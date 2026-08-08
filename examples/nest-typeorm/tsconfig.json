@@ -12,6 +12,7 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/orms/typeorm" },
-    { "path": "../../packages/frameworks/nest" }
+    { "path": "../../packages/frameworks/nest" },
+    { "path": "../../packages/realtime/sse" }
   ]
 }

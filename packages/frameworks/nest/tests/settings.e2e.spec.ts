@@ -4,7 +4,7 @@ import request from "supertest";
 import { Controller, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { withListMeta } from "@kavo/core";
-import type { DefaultKavoService } from "@kavo/core";
+import type { DefaultKavoService, RealtimeEventDto, RealtimeTransport } from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import { Kavo, KavoModule, getKavoServiceToken } from "@kavo/nest";
 import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
@@ -29,6 +29,7 @@ interface BootstrapOptions {
   readonly defaults?: KavoModuleOptions["defaults"];
   readonly async?: boolean;
   readonly paginationStrategies?: KavoModuleOptions["paginationStrategies"];
+  readonly realtimeTransports?: KavoModuleOptions["realtimeTransports"];
 }
 
 async function bootstrap(controller: unknown, options: BootstrapOptions = {}): Promise<void> {
@@ -36,11 +37,18 @@ async function bootstrap(controller: unknown, options: BootstrapOptions = {}): P
   const infrastructure = fakeInfrastructure(adapter);
   const rootModule =
     options.async === true
-      ? KavoModule.forRootAsync({ useFactory: () => ({ infrastructure, defaults: options.defaults }) })
+      ? KavoModule.forRootAsync({
+          useFactory: () => ({
+            infrastructure,
+            defaults: options.defaults,
+            ...(options.realtimeTransports !== undefined && { realtimeTransports: options.realtimeTransports }),
+          }),
+        })
       : KavoModule.forRoot({
           infrastructure,
           defaults: options.defaults,
           ...(options.paginationStrategies !== undefined && { paginationStrategies: options.paginationStrategies }),
+          ...(options.realtimeTransports !== undefined && { realtimeTransports: options.realtimeTransports }),
         });
   const moduleRef = await Test.createTestingModule({
     imports: [rootModule, KavoModule.forFeature([controller as never])],
@@ -317,6 +325,95 @@ describe("KavoModule.forRoot({ paginationStrategies }) — a custom strategy rea
     await bootstrap(AlternatingController, { defaults: { pagination: { strategy: "missing" } } });
 
     await request(server()).get("/todos").expect(500);
+  });
+});
+
+describe("KavoModule.forRoot({ realtimeTransports }) — a registered transport reaches the engine", () => {
+  // Same "declared public option with no coverage of its wiring" concern as
+  // `paginationStrategies` above: a typo in the thread-through would leave
+  // the transport silently unregistered, and every write would still
+  // succeed — nothing about a missing publish is visible without a test
+  // watching the transport itself.
+  class FakeTransport implements RealtimeTransport {
+    readonly name = "fake";
+    readonly events: RealtimeEventDto[] = [];
+    async publish(event: RealtimeEventDto): Promise<void> {
+      this.events.push(event);
+    }
+  }
+
+  @Kavo(Todo, { realtime: { enabled: true, events: {} } })
+  @Controller("todos")
+  class RealtimeController {}
+
+  it("publishes to a transport registered via forRoot's realtimeTransports", async () => {
+    const transport = new FakeTransport();
+    await bootstrap(RealtimeController, { realtimeTransports: [transport] });
+
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    expect(transport.events).toHaveLength(1);
+    expect(transport.events[0]).toMatchObject({ event: "created", entity: "Todo", channel: "Todo.1" });
+  });
+
+  it("publishes to a transport registered via forRootAsync's realtimeTransports", async () => {
+    const transport = new FakeTransport();
+    await bootstrap(RealtimeController, { async: true, realtimeTransports: [transport] });
+
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    expect(transport.events).toHaveLength(1);
+    expect(transport.events[0]?.event).toBe("created");
+  });
+
+  it("never publishes when no transport is registered, even with realtime enabled on the entity", async () => {
+    await bootstrap(RealtimeController);
+
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+    // Nothing to assert on directly (no transport exists to have recorded
+    // anything) — this only proves the write itself still succeeds with
+    // realtime turned on and zero transports registered.
+  });
+
+  it("publishes to every transport registered via realtimeTransports, not just the first", async () => {
+    const first = new FakeTransport();
+    const second = new FakeTransport();
+    await bootstrap(RealtimeController, { realtimeTransports: [first, second] });
+
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    expect(first.events).toHaveLength(1);
+    expect(second.events).toHaveLength(1);
+    expect(first.events[0]?.id).toBe(second.events[0]?.id);
+  });
+
+  it("does not publish for an entity whose own realtime.enabled is false, even with a transport registered", async () => {
+    // `RealtimeController` above turns realtime on; this one, over the same
+    // Todo entity, deliberately doesn't — proving the transport registration
+    // alone never turns realtime on for an entity that didn't ask for it.
+    @Kavo(Todo)
+    @Controller("todos")
+    class NoRealtimeController {}
+
+    const transport = new FakeTransport();
+    await bootstrap(NoRealtimeController, { realtimeTransports: [transport] });
+
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    expect(transport.events).toHaveLength(0);
+  });
+
+  it("publishes updated/patched/deleted events too, not only created", async () => {
+    const transport = new FakeTransport();
+    await bootstrap(RealtimeController, { realtimeTransports: [transport] });
+
+    const created = await request(server()).post("/todos").send({ title: "x" }).expect(201);
+    const id = created.body.id as number;
+    await request(server()).put(`/todos/${id}`).send({ title: "y", done: true, priority: 1 }).expect(200);
+    await request(server()).delete(`/todos/${id}`).expect(204);
+
+    const eventIds = transport.events.map((event) => event.event);
+    expect(eventIds).toEqual(["created", "updated", "deleted"]);
   });
 });
 

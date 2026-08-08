@@ -89,6 +89,30 @@ GET    /cats?include=owner&fields[owner]=id,name
 POST   /cats                     {"name":"Kit","age":1,"owner":1}   # associate by id
 ```
 
+## Realtime
+
+`Owner` writes publish over SSE (`@kavo/sse`, mounted in `main.ts` at
+`/realtime`) — `createOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`
+all stream as `RealtimeEventDto`s to any connected subscriber. Subscribe
+with `curl` or `EventSource`:
+
+```bash
+curl -N "http://localhost:3000/realtime?channel=Owner" &
+curl -X POST http://localhost:3000/owners \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada","email":"ada@x.io"}'
+# the curl above prints the created event as it arrives
+```
+
+`channel=Owner.1` subscribes to one owner only; `channel=Owner` is the
+collection channel (every owner). Both accept the same
+`filter[field][operator]=value` grammar REST list requests use —
+`channel=Owner&filter[name][eq]=Ada` delivers only writes to owners named
+"Ada". `@kavo/sse` has no authentication of its own here (see its own
+README); see
+[`docs/internals/architecture/18-realtime.md`](../../docs/internals/architecture/18-realtime.md)
+for the full event/channel model.
+
 The e2e suite in `tests/` is the executable form of the behavior spec.
 `crud-e2e.suite.ts` holds the shared assertions; `app.e2e.spec.ts`,
 `app-postgres.e2e.spec.ts`, `app-mariadb.e2e.spec.ts`, and

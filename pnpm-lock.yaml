@@ -171,6 +171,9 @@ importers:
       '@kavo/nest':
         specifier: workspace:*
         version: link:../../packages/frameworks/nest
+      '@kavo/sse':
+        specifier: workspace:*
+        version: link:../../packages/realtime/sse
       '@kavo/typeorm':
         specifier: workspace:*
         version: link:../../packages/orms/typeorm

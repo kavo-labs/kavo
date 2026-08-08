@@ -1,10 +1,45 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
+import { getKavoServiceToken } from "@kavo/nest";
+import { createSseTransport } from "@kavo/sse";
 import { AppModule } from "./app.module.js";
+import { Owner } from "./owner/owner.entity.js";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule.forRoot());
+  // Filled in once the app finishes bootstrapping, below — `filterableEntities`
+  // is only ever invoked at subscribe-request time (well after that), so
+  // the forward reference through this mutable box is safe, the same
+  // pattern `@kavo/sse`'s own README uses.
+  let ownerService: DefaultKavoService<Owner> | undefined;
+
+  const sse = createSseTransport({
+    // Same erasure cast `kavo.ts`'s own `catalog.register` uses internally
+    // — `ownerService.engine.config` is concretely typed per entity
+    // (`ResolvedEntityConfig<Owner>`), while `FilterableEntity` serves
+    // every entity through one callback and is not.
+    filterableEntities: (entityName: string) =>
+      entityName === "Owner" && ownerService !== undefined
+        ? {
+            metadata: ownerService.engine.metadata as EntityMetadata,
+            config: ownerService.engine.config as unknown as ResolvedEntityConfig,
+          }
+        : undefined,
+  });
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(undefined, [sse]));
+  // `provideServices: true` (app.module.ts) already registers this as a
+  // real DI provider — resolvable synchronously right after `create`.
+  ownerService = app.get(getKavoServiceToken(Owner));
+
+  // Wide open, deliberately: this is a local reference app, not a
+  // production service. Without it, a browser page on any other origin —
+  // including a plain `file://` test page — has its `/realtime`
+  // `EventSource` (and any `fetch`) silently blocked by CORS, which looks
+  // indistinguishable from the server never responding.
+  app.enableCors();
 
   const document = SwaggerModule.createDocument(
     app,
@@ -15,12 +50,26 @@ async function bootstrap(): Promise<void> {
           "sorting, pagination, layered config, and RFC 9457 problem-details " +
           "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
           "model the schema, with opt-in relation includes " +
-          "(`?include=owner`, `?include=pets`) and soft delete on owners.",
+          "(`?include=owner`, `?include=pets`) and soft delete on owners. " +
+          "Owner writes also publish over SSE — see the realtime example " +
+          "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
+          "optionally `&filter[...]=...`).",
       )
       .setVersion("0.0.0")
       .build(),
   );
   SwaggerModule.setup("docs", app, document);
+
+  // `@kavo/sse` has no authentication of its own and is host-framework-
+  // agnostic (plain `IncomingMessage`/`ServerResponse`, which Express's
+  // request/response extend) — mounted here as an ordinary GET route
+  // alongside the generated `@Kavo` controllers.
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .get("/realtime", (req: unknown, res: unknown) => {
+      void sse.handleRequest(req as never, res as never);
+    });
 
   await app.listen(3000);
 }
