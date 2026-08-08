@@ -34,6 +34,13 @@ async function bootstrap(): Promise<void> {
   // real DI provider — resolvable synchronously right after `create`.
   ownerService = app.get(getKavoServiceToken(Owner));
 
+  // Wide open, deliberately: this is a local reference app, not a
+  // production service. Without it, a browser page on any other origin —
+  // including a plain `file://` test page — has its `/realtime`
+  // `EventSource` (and any `fetch`) silently blocked by CORS, which looks
+  // indistinguishable from the server never responding.
+  app.enableCors();
+
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
