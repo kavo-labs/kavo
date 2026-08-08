@@ -33,6 +33,9 @@ beforeAll(async () => {
             config: ownerService.engine.config as unknown as ResolvedEntityConfig,
           }
         : undefined,
+    // Mirrors main.ts exactly, so this suite exercises the real
+    // configuration rather than a lighter stand-in.
+    subscribableFields: (entityName: string) => (entityName === "Owner" ? ["id", "name", "email"] : undefined),
   });
 
   const moduleRef = await Test.createTestingModule({
@@ -58,7 +61,14 @@ afterAll(async () => {
   if (app !== undefined) await app.close();
 });
 
-function readSseFrames(body: ReadableStream<Uint8Array>): { next(): Promise<string>; cancel(): Promise<void> } {
+interface RealtimeFrames {
+  next(): Promise<string>;
+  /** Parses the next frame's `event:`/`data:` lines together. */
+  nextEvent(): Promise<{ event: string; data: Record<string, unknown> }>;
+  cancel(): Promise<void>;
+}
+
+function readSseFrames(body: ReadableStream<Uint8Array>): RealtimeFrames {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -75,7 +85,61 @@ function readSseFrames(body: ReadableStream<Uint8Array>): { next(): Promise<stri
     return frame;
   }
 
-  return { next, cancel: () => reader.cancel() };
+  async function nextEvent(): Promise<{ event: string; data: Record<string, unknown> }> {
+    const frame = await next();
+    const event = /^event: (.+)$/m.exec(frame)![1]!;
+    const dataLine = frame.split("\n").find((line) => line.startsWith("data: "))!;
+    const data = JSON.parse(dataLine.slice("data: ".length)) as Record<string, unknown>;
+    return { event, data };
+  }
+
+  return { next, nextEvent, cancel: () => reader.cancel() };
+}
+
+async function subscribe(channel: string, extra = ""): Promise<{ status: number; frames: RealtimeFrames }> {
+  const response = await fetch(`${baseUrl}/realtime?channel=${channel}${extra}`, {
+    headers: { Accept: "text/event-stream" },
+  });
+  return { status: response.status, frames: readSseFrames(response.body!) };
+}
+
+async function createOwner(name: string, email: string): Promise<{ id: number; name: string; email: string }> {
+  const response = await fetch(`${baseUrl}/owners`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email }),
+  });
+  return (await response.json()) as { id: number; name: string; email: string };
+}
+
+async function patchOwner(id: number, body: Record<string, unknown>): Promise<number> {
+  const response = await fetch(`${baseUrl}/owners/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response.status;
+}
+
+async function putOwner(id: number, body: Record<string, unknown>): Promise<number> {
+  const response = await fetch(`${baseUrl}/owners/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response.status;
+}
+
+async function deleteOwner(id: number): Promise<number> {
+  return (await fetch(`${baseUrl}/owners/${id}`, { method: "DELETE" })).status;
+}
+
+async function restoreOwner(id: number): Promise<number> {
+  return (await fetch(`${baseUrl}/owners/${id}/restore`, { method: "PATCH" })).status;
+}
+
+async function purgeOwner(id: number): Promise<number> {
+  return (await fetch(`${baseUrl}/owners/${id}/purge`, { method: "DELETE" })).status;
 }
 
 describe("GET /realtime — Owner writes stream over SSE", () => {
@@ -192,5 +256,186 @@ describe("GET /realtime — Owner writes stream over SSE", () => {
       if (Date.now() > deadline) throw new Error(`connectionCount stuck at ${sse.connectionCount}`);
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
+  });
+});
+
+describe("GET /realtime — item channel: every standard event type", () => {
+  it("delivers 'updated' on a full PUT replace", async () => {
+    const owner = await createOwner("Put Target", "put-target@example.com");
+    const { status, frames } = await subscribe(`Owner.${owner.id}`);
+    expect(status).toBe(200);
+
+    expect(await putOwner(owner.id, { name: "Put Replaced", email: owner.email })).toBe(200);
+
+    const event = await frames.nextEvent();
+    expect(event.event).toBe("updated");
+    expect(event.data["entity"]).toBe("Owner");
+    await frames.cancel();
+  });
+
+  it("delivers 'deleted' for a permanent purge, same event id as a soft delete", async () => {
+    const owner = await createOwner("Purge Target", "purge-target@example.com");
+    expect(await deleteOwner(owner.id)).toBe(204); // soft delete first — purge needs an already-deleted row
+
+    const { status, frames } = await subscribe(`Owner.${owner.id}`);
+    expect(status).toBe(200);
+
+    expect(await purgeOwner(owner.id)).toBe(204);
+
+    const event = await frames.nextEvent();
+    expect(event.event).toBe("deleted");
+    await frames.cancel();
+  });
+
+  it("never delivers another owner's events to this item channel (channel isolation)", async () => {
+    const watched = await createOwner("Watched", "watched@example.com");
+    const other = await createOwner("Other", "other@example.com");
+    const { status, frames } = await subscribe(`Owner.${watched.id}`);
+    expect(status).toBe(200);
+
+    await patchOwner(other.id, { name: "Other Renamed" });
+    // The only write this subscriber should ever see is the one below —
+    // if isolation were broken, this would be the *second* frame, not the
+    // first, and `nextEvent()` would return the other owner's patch instead.
+    await patchOwner(watched.id, { name: "Watched Renamed" });
+
+    const event = await frames.nextEvent();
+    expect(event.data["id"]).toBe(watched.id);
+    await frames.cancel();
+  });
+});
+
+describe("GET /realtime — collection channel: every standard event type reaches it too", () => {
+  it("delivers created/patched/deleted/restored/purged, in order, to a bare-entity subscriber", async () => {
+    const { status, frames } = await subscribe("Owner");
+    expect(status).toBe(200);
+
+    const owner = await createOwner("Collection Lifecycle", "collection-lifecycle@example.com");
+    expect(await patchOwner(owner.id, { name: "Renamed" })).toBe(200);
+    expect(await deleteOwner(owner.id)).toBe(204);
+    expect(await restoreOwner(owner.id)).toBe(200);
+    expect(await deleteOwner(owner.id)).toBe(204);
+    expect(await purgeOwner(owner.id)).toBe(204);
+
+    const events: string[] = [];
+    for (let i = 0; i < 6; i++) events.push((await frames.nextEvent()).event);
+    expect(events).toEqual(["created", "patched", "deleted", "restored", "deleted", "deleted"]);
+
+    await frames.cancel();
+  });
+});
+
+describe("GET /realtime — subscribe-time filtering: transitions", () => {
+  it("delivers from creation when the created item already matches", async () => {
+    const { status, frames } = await subscribe("Owner", "&filter[name][eq]=MatchesImmediately");
+    expect(status).toBe(200);
+
+    await createOwner("MatchesImmediately", "matches@example.com");
+
+    const event = await frames.nextEvent();
+    expect((event.data["item"] as { name: string }).name).toBe("MatchesImmediately");
+    await frames.cancel();
+  });
+
+  it("delivers an 'entering' write as its real event id, not a synthesized one", async () => {
+    const owner = await createOwner("EnterMe", "enterme@example.com");
+    const { status, frames } = await subscribe("Owner", "&filter[name][eq]=Entered");
+    expect(status).toBe(200);
+
+    // Didn't match at creation (filter targets "Entered") — this patch is
+    // the write that makes it start matching.
+    expect(await patchOwner(owner.id, { name: "Entered" })).toBe(200);
+
+    const event = await frames.nextEvent();
+    expect(event.event).toBe("patched");
+    await frames.cancel();
+  });
+
+  it("delivers 'deleted' unconditionally, even for a row that never matched the filter (bypass policy)", async () => {
+    const owner = await createOwner("NeverMatches", "nevermatches@example.com");
+    const { status, frames } = await subscribe("Owner", "&filter[name][eq]=SomethingElseEntirely");
+    expect(status).toBe(200);
+
+    expect(await deleteOwner(owner.id)).toBe(204);
+
+    const event = await frames.nextEvent();
+    expect(event.event).toBe("deleted");
+    await frames.cancel();
+  });
+
+  it("rejects a malformed filter (unknown operator) with 400 before opening the stream", async () => {
+    const response = await fetch(`${baseUrl}/realtime?channel=Owner&filter[name][bogus]=x`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a filter naming a field the entity doesn't have, with 400", async () => {
+    const response = await fetch(`${baseUrl}/realtime?channel=Owner&filter[nope][eq]=x`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("GET /realtime — subscribableFields payload narrowing", () => {
+  it("narrows the item to id/name/email unconditionally, with no 'fields' param", async () => {
+    const { status, frames } = await subscribe("Owner");
+    expect(status).toBe(200);
+
+    await createOwner("Narrowed", "narrowed@example.com");
+
+    const event = await frames.nextEvent();
+    expect(Object.keys(event.data["item"] as object).sort()).toEqual(["email", "id", "name"]);
+    await frames.cancel();
+  });
+
+  it("narrows further to a requested 'fields' subset within the allowlist", async () => {
+    const { status, frames } = await subscribe("Owner", "&fields=name");
+    expect(status).toBe(200);
+
+    await createOwner("Fielded", "fielded@example.com");
+
+    const event = await frames.nextEvent();
+    expect(Object.keys(event.data["item"] as object)).toEqual(["name"]);
+    await frames.cancel();
+  });
+
+  it("rejects a 'fields' request naming a field outside subscribableFields with 400", async () => {
+    const response = await fetch(`${baseUrl}/realtime?channel=Owner&fields=startedAt`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects a filter field outside subscribableFields with 400, even though it's on the REST filterable allowlist", async () => {
+    // `startedAt` is filterable over REST (Owner's allowlist excludes only
+    // `deletedAt`) but is not in `subscribableFields` — a subscriber can't
+    // scope itself by a field it isn't allowed to receive.
+    const response = await fetch(`${baseUrl}/realtime?channel=Owner&filter[startedAt][isNull]=true`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("GET /realtime — one write, multiple simultaneous subscribers", () => {
+  it("fans out to an item-channel and a collection-channel subscriber from the same write", async () => {
+    const owner = await createOwner("FanOut", "fanout@example.com");
+    const item = await subscribe(`Owner.${owner.id}`);
+    const collection = await subscribe("Owner");
+    expect(item.status).toBe(200);
+    expect(collection.status).toBe(200);
+
+    expect(await patchOwner(owner.id, { name: "FanOut Renamed" })).toBe(200);
+
+    const itemEvent = await item.frames.nextEvent();
+    const collectionEvent = await collection.frames.nextEvent();
+    expect(itemEvent.event).toBe("patched");
+    expect(collectionEvent.event).toBe("patched");
+    expect(itemEvent.data["id"]).toBe(collectionEvent.data["id"]);
+
+    await item.frames.cancel();
+    await collection.frames.cancel();
   });
 });

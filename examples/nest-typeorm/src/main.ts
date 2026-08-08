@@ -27,6 +27,11 @@ async function bootstrap(): Promise<void> {
             config: ownerService.engine.config as unknown as ResolvedEntityConfig,
           }
         : undefined,
+    // Narrows every outgoing Owner item to just these three fields —
+    // unconditionally, whether or not a subscriber names `fields` (see
+    // `@kavo/sse`'s own doc on why). `startedAt`/`createdAt`/`deletedAt`
+    // stay off the wire.
+    subscribableFields: (entityName: string) => (entityName === "Owner" ? ["id", "name", "email"] : undefined),
   });
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(undefined, [sse]));

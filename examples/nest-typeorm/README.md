@@ -108,8 +108,10 @@ curl -X POST http://localhost:3000/owners \
 collection channel (every owner). Both accept the same
 `filter[field][operator]=value` grammar REST list requests use —
 `channel=Owner&filter[name][eq]=Ada` delivers only writes to owners named
-"Ada". `@kavo/sse` has no authentication of its own here (see its own
-README); see
+"Ada". Every outgoing item is also narrowed to `id`/`name`/`email`
+(`subscribableFields` in `main.ts`) — `startedAt`/`createdAt`/`deletedAt`
+never reach a subscriber. `@kavo/sse` has no authentication of its own
+here (see its own README); see
 [`docs/internals/architecture/18-realtime.md`](../../docs/internals/architecture/18-realtime.md)
 for the full event/channel model.
 
