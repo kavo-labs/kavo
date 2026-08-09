@@ -1,29 +1,40 @@
 <template>
   <div v-if="reduceMotion" class="flow-static">
-    <p class="flow-static-line"><span class="flow-static-tag">Request</span>{{ REQUEST_LABEL }} &rarr; Kavo</p>
     <p class="flow-static-line">
-      <span class="flow-static-tag flow-static-tag--event">Event</span>Kavo &rarr; SSE &middot; {{ EVENT_LABEL }}
-      &rarr; Your app
+      <span class="flow-static-tag">Broadcast</span>Kavo pushes {{ EVENT_LABEL }} to 3 connected clients over SSE,
+      simultaneously.
     </p>
   </div>
-  <div v-else class="flow-window" role="img" :aria-label="ariaLabel">
-    <div class="flow-window-header">
-      <span class="flow-window-dot flow-window-dot--red"></span>
-      <span class="flow-window-dot flow-window-dot--yellow"></span>
-      <span class="flow-window-dot flow-window-dot--green"></span>
-      <span class="flow-window-title">SSE &mdash; Realtime</span>
-    </div>
-    <div class="flow-window-body">
-      <TransitionGroup tag="div" name="flow-msg" class="flow-feed">
-        <div v-if="visibleCount >= 1" key="request" class="flow-row">
-          <span class="flow-row-tag">request</span>
-          <span class="flow-row-text">{{ REQUEST_LABEL }}</span>
-        </div>
-        <div v-if="visibleCount >= 2" key="event" class="flow-row flow-row--event">
-          <span class="flow-row-tag flow-row-tag--event">sse</span>
-          <span class="flow-row-text">event: {{ EVENT_LABEL }}</span>
-        </div>
-      </TransitionGroup>
+  <div v-else class="flow-broadcast" role="img" :aria-label="ariaLabel">
+    <div class="flow-broadcast-label">event: {{ EVENT_LABEL }}</div>
+    <div class="flow-canvas">
+      <svg class="flow-lines" viewBox="0 0 300 170" aria-hidden="true">
+        <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
+      </svg>
+
+      <Transition v-for="(c, i) in clients" :key="`dot-${i}`" name="pulse-dot">
+        <div
+          v-if="showDots"
+          class="pulse-dot"
+          :style="{ left: `${hubX}px`, top: `${hubY}px`, '--dx': `${c.x - hubX}px`, '--dy': `${c.y - hubY}px` }"
+        ></div>
+      </Transition>
+
+      <div
+        class="flow-hub"
+        :class="{ 'flow-hub--pulse': phase === 'server-pulse' }"
+        :style="{ left: `${hubX}px`, top: `${hubY}px` }"
+      >
+        Kavo
+      </div>
+
+      <div
+        v-for="(c, i) in clients"
+        :key="`client-${i}`"
+        class="flow-client"
+        :class="{ 'flow-client--pulse': phase === 'client-pulse' }"
+        :style="{ left: `${c.x}px`, top: `${c.y}px` }"
+      ></div>
     </div>
   </div>
   <button
@@ -47,36 +58,46 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-const REQUEST_LABEL = "PATCH /books/42";
+type PhaseName = "idle" | "server-pulse" | "broadcasting" | "client-pulse" | "hold";
+
 const EVENT_LABEL = "book.updated";
+const ariaLabel = `Diagram: Kavo broadcasts a ${EVENT_LABEL} event to 3 connected clients simultaneously over SSE.`;
 
-const ariaLabel = `Diagram: a ${REQUEST_LABEL} request goes from your app to Kavo, then Kavo pushes a ${EVENT_LABEL} event back to your app over SSE.`;
+const hubX = 150;
+const hubY = 26;
+const clients = [
+  { x: 60, y: 150 },
+  { x: 150, y: 150 },
+  { x: 240, y: 150 },
+];
 
-const STEP_MS = 900;
-const HOLD_MS = 2200;
-const RESET_PAUSE_MS = 500;
+const PHASES: { name: PhaseName; duration: number }[] = [
+  { name: "idle", duration: 900 },
+  { name: "server-pulse", duration: 450 },
+  { name: "broadcasting", duration: 650 },
+  { name: "client-pulse", duration: 700 },
+  { name: "hold", duration: 1200 },
+];
 
-const visibleCount = ref(0);
+const phaseIndex = ref(0);
+const phase = computed<PhaseName>(() => PHASES[phaseIndex.value].name);
+const showDots = computed(() => phase.value === "broadcasting" || phase.value === "client-pulse");
+
 const reduceMotion = ref(false);
 const isPlaying = ref(true);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-function tick() {
-  if (visibleCount.value < 2) {
-    visibleCount.value += 1;
-    timer = setTimeout(tick, STEP_MS);
-    return;
-  }
+function advance() {
   timer = setTimeout(() => {
-    visibleCount.value = 0;
-    timer = setTimeout(tick, RESET_PAUSE_MS);
-  }, HOLD_MS);
+    phaseIndex.value = (phaseIndex.value + 1) % PHASES.length;
+    advance();
+  }, PHASES[phaseIndex.value].duration);
 }
 
 function togglePlay() {
   isPlaying.value = !isPlaying.value;
   if (isPlaying.value) {
-    timer = setTimeout(tick, STEP_MS);
+    advance();
   } else {
     clearTimeout(timer);
   }
@@ -84,11 +105,9 @@ function togglePlay() {
 
 onMounted(() => {
   reduceMotion.value = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduceMotion.value) {
-    visibleCount.value = 2;
-    return;
+  if (!reduceMotion.value) {
+    advance();
   }
-  timer = setTimeout(tick, STEP_MS);
 });
 
 onUnmounted(() => {
@@ -97,128 +116,93 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.flow-window {
+.flow-broadcast {
   max-width: 420px;
   margin: 0 auto 12px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--vp-code-block-bg);
-  text-align: left;
-  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.4);
+  text-align: center;
 }
 
-.flow-window-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
-}
-
-.flow-window-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.flow-window-dot--red {
-  background: #ff5f56;
-}
-
-.flow-window-dot--yellow {
-  background: #ffbd2e;
-}
-
-.flow-window-dot--green {
-  background: #27c93f;
-}
-
-.flow-window-title {
-  margin-left: 6px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--vp-c-text-3);
-}
-
-.flow-window-body {
-  position: relative;
-  height: 84px;
-  overflow: hidden;
-}
-
-.flow-feed {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 100%;
-  gap: 10px;
-  padding: 16px 18px;
-}
-
-.flow-msg-enter-active {
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
-}
-
-.flow-msg-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.flow-msg-leave-active {
-  transition: opacity 0.15s ease;
-  position: absolute;
-}
-
-.flow-msg-leave-to {
-  opacity: 0;
-}
-
-.flow-msg-move {
-  transition: transform 0.18s ease;
-}
-
-.flow-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 40%, var(--vp-c-divider));
-  background: var(--vp-c-brand-soft);
-}
-
-.flow-row--event {
-  border-color: var(--vp-c-divider);
-  background: transparent;
-  margin-left: 12px;
-  border-left: 2px solid var(--vp-c-divider);
-  border-radius: 0;
-}
-
-.flow-row-tag {
-  font-family: var(--vp-font-family-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--vp-c-brand-1);
-  opacity: 0.8;
-}
-
-.flow-row-tag--event {
-  color: var(--vp-c-text-3);
-}
-
-.flow-row-text {
+.flow-broadcast-label {
+  margin-bottom: 8px;
   font-family: var(--vp-font-family-mono);
   font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+}
+
+.flow-canvas {
+  position: relative;
+  width: 300px;
+  height: 170px;
+  margin: 0 auto;
+}
+
+.flow-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.flow-line-svg {
+  stroke: var(--vp-c-divider);
+  stroke-width: 1.5;
+}
+
+.pulse-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)));
+}
+
+.pulse-dot-enter-from {
+  transform: translate(-50%, -50%);
+}
+
+.pulse-dot-enter-active {
+  transition: transform 0.65s ease;
+}
+
+.flow-hub {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 7px 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 999px;
+  background: var(--vp-c-bg-soft);
+  font-size: 12px;
+  font-weight: 600;
   color: var(--vp-c-text-1);
+  white-space: nowrap;
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.flow-hub--pulse {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
+}
+
+.flow-client {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.flow-client--pulse {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
 .flow-static {
@@ -243,10 +227,6 @@ onUnmounted(() => {
   margin-right: 8px;
   font-weight: 700;
   color: var(--vp-c-brand-1);
-}
-
-.flow-static-tag--event {
-  color: var(--vp-c-text-2);
 }
 
 .flow-play-btn {
@@ -279,9 +259,8 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flow-window-body {
+  .flow-canvas {
     height: auto;
-    overflow: visible;
   }
 }
 </style>
