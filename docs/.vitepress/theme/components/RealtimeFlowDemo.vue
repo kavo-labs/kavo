@@ -12,6 +12,14 @@
         <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
       </svg>
 
+      <Transition v-for="(c, i) in clients" :key="`dot-${i}`" name="pulse-dot">
+        <div
+          v-if="showDots"
+          class="pulse-dot"
+          :style="{ left: `${hubX}px`, top: `${hubY}px`, '--dx': `${c.x - hubX}px`, '--dy': `${c.y - hubY}px` }"
+        ></div>
+      </Transition>
+
       <div
         class="flow-hub"
         :class="{ 'flow-hub--pulse': phase === 'server-pulse' }"
@@ -75,6 +83,7 @@ const PHASES: { name: PhaseName; duration: number }[] = [
 
 const phaseIndex = ref(0);
 const phase = computed<PhaseName>(() => PHASES[phaseIndex.value].name);
+const showDots = computed(() => phase.value === "broadcasting");
 
 const reduceMotion = ref(false);
 const isPlaying = ref(true);
@@ -165,6 +174,31 @@ onUnmounted(() => {
   to {
     stroke-dashoffset: 0;
   }
+}
+
+/*
+ * One dot per client, each traveling from the hub's position to that
+ * client's along a straight line (--dx/--dy are the per-client offset,
+ * set inline). Mounted only during the broadcasting phase via v-if, so
+ * Vue's <Transition> plays the enter (hub -> client) once and there is
+ * no reverse/leave animation to manage — the dot simply unmounts when
+ * the phase moves on.
+ */
+.pulse-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vp-c-brand-1);
+  transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)));
+}
+
+.pulse-dot-enter-from {
+  transform: translate(-50%, -50%);
+}
+
+.pulse-dot-enter-active {
+  transition: transform 0.6s ease-out;
 }
 
 .flow-hub {
