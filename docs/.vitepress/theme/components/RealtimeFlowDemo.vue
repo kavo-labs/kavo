@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 
-type PhaseName = "idle" | "server-pulse" | "broadcasting" | "client-pulse" | "hold";
+type PhaseName = "broadcasting" | "client-pulse" | "hold";
 
 const EVENT_EXAMPLES = [
   "book #42 updated",
@@ -79,8 +79,6 @@ const clients = [
 ];
 
 const PHASES: { name: PhaseName; duration: number }[] = [
-  { name: "idle", duration: 900 },
-  { name: "server-pulse", duration: 450 },
   { name: "broadcasting", duration: 650 },
   { name: "client-pulse", duration: 700 },
   { name: "hold", duration: 1200 },
@@ -96,7 +94,9 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 function advance() {
   timer = setTimeout(() => {
     const nextIndex = (phaseIndex.value + 1) % PHASES.length;
-    if (PHASES[nextIndex].name === "idle") {
+    if (PHASES[nextIndex].name === "broadcasting") {
+      // The event swaps in the same tick the dots start traveling, so the
+      // new event text and its broadcast animation always begin together.
       currentEvent.value = randomEvent(currentEvent.value);
     }
     phaseIndex.value = nextIndex;
