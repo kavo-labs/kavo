@@ -24,6 +24,8 @@
         <div class="flow-hub-event">{{ currentEvent }}</div>
       </div>
 
+      <div class="flow-clients-caption">client-facing UI &middot; service-to-service &middot; external-facing</div>
+
       <div
         v-for="(c, i) in clients"
         :key="`client-${i}`"
@@ -35,22 +37,6 @@
       </div>
     </div>
   </div>
-  <button
-    v-if="!reduceMotion"
-    type="button"
-    class="flow-play-btn"
-    :aria-label="isPlaying ? 'Pause' : 'Play'"
-    :aria-pressed="isPlaying"
-    @click="togglePlay"
-  >
-    <svg v-if="isPlaying" class="flow-play-icon" viewBox="0 0 16 16" fill="currentColor">
-      <rect x="3" y="2" width="4" height="12" rx="1.5" />
-      <rect x="9" y="2" width="4" height="12" rx="1.5" />
-    </svg>
-    <svg v-else class="flow-play-icon" viewBox="0 0 16 16" fill="currentColor">
-      <polygon points="4,2 13,8 4,14" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" />
-    </svg>
-  </button>
 </template>
 
 <script setup lang="ts">
@@ -105,7 +91,6 @@ const phase = computed<PhaseName>(() => PHASES[phaseIndex.value].name);
 const showDots = computed(() => phase.value === "broadcasting");
 
 const reduceMotion = ref(false);
-const isPlaying = ref(true);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function advance() {
@@ -117,15 +102,6 @@ function advance() {
     phaseIndex.value = nextIndex;
     advance();
   }, PHASES[phaseIndex.value].duration);
-}
-
-function togglePlay() {
-  isPlaying.value = !isPlaying.value;
-  if (isPlaying.value) {
-    advance();
-  } else {
-    clearTimeout(timer);
-  }
 }
 
 onMounted(() => {
@@ -275,6 +251,18 @@ onUnmounted(() => {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
+.flow-clients-caption {
+  position: absolute;
+  top: 112px;
+  left: 0;
+  right: 0;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--vp-c-text-3);
+  text-align: center;
+}
+
 .flow-static {
   max-width: 420px;
   margin: 0 auto 28px;
@@ -297,35 +285,6 @@ onUnmounted(() => {
   margin-right: 8px;
   font-weight: 700;
   color: var(--vp-c-brand-1);
-}
-
-.flow-play-btn {
-  appearance: none;
-  -webkit-appearance: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--vp-c-text-3);
-  cursor: pointer;
-  transition:
-    color 0.15s,
-    background-color 0.15s;
-}
-
-.flow-play-btn:hover {
-  color: var(--vp-c-text-1);
-}
-
-.flow-play-icon {
-  width: 14px;
-  height: 14px;
 }
 
 @media (prefers-reduced-motion: reduce) {
