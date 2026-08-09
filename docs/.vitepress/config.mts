@@ -13,7 +13,7 @@ const config = defineConfig({
   description: "A production-grade CRUD framework for TypeScript",
   base: "/",
   srcDir: ".",
-  srcExclude: ["README.md"],
+  srcExclude: ["README.md", "superpowers/**"],
   cleanUrls: true,
   ignoreDeadLinks: [/CLAUDE(\.md)?$/],
   appearance: "dark",
