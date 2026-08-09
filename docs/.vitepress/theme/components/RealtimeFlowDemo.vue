@@ -9,16 +9,7 @@
     <div class="flow-broadcast-label">event: {{ EVENT_LABEL }}</div>
     <div class="flow-canvas">
       <svg class="flow-lines" viewBox="0 0 320 170" aria-hidden="true">
-        <line
-          v-for="(c, i) in clients"
-          :key="i"
-          :x1="hubX"
-          :y1="hubY"
-          :x2="c.x"
-          :y2="c.y"
-          class="flow-line-svg"
-          :class="{ 'flow-line-svg--flowing': phase === 'broadcasting' || phase === 'client-pulse' }"
-        />
+        <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
       </svg>
 
       <div
@@ -151,21 +142,20 @@ onUnmounted(() => {
  * the line was drawn (hub -> client), so this reads as data flowing
  * outward from the server. The offset per iteration (20) is a multiple of
  * the dasharray's repeat length (5 + 5 = 10), so each loop lands back on
- * an identical dash position and the animation seams invisibly. The line
- * is always flowing (a connection is always live) at a slow, dim,
- * ambient pace; the broadcasting/client-pulse phase just speeds it up.
- * Color stays neutral throughout — only the hub/client node borders
- * pick up the brand color, so that's the one signal for "active".
+ * an identical dash position and the animation seams invisibly.
+ *
+ * The flow runs at one constant speed at all times, deliberately — an
+ * earlier version sped this animation up during the broadcast phase by
+ * swapping animation-duration, but changing animation-duration mid-flight
+ * restarts the keyframe from its `from` value, so the dashes visibly
+ * jump every phase change instead of flowing smoothly. Only the
+ * hub/client node borders (below) signal "active" now.
  */
 .flow-line-svg {
   stroke: var(--vp-c-divider);
   stroke-width: 1.5;
   stroke-dasharray: 5 5;
-  animation: flow-dash 2.4s linear infinite;
-}
-
-.flow-line-svg--flowing {
-  animation-duration: 0.4s;
+  animation: flow-dash 1.6s linear infinite;
 }
 
 @keyframes flow-dash {
@@ -189,8 +179,8 @@ onUnmounted(() => {
   color: var(--vp-c-text-1);
   white-space: nowrap;
   transition:
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    box-shadow 0.35s ease-in-out,
+    border-color 0.35s ease-in-out;
 }
 
 .flow-hub--pulse {
@@ -216,8 +206,8 @@ onUnmounted(() => {
   color: var(--vp-c-text-2);
   white-space: nowrap;
   transition:
-    box-shadow 0.2s ease,
-    border-color 0.2s ease;
+    box-shadow 0.35s ease-in-out,
+    border-color 0.35s ease-in-out;
 }
 
 .flow-client--pulse {
