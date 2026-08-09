@@ -312,26 +312,46 @@
         return `${base}/realtime?${params.toString()}`;
       }
 
-      function logEvent(eventName, raw) {
+      // Builds every log entry via DOM APIs (createElement/textContent), never
+      // innerHTML + a template literal — even though today's callers only
+      // ever pass fixed strings, that pattern is a DOM-XSS trap waiting for
+      // a future caller that doesn't, and CodeQL is right to flag it as
+      // unsafe-by-construction rather than case-by-case safe.
+      function logEntry(eventName, text, evClass) {
         const wrap = document.createElement("div");
-        wrap.className = `event ${eventName}`;
+        wrap.className = evClass ? `event ${evClass}` : "event";
+
+        const head = document.createElement("div");
+        head.className = "head";
+
+        const ev = document.createElement("span");
+        ev.className = evClass ? `ev ${evClass}` : "ev";
+        ev.textContent = eventName;
+        head.appendChild(ev);
+
+        const time = document.createElement("span");
+        time.textContent = new Date().toLocaleTimeString();
+        head.appendChild(time);
+
+        const pre = document.createElement("pre");
+        pre.textContent = text;
+
+        wrap.append(head, pre);
+        $("log").prepend(wrap);
+      }
+
+      function logEvent(eventName, raw) {
         let pretty = raw;
         try {
           pretty = JSON.stringify(JSON.parse(raw), null, 2);
         } catch {
           /* leave as-is */
         }
-        wrap.innerHTML = `<div class="head"><span class="ev ${eventName}">${eventName}</span><span>${new Date().toLocaleTimeString()}</span></div><pre></pre>`;
-        wrap.querySelector("pre").textContent = pretty;
-        $("log").prepend(wrap);
+        logEntry(eventName, pretty, eventName);
       }
 
       function logRaw(label, text) {
-        const wrap = document.createElement("div");
-        wrap.className = "event";
-        wrap.innerHTML = `<div class="head"><span class="ev">${label}</span><span>${new Date().toLocaleTimeString()}</span></div><pre></pre>`;
-        wrap.querySelector("pre").textContent = text;
-        $("log").prepend(wrap);
+        logEntry(label, text, null);
       }
 
       $("connect").addEventListener("click", () => {
@@ -368,7 +388,7 @@
       });
 
       $("clear").addEventListener("click", () => {
-        $("log").innerHTML = "";
+        $("log").replaceChildren();
       });
 
       async function api(path, options) {
