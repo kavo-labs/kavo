@@ -8,24 +8,25 @@
   <div v-else class="flow-broadcast" role="img" :aria-label="ariaLabel">
     <div class="flow-broadcast-label">event: {{ EVENT_LABEL }}</div>
     <div class="flow-canvas">
-      <svg class="flow-lines" viewBox="0 0 300 170" aria-hidden="true">
-        <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
+      <svg class="flow-lines" viewBox="0 0 320 170" aria-hidden="true">
+        <line
+          v-for="(c, i) in clients"
+          :key="i"
+          :x1="hubX"
+          :y1="hubY"
+          :x2="c.x"
+          :y2="c.y"
+          class="flow-line-svg"
+          :class="{ 'flow-line-svg--flowing': phase === 'broadcasting' }"
+        />
       </svg>
-
-      <Transition v-for="(c, i) in clients" :key="`dot-${i}`" name="pulse-dot">
-        <div
-          v-if="showDots"
-          class="pulse-dot"
-          :style="{ left: `${hubX}px`, top: `${hubY}px`, '--dx': `${c.x - hubX}px`, '--dy': `${c.y - hubY}px` }"
-        ></div>
-      </Transition>
 
       <div
         class="flow-hub"
         :class="{ 'flow-hub--pulse': phase === 'server-pulse' }"
         :style="{ left: `${hubX}px`, top: `${hubY}px` }"
       >
-        Kavo
+        Kavo <span class="flow-node-role">server</span>
       </div>
 
       <div
@@ -34,7 +35,9 @@
         class="flow-client"
         :class="{ 'flow-client--pulse': phase === 'client-pulse' }"
         :style="{ left: `${c.x}px`, top: `${c.y}px` }"
-      ></div>
+      >
+        {{ c.label }}
+      </div>
     </div>
   </div>
   <button
@@ -61,14 +64,14 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 type PhaseName = "idle" | "server-pulse" | "broadcasting" | "client-pulse" | "hold";
 
 const EVENT_LABEL = "book.updated";
-const ariaLabel = `Diagram: Kavo broadcasts a ${EVENT_LABEL} event to 3 connected clients simultaneously over SSE.`;
+const ariaLabel = `Diagram: Kavo (the server) broadcasts a ${EVENT_LABEL} event to Client A, Client B, and Client C simultaneously over SSE.`;
 
-const hubX = 150;
+const hubX = 160;
 const hubY = 26;
 const clients = [
-  { x: 60, y: 150 },
-  { x: 150, y: 150 },
-  { x: 240, y: 150 },
+  { x: 45, y: 150, label: "Client A" },
+  { x: 160, y: 150, label: "Client B" },
+  { x: 275, y: 150, label: "Client C" },
 ];
 
 const PHASES: { name: PhaseName; duration: number }[] = [
@@ -81,7 +84,6 @@ const PHASES: { name: PhaseName; duration: number }[] = [
 
 const phaseIndex = ref(0);
 const phase = computed<PhaseName>(() => PHASES[phaseIndex.value].name);
-const showDots = computed(() => phase.value === "broadcasting" || phase.value === "client-pulse");
 
 const reduceMotion = ref(false);
 const isPlaying = ref(true);
@@ -132,7 +134,7 @@ onUnmounted(() => {
 
 .flow-canvas {
   position: relative;
-  width: 300px;
+  width: 320px;
   height: 170px;
   margin: 0 auto;
 }
@@ -147,23 +149,26 @@ onUnmounted(() => {
 .flow-line-svg {
   stroke: var(--vp-c-divider);
   stroke-width: 1.5;
+  stroke-dasharray: 5 5;
 }
 
-.pulse-dot {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--vp-c-brand-1);
-  transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)));
+/*
+ * A decreasing stroke-dashoffset walks the dash pattern in the direction
+ * the line was drawn (hub -> client), so this reads as data flowing
+ * outward from the server rather than the dashes just flickering in place.
+ */
+.flow-line-svg--flowing {
+  stroke: var(--vp-c-brand-1);
+  animation: flow-dash 0.65s linear;
 }
 
-.pulse-dot-enter-from {
-  transform: translate(-50%, -50%);
-}
-
-.pulse-dot-enter-active {
-  transition: transform 0.65s ease;
+@keyframes flow-dash {
+  from {
+    stroke-dashoffset: 20;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .flow-hub {
@@ -187,14 +192,23 @@ onUnmounted(() => {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
+.flow-node-role {
+  margin-left: 4px;
+  font-weight: 500;
+  color: var(--vp-c-text-3);
+}
+
 .flow-client {
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
+  padding: 6px 11px;
+  border-radius: 999px;
   border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  white-space: nowrap;
   transition:
     box-shadow 0.2s ease,
     border-color 0.2s ease;
@@ -202,6 +216,7 @@ onUnmounted(() => {
 
 .flow-client--pulse {
   border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-text-1);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
