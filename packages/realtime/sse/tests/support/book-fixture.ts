@@ -4,7 +4,7 @@ import { NotFoundException } from "@kavo/core";
 /**
  * The smallest entity this package's integration test needs: enough for
  * `createOne`/`patchOne` to round-trip through a real `KavoEngine` and
- * trigger the realtime emit hook, wired to a real `createSseTransport`
+ * trigger the realtime emit hook, wired to a real `createTransport`
  * over a real HTTP server. Not a general-purpose fixture — every method
  * the engine doesn't exercise in these tests throws instead of pretending
  * to work.

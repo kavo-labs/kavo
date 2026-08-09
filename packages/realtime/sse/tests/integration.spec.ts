@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createKavo } from "@kavo/core";
-import { createSseTransport, type SseTransport } from "@kavo/sse";
+import { createTransport, type SseTransport } from "@kavo/sse";
 import { Book, bookMetadata, InMemoryBookAdapter } from "./support/book-fixture.js";
 
 /**
@@ -60,7 +60,7 @@ describe("@kavo/sse — end-to-end over a real HTTP server", () => {
 
   beforeEach(async () => {
     adapter = new InMemoryBookAdapter();
-    transport = createSseTransport({
+    transport = createTransport({
       subscribableFields: (entity) => (entity === "Book" ? ["title", "status"] : undefined),
     });
 

@@ -11,14 +11,14 @@ or any other framework — same rule `packages/orms/*` follows.
 ## Usage
 
 ```ts
-import { createSseTransport } from "@kavo/sse";
+import { createTransport } from "@kavo/sse";
 import { createKavo } from "@kavo/core";
 
 // Filled in below, after `createCrud` — the callback only runs once a
 // subscribe request actually arrives, so the forward reference is fine.
 let bookService: ReturnType<typeof kavo.createCrud<Book>>;
 
-const sse = createSseTransport({
+const sse = createTransport({
   subscribableFields: (entityName) => (entityName === "Book" ? ["title", "status", "price"] : undefined),
   // Enables subscribe-time filtering (issue #160) for an entity — omit an
   // entry and a `filter[...]` query param on that entity is rejected with

@@ -86,7 +86,7 @@ supplies via `SseTransportOptions.filterableEntities`, the same pattern
 `subscribableFields` already established:
 
 ```ts
-const sse = createSseTransport({
+const sse = createTransport({
   subscribableFields: (entity) => (entity === "Book" ? ["title", "status", "price"] : undefined),
   filterableEntities: (entity) =>
     entity === "Book" ? { metadata: bookService.engine.metadata, config: bookService.engine.config } : undefined,

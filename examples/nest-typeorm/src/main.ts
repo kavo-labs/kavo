@@ -6,7 +6,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
 import { getKavoServiceToken } from "@kavo/nest";
-import { createSseTransport } from "@kavo/sse";
+import { createTransport } from "@kavo/sse";
 import { AppModule } from "./app.module.js";
 import { Owner } from "./owner/owner.entity.js";
 
@@ -21,7 +21,7 @@ async function bootstrap(): Promise<void> {
   // pattern `@kavo/sse`'s own README uses.
   let ownerService: DefaultKavoService<Owner> | undefined;
 
-  const sse = createSseTransport({
+  const sse = createTransport({
     // Same erasure cast `kavo.ts`'s own `catalog.register` uses internally
     // — `ownerService.engine.config` is concretely typed per entity
     // (`ResolvedEntityConfig<Owner>`), while `FilterableEntity` serves

@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from "node:
 
 /**
  * Just enough of `IncomingMessage`/`ServerResponse` for `handleRequest` unit
- * tests to drive `createSseTransport` without a real socket — the
+ * tests to drive `createTransport` without a real socket — the
  * integration suite (`integration.spec.ts`) is what exercises a genuine
  * `http.Server` end to end. `writableLength` is settable directly so the
  * bounded-buffer test can simulate a slow reader without actually stalling

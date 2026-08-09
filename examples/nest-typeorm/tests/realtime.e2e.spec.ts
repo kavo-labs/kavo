@@ -7,7 +7,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
 import { getKavoServiceToken } from "@kavo/nest";
-import { createSseTransport, type SseTransport } from "@kavo/sse";
+import { createTransport, type SseTransport } from "@kavo/sse";
 import { AppModule } from "../src/app.module.js";
 import { Owner } from "../src/owner/owner.entity.js";
 import { listen } from "./support/listen.js";
@@ -27,7 +27,7 @@ let sse: SseTransport;
 
 beforeAll(async () => {
   let ownerService: DefaultKavoService<Owner> | undefined;
-  sse = createSseTransport({
+  sse = createTransport({
     filterableEntities: (entityName: string) =>
       entityName === "Owner" && ownerService !== undefined
         ? {
