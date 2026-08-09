@@ -6,9 +6,8 @@
     </p>
   </div>
   <div v-else class="flow-broadcast" role="img" :aria-label="ariaLabel">
-    <div class="flow-broadcast-label">event: {{ currentEvent }}</div>
     <div class="flow-canvas">
-      <svg class="flow-lines" viewBox="0 0 320 170" aria-hidden="true">
+      <svg class="flow-lines" viewBox="0 0 320 180" aria-hidden="true">
         <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
       </svg>
 
@@ -25,7 +24,8 @@
         :class="{ 'flow-hub--pulse': phase === 'server-pulse' }"
         :style="{ left: `${hubX}px`, top: `${hubY}px` }"
       >
-        Kavo <span class="flow-node-role">server</span>
+        <div class="flow-hub-name">Kavo <span class="flow-node-role">server</span></div>
+        <div class="flow-hub-event">{{ currentEvent }}</div>
       </div>
 
       <div
@@ -89,11 +89,11 @@ const ariaLabel = computed(
 );
 
 const hubX = 160;
-const hubY = 32;
+const hubY = 42;
 const clients = [
-  { x: 45, y: 150, label: "Client A" },
-  { x: 160, y: 150, label: "Client B" },
-  { x: 275, y: 150, label: "Client C" },
+  { x: 45, y: 155, label: "Client A" },
+  { x: 160, y: 155, label: "Client B" },
+  { x: 275, y: 155, label: "Client C" },
 ];
 
 const PHASES: { name: PhaseName; duration: number }[] = [
@@ -151,18 +151,10 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.flow-broadcast-label {
-  margin-bottom: 8px;
-  font-family: var(--vp-font-family-mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--vp-c-brand-1);
-}
-
 .flow-canvas {
   position: relative;
   width: 320px;
-  height: 170px;
+  height: 180px;
   margin: 0 auto;
 }
 
@@ -230,14 +222,15 @@ onUnmounted(() => {
 
 .flow-hub {
   position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   transform: translate(-50%, -50%);
-  padding: 11px 24px;
+  padding: 10px 20px;
   border: 1px solid var(--vp-c-divider);
-  border-radius: 999px;
+  border-radius: 14px;
   background: var(--vp-c-bg-soft);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--vp-c-text-1);
   white-space: nowrap;
   transition:
     box-shadow 0.35s ease-in-out,
@@ -249,11 +242,24 @@ onUnmounted(() => {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
+.flow-hub-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+}
+
 .flow-node-role {
   margin-left: 4px;
   font-size: 11px;
   font-weight: 500;
   color: var(--vp-c-text-3);
+}
+
+.flow-hub-event {
+  font-family: var(--vp-font-family-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
 }
 
 .flow-client {
