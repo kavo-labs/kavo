@@ -1,5 +1,6 @@
 <template>
   <RealtimeFlowDemo />
+  <p class="realtime-categories-caption">Where teams put it to work</p>
   <div class="realtime-categories">
     <div v-for="category in categories" :key="category.title" class="realtime-category">
       <span class="realtime-category-title">{{ category.title }}</span>
@@ -30,6 +31,15 @@ const categories = [
 </script>
 
 <style scoped>
+.realtime-categories-caption {
+  margin: 28px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--vp-c-text-2);
+  text-align: center;
+}
+
 .realtime-categories {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
