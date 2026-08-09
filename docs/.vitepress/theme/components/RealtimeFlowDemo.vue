@@ -1,12 +1,12 @@
 <template>
   <div v-if="reduceMotion" class="flow-static">
     <p class="flow-static-line">
-      <span class="flow-static-tag">Broadcast</span>Kavo pushes {{ EVENT_LABEL }} to 3 connected clients over SSE,
+      <span class="flow-static-tag">Broadcast</span>Kavo pushes {{ currentEvent }} to 3 connected clients over SSE,
       simultaneously.
     </p>
   </div>
   <div v-else class="flow-broadcast" role="img" :aria-label="ariaLabel">
-    <div class="flow-broadcast-label">event: {{ EVENT_LABEL }}</div>
+    <div class="flow-broadcast-label">event: {{ currentEvent }}</div>
     <div class="flow-canvas">
       <svg class="flow-lines" viewBox="0 0 320 170" aria-hidden="true">
         <line v-for="(c, i) in clients" :key="i" :x1="hubX" :y1="hubY" :x2="c.x" :y2="c.y" class="flow-line-svg" />
@@ -62,11 +62,34 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 
 type PhaseName = "idle" | "server-pulse" | "broadcasting" | "client-pulse" | "hold";
 
-const EVENT_LABEL = "book.updated";
-const ariaLabel = `Diagram: Kavo (the server) broadcasts a ${EVENT_LABEL} event to Client A, Client B, and Client C simultaneously over SSE.`;
+const EVENT_EXAMPLES = [
+  "book #42 updated",
+  "order #108 created",
+  "article #3 deleted",
+  "invoice #77 paid",
+  "user #12 archived",
+  "comment #205 created",
+  "shipment #19 updated",
+  "ticket #58 closed",
+];
+
+function randomEvent(exclude?: string): string {
+  if (EVENT_EXAMPLES.length === 1) return EVENT_EXAMPLES[0];
+  let next: string;
+  do {
+    next = EVENT_EXAMPLES[Math.floor(Math.random() * EVENT_EXAMPLES.length)];
+  } while (next === exclude);
+  return next;
+}
+
+const currentEvent = ref(randomEvent());
+const ariaLabel = computed(
+  () =>
+    `Diagram: Kavo (the server) broadcasts a "${currentEvent.value}" event to Client A, Client B, and Client C simultaneously over SSE.`,
+);
 
 const hubX = 160;
-const hubY = 26;
+const hubY = 32;
 const clients = [
   { x: 45, y: 150, label: "Client A" },
   { x: 160, y: 150, label: "Client B" },
@@ -91,7 +114,11 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 
 function advance() {
   timer = setTimeout(() => {
-    phaseIndex.value = (phaseIndex.value + 1) % PHASES.length;
+    const nextIndex = (phaseIndex.value + 1) % PHASES.length;
+    if (PHASES[nextIndex].name === "idle") {
+      currentEvent.value = randomEvent(currentEvent.value);
+    }
+    phaseIndex.value = nextIndex;
     advance();
   }, PHASES[phaseIndex.value].duration);
 }
@@ -204,12 +231,12 @@ onUnmounted(() => {
 .flow-hub {
   position: absolute;
   transform: translate(-50%, -50%);
-  padding: 7px 16px;
+  padding: 11px 24px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 999px;
   background: var(--vp-c-bg-soft);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--vp-c-text-1);
   white-space: nowrap;
   transition:
@@ -224,6 +251,7 @@ onUnmounted(() => {
 
 .flow-node-role {
   margin-left: 4px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--vp-c-text-3);
 }
