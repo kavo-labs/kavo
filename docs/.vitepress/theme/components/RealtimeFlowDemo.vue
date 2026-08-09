@@ -17,7 +17,7 @@
           :x2="c.x"
           :y2="c.y"
           class="flow-line-svg"
-          :class="{ 'flow-line-svg--flowing': phase === 'broadcasting' }"
+          :class="{ 'flow-line-svg--flowing': phase === 'broadcasting' || phase === 'client-pulse' }"
         />
       </svg>
 
@@ -155,11 +155,13 @@ onUnmounted(() => {
 /*
  * A decreasing stroke-dashoffset walks the dash pattern in the direction
  * the line was drawn (hub -> client), so this reads as data flowing
- * outward from the server rather than the dashes just flickering in place.
+ * outward from the server. The offset per iteration (20) is a multiple of
+ * the dasharray's repeat length (5 + 5 = 10), so each loop lands back on
+ * an identical dash position and the animation seams invisibly.
  */
 .flow-line-svg--flowing {
   stroke: var(--vp-c-brand-1);
-  animation: flow-dash 0.65s linear;
+  animation: flow-dash 0.4s linear infinite;
 }
 
 @keyframes flow-dash {
