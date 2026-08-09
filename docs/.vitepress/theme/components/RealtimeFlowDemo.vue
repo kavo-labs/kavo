@@ -226,12 +226,14 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 3px;
+  width: 190px;
+  box-sizing: border-box;
   transform: translate(-50%, -50%);
-  padding: 10px 20px;
+  padding: 10px 16px;
   border: 1px solid var(--vp-c-divider);
   border-radius: 14px;
   background: var(--vp-c-bg-soft);
-  white-space: nowrap;
+  text-align: center;
   transition:
     box-shadow 0.35s ease-in-out,
     border-color 0.35s ease-in-out;
@@ -246,6 +248,7 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 700;
   color: var(--vp-c-text-1);
+  white-space: nowrap;
 }
 
 .flow-node-role {
