@@ -23,9 +23,11 @@
 ### Task 1: Create `RealtimeFlowDemo.vue`
 
 **Files:**
+
 - Create: `docs/.vitepress/theme/components/RealtimeFlowDemo.vue`
 
 **Interfaces:**
+
 - Consumes: nothing from other components — self-contained, no props.
 - Produces: a default-exported Vue SFC importable as `RealtimeFlowDemo` from `./components/RealtimeFlowDemo.vue`, usable as `<RealtimeFlowDemo />` with no props. Task 2 imports and renders it.
 
@@ -230,9 +232,11 @@ git commit -m "feat(docs): add RealtimeFlowDemo animated diagram component"
 ### Task 2: Wire `RealtimeFlowDemo` into `RealtimeSection.vue`
 
 **Files:**
+
 - Modify: `docs/.vitepress/theme/components/RealtimeSection.vue`
 
 **Interfaces:**
+
 - Consumes: `RealtimeFlowDemo` default export from `./RealtimeFlowDemo.vue` (Task 1), rendered as `<RealtimeFlowDemo />` with no props.
 - Produces: nothing consumed by further tasks — this is the last task in the plan.
 
@@ -242,7 +246,8 @@ In `docs/.vitepress/theme/components/RealtimeSection.vue`, change the `<template
 
 ```vue
 <template>
-  <div class="realtime-categories">
+  <div class="realtime-categories"></div>
+</template>
 ```
 
 to:
@@ -250,7 +255,8 @@ to:
 ```vue
 <template>
   <RealtimeFlowDemo />
-  <div class="realtime-categories">
+  <div class="realtime-categories"></div>
+</template>
 ```
 
 And add the import at the top of the `<script setup lang="ts">` block, before the `categories` constant:
@@ -294,6 +300,7 @@ Expected: build succeeds with no errors.
 Run: `pnpm docs:dev`
 
 Open the homepage in a browser and scroll to the "Realtime, without a second system" section. Confirm:
+
 - The diagram appears above the three-column category grid.
 - The cycle runs: `PATCH /books/42` label with dot moving left→right, "Kavo" box pulses, label swaps to `SSE · book.updated`, dot moves right→left, "Your app" box pulses, then it repeats.
 - Toggling `prefers-reduced-motion: reduce` in devtools (Rendering tab → "Emulate CSS media feature prefers-reduced-motion") and reloading shows the static two-line summary with no motion.
