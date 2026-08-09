@@ -115,6 +115,14 @@ here (see its own README); see
 [`docs/internals/architecture/18-realtime.md`](../../docs/internals/architecture/18-realtime.md)
 for the full event/channel model.
 
+**Manual test page:** `http://localhost:3000/realtime-test.html` — a
+small, self-contained page (`public/realtime-test.html`, served same-origin
+via `useStaticAssets`) with a Connect button, an event log, and buttons to
+create/patch/delete/restore an owner. Same-origin means no CORS is
+involved at all; open it in a real browser tab (not an embedded
+webview/preview panel — those can sandbox cross-origin `EventSource`
+differently than a real browser even same-origin).
+
 The e2e suite in `tests/` is the executable form of the behavior spec.
 `crud-e2e.suite.ts` holds the shared assertions; `app.e2e.spec.ts`,
 `app-postgres.e2e.spec.ts`, `app-mariadb.e2e.spec.ts`, and

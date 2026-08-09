@@ -1,7 +1,9 @@
 import "reflect-metadata";
 import type { AddressInfo } from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { INestApplication } from "@nestjs/common";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
 import { getKavoServiceToken } from "@kavo/nest";
@@ -19,7 +21,7 @@ import { listen } from "./support/listen.js";
  * `@kavo/sse`'s own `integration.spec.ts` gives for not mocking this.
  */
 
-let app: INestApplication;
+let app: NestExpressApplication;
 let baseUrl: string;
 let sse: SseTransport;
 
@@ -41,7 +43,7 @@ beforeAll(async () => {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule.forRoot(undefined, [sse])],
   }).compile();
-  app = moduleRef.createNestApplication();
+  app = moduleRef.createNestApplication<NestExpressApplication>();
   ownerService = app.get(getKavoServiceToken(Owner));
 
   app
@@ -50,6 +52,8 @@ beforeAll(async () => {
     .get("/realtime", (req: unknown, res: unknown) => {
       void sse.handleRequest(req as never, res as never);
     });
+  // Mirrors main.ts's static-asset mount for the manual test page.
+  app.useStaticAssets(join(dirname(fileURLToPath(import.meta.url)), "..", "public"));
 
   const server = await listen(app);
   const address = (server as unknown as { address(): AddressInfo }).address();
@@ -437,5 +441,16 @@ describe("GET /realtime — one write, multiple simultaneous subscribers", () =>
 
     await item.frames.cancel();
     await collection.frames.cancel();
+  });
+});
+
+describe("GET /realtime-test.html — the manual test page, served same-origin", () => {
+  it("serves the page with no CORS involved (same origin as /realtime and /owners)", async () => {
+    const response = await fetch(`${baseUrl}/realtime-test.html`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    const body = await response.text();
+    expect(body).toContain("Kavo /realtime tester");
   });
 });

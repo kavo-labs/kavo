@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Kavo /realtime tester</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b0f14;
+        --panel: #121821;
+        --border: #253141;
+        --text: #e6edf3;
+        --muted: #8b98a5;
+        --accent: #4f9dff;
+        --created: #3fb950;
+        --updated: #58a6ff;
+        --patched: #58a6ff;
+        --deleted: #f85149;
+        --restored: #d29922;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          14px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 16px;
+        padding: 16px 20px;
+        align-items: start;
+      }
+      @media (max-width: 800px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 14px;
+      }
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: var(--muted);
+        margin: 10px 0 4px;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 7px 8px;
+        background: #0d1420;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        font: inherit;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row > * {
+        flex: 1;
+      }
+      button {
+        cursor: pointer;
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: #182233;
+        color: var(--text);
+        font: inherit;
+        font-weight: 500;
+      }
+      button:hover {
+        background: #202c40;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #05131f;
+      }
+      button.primary:hover {
+        filter: brightness(1.1);
+      }
+      button.danger {
+        border-color: var(--deleted);
+        color: var(--deleted);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .btnrow {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 10px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      .dot.on {
+        background: var(--created);
+      }
+      #log {
+        height: 65vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column-reverse;
+      }
+      .event {
+        border: 1px solid var(--border);
+        border-left-width: 4px;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        font-size: 12.5px;
+      }
+      .event.created {
+        border-left-color: var(--created);
+      }
+      .event.updated {
+        border-left-color: var(--updated);
+      }
+      .event.patched {
+        border-left-color: var(--patched);
+      }
+      .event.deleted {
+        border-left-color: var(--deleted);
+      }
+      .event.restored {
+        border-left-color: var(--restored);
+      }
+      .event .head {
+        display: flex;
+        justify-content: space-between;
+        color: var(--muted);
+        margin-bottom: 4px;
+      }
+      .event .head .ev {
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .event .head .ev.created {
+        color: var(--created);
+      }
+      .event .head .ev.updated,
+      .event .head .ev.patched {
+        color: var(--updated);
+      }
+      .event .head .ev.deleted {
+        color: var(--deleted);
+      }
+      .event .head .ev.restored {
+        color: var(--restored);
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--text);
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      #meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Kavo <code>/realtime</code> tester</h1>
+      <p>
+        Manual SSE test page for <code>examples/nest-typeorm</code> — subscribe to an Owner channel, then trigger writes
+        via the REST API and watch events arrive.
+      </p>
+    </header>
+    <main>
+      <section class="panel">
+        <h2>Server</h2>
+        <label for="base">Base URL</label>
+        <input id="base" value="http://localhost:3000" />
+
+        <h2 style="margin-top: 18px">Subscribe</h2>
+        <label for="channel">Channel</label>
+        <input id="channel" value="Owner" placeholder="Owner or Owner.1" />
+        <div class="hint">
+          Bare entity name = collection channel (every owner). <code>Owner.&lt;id&gt;</code> = one owner.
+        </div>
+
+        <label for="filterField">Filter (optional, collection channel only)</label>
+        <div class="row">
+          <select id="filterField">
+            <option value="">— no filter —</option>
+            <option value="name">name</option>
+            <option value="email">email</option>
+            <option value="id">id</option>
+          </select>
+          <select id="filterOp">
+            <option value="eq">eq</option>
+            <option value="ne">ne</option>
+            <option value="like">like</option>
+          </select>
+          <input id="filterValue" placeholder="value" />
+        </div>
+
+        <div class="btnrow">
+          <button id="connect" class="primary">Connect</button>
+          <button id="disconnect" disabled>Disconnect</button>
+          <button id="clear">Clear log</button>
+        </div>
+        <div class="status"><span id="dot" class="dot"></span><span id="statusText">disconnected</span></div>
+
+        <h2 style="margin-top: 18px">Trigger a write</h2>
+        <label for="ownerId">Owner id (for patch/delete/restore)</label>
+        <input id="ownerId" placeholder="e.g. 1" />
+        <div class="btnrow">
+          <button id="create" class="primary">POST create (random owner)</button>
+        </div>
+        <div class="btnrow">
+          <button id="patch">PATCH patch name</button>
+          <button id="del" class="danger">DELETE (soft)</button>
+          <button id="restore">PATCH restore</button>
+        </div>
+        <div id="actionResult" class="hint"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Event stream</h2>
+        <div id="meta">Not connected.</div>
+        <div id="log"></div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let source = null;
+
+      // Served same-origin from the Nest app itself (GET /realtime-test) means
+      // window.location.origin is already the right Base URL — no CORS involved
+      // at all in that case. Opened as a standalone file:// page instead (no
+      // http(s) origin), the http://localhost:3000 default in the input stays.
+      if (location.protocol === "http:" || location.protocol === "https:") {
+        $("base").value = location.origin;
+      }
+
+      function setStatus(connected, text) {
+        $("dot").classList.toggle("on", connected);
+        $("statusText").textContent = text;
+        $("connect").disabled = connected;
+        $("disconnect").disabled = !connected;
+      }
+
+      function buildUrl() {
+        const base = $("base").value.replace(/\/$/, "");
+        const channel = $("channel").value.trim();
+        const params = new URLSearchParams();
+        params.set("channel", channel);
+        const field = $("filterField").value;
+        const value = $("filterValue").value;
+        if (field && value) {
+          params.set(`filter[${field}][${$("filterOp").value}]`, value);
+        }
+        return `${base}/realtime?${params.toString()}`;
+      }
+
+      function logEvent(eventName, raw) {
+        const wrap = document.createElement("div");
+        wrap.className = `event ${eventName}`;
+        let pretty = raw;
+        try {
+          pretty = JSON.stringify(JSON.parse(raw), null, 2);
+        } catch {
+          /* leave as-is */
+        }
+        wrap.innerHTML = `<div class="head"><span class="ev ${eventName}">${eventName}</span><span>${new Date().toLocaleTimeString()}</span></div><pre></pre>`;
+        wrap.querySelector("pre").textContent = pretty;
+        $("log").prepend(wrap);
+      }
+
+      function logRaw(label, text) {
+        const wrap = document.createElement("div");
+        wrap.className = "event";
+        wrap.innerHTML = `<div class="head"><span class="ev">${label}</span><span>${new Date().toLocaleTimeString()}</span></div><pre></pre>`;
+        wrap.querySelector("pre").textContent = text;
+        $("log").prepend(wrap);
+      }
+
+      $("connect").addEventListener("click", () => {
+        if (source) source.close();
+        const url = buildUrl();
+        source = new EventSource(url);
+        $("meta").textContent = `Connecting to ${url} …`;
+
+        source.onopen = () => {
+          setStatus(true, "connected");
+          $("meta").textContent = `Subscribed: ${url}`;
+        };
+        source.onerror = () => {
+          setStatus(false, "error / disconnected");
+          $("meta").textContent =
+            `Connection error (readyState ${source ? source.readyState : "?"}). ` +
+            "Most likely CORS: the server needs app.enableCors() (already added " +
+            "in examples/nest-typeorm/src/main.ts — rebuild + restart it), or " +
+            "the server isn't reachable at the Base URL above.";
+          logRaw("connection error", "EventSource reported an error — see message above the log.");
+        };
+        for (const ev of ["created", "updated", "patched", "deleted", "restored"]) {
+          source.addEventListener(ev, (message) => logEvent(ev, message.data));
+        }
+        // Fallback for any event id not explicitly listened above.
+        source.onmessage = (message) => logEvent("message", message.data);
+      });
+
+      $("disconnect").addEventListener("click", () => {
+        if (source) source.close();
+        source = null;
+        setStatus(false, "disconnected");
+        $("meta").textContent = "Not connected.";
+      });
+
+      $("clear").addEventListener("click", () => {
+        $("log").innerHTML = "";
+      });
+
+      async function api(path, options) {
+        const base = $("base").value.replace(/\/$/, "");
+        const res = await fetch(`${base}${path}`, options);
+        let body;
+        try {
+          body = await res.json();
+        } catch {
+          body = null;
+        }
+        $("actionResult").textContent = `${options?.method ?? "GET"} ${path} → ${res.status}`;
+        logRaw(`HTTP ${options?.method ?? "GET"} ${path} (${res.status})`, JSON.stringify(body, null, 2));
+        if (body && body.id) $("ownerId").value = body.id;
+        return body;
+      }
+
+      $("create").addEventListener("click", () => {
+        const n = Math.floor(Math.random() * 10000);
+        api("/owners", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: `Test Owner ${n}`, email: `owner${n}@example.com` }),
+        });
+      });
+
+      $("patch").addEventListener("click", () => {
+        const id = $("ownerId").value.trim();
+        if (!id) return alert("Set an owner id first (or click create).");
+        api(`/owners/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: `Renamed ${Math.floor(Math.random() * 10000)}` }),
+        });
+      });
+
+      $("del").addEventListener("click", () => {
+        const id = $("ownerId").value.trim();
+        if (!id) return alert("Set an owner id first (or click create).");
+        api(`/owners/${id}`, { method: "DELETE" });
+      });
+
+      $("restore").addEventListener("click", () => {
+        const id = $("ownerId").value.trim();
+        if (!id) return alert("Set an owner id first (or click create).");
+        api(`/owners/${id}/restore`, { method: "PATCH" });
+      });
+    </script>
+  </body>
+</html>

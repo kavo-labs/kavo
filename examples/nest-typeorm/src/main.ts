@@ -1,4 +1,6 @@
 import "reflect-metadata";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -7,6 +9,10 @@ import { getKavoServiceToken } from "@kavo/nest";
 import { createSseTransport } from "@kavo/sse";
 import { AppModule } from "./app.module.js";
 import { Owner } from "./owner/owner.entity.js";
+
+// `dist/main.js`'s own directory, ESM-style (`import.meta.url`, no `__dirname`)
+// — `public/` sits one level up, alongside `dist/` and `src/`.
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 async function bootstrap(): Promise<void> {
   // Filled in once the app finishes bootstrapping, below — `filterableEntities`
@@ -75,6 +81,14 @@ async function bootstrap(): Promise<void> {
     .get("/realtime", (req: unknown, res: unknown) => {
       void sse.handleRequest(req as never, res as never);
     });
+
+  // A manual SSE test page (public/realtime-test.html), served same-origin
+  // at GET /realtime-test.html — `enableCors()` above already makes a
+  // cross-origin page work too, but same-origin needs no CORS at all, and
+  // sidesteps browser-embedded-webview quirks (e.g. VS Code Live Preview)
+  // that can behave differently from a real browser tab even with CORS
+  // headers present.
+  app.useStaticAssets(join(packageRoot, "public"));
 
   await app.listen(3000);
 }
