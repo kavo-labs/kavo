@@ -146,22 +146,27 @@ onUnmounted(() => {
   height: 100%;
 }
 
-.flow-line-svg {
-  stroke: var(--vp-c-divider);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 5;
-}
-
 /*
  * A decreasing stroke-dashoffset walks the dash pattern in the direction
  * the line was drawn (hub -> client), so this reads as data flowing
  * outward from the server. The offset per iteration (20) is a multiple of
  * the dasharray's repeat length (5 + 5 = 10), so each loop lands back on
- * an identical dash position and the animation seams invisibly.
+ * an identical dash position and the animation seams invisibly. The line
+ * is always flowing (a connection is always live) at a slow, dim,
+ * ambient pace; the broadcasting/client-pulse phase just speeds it up
+ * and brightens it into the active event color.
  */
+.flow-line-svg {
+  stroke: var(--vp-c-divider);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 5;
+  animation: flow-dash 2.4s linear infinite;
+  transition: stroke 0.2s ease;
+}
+
 .flow-line-svg--flowing {
   stroke: var(--vp-c-brand-1);
-  animation: flow-dash 0.4s linear infinite;
+  animation-duration: 0.4s;
 }
 
 @keyframes flow-dash {
