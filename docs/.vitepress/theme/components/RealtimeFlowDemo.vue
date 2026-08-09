@@ -24,8 +24,6 @@
         <div class="flow-hub-event">{{ currentEvent }}</div>
       </div>
 
-      <div class="flow-clients-caption">client-facing UI &middot; service-to-service &middot; external-facing</div>
-
       <div
         v-for="(c, i) in clients"
         :key="`client-${i}`"
@@ -249,18 +247,6 @@ onUnmounted(() => {
   border-color: var(--vp-c-brand-1);
   color: var(--vp-c-text-1);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
-}
-
-.flow-clients-caption {
-  position: absolute;
-  top: 112px;
-  left: 0;
-  right: 0;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--vp-c-text-3);
-  text-align: center;
 }
 
 .flow-static {
