@@ -1,4 +1,5 @@
 <template>
+  <RealtimeFlowDemo />
   <div class="realtime-categories">
     <div v-for="category in categories" :key="category.title" class="realtime-category">
       <span class="realtime-category-title">{{ category.title }}</span>
@@ -10,6 +11,8 @@
 </template>
 
 <script setup lang="ts">
+import RealtimeFlowDemo from "./RealtimeFlowDemo.vue";
+
 const categories = [
   {
     title: "Client-facing UI",
