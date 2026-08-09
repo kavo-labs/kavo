@@ -239,7 +239,7 @@ function collectConditionFields(expression: FilterExpression<object>): readonly 
  * this instance never sees a write handled by another instance of a
  * horizontally-scaled app (see the package README's "Known limitations").
  */
-export function createSseTransport(options: SseTransportOptions): SseTransport {
+export function createTransport(options: SseTransportOptions): SseTransport {
   const bufferLimitBytes = options.bufferLimitBytes ?? DEFAULT_BUFFER_LIMIT_BYTES;
   const channels = new Map<string, Set<Connection>>();
   let nextEventId = 1;

@@ -1,5 +1,5 @@
 export {
-  createSseTransport,
+  createTransport,
   type FilterableEntity,
   type SseTransport,
   type SseTransportOptions,
