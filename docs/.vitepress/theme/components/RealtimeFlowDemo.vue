@@ -19,11 +19,7 @@
         ></div>
       </Transition>
 
-      <div
-        class="flow-hub"
-        :class="{ 'flow-hub--pulse': phase === 'server-pulse' }"
-        :style="{ left: `${hubX}px`, top: `${hubY}px` }"
-      >
+      <div class="flow-hub" :style="{ left: `${hubX}px`, top: `${hubY}px` }">
         <div class="flow-hub-name">Kavo <span class="flow-node-role">server</span></div>
         <div class="flow-hub-event">{{ currentEvent }}</div>
       </div>
@@ -234,14 +230,6 @@ onUnmounted(() => {
   border-radius: 14px;
   background: var(--vp-c-bg-soft);
   text-align: center;
-  transition:
-    box-shadow 0.35s ease-in-out,
-    border-color 0.35s ease-in-out;
-}
-
-.flow-hub--pulse {
-  border-color: var(--vp-c-brand-1);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--vp-c-brand-1) 20%, transparent);
 }
 
 .flow-hub-name {
