@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from "@nestjs/common";
 import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
+import type { RealtimeTransport } from "@kavo/core";
 import type { DataSource } from "typeorm";
 import { DATA_SOURCE, DatabaseModule, type SqlOptions } from "./database.module.js";
 import { OwnerController } from "./owner/owner.controller.js";
@@ -17,10 +18,15 @@ import { AddressController } from "./address/address.controller.js";
  * `forRoot()` defaults to the in-memory SQLite `DatabaseModule`;
  * `forRoot(sql)` threads the same options through to a real Postgres or
  * MariaDB instance instead, picked by `sql.type` (see `DatabaseModule`).
+ *
+ * `forRoot(sql, realtimeTransports)` additionally registers realtime
+ * transports (`@kavo/sse`'s, in `main.ts`) — a root-scope option, so it
+ * travels alongside `infrastructure` rather than through `defaults`
+ * (ADR-0023: a transport is a live object, not settings-tree data).
  */
 @Module({})
 export class AppModule {
-  static forRoot(sql?: SqlOptions): DynamicModule {
+  static forRoot(sql?: SqlOptions, realtimeTransports?: readonly RealtimeTransport[]): DynamicModule {
     return {
       module: AppModule,
       imports: [
@@ -34,6 +40,7 @@ export class AppModule {
           provideServices: true,
           useFactory: (dataSource: DataSource) => ({
             infrastructure: createInfrastructure(dataSource),
+            ...(realtimeTransports !== undefined && { realtimeTransports }),
             defaults: {
               pagination: { defaultLimit: 20, maxLimit: 100 },
               errors: { exposeInternals: false },

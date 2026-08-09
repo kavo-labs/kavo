@@ -89,6 +89,40 @@ GET    /cats?include=owner&fields[owner]=id,name
 POST   /cats                     {"name":"Kit","age":1,"owner":1}   # associate by id
 ```
 
+## Realtime
+
+`Owner` writes publish over SSE (`@kavo/sse`, mounted in `main.ts` at
+`/realtime`) — `createOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`
+all stream as `RealtimeEventDto`s to any connected subscriber. Subscribe
+with `curl` or `EventSource`:
+
+```bash
+curl -N "http://localhost:3000/realtime?channel=Owner" &
+curl -X POST http://localhost:3000/owners \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ada","email":"ada@x.io"}'
+# the curl above prints the created event as it arrives
+```
+
+`channel=Owner.1` subscribes to one owner only; `channel=Owner` is the
+collection channel (every owner). Both accept the same
+`filter[field][operator]=value` grammar REST list requests use —
+`channel=Owner&filter[name][eq]=Ada` delivers only writes to owners named
+"Ada". Every outgoing item is also narrowed to `id`/`name`/`email`
+(`subscribableFields` in `main.ts`) — `startedAt`/`createdAt`/`deletedAt`
+never reach a subscriber. `@kavo/sse` has no authentication of its own
+here (see its own README); see
+[`docs/internals/architecture/18-realtime.md`](../../docs/internals/architecture/18-realtime.md)
+for the full event/channel model.
+
+**Manual test page:** `http://localhost:3000/realtime-test.html` — a
+small, self-contained page (`public/realtime-test.html`, served same-origin
+via `useStaticAssets`) with a Connect button, an event log, and buttons to
+create/patch/delete/restore an owner. Same-origin means no CORS is
+involved at all; open it in a real browser tab (not an embedded
+webview/preview panel — those can sandbox cross-origin `EventSource`
+differently than a real browser even same-origin).
+
 The e2e suite in `tests/` is the executable form of the behavior spec.
 `crud-e2e.suite.ts` holds the shared assertions; `app.e2e.spec.ts`,
 `app-postgres.e2e.spec.ts`, `app-mariadb.e2e.spec.ts`, and

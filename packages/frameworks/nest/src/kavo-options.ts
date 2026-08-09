@@ -1,4 +1,4 @@
-import type { KavoInfrastructure, KavoSettings, DeepPartial, PaginationStrategy } from "@kavo/core";
+import type { KavoInfrastructure, KavoSettings, DeepPartial, PaginationStrategy, RealtimeTransport } from "@kavo/core";
 import type { KavoPrincipalOption } from "./principal.js";
 
 /**
@@ -16,6 +16,17 @@ export interface KavoModuleOptions {
   readonly infrastructure?: KavoInfrastructure;
   readonly defaults?: DeepPartial<KavoSettings>;
   readonly paginationStrategies?: readonly PaginationStrategy[];
+  /**
+   * Realtime transports every entity's write events publish to — the same
+   * root-scope option `createKavo`'s own `KavoOptions.realtimeTransports`
+   * is, threaded through unchanged. Registered once, process-wide, not
+   * per entity (ADR-0023: a transport is a live object and cannot live
+   * inside `defaults`/the settings tree). An entity still needs its own
+   * `realtime: { enabled: true, events: {...} }` — in `defaults` here or
+   * in that entity's own `@Kavo` config — before any of its writes publish
+   * anything; registering a transport alone does not turn realtime on.
+   */
+  readonly realtimeTransports?: readonly RealtimeTransport[];
   /**
    * Where a generated route finds the authenticated caller to put on
    * `KavoContext.principal` — `true` for `request.user`, or a function for

@@ -12,7 +12,8 @@
     "paths": {
       "@kavo/core": ["../../packages/core/src/index.ts"],
       "@kavo/typeorm": ["../../packages/orms/typeorm/src/index.ts"],
-      "@kavo/nest": ["../../packages/frameworks/nest/src/index.ts"]
+      "@kavo/nest": ["../../packages/frameworks/nest/src/index.ts"],
+      "@kavo/sse": ["../../packages/realtime/sse/src/index.ts"]
     }
   },
   "include": ["tests"]

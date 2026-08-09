@@ -19,6 +19,12 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * `AppModule` sets a global `defaults.operations.restoreOne: false`
  * (issue #38) — this entity opts back in, which is the whole point of the
  * precedence chain: entity config always wins over the global default.
+ *
+ * Realtime: every standard write publishes to whatever transports
+ * `AppModule.forRoot`'s second argument registers — `main.ts` wires
+ * `@kavo/sse`, so `GET /realtime?channel=Owner.<id>` or
+ * `?channel=Owner` (every owner, issue #160's collection channel) streams
+ * these events over `text/event-stream`.
  */
 @Kavo(Owner, {
   dto: {
@@ -27,6 +33,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     item: OwnerItemDto,
     list: OwnerListDto,
   },
+  realtime: { enabled: true, events: {} },
   softDelete: { strategy: "soft" },
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves

@@ -314,5 +314,8 @@ function createInstance(options: KavoModuleOptions): KavoInstance {
     ...(options.paginationStrategies !== undefined && {
       paginationStrategies: options.paginationStrategies,
     }),
+    ...(options.realtimeTransports !== undefined && {
+      realtimeTransports: options.realtimeTransports,
+    }),
   });
 }
