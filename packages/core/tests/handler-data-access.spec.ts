@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { EntityId, FindManyResult, KavoContext, RepositoryAdapter } from "@kavo/core";
+import type { EntityId, FindManyResult, KavoContext } from "@kavo/core";
 import { NotFoundException, builtInHandlers, createKavo, withListMeta } from "@kavo/core";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
+import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
 
 /**
  * How a handler reaches persistence (ADR-0025, issue #152).
@@ -24,6 +25,13 @@ function makeCrud(config: unknown, adapter = new InMemoryUserAdapter()) {
 
 async function seedAda(crud: ReturnType<typeof makeCrud>["crud"]): Promise<void> {
   await crud.createOne({ name: "Ada", email: "ada@example.com", age: 36, status: "pending" } as never);
+}
+
+/** The soft-deletable fixture, for the strategy-inheritance case below. */
+function makeAccountCrud(config: unknown) {
+  const adapter = new InMemoryAccountAdapter();
+  const crud = createKavo().createCrud(Account, config as never, { adapter, metadata: accountMetadata });
+  return { crud, adapter };
 }
 
 /** The custom operation's own request body — nothing on it is a column. */
@@ -81,38 +89,36 @@ describe("KavoContext.repository — a custom handler's data access", () => {
   });
 
   it("raises the handler's own NotFoundException when the row is missing", async () => {
-    const { crud } = makeCrud(banConfig);
+    const { crud, adapter } = makeCrud(banConfig);
+    await seedAda(crud);
 
-    await expect(crud.run("banOne", { id: 404, body: { reason: "spam" } } as never)).rejects.toMatchObject({
-      code: "KAVO_NOT_FOUND",
-    });
+    const failed = crud.run("banOne", { id: 404, body: { reason: "spam" } } as never);
+
+    await expect(failed).rejects.toBeInstanceOf(NotFoundException);
+    await expect(failed).rejects.toMatchObject({ code: "KAVO_NOT_FOUND" });
+    // The seeded row is untouched: the handler refused before writing.
+    expect(adapter.rows[0]).toMatchObject({ status: "pending" });
   });
 
-  it("carries the very adapter createCrud resolved, not a copy of it", async () => {
-    // Identity matters: a handler's write has to land in the same store
-    // every other operation reads from, including the `runtime.adapter`
-    // override, which is how a single entity is pointed somewhere else.
-    let seen: RepositoryAdapter<User> | undefined;
-    const adapter = new InMemoryUserAdapter();
-    const { crud } = makeCrud(
-      {
-        operations: {
-          inspectOne: {
-            handler: {
-              async execute(_input: unknown, context: KavoContext<User>) {
-                seen = context.repository;
-                return null;
-              },
-            },
-          },
-        },
+  it("resolves the same adapter createCrud did, runtime.adapter override included", async () => {
+    // A handler's write has to land in the store every other operation
+    // reads from. `runtime.adapter` is how one entity is pointed somewhere
+    // else, so it is the case that tells a wrong answer from a right one:
+    // the root infrastructure's adapter must stay untouched.
+    const root = new InMemoryUserAdapter();
+    const override = new InMemoryUserAdapter();
+    const crud = createKavo({
+      infrastructure: {
+        metadataFor: () => userMetadata as never,
+        adapterFor: () => root as never,
       },
-      adapter,
-    );
+    }).createCrud(User, banConfig as never, { adapter: override });
+    await seedAda(crud);
 
-    await crud.run("inspectOne");
+    await crud.run("banOne", { id: 1, body: { reason: "spam" } } as never);
 
-    expect(seen).toBe(adapter);
+    expect(override.rows[0]).toMatchObject({ status: "banned", name: "spam" });
+    expect(root.rows).toHaveLength(0);
   });
 
   it("hands a read the writer half too — kind decides the request's shape, not the handler's reach", async () => {
@@ -162,11 +168,50 @@ describe("KavoContext.repository — a custom handler's data access", () => {
       },
       recording,
     );
-    const handle = { id: "tx-1" };
+    const transaction = { id: "tx-1", handle: { queryRunner: "opaque" } };
 
-    await crud.run("adoptOne", { body: { name: "Ada" } } as never, { transaction: { handle } as never });
+    await crud.run("adoptOne", { body: { name: "Ada" } } as never, { transaction });
 
-    expect(recording.seen).toEqual({ handle });
+    // The caller's own object, not a reconstruction of it: the handle is
+    // opaque to core, so anything short of identity would be core having
+    // opinions about a shape it cannot see.
+    expect(recording.seen).toBe(transaction);
+  });
+
+  it("applies the soft-delete strategy the request resolved, per-call override included", async () => {
+    // The claim under test is that a handler's write inherits the resolved
+    // config, not the frozen entity one. `InMemoryAccountAdapter` branches
+    // on `context.config.softDelete` the way a real adapter does, so a
+    // context that lost the per-call view fails here.
+    const archiveConfig = {
+      operations: {
+        archiveOne: {
+          handler: {
+            // `{ id, body }` is what the engine assembles for an
+            // id-addressed custom write, body and all, even when the
+            // operation reads nothing from it.
+            async execute({ id }: { id: EntityId }, context: KavoContext<Account>) {
+              await context.repository.delete(id, context);
+              return null;
+            },
+          },
+        },
+      },
+    };
+    const soft = makeAccountCrud(archiveConfig);
+    await soft.crud.createOne({ name: "acme" } as never);
+    const hard = makeAccountCrud(archiveConfig);
+    await hard.crud.createOne({ name: "acme" } as never);
+
+    await soft.crud.run("archiveOne", { id: 1 } as never);
+    await hard.crud.run("archiveOne", { id: 1 } as never, { settings: { softDelete: { strategy: "hard" } } });
+
+    // Soft: the row survives, marked, and is gone from the default view.
+    expect(soft.adapter.rows).toHaveLength(1);
+    expect(soft.adapter.rows[0]?.deletedAt).toBeInstanceOf(Date);
+    expect((await soft.crud.findMany()).items).toHaveLength(0);
+    // Hard, from the per-call override alone: the row is gone.
+    expect(hard.adapter.rows).toHaveLength(0);
   });
 });
 
@@ -213,5 +258,24 @@ describe("builtInHandlers — with and without an adapter argument", () => {
 
     expect(list.items).toEqual([expect.objectContaining({ name: "Grace" })]);
     expect(adapter.rows).toHaveLength(1);
+  });
+
+  it("sends a write to the given adapter too, not only a read", async () => {
+    // The fallback is per handler, so a read proving it says nothing about
+    // the seven others. A write is the half where getting it backwards
+    // corrupts data rather than returning the wrong rows.
+    const replica = new InMemoryUserAdapter();
+    await replica.create({ name: "Grace", email: "grace@example.com", age: 45, status: "active" });
+    const { crud, adapter } = makeCrud({
+      operations: {
+        patchOne: { handler: builtInHandlers<User>(replica)("patchOne") },
+      },
+    });
+    await seedAda(crud);
+
+    await crud.patchOne(1, { age: 46 } as never);
+
+    expect(replica.rows[0]).toMatchObject({ name: "Grace", age: 46 });
+    expect(adapter.rows[0]).toMatchObject({ name: "Ada", age: 36 });
   });
 });

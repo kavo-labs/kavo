@@ -2,6 +2,7 @@ import { expectTypeOf } from "vitest";
 import { builtInHandlers, createKavo, createKavoContext } from "@kavo/core";
 import type {
   KavoContext,
+  KavoEngineDependencies,
   RepositoryAdapter,
   ResolvedEntityConfig,
   StandardHandlerFactory,
@@ -41,6 +42,13 @@ kavo.createCrud(Author, {
 // adapter exists to pass.
 expectTypeOf(builtInHandlers<Author>()).toEqualTypeOf<StandardHandlerFactory<Author>>();
 expectTypeOf(builtInHandlers({} as RepositoryAdapter<Author>)).toEqualTypeOf<StandardHandlerFactory<Author>>();
+
+// The engine is built from the whole adapter, not the read half. Pinned
+// because the rename is breaking for anything constructing a `KavoEngine`
+// and nothing in the suite constructs one directly.
+expectTypeOf<KavoEngineDependencies<Author>["repository"]>().toEqualTypeOf<RepositoryAdapter<Author>>();
+// @ts-expect-error — `reader` is gone, replaced by `repository`.
+expectTypeOf<KavoEngineDependencies<Author>["reader"]>().toBeNever();
 
 // `repository` is required on a context, not an optional extra: a context
 // without one would hand some handler a field that is not there.

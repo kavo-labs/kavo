@@ -4,8 +4,20 @@ import request from "supertest";
 import { Controller, Get, Inject, NotFoundException, Param, type INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
-import type { DefaultKavoService, KavoContext, NormalizedQueryContext, OperationHandler } from "@kavo/core";
-import { ConfigurationException, NotFoundException as KavoNotFoundException, WireQuery } from "@kavo/core";
+import type {
+  DefaultKavoService,
+  FindManyResult,
+  KavoContext,
+  NormalizedQueryContext,
+  OperationHandler,
+} from "@kavo/core";
+import {
+  ConfigurationException,
+  NotFoundException as KavoNotFoundException,
+  WireQuery,
+  builtInHandlers,
+  withListMeta,
+} from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import {
   Kavo,
@@ -775,6 +787,35 @@ describe("@Kavo custom operations reaching data (issue #152)", () => {
       .expect("Content-Type", /application\/problem\+json/);
 
     expect(response.body.code).toBe("KAVO_NOT_FOUND");
+  });
+
+  /**
+   * The other half of ADR-0025: a built-in handler wrapped at decoration
+   * time. `builtInHandlers<Todo>()` takes no adapter, so this composes
+   * where the old form could not, and the wrap still runs the real
+   * `findMany` against the adapter the factory built afterwards.
+   */
+  @Kavo(Todo, {
+    operations: {
+      findMany: {
+        handler: withListMeta(builtInHandlers<Todo>()("findMany"), (result: FindManyResult<Todo>) => ({
+          done: result.entities.filter((todo) => todo.done).length,
+        })),
+      },
+    },
+  })
+  @Controller("todos")
+  class ListMetaController {}
+
+  it("runs a decoration-time withListMeta wrap over the built-in findMany", async () => {
+    await bootstrapAsync(ListMetaController);
+    await request(server()).post("/todos").send({ title: "write docs", done: true }).expect(201);
+    await request(server()).post("/todos").send({ title: "write tests" }).expect(201);
+
+    const response = await request(server()).get("/todos").expect(200);
+
+    expect(response.body).toMatchObject({ total: 2, limit: 20, offset: 0, meta: { done: 1 } });
+    expect(response.body.items).toHaveLength(2);
   });
 });
 

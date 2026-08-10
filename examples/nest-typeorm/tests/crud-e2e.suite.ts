@@ -875,6 +875,33 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(operation?.operationId).toBe("Address_normalizePostalCodeOne");
     });
 
+    it("400s when the stored postalCode cannot be normalized into a valid one", async () => {
+      // The handler's `assertValidPostalCode` throws inside the engine now
+      // rather than inside a native route, so its exception travels the
+      // engine's error handler on the way out. Seeded directly, since
+      // every write path validates on the way in.
+      const created = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "Springfield", postalCode: "10001" })
+        .expect(201);
+      const id = created.body.id as number;
+      const dataSource = getApp().get<DataSource>(DATA_SOURCE);
+      await dataSource.getRepository(Address).update(id, { postalCode: "not-a-code" });
+
+      const response = await request(server())
+        .post(`/addresses/${id}/normalize-postal-code`)
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body).toMatchObject({ status: 400, code: "KAVO_QUERY_INVALID" });
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "postalCode", code: "KAVO_QUERY_INVALID_VALUE" }),
+      ]);
+
+      // Refused before the write, so the row still holds the bad value.
+      const fetched = await request(server()).get(`/addresses/${id}`).expect(200);
+      expect(fetched.body.postalCode).toBe("not-a-code");
+    });
+
     it("404s when normalizing a nonexistent address", async () => {
       const response = await request(server())
         .post("/addresses/999999/normalize-postal-code")
