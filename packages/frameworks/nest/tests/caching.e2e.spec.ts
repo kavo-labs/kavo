@@ -129,6 +129,31 @@ describe("ETag alongside the host framework's own", () => {
 
     expect(created.headers["etag"]).toMatch(/^"[0-9a-f]{64}"$/);
   });
+
+  it("wins over Express's weak ETag on an @Override'd route too", async () => {
+    // #186's actual scenario, and the one the rest of this file could not
+    // see because it turns Express's tag off. An override delegating to the
+    // typed service used to serve no tag of its own, so Express's weak one
+    // stood in — and a weak tag can never satisfy `If-Match`, which uses the
+    // strong comparison. The route looked cached and protected nothing.
+    @Kavo(Todo)
+    @Controller("todos")
+    class DelegatingTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      async findOne(id: string, query: unknown): Promise<unknown> {
+        return this.base.findOne(id as never, query as never);
+      }
+    }
+
+    await bootstrap(DelegatingTodoController, { expressEtag: true });
+    await seed();
+
+    const read = await request(server()).get("/todos/1").expect(200);
+    expect(read.headers["etag"]).toMatch(/^"[0-9a-f]{64}"$/);
+    expect(read.headers["etag"]).not.toMatch(/^W\//);
+  });
 });
 
 describe("If-None-Match → 304", () => {
@@ -335,7 +360,7 @@ describe("If-Match through a replaced controller method", () => {
     }
   }
 
-  it("drops the guard when the override drops its preconditions parameter", async () => {
+  it("drops the guard when the override drops its preconditions parameter, but keeps the ETag", async () => {
     await bootstrap(BypassingTodoController);
     await seed();
     await request(server()).patch("/todos/1").send({ priority: 5 }).expect(200);
@@ -344,8 +369,49 @@ describe("If-Match through a replaced controller method", () => {
     const applied = await request(server()).put("/todos/1").set("If-Match", '"stale"').send({ title: "overwritten" });
     expect(applied.status).toBe(200);
     expect(adapter.rows[0]).toMatchObject({ title: "overwritten" });
-    // And no ETag either: this override returns the typed service's
-    // unwrapped item, which is where the envelope's tag was discarded.
+    // The tag, though, is Kavo's (ADR-0027). This used to assert
+    // `toBeUndefined()`, which was true of the framework and false of the
+    // wire: Express filled in its own weak tag, so the route looked like it
+    // had conditional requests while every If-Match write was a silent lost
+    // update (#186). Asserting the shape is the point — "an ETag exists" is
+    // exactly the check that missed this.
+    expect(applied.headers["etag"]).toMatch(/^"[0-9a-f]{64}"$/);
+  });
+
+  it("serves a tag a forwarding override will actually accept", async () => {
+    // The round trip #186 could not close. A client reads, holds the tag,
+    // and writes with it; if the read served the host framework's weak tag
+    // and the write compared against the engine's content hash, the two
+    // could never match and forwarding `preconditions` turned a silent
+    // no-op into a permanent 412.
+    await bootstrap(ForwardingTodoController);
+    await seed();
+
+    const read = await request(server()).get("/todos/1").expect(200);
+    const tag = read.headers["etag"] as string;
+    expect(tag).toMatch(/^"[0-9a-f]{64}"$/);
+
+    await request(server()).put("/todos/1").set("If-Match", tag).send({ title: "accepted" }).expect(200);
+    expect(adapter.rows[0]).toMatchObject({ title: "accepted" });
+  });
+
+  it("leaves the override's return alone when caching is off for the operation", async () => {
+    // The wrapper reads the operation's own resolved settings, so an app
+    // that turned ETags off does not get one bolted back on.
+    @Kavo(Todo, { caching: { etag: false } })
+    @Controller("todos")
+    class UncachedTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      async updateOne(id: string, body: Partial<Todo>): Promise<unknown> {
+        return this.base.updateOne(id as never, body as never);
+      }
+    }
+
+    await bootstrap(UncachedTodoController);
+    await seed();
+    const applied = await request(server()).put("/todos/1").send({ title: "no tag" }).expect(200);
     expect(applied.headers["etag"]).toBeUndefined();
   });
 

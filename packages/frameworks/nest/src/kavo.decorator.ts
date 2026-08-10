@@ -5,6 +5,7 @@ import type {
   EntityConfig,
   EntityInput,
   KavoCallOptions,
+  KavoResponse,
   OperationDescriptor,
   OperationId,
   OperationsConfig,
@@ -12,7 +13,7 @@ import type {
   RequestPreconditions,
   StandardOperationId,
 } from "@kavo/core";
-import { ConfigurationException, createOperationRegistry } from "@kavo/core";
+import { ConfigurationException, computeEtag, createOperationRegistry } from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
 import type { OverrideMetadata } from "./override.decorator.js";
 import type { KavoPrincipalExtractor, KavoPrincipalRequest } from "./principal.js";
@@ -147,7 +148,7 @@ interface ResolvedRoute {
  * function backing it changes — resolved first, ahead of manual-method-wins,
  * so a decorated method never falls through to plain name-matching.
  *
- * **A replaced method owns its own conditional-request handling.** Kavo
+ * **A replaced method owns the precondition, but not the `ETag`.** Kavo
  * enforces `If-Match` inside the engine (ADR-0020), so a method that does
  * not reach the engine cannot have it enforced for it: a hand-written or
  * `@Override`'d `updateOne` that ignores its `preconditions` parameter
@@ -156,8 +157,14 @@ interface ResolvedRoute {
  * `ConditionalRequest` parameter is applied to overrides too, so the
  * tokens are handed to the method. Forward them, either as
  * `service.<op>(…, { preconditions })` on the typed surface or by
- * returning `service.engine.execute({ …, preconditions })`, which
- * additionally puts the `ETag` back on the response. The same goes for the
+ * returning `service.engine.execute({ …, preconditions })`.
+ *
+ * The `ETag` half is *not* the method's to arrange: `wrapOverrideForEtag`
+ * hashes a bare return, so an override delegating to the typed service
+ * still serves the tag a generated route would (ADR-0027). Before that,
+ * the header simply went missing and the host framework's own weak tag
+ * stood in for it — which looked like working conditional requests and
+ * guarded nothing (#186). The same goes for the
  * principal: a generated route resolves it from the module's `principal`
  * extractor per request, a replaced method must pass it on itself, and
  * `boundKavoPrincipal(this, request)` is how it reaches the extractor the
@@ -240,6 +247,7 @@ export function Kavo<
         applySwaggerMetadata(controller.prototype, methodName, descriptor, route, entity, erasedConfig);
       } else {
         assertNoOwnParamMetadata(controller.prototype, overrideMethodName, entity.name, descriptor.id);
+        wrapOverrideForEtag(controller.prototype, overrideMethodName, descriptor);
         applyRouteDecorators(controller.prototype, overrideMethodName, descriptor, route);
         applySwaggerMetadata(controller.prototype, overrideMethodName, descriptor, route, entity, erasedConfig);
       }
@@ -285,6 +293,76 @@ function collectOverrides(
     }
   }
   return overrides;
+}
+
+/**
+ * Gives an `@Override`'d single-item route the `ETag` a generated one
+ * carries (ADR-0027).
+ *
+ * The interceptor that sets the header only acts on an engine envelope, and
+ * the natural way to write an override is to delegate to the typed service
+ * — `this.base.patchOne(id, body, { principal })` — which discards the
+ * envelope by design. So the override returned a bare item, the interceptor
+ * left it alone, and **the host framework filled in its own weak tag**.
+ * Express's default is convincing: reads carry an `ETag`, `If-None-Match`
+ * answers `304`, and the tag changes when the body does. Three of the four
+ * observable behaviours are right. The missing one is the `412`, which is
+ * the only one that protects data, so an application checking "do
+ * conditional requests work?" by hand saw them pass while every `If-Match`
+ * write was a silent lost update (#186).
+ *
+ * Promoting a bare return to an envelope here fixes that at the one point
+ * that can see both the operation's config and the value actually being
+ * served. An override that already returns `service.engine.execute(...)` is
+ * untouched, and so is one on a `many` operation, since a collection has no
+ * ETag (ADR-0020).
+ *
+ * **What this does not do is evaluate `If-Match`.** That happens inside the
+ * engine, against a canonical read, and only when the override forwards its
+ * `preconditions` parameter. What changes is that forwarding now *works*:
+ * previously the client held the host framework's tag, which could never
+ * equal the engine's content hash, so forwarding turned a silent no-op into
+ * a permanent `412`.
+ */
+function wrapOverrideForEtag(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+): void {
+  // A collection response has no tag to give: a list's identity spans
+  // pagination, sort and filter, which ADR-0020 leaves out of scope.
+  if (descriptor.cardinality === "many") return;
+  const original = prototype[methodName] as (this: unknown, ...args: unknown[]) => unknown;
+  async function wrapped(this: Partial<BoundController>, ...args: unknown[]): Promise<unknown> {
+    const result = (await original.apply(this, args)) as unknown;
+    // An envelope is already tagged; `null`/`undefined` is a void operation
+    // (`deleteOne`), which has no representation to hash.
+    if (result === null || result === undefined || isKavoResponse(result)) return result;
+    const service = this[KAVO_SERVICE_PROPERTY];
+    // Unbound (a controller outside `KavoModule`'s discovery) means there
+    // is no config to consult, and guessing `etag: true` would add a header
+    // the app may have turned off. Leave it exactly as the override wrote it.
+    if (service === undefined) return result;
+    if (!service.engine.config.settingsFor(descriptor.id).caching.etag) return result;
+    return {
+      operation: descriptor.id,
+      item: result,
+      list: null,
+      etag: await computeEtag(result),
+      // `If-None-Match` is answered by the engine against its own
+      // representation. This wrapper never saw the request's preconditions
+      // — they went to the override — so it reports the tag and nothing more.
+      notModified: false,
+    } satisfies KavoResponse;
+  }
+  Object.defineProperty(wrapped, "name", { value: methodName });
+  Object.defineProperty(prototype, methodName, { value: wrapped, writable: true, configurable: true });
+}
+
+function isKavoResponse(value: unknown): boolean {
+  return (
+    typeof value === "object" && value !== null && "operation" in value && "etag" in value && "notModified" in value
+  );
 }
 
 /**
