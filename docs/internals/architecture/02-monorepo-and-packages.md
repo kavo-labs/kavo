@@ -270,10 +270,21 @@ uninstallable — and npm does not allow republishing a version to correct it.
 | `@kavo/mongoose` | `@kavo/core`                               | `mongoose`                                                                                                                         |
 | `@kavo/mikroorm` | `@kavo/core`                               | `@mikro-orm/core`                                                                                                                  |
 | `@kavo/sse`      | `@kavo/core`                               | — (none)                                                                                                                           |
-| `@kavo/graphql`  | `@kavo/core`                               | `graphql`                                                                                                                          |
-| `@kavo/mcp`      | `@kavo/core`                               | `@modelcontextprotocol/sdk`                                                                                                        |
+| `@kavo/graphql`  | `@kavo/core`                               | `graphql` (optional)                                                                                                               |
+| `@kavo/mcp`      | `@kavo/core`                               | `@modelcontextprotocol/sdk` (optional)                                                                                             |
 | `@kavo/nest`     | `@kavo/core`, `@kavo/graphql`, `@kavo/mcp` | `@nestjs/common`, `@nestjs/core`, `graphql`, `@modelcontextprotocol/sdk` (+ `@nestjs/swagger`, all three protocol peers, optional) |
 
 Peers, not dependencies, because the consumer's app owns the TypeORM/Prisma/
 Mongoose/MikroORM/Nest instance — a second copy via a nested dependency would fracture
 `instanceof` checks and DI tokens.
+
+**Optional where the peer is optional to _install_, required to _use_.** An
+ORM adapter's peer is not: `@kavo/typeorm` without `typeorm` does nothing, so
+marking it optional would trade an install-time error for a runtime one. A
+protocol binding's is, and both hops have to say so. `@kavo/nest` depends on
+`@kavo/graphql` and `@kavo/mcp` outright (ADR-0016's sanctioned sideways
+edge), so npm resolves the binding and then the binding's peer — marking only
+`@kavo/nest`'s copy left `graphql`, the MCP SDK and its `zod` subtree in
+every REST-only install (#148). `tests/release-workflow.spec.ts` asserts both
+hops, since the failure is silent: the manifest still installs, the tree is
+just bigger.

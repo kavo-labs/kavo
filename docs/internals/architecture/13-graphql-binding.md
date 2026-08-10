@@ -179,8 +179,12 @@ graphql: true })` mounts `POST /graphql`; `{ graphql: { path: "api/graphql"
 
 ## 6. Lazy-loading an optional protocol dependency
 
-`graphql` is an _optional_ peer of `@kavo/nest` (`peerDependenciesMeta.graphql.optional: true`)
-— an app that never touches GraphQL shouldn't need it installed. That
+`graphql` is an _optional_ peer of `@kavo/nest` **and of `@kavo/graphql`
+itself** (`peerDependenciesMeta.graphql.optional: true` on both) — an app
+that never touches GraphQL shouldn't need it installed. Both hops matter:
+`@kavo/nest` depends on `@kavo/graphql` outright, so npm resolves the
+binding and then the binding's peer, and marking only the outer one left
+`graphql` in every REST-only install (#148). That
 guarantee only holds if nothing `@kavo/nest`'s always-loaded module graph
 (`index.ts`, `kavo.module.ts`) reaches at import time ever statically
 imports `@kavo/graphql` or `graphql`. A static top-level `import` is
@@ -227,6 +231,18 @@ Node cannot `require()` an ES module synchronously — only a dynamic
 `BaseKavoGraphQLController.onModuleInit`/`execute` are `async` for
 exactly this reason; a future binding lazily loading another first-party
 ESM package should expect the same.
+
+**The lazy path is `@kavo/nest`'s, not `@kavo/graphql`'s.** Now that
+`graphql` is optional on `@kavo/graphql` too, installing that package alone
+without `graphql` is a reachable state, and it does not get the friendly
+`ConfigurationException`: `json-scalar.ts` and `schema.ts` import
+`GraphQLScalarType`/`Kind`/`valueFromASTUntyped` as **values** at the top
+level, so the first import throws a raw `ERR_MODULE_NOT_FOUND`. That is the
+honest outcome — a package whose whole job is building a GraphQL schema
+cannot run without `graphql`, and "optional" here means optional to
+_install_, required to _use_. The friendly error exists on the `@kavo/nest`
+path because that is the one where an app can plausibly have never asked for
+GraphQL at all.
 
 ## 7. What's out of scope (by design, for now)
 
