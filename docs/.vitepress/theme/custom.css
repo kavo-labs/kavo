@@ -4,6 +4,7 @@
   --vp-c-brand-3: #5c3dc0;
   --vp-c-brand-soft: rgba(124, 92, 255, 0.14);
   --vp-c-brand-selection: rgba(124, 92, 255, 0.28);
+  --vp-home-selection: rgba(147, 51, 234, 0.75);
 
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: linear-gradient(120deg, #9b7fe0 20%, #6a45e6);
@@ -14,10 +15,16 @@
   --vp-c-brand-2: #8b6fe0;
   --vp-c-brand-3: #7c5cff;
   --vp-c-brand-selection: rgba(167, 139, 250, 0.32);
+  --vp-home-selection: rgba(196, 132, 252, 0.8);
 }
 
 ::selection {
   background-color: var(--vp-c-brand-selection);
+}
+
+.VPHome ::selection {
+  background-color: var(--vp-home-selection);
+  color: #000;
 }
 
 .VPHero {
