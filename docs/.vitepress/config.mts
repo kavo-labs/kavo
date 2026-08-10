@@ -54,6 +54,8 @@ const config = defineConfig({
   },
 
   themeConfig: {
+    logo: "/favicon.svg",
+
     nav: [
       { text: "Getting started", link: "/getting-started" },
       {
