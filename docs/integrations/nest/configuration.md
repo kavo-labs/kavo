@@ -424,6 +424,28 @@ Worth knowing before you reach for one:
 - **Custom routes are matched first.** Custom entries are registered ahead of the standard table, so `GET /orders/pending` reaches its own handler rather than `GET /orders/:id`. The flip side is that a custom entry whose `meta.routes` reproduces a standard route's shape takes that route.
 - **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it is a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
+- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `dto.output`, the handler's return value is filtered to the entity's columns plus its computed fields, exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its **own** shape needs a DTO:
+
+  ```ts
+  class ImportOutcomeDto {
+    applied = 0;
+    skus: string[] = [];
+  }
+
+  operations: {
+    // `One`, not `Many`: cardinality names the *response*, and this one
+    // answers with a single outcome however many rows it wrote.
+    importPricesOne: { handler, dto: { output: ImportOutcomeDto } },
+  }
+  ```
+
+  Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing.
+
+  A result the projection empties **raises** rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of the three mistakes it is: no DTO and no field in common with the entity, a registered DTO the handler's keys do not match, or a registered DTO with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array — the last being what a handler that meant `cardinality: "many"` and left it at the default returns. It does **not** fire under an explicit `fields=`, which can empty a projection on its own.
+
+  Two things follow from it being a request-time refusal. The handler has already run, so a write it made through `context.repository` stands; and a partial strip — a result mixing entity fields with its own — is still silent, because that is what a projection is for.
+
+- **The route defaults to `POST` and `201`.** A custom id is absent from the standard route table, so it falls back to `POST /<controller>/<operation id>` with a `201` — a custom operation is a write against the collection until its `meta.routes` says otherwise. A read that returns an existing row almost certainly wants `meta: { routes: { method: "GET", path: ":id/summary", successStatus: 200 } }`.
 
 Custom operations are a REST and programmatic feature only: the GraphQL and MCP bindings expose the standard operations.
 
