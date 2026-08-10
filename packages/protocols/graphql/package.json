@@ -35,6 +35,11 @@
   "peerDependencies": {
     "graphql": "^17.0.0"
   },
+  "peerDependenciesMeta": {
+    "graphql": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "graphql": "^17.0.0"
   }

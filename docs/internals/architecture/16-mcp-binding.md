@@ -213,11 +213,24 @@ via `KavoModule`'s `mcp` option — never from `index.ts`, `kavo.module.ts`,
 or `base-kavo-mcp.controller.ts` directly.
 
 `@modelcontextprotocol/sdk` is listed as an optional peer of both
-`@kavo/mcp` and `@kavo/nest` (`peerDependenciesMeta`) so a consumer's own
-typecheck resolves the `Tool`/`CallToolResult` types even if they never
-install the SDK (a hand-written `BaseKavoMcpController` subclass reusing
-only the plain data shapes) — and so it's actually present for `mcp: true`
-to work at runtime.
+`@kavo/mcp` and `@kavo/nest` (`peerDependenciesMeta`). A **peer**, so the
+supported version range is declared and a package manager links the
+consumer's own copy rather than nesting a second one. **Optional**, because
+`@kavo/mcp` never executes the SDK — its only reference is
+`import type { CallToolResult, Tool }` in `tools.ts`, fully erased — so
+`@kavo/nest`'s eager `import { resolveKavoMcpTools } from "@kavo/mcp"`
+resolves with the SDK absent, and a REST-only app is not made to install it
+(#148). Marking it on both hops is what makes that true: `@kavo/nest`
+depends on `@kavo/mcp` outright, so a required peer on the inner hop
+force-installs the SDK regardless of the outer marking.
+
+Note what optional does **not** buy: it has no bearing on type resolution.
+A consumer who never installs the SDK loses the `Tool`/`CallToolResult`
+declarations `tools.d.ts` re-exports, which surfaces as `TS2307` only under
+`skipLibCheck: false` — `tsconfig.base.json` and Nest's own scaffold both
+set it `true`, so the blast radius is narrow, but a hand-written
+`BaseKavoMcpController` subclass that wants those types should install the
+SDK as a devDependency.
 
 ## 6. What's out of scope (by design, for now)
 

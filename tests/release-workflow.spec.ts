@@ -35,6 +35,7 @@ interface Manifest {
   engines?: Record<string, string>;
   dependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
   optionalDependencies?: Record<string, string>;
 }
 
@@ -320,6 +321,46 @@ describe("engines field lockstep", () => {
     for (const [dir, node] of Object.entries(actual)) {
       expect(node, `${dir} engines.node`).toBe(expectedNode);
     }
+  });
+});
+
+/**
+ * A protocol binding's peer is **optional to install, required to use**, and
+ * only `peerDependenciesMeta` says so to a package manager. Without it,
+ * `@kavo/nest` — which depends on both bindings — drags `graphql`, the MCP
+ * SDK and its `zod` subtree into every REST-only install (#148).
+ *
+ * `@kavo/nest` already marks its own three. These two are the transitive
+ * hop that made the marking on `@kavo/nest` insufficient, and the pairing is
+ * exactly the kind of thing that regresses silently when a package is added:
+ * the manifest still installs, the tree is just bigger.
+ *
+ * Deliberately **not** generalized to "every peer of every package". An ORM
+ * adapter's peer is genuinely required — `@kavo/typeorm` without `typeorm`
+ * does nothing — so marking those optional would trade a real install-time
+ * error for a runtime one.
+ */
+describe("optional protocol peers", () => {
+  const optionalPeers: readonly [dir: string, peer: string][] = [
+    ["packages/protocols/graphql", "graphql"],
+    ["packages/protocols/mcp", "@modelcontextprotocol/sdk"],
+  ];
+
+  it.each(optionalPeers)("marks %s's %s peer optional", (dir, peer) => {
+    const manifest = readManifest(dir);
+
+    expect(manifest.peerDependencies?.[peer], `${dir} must still declare ${peer} as a peer`).toBeTruthy();
+    expect(manifest.peerDependenciesMeta?.[peer]?.optional, `${dir} peerDependenciesMeta.${peer}.optional`).toBe(true);
+  });
+
+  it("keeps @kavo/nest's own marking, since both hops have to say optional", () => {
+    // Marking only the leaf does not help: npm resolves `@kavo/nest`'s
+    // dependency on the binding, then the binding's peer. Either hop
+    // declaring the peer required pulls it in.
+    const nest = readManifest("packages/frameworks/nest").peerDependenciesMeta;
+
+    expect(nest?.["graphql"]?.optional).toBe(true);
+    expect(nest?.["@modelcontextprotocol/sdk"]?.optional).toBe(true);
   });
 });
 
