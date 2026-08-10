@@ -24,10 +24,13 @@ const NOT_MODIFIED = 304;
  *
  * Applied method-scoped, by `@Kavo`, to every method it routes —
  * generated and `@Override`'d alike. It acts only on an engine envelope
- * (`isKavoResponse`), so an override returning its own value is left
- * untouched, while one returning `service.engine.execute(...)` gets the
- * identical `ETag`/`304` treatment instead of silently losing it. Being
- * the innermost interceptor, it unwraps before any controller- or
+ * (`isKavoResponse`), and an override reaches it holding one either way:
+ * `applyOverrideEtag` promotes a bare return into an envelope carrying the
+ * tag before this runs (ADR-0027). What an override returning
+ * `service.engine.execute(...)` gets that a bare return does not is the
+ * `304`, since `notModified` is the engine's answer against the request's
+ * own `If-None-Match` and the promotion has no preconditions to consult.
+ * Being the innermost interceptor, it unwraps before any controller- or
  * app-level interceptor sees the result, so nothing downstream ever meets
  * the envelope.
  *
@@ -61,7 +64,18 @@ function unwrap(context: ExecutionContext, value: unknown): unknown {
   return value.list ?? value.item;
 }
 
-function isKavoResponse(value: unknown): value is KavoResponse {
+/**
+ * Whether a handler's return value is an engine envelope.
+ *
+ * Exported because `@Kavo` needs the same question answered before it
+ * promotes a bare `@Override` return (ADR-0027), and two copies with
+ * different key sets would drift: the looser one would treat a value as an
+ * envelope, skip the promotion, and then this one would pass the raw object
+ * through as the response body, envelope keys and all.
+ *
+ * @internal
+ */
+export function isKavoResponse(value: unknown): value is KavoResponse {
   return (
     typeof value === "object" &&
     value !== null &&

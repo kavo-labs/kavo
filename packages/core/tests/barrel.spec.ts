@@ -204,6 +204,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "assertNever",
   "builtInHandlers",
   "builtInPaginationStrategies",
+  "computeEtag",
   "createCrud",
   "createKavoContext",
   "createKavo",

@@ -42,6 +42,61 @@ export interface OverrideMetadata {
  * }
  * ```
  *
+ * ## What an override inherits, and what it does not
+ *
+ * Everything about the *route* is inherited by construction — method, path,
+ * success status, param wiring, Swagger metadata — because both paths go
+ * through the same `applyRouteDecorators` call. What is not inherited is
+ * anything the **engine** does, because the override is what replaced the
+ * call into it:
+ *
+ * | Behavior                    | Inherited | Why                                                                       |
+ * | --------------------------- | --------- | ------------------------------------------------------------------------- |
+ * | Route, params, Swagger      | yes       | same wiring as a generated route                                          |
+ * | `ETag` on a single item     | yes       | supplied for a bare return by `@Kavo` (ADR-0027)                          |
+ * | Method decorators you added | yes       | `@UseGuards`, `@SetMetadata`, `@Version`, … are copied onto the wrapper   |
+ * | `If-Match` → `412`          | **no**    | evaluated in the engine; reaches it only if you forward `preconditions`   |
+ * | `If-None-Match` → `304`     | not Kavo's | the host framework answers it off the tag above; see below               |
+ * | Row scoping, auth           | n/a       | never Kavo's; that is why you are overriding                              |
+ *
+ * The `304` row is the one worth reading twice. Kavo reports
+ * `notModified: false` for a promoted return, because the promotion never
+ * saw the request's `If-None-Match` — those went to your method. Express
+ * then answers `304` anyway, from `req.fresh`, because a strong `ETag` is
+ * now on the response; another adapter may not. If you need the `304` to be
+ * Kavo's answer rather than the host's, return `service.engine.execute(...)`
+ * so the engine evaluates the precondition itself.
+ *
+ * So an override that only needs the tag can ignore all of this: return the
+ * typed service's item and `@Kavo` hashes it. One that needs the
+ * **precondition** must pass `preconditions` on, which reaches the engine
+ * either through `KavoCallOptions` or by calling `execute` directly:
+ *
+ * ```ts
+ * @Override()
+ * async updateOne(id: EntityId, body: Partial<Todo>, preconditions: RequestPreconditions | null) {
+ *   return this.base.engine.execute({
+ *     operation: "updateOne",
+ *     id,
+ *     body: body as never,
+ *     query: null,
+ *     options: null,
+ *     preconditions,
+ *   });
+ * }
+ * ```
+ *
+ * That form returns the engine envelope, which `KavoResponseInterceptor`
+ * unwraps and tags exactly as it would a generated route's.
+ *
+ * One caveat worth knowing before relying on `If-Match` from an override:
+ * the engine evaluates it against a **canonical read** — what `findOne`
+ * would serve for that id — so an override that serves a *reshaped*
+ * representation hands the client a tag the check can never match, and
+ * every conditional write answers `412`. Serve the canonical shape, or set
+ * `caching: { etag: false }` for that operation and own the concurrency
+ * control yourself.
+ *
  * Distinct from plain manual-method-wins: an undecorated method whose name
  * matches an operation id suppresses that route entirely — no method/path/
  * status/Swagger wiring happens for it. `@Override` keeps all of that,

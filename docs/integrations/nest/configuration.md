@@ -146,7 +146,14 @@ See [ETags and conditional requests](/using-the-api#etags-and-conditional-reques
 
 **Redaction belongs in the DTO, not in an interceptor.** Kavo's `KavoResponseInterceptor` is method-scoped and therefore innermost: it sets the `ETag` before any controller- or app-level interceptor runs. An outer interceptor that strips fields per role would ship a hash of the _unredacted_ representation next to a redacted body — and a client's `If-Match` built from it would never match. Shape the response with a per-operation `item` DTO, which the engine serializes through before hashing.
 
-**An `@Override`'d method enforces `If-Match` only if it forwards it.** The check lives in the engine, so a method you wrote in place of a generated one bypasses it. `@Kavo` still hands the tokens to the method as its last parameter; pass them on with `{ preconditions }` on the typed service, or return `service.engine.execute({ …, preconditions })` to also get the `ETag` header back.
+**An `@Override`'d method gets the `ETag` for free, and enforces `If-Match` only if it forwards it.** The split is worth reading carefully, because the two halves come from different places ([ADR-0027](/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition)):
+
+- **The tag is automatic.** An override on a single-item operation can return the typed service's item — `this.base.patchOne(id, body, { principal })` — and `@Kavo` hashes it into the same strong `ETag` a generated route would serve. Nothing to opt into.
+- **The precondition is not.** `If-Match` is evaluated inside the engine, against a canonical read, so it only runs if the method passes its `preconditions` parameter on: either as `{ preconditions }` on the typed service, or by returning `service.engine.execute({ …, preconditions })`.
+
+Before v0.9 the tag was not automatic, and the host framework filled in its own weak one instead. That is the failure worth recognizing if you are on an older version: reads carried an `ETag`, `If-None-Match` answered `304`, and the tag changed with the body — everything except the `412` that protects data, so a route could look fully conditional while every guarded write was a silent lost update. Assert the tag's **shape** (`/^"[0-9a-f]{64}"$/`), not its presence.
+
+One limit survives. The engine compares `If-Match` against what `findOne` would serve for that id, so an override serving a **reshaped** representation hands out a tag the check can never match, and every conditional write answers `412`. Serve the canonical shape, or set `caching: { etag: false }` for that operation and own the concurrency control yourself.
 
 ### `softDelete`
 

@@ -117,12 +117,17 @@ export type { KavoRequest } from "./context/kavo-request.js";
 export type { KavoResponse } from "./context/kavo-response.js";
 
 // ── HTTP caching (ADR-0020) ───────────────────────────────────────────
-// The *type* only. `computeEtag` stays internal on purpose: exporting it
-// would make "SHA-256 of the canonicalized representation" a public
-// promise, and ADR-0020's own consequences say a version-column scheme may
-// supersede it. Nothing in the workspace needs it — `@kavo/nest` consumes
-// the tag off `KavoResponse` — so the barrel keeps to what has a consumer
-// (ADR-0010).
+// `computeEtag` was held back while nothing in the workspace needed it —
+// `@kavo/nest` read the tag off `KavoResponse` and that was enough. It is
+// no longer enough: an `@Override`'d route that returns the typed service's
+// unwrapped item has no envelope to read a tag from, so the binding has to
+// compute one itself or let the host framework's weak default stand in for
+// Kavo's (ADR-0027). That is a consumer, which is the bar ADR-0010 sets.
+//
+// What the export promises is "the tag Kavo would set for this
+// representation", not the algorithm behind it — so ADR-0020's option to
+// supersede the content hash with a version column stays open.
+export { computeEtag } from "./caching/etag.js";
 export type { RequestPreconditions } from "./caching/etag.js";
 
 // ── Serialization ─────────────────────────────────────────────────────
