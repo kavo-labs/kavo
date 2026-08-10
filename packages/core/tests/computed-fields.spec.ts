@@ -227,16 +227,43 @@ describe("computed fields — selection", () => {
     await expect(crud.findOne(1, { fields: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
   });
 
-  it("can be excluded by name, without leaving the default projection", async () => {
+  it("leaves the default projection when excluded by name, not just the allowlist", async () => {
+    // Changed by ADR-0026, deliberately. This used to assert the opposite:
+    // that `{ exclude: ["shout"] }` narrowed the allowlist and left the
+    // field in every response anyway. That is #149 — a config that states
+    // an intent to hide and does not hide.
+    //
+    // The descriptor flag and the explicit list now say different things,
+    // which is the point of having both: `selectable: false` still keeps
+    // the field in the projection (the test above), because it is a default
+    // about *nameability*; an explicit list is a statement about the
+    // response.
     const { crud } = await seeded({
       computed: { shout },
       allowlists: { selectable: { exclude: ["shout"] } },
     } as never);
-    expect(await crud.findOne(1)).toMatchObject({ shout: "ADA" });
+    expect(await crud.findOne(1)).not.toHaveProperty("shout");
     await expect(crud.findOne(1, { fields: ["shout"] } as never)).rejects.toMatchObject({
       code: "KAVO_QUERY_INVALID",
       issues: [{ field: "shout", code: "KAVO_QUERY_INVALID_FIELD" }],
     });
+  });
+
+  it("keeps a `selectable: false` field when an { exclude } list names something else", async () => {
+    // The interaction ADR-0026 §2 promises and the first cut of it broke.
+    // `{ exclude }` resolves against the *readable* projection — every
+    // column plus every declared computed field — not against the selectable
+    // base, which drops `selectable: false` fields. Resolving against the
+    // narrower base deleted an audit field the author never named, from
+    // every response, because they excluded an unrelated column.
+    const { crud } = await seeded({
+      computed: { shout: { ...shout, selectable: false } },
+      allowlists: { selectable: { exclude: ["email"] } },
+    } as never);
+
+    const item = (await crud.findOne(1)) as unknown as Record<string, unknown>;
+    expect(item["shout"]).toBe("ADA");
+    expect(item).not.toHaveProperty("email");
   });
 
   it("lets an explicit selectable list override the descriptor's `selectable: false`", async () => {

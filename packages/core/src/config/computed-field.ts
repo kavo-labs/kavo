@@ -70,9 +70,14 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    * Note what that does *not* buy: a request that sends any `fields=` at
    * all still drops the field, because selection narrows the projection
    * uniformly and there is no way to ask for it back. `false` means "not
-   * individually selectable", not "always present". An explicit
-   * `allowlists.selectable` list naming the field overrides this — an
-   * explicit list is always the deliberate answer.
+   * individually selectable", not "always present".
+   *
+   * This flag and an explicit `allowlists.selectable` now say different
+   * things, and the difference is deliberate (ADR-0026). The flag is a
+   * default about *nameability* and leaves the projection alone; an
+   * explicit list is a statement about the **response**, so a list that
+   * omits (or `exclude`s) the field drops it from responses too. Where
+   * both are present the explicit list wins, as it always has.
    */
   readonly selectable?: boolean;
 }
