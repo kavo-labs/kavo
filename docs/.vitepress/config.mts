@@ -261,6 +261,10 @@ const config = defineConfig({
                 text: "0024 — Collection channels reuse the filter grammar and vocabulary",
                 link: "/internals/adr/0024-collection-channels-reuse-the-filter-grammar-and-vocabulary",
               },
+              {
+                text: "0025 — Handlers reach persistence through the request context",
+                link: "/internals/adr/0025-handlers-reach-persistence-through-the-context",
+              },
             ],
           },
         ],

@@ -179,3 +179,10 @@ its own value is untouched.
   downstream of `KavoResponseInterceptor` emits a tag for the
   representation the engine produced, not the one on the wire.
   Field-level shaping belongs in the DTO.
+
+**Amendment (issue #152):** the dependency added in point 3 is now
+`repository: RepositoryAdapter<Entity>`, not `reader: EntityReader<Entity>`.
+Only the name and the declared type changed. `createCrud` always passed the
+whole adapter, and the pre-read described above is unchanged; the engine
+also hands that adapter to every handler on the request context (ADR-0025),
+which is a use the narrower name no longer described.

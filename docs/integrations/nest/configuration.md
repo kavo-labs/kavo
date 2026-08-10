@@ -275,7 +275,7 @@ Keep it a pure function of the entity as well (plus `context.principal` where a 
 
 **What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does **not** pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present". An explicit `allowlists.selectable` list naming the field overrides the flag — an explicit list is always the deliberate answer.
 
-On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config` and `query` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](#the-principal) option extracted for the root request, or `null` when no option is set.
+On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query` and `repository` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](#the-principal) option extracted for the root request, or `null` when no option is set.
 
 **The generated OpenAPI response schema does not mention a computed field** when no `item`/`list` DTO is registered: the schema falls back to the entity class, whose columns are all the reflection can see, while the runtime response carries the computed key. Registering an `item`/`list` DTO naming the field fixes the document and the static response type in one move — the same escape hatch, for both consequences.
 
@@ -337,9 +337,15 @@ An `operations` key that is **not** one of the eight standard ids declares an op
 @Kavo(Order, {
   operations: {
     markPaidOne: {
+      dto: { input: MarkPaidDto },
       handler: {
         async execute({ id, body }: { id: number; body: MarkPaidDto }, context) {
-          return markOrderPaid(id, body.reference);
+          // `context.repository` is this entity's own repository adapter.
+          const order = await context.repository.findOneById(id, null, context);
+          if (order === null) {
+            throw new NotFoundException({ messageParams: { entity: context.entityName, id: String(id) } });
+          }
+          return context.repository.patch(id, { paidAt: new Date(), reference: body.reference }, context);
         },
       },
       meta: { routes: { method: "POST", path: ":id/mark-paid" } },
@@ -362,6 +368,17 @@ export class OrderController {}
 
 Naming follows the same convention the built-ins do: camelCase, always spelling out cardinality (`markPaidOne`, `findPendingMany`). An id that differs from a standard one only by case is refused at bootstrap, since `deleteone` is a slip rather than a name.
 
+#### Reaching the database from a handler
+
+`context.repository` is the entity's [`RepositoryAdapter`](/internals/architecture/03-core-contracts-and-type-system), reads and writes both, and it is how a handler gets at data ([ADR-0025](/internals/adr/0025-handlers-reach-persistence-through-the-context)). Nothing is closed over, which is what makes the example above work at all: a `@Kavo` config literal is evaluated when the class is defined ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), so a `DataSource` built inside `KavoModule.forRootAsync`'s factory does not exist yet, and neither does the adapter derived from it.
+
+Adapter methods take a context of their own, so pass the one you were given back: `context.repository.patch(id, data, context)`. That is what puts the call inside the request's transaction, applies the resolved soft-delete strategy, and gives it the settings view in force for this call. Two things it deliberately is not:
+
+- **It is this entity's adapter only.** A write to another entity is yours to make, through whatever you already use to reach it (an injected service on the controller, the ORM directly). Kavo does not hand out a registry of every entity's adapter.
+- **It is not narrowed by `kind`.** A `kind: "read"` handler is handed the writer half too. `kind` decides the request's shape, not what your code is allowed to do.
+
+A handler that needs an injected application service, rather than the database, is still a case for `@Override` or a hand-written route: a config-level handler is a plain object, with no `this` and no constructor to inject into.
+
 In code, a custom operation is called through `run`, which takes the id and returns the same envelope-unwrapped result the named methods do:
 
 ```ts
@@ -371,7 +388,7 @@ await service.run("markPaidOne", { id: 7, body: { reference: "INV-42" } });
 Worth knowing before you reach for one:
 
 - **Custom routes are matched first.** Custom entries are registered ahead of the standard table, so `GET /orders/pending` reaches its own handler rather than `GET /orders/:id`. The flip side is that a custom entry whose `meta.routes` reproduces a standard route's shape takes that route.
-- **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config. If it needs the repository adapter, that adapter has to exist when the class is declared. A module-scope `DataSource` does; one created inside `KavoModule.forRootAsync`'s factory does not. Reach data through an already-resolved infrastructure, or write the route by hand and use `boundKavoService(this)`.
+- **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it is a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
 
 Custom operations are a REST and programmatic feature only: the GraphQL and MCP bindings expose the standard operations.
@@ -387,16 +404,10 @@ It is the envelope's one optional field. Until a handler fills it the key is **a
 `withListMeta` wraps an existing handler so a contributor function's keys land on the bag, which saves rewriting the built-in `findMany` just to add one number:
 
 ```ts
-// data-source.ts — the same infrastructure app.module.ts hands KavoModule
-export const infrastructure = createInfrastructure(dataSource);
-```
-
-```ts
 // book.controller.ts
 import { builtInHandlers, withListMeta } from "@kavo/core";
-import { infrastructure } from "./data-source.js";
 
-const findMany = builtInHandlers(infrastructure.adapterFor(Book))("findMany");
+const findMany = builtInHandlers<Book>()("findMany");
 
 @Kavo(Book, {
   operations: {
@@ -416,7 +427,7 @@ export class BookController {}
 { "items": [...], "limit": 20, "offset": 0, "total": 2, "meta": { "inStock": 1, "countedAt": "2026-01-01T00:00:00.000Z" } }
 ```
 
-The adapter has to exist when the class is **declared**, because `@Kavo`'s config object is evaluated at decoration time ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)) — the module-scope `DataSource` the [wiring guide](/integrations/nest/typeorm#zero-config-wiring) already builds is exactly that. If yours is created by a DI factory (`KavoModule.forRootAsync`) instead, it isn't available yet: contribute from a handler that doesn't need the adapter, or configure the entity through `createCrud` where the infrastructure is already resolved.
+`builtInHandlers<Book>()` takes no adapter: the handlers it returns read the request's own `context.repository` ([ADR-0025](/internals/adr/0025-handlers-reach-persistence-through-the-context)), which is what lets this wrap be written inside a `@Kavo` config, evaluated when the class is defined and before any `DataSource` exists. Pass one (`builtInHandlers(replica)`) only to point those handlers somewhere other than the entity's own adapter.
 
 | Point                | Behavior                                                                                                                                                                               |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

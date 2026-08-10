@@ -64,7 +64,11 @@ What keeps this from being a repeat of the first attempt:
 - **`handler` is required.** The old shape allowed an entry whose behavior
   lived somewhere else, which is what made the `@Override` trick possible
   and what made `service.run(id)` and `POST /…` disagree about what the
-  operation does. A custom operation now carries its behavior.
+  operation does. A custom operation now carries its behavior. What that
+  behavior can reach is ADR-0025's subject: the handler is handed its
+  entity's `RepositoryAdapter` on the request context, because a config
+  literal evaluated at decoration time has nothing to close over (issue
+  #152).
 - **Nothing reads the registry differently.** The engine still loops over
   entries, and route generation still walks the same table. The two places
   that used to name `findMany` literally (response mapping, and the

@@ -76,6 +76,23 @@ which is the same `engine.execute` the eight named methods make, typed from
 the operation's own `dto` override or, failing that, from the registered
 handler's signature.
 
+The handler reads and writes through `context.repository`, its entity's own
+`RepositoryAdapter` (ADR-0025):
+
+```ts
+async execute({ id }: { id: EntityId }, context: KavoContext<Order>) {
+  const order = await context.repository.findOneById(id, null, context);
+  if (order === null) throw new NotFoundException({ … });
+  return context.repository.patch(id, { paidAt: new Date() }, context);
+}
+```
+
+Passing the same context back is what makes the call inherit the active
+transaction, the resolved soft-delete strategy and the per-call settings
+view. It matters most under `@Kavo`, where this config literal is evaluated
+when the controller class is defined (ADR-0012) and there is no adapter,
+infrastructure or `DataSource` in scope to close over.
+
 Two bootstrap errors are worth knowing about, both naming the entity and
 the key path. A custom entry with no `handler` cannot run, so it is refused
 rather than registered. And an id that differs from a standard one only by
@@ -89,7 +106,9 @@ routing decision rather than a dispatch one, and doc 10 covers it.
 ## 2. `KavoContext` contents
 
 Entity + operation identity, the resolved config view (with per-call
-settings already merged), `principal` (opaque to core, copied from
+settings already merged), `repository` (the entity's own
+`RepositoryAdapter`, which is how every handler reaches persistence,
+ADR-0025 and §1a), `principal` (opaque to core, copied from
 `KavoCallOptions.principal` and `null` when the caller sent none — the
 framework layer fills it per request from the module's `principal`
 extractor, doc 10 §1a), `transaction` (an opaque handle a programmatic caller may
@@ -103,7 +122,12 @@ caller didn't forward one), and the typed `state` bag
 
 Ordinary registry entries (ADR-0006), one adapter call each plus the
 "missing vs. error" decision — adapters return `null`, handlers raise
-`NotFoundException`. `findMany` returns `{ entities, total, meta?, hasMore? }`
+`NotFoundException`. The adapter they call is `context.repository`, the
+same one a custom handler is handed (ADR-0025), which is why
+`builtInHandlers()` needs no argument and why one of these handlers can be
+wrapped and registered from a `@Kavo` config, where no adapter exists yet.
+Passing one (`builtInHandlers(replica)`) overrides that choice for the
+handlers it returns and means only that. `findMany` returns `{ entities, total, meta?, hasMore? }`
 where `total` is only computed when `pagination.count` is true (a separate
 count query, never `getManyAndCount`), and `hasMore` is the has-more
 signal `meta.nextCursor` needs under cursor pagination (§3.1, ADR-0021):
@@ -181,8 +205,9 @@ cache miss. Collection responses carry none. The tag and a
 them; `@kavo/nest` turns them into the `ETag` header and a `304`.
 
 `If-Match` is the one stage that needs a read the handlers cannot give
-it: `KavoEngineDependencies.reader` exists for it. The engine re-reads
-the target through that reader, hashes the row's **canonical read
+it: `KavoEngineDependencies.repository` is what it reads through. The
+engine re-reads
+the target through that adapter, hashes the row's **canonical read
 representation** (what `findOne` with no `fields`/`include`/`sort`
 would return, `withDeleted` on a soft-deletable entity so the same read
 serves a deleted row), and raises `PreconditionFailedException` (412)
