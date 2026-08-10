@@ -1,6 +1,7 @@
 import type { KavoContext, KavoContextState, StateKey } from "./kavo-context.js";
 import type { NormalizedQueryContext } from "../query/query-context.js";
 import type { OperationId } from "../operations/operation.js";
+import type { RepositoryAdapter } from "../persistence/repository-adapter.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 import type { TransactionContext } from "../persistence/transaction-manager.js";
 
@@ -34,6 +35,14 @@ export function randomUuid(): string {
 export interface KavoContextInit<Entity> {
   readonly operation: OperationId;
   readonly config: ResolvedEntityConfig<Entity>;
+  /**
+   * The entity's repository adapter (ADR-0025). Required, because every
+   * handler now reaches persistence through the context and a context
+   * without one would hand some operation a `repository` that is not
+   * there — the failure would surface inside a handler, far from whoever
+   * built the context.
+   */
+  readonly repository: RepositoryAdapter<Entity>;
   readonly principal?: unknown;
   readonly transaction?: TransactionContext | null;
   readonly query?: NormalizedQueryContext<Entity> | null;
@@ -50,6 +59,7 @@ export function createKavoContext<Entity>(init: KavoContextInit<Entity>): KavoCo
     entityName: init.config.entityName,
     operation: init.operation,
     config: init.config,
+    repository: init.repository,
     principal: init.principal ?? null,
     transaction: init.transaction ?? null,
     query: init.query ?? null,

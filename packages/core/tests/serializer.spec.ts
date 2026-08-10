@@ -7,7 +7,7 @@ import {
   createKavoContext,
   resolveEntityConfig,
 } from "@kavo/core";
-import { User, contextStub, userMetadata } from "./support/user-fixture.js";
+import { User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
 import { Author, Post, postMetadata } from "./support/blog-fixture.js";
 
 const userConfig = resolveEntityConfig(userMetadata, undefined, undefined);
@@ -32,6 +32,7 @@ function readContext<Entity extends object>(
   return createKavoContext<Entity>({
     operation: "findMany",
     config,
+    repository: unusedRepository<Entity>(),
     query: { ...(EMPTY_QUERY as NormalizedQueryContext<Entity>), ...query },
   });
 }

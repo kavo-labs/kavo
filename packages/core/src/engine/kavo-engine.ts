@@ -6,7 +6,7 @@ import type { ListMetaDto } from "../dto/list-result.js";
 import type { Deserializer, Serializer } from "../serialization/serializer.js";
 import type { EntityId } from "../types/entity-id.js";
 import type { EntityMetadata, FieldMetadata } from "../metadata/entity-metadata.js";
-import type { EntityReader } from "../persistence/entity-reader.js";
+import type { RepositoryAdapter } from "../persistence/repository-adapter.js";
 import type { ErrorHandler } from "../errors/kavo-exception-shape.js";
 import type { NormalizedQueryContext } from "../query/query-context.js";
 import type { QueryContext } from "../query/query-context.js";
@@ -57,14 +57,20 @@ export interface KavoEngineDependencies<Entity extends object> {
   readonly normalizer: QueryNormalizer<Entity>;
   readonly errorHandler: ErrorHandler;
   /**
-   * The read half of the entity's adapter, for the one thing a handler
-   * cannot do: evaluate an `If-Match` precondition, which needs both a
-   * read of the current row *and* the serializer that turns it into the
-   * representation the ETag was computed from (ADR-0020). Handlers close
-   * over the adapter privately and have no serializer, so the pre-read
-   * lives here rather than inside `updateOne`/`patchOne`/`deleteOne`.
+   * The entity's repository adapter. The engine uses it for two things.
+   *
+   * It puts it on every `KavoContext` it builds (ADR-0025), which is how a
+   * handler reaches persistence — the only channel a config-supplied
+   * handler has, since it was built before any adapter existed.
+   *
+   * And it reads through it for the one thing a handler cannot do:
+   * evaluate an `If-Match` precondition, which needs both a read of the
+   * current row *and* the serializer that turns it into the representation
+   * the ETag was computed from (ADR-0020). Handlers have no serializer, so
+   * the pre-read lives here rather than inside
+   * `updateOne`/`patchOne`/`deleteOne`.
    */
-  readonly reader: EntityReader<Entity>;
+  readonly repository: RepositoryAdapter<Entity>;
 }
 
 /**
@@ -234,6 +240,7 @@ export class KavoEngine<Entity extends object> {
     const context = createKavoContext<Entity>({
       operation: descriptor.id,
       config: configView,
+      repository: this.deps.repository,
       principal: request.options?.principal,
       transaction: request.options?.transaction ?? null,
       query,
@@ -442,7 +449,7 @@ export class KavoEngine<Entity extends object> {
     config: ResolvedEntityConfig<Entity>,
     correlationId: string,
   ): Promise<string | null> {
-    const { reader, serializer, normalizer, registry } = this.deps;
+    const { repository, serializer, normalizer, registry } = this.deps;
     // `withDeleted` is only a legal query param on a soft-deletable entity
     // — the normalizer rejects it outright otherwise (a client that thinks
     // it is seeing deleted rows should be told it is not), and on a
@@ -452,12 +459,13 @@ export class KavoEngine<Entity extends object> {
     const context = createKavoContext<Entity>({
       operation: "findOne",
       config,
+      repository,
       principal: request.options?.principal,
       transaction: request.options?.transaction ?? null,
       query,
       correlationId,
     });
-    const entity = await reader.findOneById(id, query, context);
+    const entity = await repository.findOneById(id, query, context);
     if (entity === null) return null;
     // Same fallback `mapResponse` uses for a served `findOne` response
     // (descriptor override first): "what `findOne` on that id ... would
