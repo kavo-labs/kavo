@@ -15,12 +15,12 @@
 }
 
 ::selection {
-  background: rgba(124, 92, 255, 0.28);
+  background: rgba(130, 87, 255, 0.55);
   color: inherit;
 }
 
 .dark ::selection {
-  background: rgba(167, 139, 250, 0.35);
+  background: rgba(178, 130, 255, 0.6);
   color: inherit;
 }
 
