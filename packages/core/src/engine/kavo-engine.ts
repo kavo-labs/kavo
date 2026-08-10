@@ -719,18 +719,36 @@ export class KavoEngine<Entity extends object> {
     const nextCursor =
       last === undefined ? null : encodeCursor(cursorValuesOf(last, query.sort, this.entityFields, context.entityName));
     // A token identical to the one that produced this page means the page
-    // did not advance — the signature of an adapter that honours the
-    // `limit + 1` over-fetch but still reads `query.filter` instead of
-    // `readFilter(query)`, so every page is page 1 and `hasMore` never goes
-    // false. A client following `nextCursor` would loop forever; erroring
-    // beats looping (ADR-0021).
+    // did not advance: every page is page 1 and `hasMore` never goes false,
+    // so a client following `nextCursor` would loop forever. Erroring beats
+    // looping (ADR-0021).
+    //
+    // Two distinct causes land here, and the message names both because
+    // naming only the first sends the reader to audit an adapter that is
+    // already correct (#185):
+    //
+    // 1. The adapter honours the `limit + 1` over-fetch but reads
+    //    `query.filter` instead of `readFilter(query)`, so the keyset
+    //    predicate never reached the query at all.
+    // 2. The predicate reached the query and did not select what `ORDER BY`
+    //    ordered, because the leading sort column's stored values do not
+    //    compare against the bound cursor value the way the engine sorts
+    //    them. SQLite is where this bites: a `date` column is TEXT and
+    //    compares lexically, so rows written by a SQL default
+    //    (`@CreateDateColumn` renders `datetime('now')`, second precision)
+    //    and a parameter bound by the driver (`.000` milliseconds) are two
+    //    spellings of one instant that never compare equal.
     if (nextCursor !== null && nextCursor === pagination.cursor) {
       throw new ConfigurationException(
         context.entityName,
         "pagination.strategy",
-        `cursor pagination did not advance: the page produced the same token it was given, which means the ` +
-          `repository adapter ignored the keyset predicate. An adapter's 'findMany' must filter by ` +
-          `'readFilter(query)', not by 'query.filter'`,
+        `cursor pagination did not advance: the page produced the same token it was given, so the keyset ` +
+          `predicate did not exclude the rows already served. Two causes produce this. Either the repository ` +
+          `adapter's 'findMany' filters by 'query.filter' rather than 'readFilter(query)', so the predicate ` +
+          `never reached the query; or it did reach the query and does not agree with 'ORDER BY', because the ` +
+          `sort column's stored values compare differently from the bound cursor value — which is what a ` +
+          `date column holding more than one textual spelling of an instant does on a backend that stores ` +
+          `dates as text. Check the adapter first, then the sort column`,
       );
     }
     return compactMeta({ nextCursor, ...result.meta });

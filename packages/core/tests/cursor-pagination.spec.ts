@@ -1047,6 +1047,24 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     );
   });
 
+  it("names the sort-column cause too, not only the adapter one", async () => {
+    // The guard fires for two unrelated reasons and an adapter that is
+    // already correct is the more confusing of the two: #185 was diagnosed
+    // by reading `TypeOrmRepositoryAdapter.findMany` first, on the message's
+    // instruction, and finding it did call `readFilter(query)`. The real
+    // cause was a date column holding two textual spellings of one instant.
+    const { crud } = ignoringCrud();
+    await seed(crud as never, 5);
+
+    const client = crud as never as ReturnType<typeof cursorCrud>["crud"];
+    const token = nextCursorOf(await client.findMany({ limit: 2 } as never));
+
+    const error = await client.findMany({ limit: 2, cursor: token } as never).catch((thrown: unknown) => thrown);
+    const message = (error as ConfigurationException).message;
+    expect(message).toMatch(/ORDER BY/);
+    expect(message).toMatch(/sort column/);
+  });
+
   it("still reports the entity and the config path the failure belongs to", async () => {
     const { crud } = ignoringCrud();
     await seed(crud as never, 5);
