@@ -36,11 +36,12 @@ export interface KavoContextInit<Entity> {
   readonly operation: OperationId;
   readonly config: ResolvedEntityConfig<Entity>;
   /**
-   * The entity's repository adapter (ADR-0025). Required, because every
-   * handler now reaches persistence through the context and a context
-   * without one would hand some operation a `repository` that is not
-   * there — the failure would surface inside a handler, far from whoever
-   * built the context.
+   * The entity's repository adapter (ADR-0025). Required rather than
+   * optional: every handler reaches persistence through it, so a context
+   * built without one produces a `TypeError` inside whatever handler runs
+   * next, far from whoever built the context. Nothing checks it at run
+   * time — the type is the guard, and a caller that erases it gets the
+   * deferred failure this shape exists to make unrepresentable.
    */
   readonly repository: RepositoryAdapter<Entity>;
   readonly principal?: unknown;
