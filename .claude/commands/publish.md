@@ -45,6 +45,20 @@ workflow.
    to 0, minor resets patch to 0). State the computed version and _why_
    (which commits triggered the bump level) before touching any files.
 
+   **While the current version is `0.x`, cap the computed bump at minor.**
+   Before 1.0 a breaking change bumps the minor (`0.7.2` → `0.8.0`), and the
+   `!` still matters: it is what makes the release a minor rather than a
+   patch. What it must not do is decide `1.0.0`. Declaring 1.0 says the
+   public API is now stable and that breaking it needs a major, which is a
+   deliberate call about the project rather than a fact about one commit
+   subject — and it retires the standing latitude to break APIs and revise
+   accepted ADRs that pre-1.0 work relies on. Ship 1.0.0 only when
+   `$ARGUMENTS` is explicitly `major`, and confirm it with the user as its
+   own decision rather than folding it into the release.
+
+   This rule is why v0.8.0 is 0.8.0: it carried two `feat!` commits (#151
+   and #172), both of which used that pre-1.0 latitude on purpose.
+
 3. **Apply the version, in lockstep** (ADR-0004 — [`docs/internals/adr/0004-lockstep-versioning.md`](../../docs/internals/adr/0004-lockstep-versioning.md)):
    set the new version in the `package.json` of **every** published package.
    `PACKAGE_DIRS` in `.github/workflows/publish.yml` is the single source of
