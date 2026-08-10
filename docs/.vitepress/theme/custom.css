@@ -3,6 +3,7 @@
   --vp-c-brand-2: #6a45e6;
   --vp-c-brand-3: #5c3dc0;
   --vp-c-brand-soft: rgba(124, 92, 255, 0.14);
+  --vp-c-brand-selection: rgba(124, 92, 255, 0.28);
 
   --vp-home-hero-name-color: transparent;
   --vp-home-hero-name-background: linear-gradient(120deg, #9b7fe0 20%, #6a45e6);
@@ -12,16 +13,11 @@
   --vp-c-brand-1: #a78bfa;
   --vp-c-brand-2: #8b6fe0;
   --vp-c-brand-3: #7c5cff;
+  --vp-c-brand-selection: rgba(167, 139, 250, 0.32);
 }
 
 ::selection {
-  background: #a98bff;
-  color: #000;
-}
-
-.dark ::selection {
-  background: #b282ff;
-  color: #14101f;
+  background-color: var(--vp-c-brand-selection);
 }
 
 .VPHero {
