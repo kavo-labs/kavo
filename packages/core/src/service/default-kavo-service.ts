@@ -7,6 +7,12 @@ import type { ListResultDto } from "../dto/list-result.js";
 import type { OperationId } from "../operations/operation.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { DtoInputOf, DtoOutputOf, DtoQueryOf } from "../dto/dto.js";
+import type {
+  CustomOperationBody,
+  CustomOperationId,
+  CustomOperationRequest,
+  CustomOperationResult,
+} from "./custom-operation.js";
 import { KavoEngine } from "../engine/kavo-engine.js";
 
 /**
@@ -130,5 +136,32 @@ export class DefaultKavoService<
 
   async purgeOne(id: Id, options?: KavoCallOptions): Promise<void> {
     await this.engine.execute(this.request({ operation: "purgeOne", id, options: options ?? null }));
+  }
+
+  /**
+   * Custom-operation dispatch (issue #145). The only method that names its
+   * operation at the call site, because the application named it.
+   *
+   * The result comes off whichever envelope half `mapResponse` filled —
+   * `list` for a `cardinality: "many"` operation, `item` otherwise, and
+   * `null` for a void one. `??` reads the two in that order rather than
+   * branching on the descriptor: exactly one is ever non-null, so the
+   * fallback is a read of the filled half, not a guess between them.
+   */
+  async run<Operation extends CustomOperationId<Ops>>(
+    operation: Operation,
+    request?: CustomOperationRequest<Id, CustomOperationBody<Ops, Operation>, DtoQueryOf<Ops, Operation, QueryDto>>,
+    options?: KavoCallOptions,
+  ): Promise<CustomOperationResult<Ops, Operation>> {
+    const response = await this.engine.execute(
+      this.request({
+        operation,
+        id: (request?.id ?? null) as never,
+        body: (request?.body ?? null) as never,
+        query: (request?.query ?? null) as never,
+        options: options ?? null,
+      }),
+    );
+    return (response.list ?? response.item) as CustomOperationResult<Ops, Operation>;
   }
 }

@@ -539,11 +539,15 @@ export class KavoEngine<Entity extends object> {
           data: deserializer.deserialize(request.body, dto, context),
         };
       default: {
-        // createOne, and any operation id registered outside the standard
-        // table (ADR-0006's registry stays generic even without a config
-        // surface for adding one): the deserialized body, plus the request
-        // id when one is present. createOne never carries an id, so this
-        // falls through to the body alone there.
+        // A custom read (issue #145) follows the same rule the two standard
+        // reads above do: no request body exists to deserialize, so the
+        // input is the target id when the route names one and nothing
+        // otherwise — everything else a read is given rides on
+        // `context.query`.
+        if (descriptor.kind === "read") return request.id === null ? null : this.coerceId(request.id);
+        // createOne, and every custom write: the deserialized body, plus
+        // the request id when one is present. createOne never carries an
+        // id, so this falls through to the body alone there.
         const body = deserializer.deserialize(request.body, dto, context);
         return request.id === null ? body : { id: this.coerceId(request.id), body };
       }
@@ -578,7 +582,12 @@ export class KavoEngine<Entity extends object> {
   ): Promise<KavoResponse> {
     const { serializer, config } = this.deps;
 
-    if (descriptor.id === "findMany") {
+    // Which envelope half is filled comes off the descriptor, not off the
+    // id: `findMany` is simply the one standard entry with cardinality
+    // `"many"`, and a custom operation that declares the same cardinality
+    // (issue #145) returns the same `FindManyResult` shape and is mapped
+    // the same way — nothing is special-cased per verb (ADR-0006).
+    if (descriptor.cardinality === "many") {
       const listResult = result as FindManyResult<Entity>;
       const listDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("list", descriptor.id);
       const pagination: Pagination<Entity> = context.query?.pagination ?? { limit: 0, offset: 0 };

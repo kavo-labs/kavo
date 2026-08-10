@@ -385,6 +385,264 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
   });
 });
 
+describe("createOperationRegistry — custom operations (issue #145)", () => {
+  class MarkPaidDto {}
+  class OrderReceiptDto {}
+  class OrderSearchQueryDto {}
+
+  /** The motivating config: one custom write with a route of its own. */
+  const markPaidConfig = {
+    operations: {
+      markPaidOne: {
+        handler: handlerNamed("mark-paid"),
+        meta: { routes: { method: "POST", path: ":id/mark-paid" } },
+      },
+    },
+  } as UserConfig;
+
+  it("registers custom ids ahead of the standard table, because that is route order", () => {
+    // Registration order is route-generation order (ADR-0012), and a router
+    // matches in declaration order: a custom `GET /orders/pending` declared
+    // after `findOne` would be swallowed by `GET /orders/:id`.
+    const registry = createOperationRegistry<User>(markPaidConfig, standardHandlers, undefined, "User");
+    expect(ids(registry)).toEqual(["markPaidOne", ...Object.keys(STANDARD_OPERATIONS)]);
+  });
+
+  it("defaults a custom operation to an enabled single-row write", async () => {
+    // The shape every motivating example wants (`markPaidOne`, `publishOne`),
+    // so it is the one that costs no declaration.
+    const registry = createOperationRegistry<User>(markPaidConfig, standardHandlers, undefined, "User");
+    const entry = registry.get("markPaidOne");
+    expect(entry).toMatchObject({ kind: "write", cardinality: "one", enabled: true });
+    await expect(entry?.handler.execute({}, contextStub())).resolves.toBe("mark-paid");
+  });
+
+  it("carries the route metadata through verbatim, for the framework layer", () => {
+    const registry = createOperationRegistry<User>(markPaidConfig, standardHandlers, undefined, "User");
+    expect(registry.get("markPaidOne")?.meta).toEqual({ routes: { method: "POST", path: ":id/mark-paid" } });
+  });
+
+  it("takes the declared kind and cardinality when the operation is not a single-row write", () => {
+    const registry = createOperationRegistry<User>(
+      {
+        operations: {
+          findActiveMany: { handler: handlerNamed("active"), kind: "read", cardinality: "many" },
+        },
+      } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(registry.get("findActiveMany")).toMatchObject({ kind: "read", cardinality: "many" });
+  });
+
+  it("registers a custom operation disabled when the config says so", () => {
+    const registry = createOperationRegistry<User>(
+      { operations: { markPaidOne: { handler: handlerNamed("x"), enabled: false } } } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(registry.get("markPaidOne")).toMatchObject({ enabled: false });
+    expect(ids(registry)).toContain("markPaidOne");
+  });
+
+  it("resolves input and output DTO overrides on a custom write", () => {
+    const registry = createOperationRegistry<User>(
+      {
+        operations: {
+          markPaidOne: { handler: handlerNamed("x"), dto: { input: MarkPaidDto, output: OrderReceiptDto } },
+        },
+      } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(registry.get("markPaidOne")).toMatchObject({
+      input: MarkPaidDto,
+      output: OrderReceiptDto,
+      query: null,
+    });
+  });
+
+  it("resolves output and query overrides on a custom read", () => {
+    const registry = createOperationRegistry<User>(
+      {
+        operations: {
+          findActiveMany: {
+            handler: handlerNamed("x"),
+            kind: "read",
+            cardinality: "many",
+            dto: { output: OrderReceiptDto, query: OrderSearchQueryDto },
+          },
+        },
+      } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(registry.get("findActiveMany")).toMatchObject({
+      output: OrderReceiptDto,
+      query: OrderSearchQueryDto,
+      input: null,
+    });
+  });
+
+  it("rejects a 'query' override on a custom write, which runs no query resolution", () => {
+    try {
+      createOperationRegistry<User>(
+        {
+          operations: { markPaidOne: { handler: handlerNamed("x"), dto: { query: OrderSearchQueryDto } } },
+        } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: { entity: "User", path: "operations.markPaidOne.dto.query" },
+      });
+    }
+  });
+
+  it("rejects an 'input' override on a custom read, which carries no body", () => {
+    expect(() =>
+      createOperationRegistry<User>(
+        {
+          operations: { findActiveMany: { handler: handlerNamed("x"), kind: "read", dto: { input: MarkPaidDto } } },
+        } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      ),
+    ).toThrowError(ConfigurationException);
+  });
+
+  it("rejects a custom entry with no handler, naming the key path", () => {
+    // A type error on a literal config (`CustomOperationConfig.handler` is
+    // required); this is the runtime mirror, for a cast or erased one.
+    try {
+      createOperationRegistry<User>(
+        { operations: { markPaidOne: { meta: {} } } } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: { entity: "User", path: "operations.markPaidOne.handler" },
+      });
+    }
+  });
+
+  it("rejects the boolean shorthand on a custom id, which has nothing to enable", () => {
+    try {
+      createOperationRegistry<User>(
+        { operations: { markPaidOne: true } } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: { entity: "User", path: "operations.markPaidOne" },
+      });
+    }
+  });
+
+  it("rejects a kind or cardinality outside its closed set", () => {
+    for (const [key, entry] of [
+      ["kind", { handler: handlerNamed("x"), kind: "readonly" }],
+      ["cardinality", { handler: handlerNamed("x"), cardinality: "single" }],
+    ] as const) {
+      try {
+        createOperationRegistry<User>(
+          { operations: { markPaidOne: entry } } as unknown as UserConfig,
+          standardHandlers,
+          undefined,
+          "User",
+        );
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toMatchObject({
+          code: "KAVO_CONFIG_INVALID",
+          messageParams: { path: `operations.markPaidOne.${key}` },
+        });
+      }
+    }
+  });
+
+  it("rejects a custom id that differs from a standard one only by case", () => {
+    // `deleteone` would otherwise register a second, unrelated operation
+    // next to the real `deleteOne` and silently leave the intended config
+    // unapplied.
+    try {
+      createOperationRegistry<User>(
+        { operations: { deleteone: { handler: handlerNamed("x") } } } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: { entity: "User", path: "operations.deleteone" },
+      });
+      expect((error as ConfigurationException).detail).toContain("deleteOne");
+    }
+  });
+
+  it("leaves a custom id that merely resembles a standard one alone", () => {
+    // A custom id is arbitrary by definition; only an exact case-insensitive
+    // match is a slip rather than a name.
+    const registry = createOperationRegistry<User>(
+      { operations: { findAny: { handler: handlerNamed("x") } } } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(registry.get("findAny")?.enabled).toBe(true);
+  });
+
+  it("rejects a kind or cardinality declared on a standard id, whose shape is fixed", () => {
+    try {
+      createOperationRegistry<User>(
+        { operations: { deleteOne: { kind: "read" } } } as unknown as UserConfig,
+        standardHandlers,
+        undefined,
+        "User",
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: { entity: "User", path: "operations.deleteOne.kind" },
+      });
+    }
+  });
+
+  it("still treats a standard id as an override, however much the entry carries", () => {
+    // The standard loop runs first and owns every standard key, so
+    // `operations.findOne` is never a redefinition of `findOne`.
+    const registry = createOperationRegistry<User>(
+      { operations: { findOne: { handler: handlerNamed("custom-find") } } } as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    expect(ids(registry)).toEqual(Object.keys(STANDARD_OPERATIONS));
+    expect(registry.get("findOne")).toMatchObject({ kind: "read", cardinality: "one" });
+  });
+});
+
 describe("createOperationRegistry — global operations default (issue #38)", () => {
   it("disables an always-on operation globally when the entity doesn't override it", () => {
     const registry = createOperationRegistry<User>(undefined, standardHandlers, { deleteOne: false, patchOne: false });

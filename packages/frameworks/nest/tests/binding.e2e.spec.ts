@@ -483,6 +483,224 @@ describe("@Kavo operation control surface", () => {
   });
 });
 
+describe("@Kavo custom operations (issue #145)", () => {
+  /** A handler that marks the row done and reports what it was given. */
+  function publishHandler(seen: unknown[]): OperationHandler<Todo> {
+    return {
+      async execute(input: unknown) {
+        seen.push(input);
+        const { id } = input as { id: number };
+        return { id, title: "published", done: true, priority: 0, deletedAt: null, list: null };
+      },
+    };
+  }
+
+  it("generates the route its meta.routes describes, and runs the whole pipeline", async () => {
+    const seen: unknown[] = [];
+
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          handler: publishHandler(seen),
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class PublishController {}
+
+    await bootstrap(PublishController);
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    const response = await request(server()).post("/todos/1/publish").send({ title: "ignored" }).expect(201);
+
+    // The `:id` segment is coerced and paired with the deserialized body,
+    // exactly as `createOne` + `updateOne`'s shared branch does.
+    expect(seen).toEqual([{ id: 1, body: { title: "ignored" } }]);
+    // The response is serialized through the `item` slot and carries an
+    // ETag, like any other single-row response (ADR-0020).
+    expect(response.body).toMatchObject({ id: 1, title: "published", done: true });
+    expect(response.headers.etag).toMatch(/^"[0-9a-f]{64}"$/);
+    // The standard routes are untouched by its presence.
+    await request(server()).get("/todos/1").expect(200);
+  });
+
+  it("falls back to POST /<id> when the operation declares no meta.routes", async () => {
+    @Kavo(Todo, { operations: { publishOne: { handler: publishHandler([]) } } })
+    @Controller("todos")
+    class DefaultRouteController {}
+
+    await bootstrap(DefaultRouteController);
+    await request(server()).post("/todos/publishOne").send({}).expect(201);
+  });
+
+  it("keeps a custom operation service-only under meta.routes.enabled: false", async () => {
+    const seen: unknown[] = [];
+
+    @Kavo(Todo, {
+      operations: {
+        publishOne: { handler: publishHandler(seen), meta: { routes: { enabled: false } } },
+      },
+    })
+    @Controller("todos")
+    class ServiceOnlyController {
+      @Get("publish-in-code/:id")
+      async publish(@Param("id") id: string): Promise<unknown> {
+        return boundKavoService<Todo>(this).run("publishOne", { id: Number(id) });
+      }
+    }
+
+    await bootstrap(ServiceOnlyController);
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    // No generated route…
+    await request(server()).post("/todos/1/publish").expect(404);
+    await request(server()).post("/todos/publishOne").expect(404);
+    // …but still callable through the typed service surface.
+    const response = await request(server()).get("/todos/publish-in-code/1").expect(200);
+    expect(response.body).toMatchObject({ title: "published" });
+    expect(seen).toHaveLength(1);
+  });
+
+  it("generates no route for a custom operation registered disabled", async () => {
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          enabled: false,
+          handler: publishHandler([]),
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class DisabledCustomController {}
+
+    await bootstrap(DisabledCustomController);
+    await request(server()).post("/todos/1/publish").expect(404);
+  });
+
+  it("manual-method-wins applies to a custom id exactly as to a standard one", async () => {
+    const seen: unknown[] = [];
+
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          handler: publishHandler(seen),
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class ManualCustomController {
+      // Same name as the operation id: the generated route is suppressed
+      // entirely, and this method's own decorators are all it has.
+      @Get("publish-manually")
+      publishOne(): { manual: boolean } {
+        return { manual: true };
+      }
+    }
+
+    await bootstrap(ManualCustomController);
+
+    const response = await request(server()).get("/todos/publish-manually").expect(200);
+    expect(response.body).toEqual({ manual: true });
+    await request(server()).post("/todos/1/publish").expect(404);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("@Override backs a custom operation's generated route with a controller method", async () => {
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          handler: publishHandler([]),
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class OverriddenCustomController {
+      @Override("publishOne")
+      async publish(id: string, body: unknown): Promise<unknown> {
+        return { id: Number(id), overridden: true, body };
+      }
+    }
+
+    await bootstrap(OverriddenCustomController);
+
+    const response = await request(server()).post("/todos/1/publish").send({ title: "t" }).expect(201);
+    expect(response.body).toEqual({ id: 1, overridden: true, body: { title: "t" } });
+  });
+
+  it("routes a custom read under GET, with the query parsed the way findMany's is", async () => {
+    let received: NormalizedQueryContext<Todo> | null = null;
+
+    @Kavo(Todo, {
+      operations: {
+        findPublishedMany: {
+          kind: "read",
+          cardinality: "many",
+          handler: {
+            async execute(_input: unknown, context: { query: NormalizedQueryContext<Todo> | null }) {
+              received = context.query;
+              return { entities: [], total: 0 };
+            },
+          },
+          meta: { routes: { method: "GET", path: "published" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class PublishedController {}
+
+    await bootstrap(PublishedController);
+
+    // `GET /todos/published` reaches its own handler rather than `findOne`'s
+    // `GET /todos/:id` — custom entries are registered, and so routed,
+    // ahead of the standard table for exactly this reason. Registered after
+    // it, this would 400 with "'published' is not a valid number".
+    const response = await request(server()).get("/todos/published?filter[done][eq]=true&limit=3").expect(200);
+
+    // The list envelope, not a bare item — cardinality drives the mapping.
+    expect(response.body).toMatchObject({ items: [], total: 0, limit: 3 });
+    expect(received).not.toBeNull();
+    expect(received!.pagination.limit).toBe(3);
+  });
+
+  it("documents the custom route in the OpenAPI document", async () => {
+    class TodoReceiptDto {
+      id = 0;
+      publishedAt = "";
+    }
+
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          handler: publishHandler([]),
+          dto: { output: TodoReceiptDto },
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class DocumentedCustomController {}
+
+    await bootstrap(DocumentedCustomController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos/{id}/publish"] as {
+        post?: { operationId?: string; responses?: Record<string, { content?: Record<string, { schema?: object }> }> };
+      }
+    )?.post;
+    expect(operation?.operationId).toBe("Todo_publishOne");
+    // The response schema follows `dto.output`, the same class the engine
+    // actually serializes through.
+    expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
+      title: "TodoReceiptDto",
+    });
+  });
+});
+
 describe("@Kavo @Override — controller-method overrides that keep generated route metadata (issue #23)", () => {
   it("keeps findOne's generated route/param wiring, delegating to the decorated method", async () => {
     @Kavo(Todo)

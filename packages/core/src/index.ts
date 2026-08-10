@@ -84,8 +84,10 @@ export type {
 } from "./config/settings.js";
 export type { GlobalConfig } from "./config/global-config.js";
 export type {
+  CustomOperationConfig,
   EntityConfig,
   OperationConfig,
+  OperationsConfig,
   StandardOperationsConfig,
   QueryAllowlists,
   QueryFieldSelector,
@@ -141,6 +143,12 @@ export type {
 // ── Service surface ───────────────────────────────────────────────────
 export type { KavoCallOptions } from "./service/kavo-call-options.js";
 export type { KavoService } from "./service/kavo-service.js";
+export type {
+  CustomOperationBody,
+  CustomOperationId,
+  CustomOperationRequest,
+  CustomOperationResult,
+} from "./service/custom-operation.js";
 
 // ════════════════════════════════════════════════════════════════════
 // Runtime — implementations of the contracts above.

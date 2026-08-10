@@ -18,7 +18,7 @@ later work never needs to mutate `@kavo/core` types.
 | `TQueryDto`  | `GET` list query shape                                         | `QueryContext<TEntity>`                                                           | `dto: { query: UserQueryDto }`                                 |
 | `TItemDto`   | Any single-resource response                                   | `TEntity`                                                                         | `dto: { item: UserItemDto }`                                   |
 | `TListDto`   | Element type inside `ListResultDto.items`                      | `TItemDto` (follows `item`)                                                       | `dto: { list: UserListDto }` — leaner list projection          |
-| `TOps`       | The `operations` config's inferred literal type (issue #131)   | `StandardOperationsConfig<...>` — no operation overrides anything                 | `operations: { findOne: { dto: { output: UserProfileDto } } }` |
+| `TOps`       | The `operations` config's inferred literal type (issue #131)   | `OperationsConfig<...>` — no operation overrides anything                         | `operations: { findOne: { dto: { output: UserProfileDto } } }` |
 
 `TOps` is unlike the rest of the table: it is not a DTO type itself, and no
 one ever writes it by hand. It exists only so `KavoService`'s per-method
@@ -28,6 +28,19 @@ caller registered under `operations.<id>.dto`, falling back to the slot
 generic above when that operation declares no override of its own — the
 same "constrain, don't fix" shape `EntityConfig.allowlists.selectable`
 already uses for `NoInfer<Computed>`.
+
+It carries a second job since issue #145. `run`'s typed positions
+(`CustomOperationId`/`CustomOperationBody`/`CustomOperationResult`,
+`service/custom-operation.ts`) read the same literal for the operations
+`TOps` declares that Kavo has no name for, taking their shapes from the
+registered handler's own signature when no `dto` override narrows them.
+Its constraint is `OperationsConfig` rather than `StandardOperationsConfig`
+so that a key outside the standard eight is a permitted custom operation
+rather than an excess property; the extra requirement that such a key carry
+a `CustomOperationConfig` is intersected into `EntityConfig.operations`'
+declared type (`CustomOperationsOf`) rather than folded into the
+constraint, because a constraint that named `TOps` inside itself would stop
+TypeScript keeping the caller's literal at all.
 
 Design rule: **every parameter defaults from the ones before it**, so type
 inference is a feature — a consumer rarely writes a generic argument by

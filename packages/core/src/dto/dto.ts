@@ -82,8 +82,14 @@ export interface OperationDtoOverride<
   readonly query?: DtoClass<QueryDto>;
 }
 
-/** The operation entry shape `Ops[Id]` resolves to, or `undefined` when `Id` was never declared. */
-type OperationEntryOf<Ops, Id extends string> = Id extends keyof Ops ? Ops[Id] : undefined;
+/**
+ * The operation entry shape `Ops[Id]` resolves to, or `undefined` when `Id`
+ * was never declared. Exported for `service/custom-operation.ts`, which
+ * reads the same `Ops` literal for a custom operation's handler signature;
+ * not a barrel export (ADR-0010) — it is an implementation detail of how
+ * the three `Dto*Of` helpers below are written.
+ */
+export type OperationEntryOf<Ops, Id extends string> = Id extends keyof Ops ? Ops[Id] : undefined;
 
 /**
  * Extracts the shape a per-operation `dto.<field>` override narrows to,

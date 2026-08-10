@@ -4,6 +4,12 @@ import type { QueryContext } from "../query/query-context.js";
 import type { ListResultDto } from "../dto/list-result.js";
 import type { DtoInputOf, DtoOutputOf, DtoQueryOf } from "../dto/dto.js";
 import type { KavoCallOptions } from "./kavo-call-options.js";
+import type {
+  CustomOperationBody,
+  CustomOperationId,
+  CustomOperationRequest,
+  CustomOperationResult,
+} from "./custom-operation.js";
 
 /**
  * The primary programmatic surface — what `createCrud(Entity, config)`
@@ -23,6 +29,9 @@ import type { KavoCallOptions } from "./kavo-call-options.js";
  * Single-item only. The spec makes batch operations optional and says to
  * drop them when a build does not want them; this build does not, so the
  * `*Many` surface is absent rather than present-but-throwing.
+ *
+ * A **custom** operation (issue #145) has no named method here — Kavo does
+ * not know its name — and reaches the same pipeline through `run`.
  */
 export interface KavoService<
   Entity,
@@ -78,4 +87,28 @@ export interface KavoService<
    * with `operations: { purgeOne: true }`.
    */
   purgeOne(id: Id, options?: KavoCallOptions): Promise<void>;
+
+  /**
+   * Invoke a **custom** operation by id — one declared under
+   * `operations.<id>` with a handler of its own (issue #145). The eight
+   * methods above are named because Kavo knows their names; a custom
+   * operation is named by the application, so this is the one method that
+   * takes the id as an argument.
+   *
+   * Everything else is identical: same engine, same lifecycle, same
+   * envelope. `request` carries whichever of `id`/`body`/`query` the
+   * operation uses, and the result is typed from the operation's own
+   * `dto` override or, failing that, from its registered handler's
+   * signature.
+   *
+   * Calling an id that is not registered raises
+   * `OperationNotRegisteredException`; a registered-but-disabled one
+   * raises `OperationDisabledException`, exactly as a standard operation
+   * does.
+   */
+  run<Operation extends CustomOperationId<Ops>>(
+    operation: Operation,
+    request?: CustomOperationRequest<Id, CustomOperationBody<Ops, Operation>, DtoQueryOf<Ops, Operation, QueryDto>>,
+    options?: KavoCallOptions,
+  ): Promise<CustomOperationResult<Ops, Operation>>;
 }

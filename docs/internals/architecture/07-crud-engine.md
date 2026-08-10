@@ -18,7 +18,7 @@ KavoRequest
  → DTO Resolution         descriptor.input/output else the doc-4 slot default
  → Deserialization        writes only: body → allowed-key projection
  → Handler Execution      OperationHandler from the registry (built-in, overridden, or custom)
- → Response Mapping       item / ListResultDto envelope / void
+ → Response Mapping       item / ListResultDto envelope / void, by descriptor.cardinality
  → Serialization          DTO mapping → field selection
  → ETag                   single-item responses: hash the representation; If-None-Match → notModified
 KavoResponse
@@ -28,11 +28,63 @@ Deliberately lean: no validation stage, no hooks, no policy stage — the
 v6 tradeoff. Cross-cutting behavior lives in the consumer's own code
 around Kavo.
 
-`createOne` and custom operations share one input-resolution branch: the
-deserialized body alone when the request carries no id, or `{ id, body }`
-when it does (a custom operation addressed by `:id` — cardinality `"one"`,
-same as `updateOne`/`patchOne` — needs the id to identify its target, and
-`request.id` is simply absent for `createOne`).
+`createOne` and custom **write** operations share one input-resolution
+branch: the deserialized body alone when the request carries no id, or
+`{ id, body }` when it does (a custom operation addressed by `:id` needs
+the id to identify its target, and `request.id` is simply absent for
+`createOne`). A custom **read** follows `findOne`/`findMany` instead: there
+is no request body to deserialize, so its input is the coerced id when the
+route names one and `null` when it does not, with everything else on
+`context.query`.
+
+## 1a. Declaring a custom operation (ADR-0006, issue #145)
+
+An `operations` key that is not one of the eight standard ids declares a
+whole operation rather than configuring an existing one:
+
+```ts
+createCrud(Order, {
+  operations: {
+    markPaidOne: {
+      handler: { async execute({ id, body }, context) { … } },
+      meta: { routes: { method: "POST", path: ":id/mark-paid" } },
+    },
+  },
+});
+```
+
+| Key           | Required | Default   | What it decides                                                                                                                           |
+| ------------- | -------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler`     | yes      | —         | The behavior. There is no built-in to fall back to.                                                                                       |
+| `kind`        | no       | `"write"` | `"read"` runs query resolution and takes no body; `@kavo/nest` binds `@Query` instead of `@Body`.                                         |
+| `cardinality` | no       | `"one"`   | `"many"` maps the result through the list envelope, so the handler returns a `FindManyResult`.                                            |
+| `enabled`     | no       | `true`    | `false` registers the entry inert, exactly as it does for a standard id.                                                                  |
+| `dto`         | no       | —         | `input`/`output` on a write, `output`/`query` on a read. The wrong field for the resolved `kind` is a bootstrap `ConfigurationException`. |
+| `meta`        | no       | `{}`      | Framework metadata; in `@kavo/nest` the route (doc 10).                                                                                   |
+| settings keys | no       | —         | The operation scope of the precedence chain, same as any standard id.                                                                     |
+
+Everything downstream treats the entry as ordinary. The engine dispatches it
+through the same lifecycle; DTO resolution falls back to the entity's own
+`item`/`list` slot and writable projection when `dto` names nothing; the
+response is serialized, ETagged and conditionally answered like any other.
+`If-Match` is the one thing a custom operation cannot have evaluated for it:
+nothing in the schema says which row it targets, so the request is refused
+rather than performed unguarded (§3a).
+
+In code it is called through `service.run("markPaidOne", { id, body })`,
+which is the same `engine.execute` the eight named methods make, typed from
+the operation's own `dto` override or, failing that, from the registered
+handler's signature.
+
+Two bootstrap errors are worth knowing about, both naming the entity and
+the key path. A custom entry with no `handler` cannot run, so it is refused
+rather than registered. And an id that differs from a standard one only by
+case (`deleteone`) is refused too: it would otherwise register a second,
+unrelated operation beside the real `deleteOne` while the configuration the
+author meant went unapplied.
+
+Custom entries are registered **ahead** of the standard table. That is a
+routing decision rather than a dispatch one, and doc 10 covers it.
 
 ## 2. `KavoContext` contents
 

@@ -144,9 +144,41 @@ and never a bare `404` that would suggest the route was never mapped.
 An app that wants the route itself gone still states so per entity,
 exactly as before.
 
+**Custom operations** (issue #145) need nothing in this generator either.
+An `operations` key outside the eight standard ids is an ordinary registry
+entry (doc 07 §1a), so the same loop routes it from its own `meta.routes`:
+
+```ts
+@Kavo(Order, {
+  operations: {
+    markPaidOne: {
+      handler: markPaid,
+      meta: { routes: { method: "POST", path: ":id/mark-paid" } },
+    },
+  },
+})
+@Controller("orders")
+export class OrderController {}
+```
+
+An entry with no `meta.routes` falls back to `POST /<operation id>`, which
+is the most a route generator can infer from a name it has never seen: a
+write against the collection. Every rule above applies unchanged, including
+`meta.routes.enabled: false` for a service-only operation, and both of the
+mechanisms below.
+
+The one thing custom operations change is **order**. Custom entries are
+registered ahead of the standard table, and registration order is route
+order, so a custom `GET /orders/pending` is matched before `GET /orders/:id`
+rather than being swallowed by it and answered with "'pending' is not a
+valid number". The same rule lets a custom entry whose `meta.routes`
+reproduces a standard route's shape take that route, which is what an
+explicitly configured route should do.
+
 **Manual-method-wins:** a hand-written controller method whose name
 matches an operation id suppresses that generated route — detected via
-`hasOwnProperty` on the prototype, no config needed.
+`hasOwnProperty` on the prototype, no config needed. It applies to a custom
+id exactly as it does to a standard one.
 
 **`@Override(operationId?)`** (issue #23) is the additive middle path
 between a config-level `operations.<id>.handler` override and plain
@@ -334,7 +366,14 @@ operation scope; the global scope arrives later, with
 per-field query documentation needs ORM metadata, which doesn't exist at
 decoration time — revisited in a future DX pass.
 
-`findMany` wraps its `list` element in `listEnvelopeSchema`, whose
+The success-response schema is chosen by the descriptor's cardinality
+rather than by a list of operation ids, matching what `mapResponse`
+actually branches on: a `"many"` operation is documented as the list
+envelope, everything else as the resolved `item` DTO, and a `204` as no
+body at all. That is what gives a custom operation (issue #145) a real
+documented response instead of a blank one.
+
+A `"many"` operation wraps its `list` element in `listEnvelopeSchema`, whose
 `required` names `items`/`limit`/`offset`/`total` — deliberately not
 `meta`, which the engine omits unless a handler contributed (doc 07 §3.1),
 so a generated client must treat it as optional. `meta` is also the one

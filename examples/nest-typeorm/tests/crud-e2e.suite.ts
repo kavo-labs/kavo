@@ -730,9 +730,9 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
   });
 
   /**
-   * `Address` overrides all five singular standard operations and adds one
-   * custom operation, entirely through `EntityConfig` (issue #21) — the
-   * example the `add-operation` skill's documented procedure was missing.
+   * `Address` overrides all five singular standard operations through
+   * `@Override`'d controller methods (issue #21/#23), and adds two fully
+   * custom, registry-independent routes (issue #26).
    */
   describe("Address operation overrides (issue #21)", () => {
     it("normalizes postalCode on create", async () => {

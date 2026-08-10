@@ -1,6 +1,6 @@
 import type { ClassRef, EntityInput } from "./types/utility.js";
 import type { KavoInfrastructure, EntityMetadata } from "./metadata/entity-metadata.js";
-import type { EntityConfig, StandardOperationsConfig } from "./config/entity-config.js";
+import type { EntityConfig, OperationsConfig } from "./config/entity-config.js";
 import type { EntityId } from "./types/entity-id.js";
 import type { GlobalConfig } from "./config/global-config.js";
 import type { PaginationStrategy } from "./query/pagination.js";
@@ -21,7 +21,6 @@ import { createOperationRegistry } from "./operations/default-operation-registry
 import { DefaultEntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
 import { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
-import { STANDARD_OPERATIONS } from "./operations/default-operation-registry.js";
 
 /**
  * Root-factory options. `GlobalConfig.defaults` is the
@@ -64,8 +63,15 @@ export interface KavoInstance {
     ItemDto = Entity,
     ListDto = ItemDto,
     Computed extends string = never,
-    Ops extends StandardOperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> =
-      StandardOperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>,
+    Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
+      Entity,
+      CreateDto,
+      UpdateDto,
+      PatchDto,
+      QueryDto,
+      ItemDto,
+      ListDto
+    >,
   >(
     entity: ClassRef<Entity>,
     config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Computed, Ops>,
@@ -154,7 +160,17 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         reader: adapter as unknown as RepositoryAdapter<Entity>,
       });
 
-      registered.set(resolved.entityName, describeResolvedConfig(resolved, Object.keys(STANDARD_OPERATIONS)));
+      // Every registered id, not just the standard table: a custom
+      // operation takes per-operation settings the same way (issue #145),
+      // so leaving it out would make the debug dump quietly incomplete for
+      // exactly the operations whose configuration is least familiar.
+      registered.set(
+        resolved.entityName,
+        describeResolvedConfig(
+          resolved,
+          registry.all().map((descriptor) => descriptor.id),
+        ),
+      );
       return new DefaultKavoService(engine) as never;
     },
 
@@ -238,8 +254,15 @@ export function createCrud<
   ItemDto = Entity,
   ListDto = ItemDto,
   Computed extends string = never,
-  Ops extends StandardOperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> =
-    StandardOperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>,
+  Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
+    Entity,
+    CreateDto,
+    UpdateDto,
+    PatchDto,
+    QueryDto,
+    ItemDto,
+    ListDto
+  >,
 >(
   entity: ClassRef<Entity>,
   config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Computed, Ops>,

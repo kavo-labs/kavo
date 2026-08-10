@@ -252,6 +252,35 @@ describe("DefaultKavoService — typed dispatch", () => {
   });
 });
 
+describe("DefaultKavoService — custom-operation dispatch (issue #145)", () => {
+  it("dispatches the id it was handed, with every other slot null", async () => {
+    const { service, engine } = recorded();
+    await service.run("markPaidOne");
+    expect(sole(engine)).toEqual({
+      operation: "markPaidOne",
+      id: null,
+      body: null,
+      query: null,
+      options: null,
+    });
+  });
+
+  it("puts id, body and query in the slots the engine reads them from", async () => {
+    const { service, engine } = recorded();
+    const body = { reference: "INV-1" };
+    const query = { limit: 5 };
+    await service.run("markPaidOne", { id: 7, body, query } as never);
+    expect(sole(engine)).toMatchObject({ operation: "markPaidOne", id: 7, body, query });
+  });
+
+  it("forwards per-call options unmerged, like every other method", async () => {
+    const { service, engine } = recorded();
+    const options = {};
+    await service.run("markPaidOne", undefined, options);
+    expect(sole(engine).options).toBe(options);
+  });
+});
+
 describe("DefaultKavoService — the engine escape hatch", () => {
   it("exposes the very engine the typed methods dispatch through", () => {
     const { service, engine } = recorded();

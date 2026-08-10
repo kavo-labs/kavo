@@ -17,12 +17,12 @@ The first three are the same mechanism (`EntityConfig` in
 `packages/core/src/config/entity-config.ts`); the fourth is `@kavo/nest`-only
 and doesn't touch `EntityConfig` at all:
 
-| Intent                                   | How                                                                                                                                                                          |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Disable** a standard operation         | `operations: { deleteOne: false }` — the entry stays in the registry so tooling can report it, but calling it raises `OperationDisabledException` and no route is generated. |
-| **Override** a standard operation (data) | `operations: { findOne: { handler } }` — a plain `OperationHandler` object replaces the handler; keeps the default DTO and serialization scaffolding.                        |
-| **Add a custom** operation               | `customOperations: { complete: { handler, input, output, meta } }` — declares its own input/output DTOs, because its shape is not guaranteed CRUD-like.                      |
-| **Override** a standard operation (code) | `@Override(operationId?)` (issue #23) — a controller method is the implementation; `@Kavo` still generates the route from the registry. See below.                           |
+| Intent                                   | How                                                                                                                                                                                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Disable** a standard operation         | `operations: { deleteOne: false }` — the entry stays in the registry so tooling can report it, but calling it raises `OperationDisabledException` and no route is generated.                                                 |
+| **Override** a standard operation (data) | `operations: { findOne: { handler } }` — a plain `OperationHandler` object replaces the handler; keeps the default DTO and serialization scaffolding.                                                                        |
+| **Add a custom** operation               | `operations: { markPaidOne: { handler, meta: { routes } } }` (issue #145): any key outside the standard eight. `handler` is required; `kind`/`cardinality` default to a single-row write; `dto` gives it a shape of its own. |
+| **Override** a standard operation (code) | `@Override(operationId?)` (issue #23) — a controller method is the implementation; `@Kavo` still generates the route from the registry. See below.                                                                           |
 
 Standard operations that are off by default (`purgeOne`, `restoreOne`) are
 turned on with `operations: { purgeOne: true }`.
@@ -111,9 +111,12 @@ meta: {
 }
 ```
 
-- Custom operations **must** carry `meta.routes` to get a route.
+- A custom operation with no `meta.routes` falls back to `POST /<operation id>`;
+  give it one whenever the route should read like anything else.
+- Custom entries are registered, and so routed, **ahead** of the standard
+  table, so a custom `GET /orders/pending` is not swallowed by `GET /orders/:id`.
 - `meta.routes.enabled: false` keeps an operation service-only — callable in
-  code, no HTTP route.
+  code (`service.run(id, …)`), no HTTP route.
 - Routes are generated at **decoration time** (ADR-0012), the only moment Nest's
   router scan sees the methods. Nothing may defer registration.
 - **Manual-method-wins**: a hand-written controller method whose name matches an

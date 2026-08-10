@@ -21,10 +21,18 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  *
  * `normalizePostalCode` and `validatePostalCode` below are both fully
  * custom, registry-independent routes (issue #26): plain native Nest
- * methods with no `customOperations` entry at all. Neither action has an
+ * methods with no `operations` entry at all. Neither action has an
  * operation identity of its own, so neither wants the registry-generated
  * route/Swagger/param machinery `@Override` exists to keep — they own
  * their own `@Post`/`@Get`, `@Param`, and status entirely.
+ *
+ * The alternative for an action that *does* want an identity is a custom
+ * operation — an `operations` key outside the standard eight, carrying its
+ * own handler (issue #145). It needs a handler that can reach persistence
+ * at *decoration* time (ADR-0012), and this app builds its `DataSource`
+ * inside `KavoModule.forRootAsync`'s factory, which has not run yet. Both
+ * routes below therefore stay native, and reach data through the
+ * constructor-injected `base` service instead.
  */
 @Kavo(Address, {
   dto: {
@@ -108,8 +116,8 @@ export class AddressController {
    * `POST /addresses/:id/normalize-postal-code` — a fully custom,
    * registry-independent route (issue #26): reuses the same
    * normalization/validation as `createOne`/`updateOne`/`patchOne`, applied
-   * to an already-persisted row, with no `customOperations` entry and none
-   * of `@Override`'s generated route/Swagger/param wiring. Nest defaults a
+   * to an already-persisted row, with no `operations` entry and none of
+   * `@Override`'s generated route/Swagger/param wiring. Nest defaults a
    * plain `@Post` to a 201, matching what the registry would have produced.
    */
   @Post(":id/normalize-postal-code")
@@ -123,7 +131,7 @@ export class AddressController {
   /**
    * `GET /addresses/:id/validate-postal-code` — a fully custom,
    * registry-independent route (issue #26): a plain native `@Get` with its
-   * own `@Param`, no `customOperations` entry. `@Kavo` never inspects this
+   * own `@Param`, no `operations` entry. `@Kavo` never inspects this
    * method — route generation only checks method names against registry
    * operation ids (manual-method-wins) or `@Override` metadata, and
    * `validatePostalCode` matches neither. It needs nothing from Kavo beyond

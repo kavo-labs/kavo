@@ -66,6 +66,15 @@ shorthand or `{ enabled }` long form) — which always wins. See
 ADR-0015 for what this global default can and cannot reach in
 `@kavo/nest`.
 
+The entity-scope map also holds keys the global one cannot: an
+`operations` key outside the eight standard ids declares a **custom**
+operation (issue #145, doc 07 §1a), and the global boolean map is keyed by
+`StandardOperationId`, so nothing at global scope can enable, disable or
+name one. Everything else about a custom entry follows the same rules as a
+standard one, including the per-operation settings scope: the loop that
+precomputes `settingsFor(operation)` walks `operations` by key and never
+checks the key against the standard table.
+
 ## 3. Resolution timing and immutability
 
 All merging happens **once at bootstrap** (`resolveEntityConfig`) into a

@@ -128,7 +128,12 @@ export function applySwaggerMetadata(
     apply(swagger.ApiParam({ name: "id", required: true }));
   }
 
-  if (descriptor.id === "findMany") {
+  // Read from the descriptor, not from the id: `findMany` is simply the
+  // standard entry with cardinality `"many"`, and a custom read declaring
+  // the same shape (issue #145) takes the same query params through the
+  // same normalizer.
+  const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
+  if (isList) {
     for (const param of LIST_QUERY_PARAMS) {
       apply(
         swagger.ApiQuery({
@@ -142,9 +147,9 @@ export function applySwaggerMetadata(
   }
 
   // Includes are documented from the entity config's relation allowlist —
-  // the only relation knowledge decoration time has (ADR-0012). `findOne`
-  // supports `include` with identical semantics, so it is documented too.
-  if (descriptor.id === "findMany" || descriptor.id === "findOne") {
+  // the only relation knowledge decoration time has (ADR-0012). Every read
+  // supports `include` with identical semantics, single-item ones included.
+  if (descriptor.kind === "read") {
     const includable = includableRelations(config);
     apply(
       swagger.ApiQuery({
@@ -188,7 +193,9 @@ export function applySwaggerMetadata(
   // leaves these documented and inert — the same limitation the query-param
   // documentation above already lives with.
   const cached = cachingEnabled(config, descriptor.id);
-  const tagged = cached && route.status !== 204 && descriptor.id !== "findMany";
+  // Collection responses carry no ETag (ADR-0020) — which is a statement
+  // about cardinality, not about one operation id.
+  const tagged = cached && route.status !== 204 && descriptor.cardinality !== "many";
   apply(
     swagger.ApiResponse({
       status: route.status,
@@ -273,10 +280,16 @@ function bodyOptionsFor(bodyDto: ClassRef): object {
  * The success-response schema for a generated route, derived from the
  * resolved response DTO the same way request bodies are (runtime shape →
  * explicit JSON schema; decorated/declarative classes fall back to
- * Swagger's own `{ type }` introspection). Single-item operations document
- * the `item` DTO (or the entity when no `item` slot is registered);
- * `findMany` wraps the `list` element in Kavo's list envelope. `deleteOne`
- * (204) and everything else keep the description-only response.
+ * Swagger's own `{ type }` introspection).
+ *
+ * The branch is the descriptor's own cardinality rather than a list of
+ * operation ids, because that is exactly what `KavoEngine.mapResponse`
+ * branches on: a `"many"` operation is wrapped in Kavo's list envelope
+ * around the `list` element, everything else documents the `item` DTO (or
+ * the entity when no `item` slot is registered). A `204` has no body at
+ * all and returns before either. Written this way, a custom operation
+ * (issue #145) is documented with the shape it actually serves instead of
+ * falling off the end of a switch into a blank response.
  */
 function successBodyFor(
   descriptor: OperationDescriptor<object>,
@@ -291,26 +304,16 @@ function successBodyFor(
   // would advertise a shape no response actually has.
   const resolve = (slot: "item" | "list"): ClassRef =>
     (descriptor.output as ClassRef | null) ?? (dtoResolver.resolve(slot, descriptor.id) as ClassRef | null) ?? entity;
-  switch (descriptor.id) {
-    case "createOne":
-    case "updateOne":
-    case "patchOne":
-    case "findOne":
-    // Restore reuses the `item` slot — no dedicated restore shape.
-    case "restoreOne": {
-      const itemDto = resolve("item");
-      const schema = schemaFromDto(itemDto);
-      return schema === null ? { type: itemDto } : { schema: { title: itemDto.name, ...schema } };
-    }
-    case "findMany": {
-      // `list` falls back to `item` inside the resolver.
-      const listDto = resolve("list");
-      const element = schemaFromDto(listDto);
-      return { schema: listEnvelopeSchema(element, listDto.name) };
-    }
-    default:
-      return {};
+  if (descriptor.cardinality === "many") {
+    // `list` falls back to `item` inside the resolver.
+    const listDto = resolve("list");
+    return { schema: listEnvelopeSchema(schemaFromDto(listDto), listDto.name) };
   }
+  // Restore reuses the `item` slot — no dedicated restore shape — and so
+  // does every custom single-row operation that registers no `dto.output`.
+  const itemDto = resolve("item");
+  const schema = schemaFromDto(itemDto);
+  return schema === null ? { type: itemDto } : { schema: { title: itemDto.name, ...schema } };
 }
 
 /**

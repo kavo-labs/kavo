@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { KavoContext } from "@kavo/core";
 import {
   ConfigurationException,
   NotFoundException,
@@ -349,7 +350,7 @@ describe("KavoEngine — custom operations", () => {
     crud.engine.registry.register({
       id: "archiveOne",
       kind: "write",
-      cardinality: "single",
+      cardinality: "one",
       enabled: true,
       handler: {
         async execute(input: unknown) {
@@ -379,6 +380,143 @@ describe("KavoEngine — custom operations", () => {
     const { crud, seen } = withArchive();
     await crud.engine.execute({ operation: "archiveOne", id: "7", body: { name: "Ada" } } as never);
     expect(seen[0]).toEqual({ id: 7, body: { name: "Ada" } });
+  });
+});
+
+describe("KavoEngine — custom operations declared in config (issue #145)", () => {
+  /**
+   * The motivating shape: one `operations` key outside the standard eight,
+   * carrying a handler and a route. Nothing here reaches the registry
+   * directly — the config is the whole surface.
+   */
+  function withPromote(
+    entry: Record<string, unknown>,
+    seen: { input?: unknown; operation?: string; hasQuery?: boolean } = {},
+  ) {
+    const { crud, adapter } = makeCrud({
+      operations: {
+        promoteOne: {
+          handler: {
+            async execute(input: unknown, context: KavoContext<User>) {
+              seen.input = input;
+              seen.operation = context.operation;
+              seen.hasQuery = context.query !== null;
+              return adapter.rows[0] ?? null;
+            },
+          },
+          ...entry,
+        },
+      },
+    } as never);
+    return { crud, adapter, seen };
+  }
+
+  it("runs a config-declared custom operation through the typed service surface", async () => {
+    const { crud, seen } = withPromote({});
+    await crud.createOne({ name: "Ada", email: "ada@x.io", age: 36 } as never);
+
+    const promoted = await crud.run("promoteOne", { id: 1, body: { name: "Ada L" } } as never);
+
+    expect(seen).toMatchObject({ operation: "promoteOne", hasQuery: false });
+    expect(seen.input).toEqual({ id: 1, body: { name: "Ada L" } });
+    // The result is serialized through the `item` slot, like any single-row
+    // response — a custom operation gets the whole pipeline, not a bypass.
+    expect(promoted).toMatchObject({ id: 1, name: "Ada" });
+  });
+
+  it("runs query resolution for a custom read, and hands it no body", async () => {
+    const { crud, seen } = withPromote({ kind: "read" });
+    await crud.createOne({ name: "Ada", email: "ada@x.io", age: 36 } as never);
+
+    await crud.run("promoteOne", { id: 1, query: { fields: ["name"] } } as never);
+
+    expect(seen).toMatchObject({ hasQuery: true });
+    // A read has no request body to deserialize; its input is the target id.
+    expect(seen.input).toBe(1);
+  });
+
+  it("maps a many-cardinality custom operation through the list envelope", async () => {
+    // `mapResponse` branches on the descriptor's cardinality, not on the
+    // literal id `findMany`, so a custom list operation gets the same
+    // envelope and the same `list` DTO projection.
+    const rows: User[] = [];
+    const { crud } = makeCrud({
+      operations: {
+        findRecentMany: {
+          kind: "read",
+          cardinality: "many",
+          handler: {
+            async execute() {
+              return { entities: rows, total: rows.length };
+            },
+          },
+        },
+      },
+    } as never);
+    rows.push(Object.assign(new User(), { id: 1, name: "Ada" }));
+
+    const list = await crud.run("findRecentMany");
+
+    expect(list).toMatchObject({ items: [expect.objectContaining({ name: "Ada" })], total: 1, offset: 0 });
+  });
+
+  it("raises OperationDisabledException for a custom operation switched off", async () => {
+    const { crud } = withPromote({ enabled: false });
+    await expect(crud.run("promoteOne")).rejects.toBeInstanceOf(OperationDisabledException);
+  });
+
+  it("still raises OperationNotRegisteredException for an id nothing declared", async () => {
+    const { crud } = withPromote({});
+    await expect(crud.run("demoteOne")).rejects.toBeInstanceOf(OperationNotRegisteredException);
+  });
+
+  it("applies per-operation settings to a custom operation like any other", async () => {
+    // `resolveEntityConfig` walks `operations` by key, so the operation
+    // scope of the precedence chain reaches a custom id for free.
+    let observed: boolean | undefined;
+    const { crud } = makeCrud({
+      operations: {
+        promoteOne: {
+          caching: { etag: false },
+          handler: {
+            async execute(_input: unknown, context: KavoContext<User>) {
+              observed = context.config.settings.caching.etag;
+              return null;
+            },
+          },
+        },
+      },
+    } as never);
+
+    await crud.run("promoteOne");
+
+    expect(observed).toBe(false);
+  });
+
+  it("deserializes the body through a declared input DTO", async () => {
+    class PromoteUserDto {
+      name = "";
+    }
+    let received: unknown;
+    const { crud } = makeCrud({
+      operations: {
+        promoteOne: {
+          dto: { input: PromoteUserDto },
+          handler: {
+            async execute(input: unknown) {
+              received = input;
+              return null;
+            },
+          },
+        },
+      },
+    } as never);
+
+    await crud.run("promoteOne", { body: { name: "Ada", age: 99 } } as never);
+
+    // `age` is outside the declared DTO's shape, so it never reaches the
+    // handler — the same projection every standard write gets.
+    expect(received).toEqual({ name: "Ada" });
   });
 });
 

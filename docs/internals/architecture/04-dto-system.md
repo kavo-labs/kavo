@@ -179,15 +179,25 @@ anywhere there is a non-void result:
 | `findMany`               |         | ✓ (list element) |    ✓    |
 | `restoreOne`             |         |        ✓         |         |
 | `deleteOne` / `purgeOne` |         |                  |         |
+| custom, `kind: "write"`  |    ✓    |        ✓         |         |
+| custom, `kind: "read"`   |         |        ✓         |    ✓    |
 
 A field outside this table is a bootstrap `ConfigurationException` — never
-a silent drop — and is also unrepresentable at the type level:
-`EntityConfig`'s `operations` field is typed through
+a silent drop — and for the standard eight it is also unrepresentable at
+the type level: `EntityConfig`'s `operations` field is typed through
 `StandardOperationsConfig`, which `Pick`s only the applicable
 `OperationDtoOverride` fields per operation id, so e.g. `deleteOne` has no
 `dto` key to set at all. The runtime check exists for the same reason
 `resolveAllowlists` and `rejectComputedWriteDtoKeys` keep one: a config
 built from an erased or cast type has no compiler to catch it.
+
+A custom operation (issue #145) is the one place the rule is runtime-only.
+Which fields apply follows from its declared `kind`, which is a value in
+the same object rather than a fact about the key, so `CustomOperationConfig`
+offers all three and the mismatch is caught at bootstrap. It also has no
+root `dto` slot of its own: `output` falls back to the entity's
+`item`/`list` slot and `input` to the entity's writable projection, which
+is what makes `dto` the only way to give it a shape of its own.
 
 `query`'s effect is **typing only**, like the root `query` slot (§1): there
 is no validation subsystem, and the query normalizer parses wire params

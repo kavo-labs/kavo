@@ -285,7 +285,7 @@ See [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated) for
 
 ### `operations`
 
-Per-operation overrides, keyed by standard operation id. Each entry is either a boolean shorthand or a full `OperationConfig` object:
+Per-operation overrides, keyed by operation id. A key that names one of the eight standard operations configures it; any other key [declares a custom operation](#custom-operations). Each standard entry is either a boolean shorthand or a full `OperationConfig` object:
 
 ```ts
 @Kavo(Book, {
@@ -328,6 +328,53 @@ Fallback order per field: `operations.<id>.dto.<field>` → the entity's root `d
 | `successStatus` | `number`                                                  | `201` create, `204` delete, `200` otherwise | Overrides the response status code on success.                                                                             |
 
 See [NestJS integration](/internals/architecture/10-nestjs-integration) for how route generation reads this, and [Registry-driven operations](/internals/adr/0006-registry-driven-operations) for why routes always come from the same registry the engine uses.
+
+### Custom operations
+
+An `operations` key that is **not** one of the eight standard ids declares an operation of your own. It is an ordinary registry entry, so it gets the same pipeline every built-in route gets: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `principal`.
+
+```ts
+@Kavo(Order, {
+  operations: {
+    markPaidOne: {
+      handler: {
+        async execute({ id, body }: { id: number; body: MarkPaidDto }, context) {
+          return markOrderPaid(id, body.reference);
+        },
+      },
+      meta: { routes: { method: "POST", path: ":id/mark-paid" } },
+    },
+  },
+})
+@Controller("orders")
+export class OrderController {}
+```
+
+| Field                | Type                                | Default   | What it does                                                                                                                                   |
+| -------------------- | ----------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `handler`            | `OperationHandler<Entity>`          | required  | The operation's behavior. There is no built-in to fall back to, so an entry without one fails at bootstrap.                                    |
+| `kind`               | `"read"` \| `"write"`               | `"write"` | A read runs query resolution and takes no request body; the generated route binds `@Query` instead of `@Body`.                                 |
+| `cardinality`        | `"one"` \| `"many"`                 | `"one"`   | `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way a `findMany` handler does.                        |
+| `enabled`            | `boolean`                           | `true`    | `false` registers the entry inert: no route, and calling it answers `405 KAVO_OPERATION_DISABLED`.                                             |
+| `dto`                | `{ input?, output?, query? }`       | —         | `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root DTO slot of its own, so this is where it gets a shape. |
+| `meta`               | `OperationMetadata`                 | `{}`      | The route, as above. Without it the operation is routed `POST /<operation id>`.                                                                |
+| _(any settings key)_ | same shape as global `KavoSettings` | —         | The operation scope of the precedence chain, exactly as for a standard id.                                                                     |
+
+Naming follows the same convention the built-ins do: camelCase, always spelling out cardinality (`markPaidOne`, `findPendingMany`). An id that differs from a standard one only by case is refused at bootstrap, since `deleteone` is a slip rather than a name.
+
+In code, a custom operation is called through `run`, which takes the id and returns the same envelope-unwrapped result the named methods do:
+
+```ts
+await service.run("markPaidOne", { id: 7, body: { reference: "INV-42" } });
+```
+
+Worth knowing before you reach for one:
+
+- **Custom routes are matched first.** Custom entries are registered ahead of the standard table, so `GET /orders/pending` reaches its own handler rather than `GET /orders/:id`. The flip side is that a custom entry whose `meta.routes` reproduces a standard route's shape takes that route.
+- **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config. If it needs the repository adapter, that adapter has to exist when the class is declared. A module-scope `DataSource` does; one created inside `KavoModule.forRootAsync`'s factory does not. Reach data through an already-resolved infrastructure, or write the route by hand and use `boundKavoService(this)`.
+- **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
+
+Custom operations are a REST and programmatic feature only: the GraphQL and MCP bindings expose the standard operations.
 
 ### Custom list metadata
 

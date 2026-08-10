@@ -1,7 +1,7 @@
 import type { OperationDescriptor, OperationRegistry } from "./operation-registry.js";
 import type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operation.js";
 import type { OperationHandler } from "./operation-handler.js";
-import type { EntityConfig } from "../config/entity-config.js";
+import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
@@ -97,6 +97,18 @@ export const STANDARD_OPERATIONS: Readonly<Record<StandardOperationId, StandardO
   purgeOne: { kind: "write", cardinality: "one", enabled: false, requiresSoftDelete: true },
 });
 
+/** The standard ids as a lookup, so the custom loop can skip them in O(1). */
+const STANDARD_IDS: ReadonlySet<string> = new Set(Object.keys(STANDARD_OPERATIONS));
+
+/**
+ * The same ids keyed by their lowercase spelling, which is how a custom id
+ * is checked for being a standard one with the wrong case
+ * (`createOperationRegistry`).
+ */
+const STANDARD_IDS_BY_LOWERCASE: ReadonlyMap<string, string> = new Map(
+  [...STANDARD_IDS].map((id) => [id.toLowerCase(), id]),
+);
+
 /** Provides the handler for one standard operation id. */
 export type StandardHandlerFactory<Entity> = (id: StandardOperationId) => OperationHandler<Entity>;
 
@@ -123,20 +135,31 @@ const DTO_OVERRIDE_FIELDS: Readonly<Record<StandardOperationId, readonly DtoOver
 });
 
 /**
- * Validates `operations.<id>.dto` against `DTO_OVERRIDE_FIELDS` and
- * returns the three descriptor fields it resolves to (`null` for an
- * unset or inapplicable field).
+ * Which `dto.<field>` overrides a **custom** operation supports, derived
+ * from its declared `kind` rather than looked up by id (issue #145). Same
+ * rule the standard table above encodes, stated once: a read has no
+ * request body to narrow, a write runs no query resolution.
+ */
+const CUSTOM_DTO_OVERRIDE_FIELDS: Readonly<Record<OperationKind, readonly DtoOverrideField[]>> = Object.freeze({
+  read: ["output", "query"],
+  write: ["input", "output"],
+});
+
+/**
+ * Validates one entry's `operations.<id>.dto` against the fields that
+ * operation actually has, and returns the three descriptor fields it
+ * resolves to (`null` for an unset or inapplicable field).
  */
 function resolveDtoOverride(
   entityName: string,
-  id: StandardOperationId,
+  id: OperationId,
+  allowed: readonly DtoOverrideField[],
   settings: { readonly dto?: unknown } | undefined,
 ): Pick<OperationDescriptor, "input" | "output" | "query"> {
   const dto = settings?.dto as Readonly<Partial<Record<DtoOverrideField, DtoClass>>> | undefined;
   const resolved: Record<DtoOverrideField, DtoClass | null> = { input: null, output: null, query: null };
   if (dto === undefined) return resolved;
 
-  const allowed = DTO_OVERRIDE_FIELDS[id];
   for (const field of Object.keys(dto) as DtoOverrideField[]) {
     if (dto[field] === undefined) continue;
     if (!allowed.includes(field)) {
@@ -165,10 +188,26 @@ const unboundHandler = (id: OperationId, entityName: string): OperationHandler<u
 
 /**
  * Build one entity's operation registry from its config (the
- * control surface configures exactly this): standard entries,
- * honoring `operations.<id>: false` (disable), `operations.<id>: true` /
- * `{ enabled: true }` (enable), and `operations.<id>.handler` (override —
- * default scaffolding stays).
+ * control surface configures exactly this): one entry per **custom** id —
+ * every `operations` key that is not one of the standard eight (issue
+ * #145) — then the standard entries, honoring `operations.<id>: false`
+ * (disable), `operations.<id>: true` / `{ enabled: true }` (enable), and
+ * `operations.<id>.handler` (override — default scaffolding stays).
+ *
+ * **Custom entries come first, and that order is a routing decision.**
+ * Registration order is route-generation order (ADR-0012), and an HTTP
+ * router matches in the order routes were declared: registered after
+ * `findOne`, a custom `GET /orders/pending` would be swallowed by
+ * `GET /orders/:id` and answered with "'pending' is not a valid number"
+ * rather than reaching its handler. A literal path has to be declared
+ * before the parameterized one it resembles, so the custom half goes first.
+ * The consequence in the other direction is deliberate too: a custom
+ * operation whose `meta.routes` reproduces a standard route's shape wins
+ * it, which is what an explicitly configured route should do.
+ *
+ * A standard *id* is still resolved only by the standard loop — the custom
+ * loop skips those keys outright — so `operations.deleteOne` is an override
+ * of the standard entry, never a redefinition of it, whatever it carries.
  *
  * The soft-delete operations default from the config alone, never
  * from ORM metadata: `restoreOne` turns on when the entity config
@@ -203,15 +242,22 @@ export function createOperationRegistry<Entity extends object>(
   entityName?: string,
 ): OperationRegistry<Entity> {
   const registry = new DefaultOperationRegistry<Entity>(entityName);
+  const scope = entityName ?? "entity";
   const operations = config?.operations ?? {};
   const softDeleteDeclared = declaresSoftDelete(config);
+
+  for (const [id, entry] of Object.entries(operations as unknown as Readonly<Record<string, unknown>>)) {
+    if (STANDARD_IDS.has(id)) continue;
+    registerCustomOperation(registry, scope, id, entry);
+  }
 
   for (const [id, shape] of Object.entries(STANDARD_OPERATIONS) as [StandardOperationId, StandardOperationShape][]) {
     const operationConfig = operations[id];
     const settings = typeof operationConfig === "object" ? operationConfig : undefined;
+    rejectCustomOperationKeys(scope, id, settings as Readonly<Record<string, unknown>> | undefined);
     const byDefault = shape.enabled || (id === "restoreOne" && softDeleteDeclared);
     const defaultForEntity = globalOperations?.[id] ?? byDefault;
-    const dtoOverride = resolveDtoOverride(entityName ?? "entity", id, settings);
+    const dtoOverride = resolveDtoOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     registry.register({
       id,
       kind: shape.kind,
@@ -226,6 +272,116 @@ export function createOperationRegistry<Entity extends object>(
     });
   }
   return registry;
+}
+
+/**
+ * Validate one custom `operations` entry and register it.
+ *
+ * Everything here is a bootstrap `ConfigurationException` naming the entity
+ * and the key path, because a custom operation is declared once and every
+ * way of getting it wrong is knowable then. The type system rejects most of
+ * these already (`CustomOperationConfig` requires `handler` and closes
+ * `kind`/`cardinality` to their unions); this is the runtime mirror, for
+ * configs that arrive erased or cast — the same defence `resolveAllowlists`
+ * and `rejectComputedWriteDtoKeys` apply to their own invariants.
+ */
+function registerCustomOperation<Entity extends object>(
+  registry: OperationRegistry<Entity>,
+  entityName: string,
+  id: string,
+  entry: unknown,
+): void {
+  // A standard id spelled with the wrong case is the one near-miss worth
+  // catching: ids are camelCase by convention, so `deleteone` is a slip
+  // rather than a name, and silently registering a second, unrelated
+  // operation next to the real `deleteOne` is the worst possible answer.
+  // Any other resemblance is left alone — a custom id is arbitrary by
+  // definition, and `findAny` is a legitimate name however close it reads
+  // to `findOne`.
+  const shadowed = STANDARD_IDS_BY_LOWERCASE.get(id.toLowerCase());
+  if (shadowed !== undefined) {
+    throw new ConfigurationException(
+      entityName,
+      `operations.${id}`,
+      `'${id}' differs from the standard operation '${shadowed}' only by case — operation ids are ` +
+        `camelCase, so this registers a second, unrelated operation instead of configuring '${shadowed}'`,
+    );
+  }
+  if (typeof entry !== "object" || entry === null) {
+    throw new ConfigurationException(
+      entityName,
+      `operations.${id}`,
+      `'${id}' is not a standard operation, so it declares a custom one and needs a handler — ` +
+        `the boolean shorthand only enables or disables an operation that already exists`,
+    );
+  }
+
+  const custom = entry as CustomOperationConfig<Entity>;
+  if (typeof custom.handler?.execute !== "function") {
+    throw new ConfigurationException(
+      entityName,
+      `operations.${id}.handler`,
+      `custom operation '${id}' has no handler — a custom operation has no built-in behavior to ` +
+        `fall back to, so it must supply one: { handler: { execute(input, context) { … } } }`,
+    );
+  }
+  const kind = requireOneOf(entityName, id, "kind", custom.kind, ["read", "write"] as const) ?? "write";
+  const cardinality =
+    requireOneOf(entityName, id, "cardinality", custom.cardinality, ["one", "many"] as const) ?? "one";
+
+  registry.register({
+    id,
+    kind,
+    cardinality,
+    enabled: custom.enabled ?? true,
+    handler: custom.handler,
+    ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
+    meta: custom.meta ?? {},
+  });
+}
+
+/**
+ * A declared `kind`/`cardinality` checked against its closed set, passing
+ * `undefined` through so the caller can apply its own default.
+ */
+function requireOneOf<Value extends string>(
+  entityName: string,
+  id: string,
+  key: string,
+  value: Value | undefined,
+  allowed: readonly Value[],
+): Value | undefined {
+  if (value === undefined || allowed.includes(value)) return value;
+  throw new ConfigurationException(
+    entityName,
+    `operations.${id}.${key}`,
+    `'${String(value)}' is not a valid ${key} — it must be one of ${allowed.map((one) => `'${one}'`).join(", ")}`,
+  );
+}
+
+/**
+ * A standard id is configured, never redefined: `kind` and `cardinality`
+ * are fixed by `STANDARD_OPERATIONS` and mean nothing on an
+ * `operations.<standard id>` entry. Declaring one there is a custom
+ * operation aimed at a name that is already taken — a type error on a
+ * literal config (`OperationConfig` has no such key), and this on a cast
+ * one, rather than a silently ignored declaration.
+ */
+function rejectCustomOperationKeys(
+  entityName: string,
+  id: StandardOperationId,
+  settings: Readonly<Record<string, unknown>> | undefined,
+): void {
+  if (settings === undefined) return;
+  for (const key of ["kind", "cardinality"] as const) {
+    if (settings[key] === undefined) continue;
+    throw new ConfigurationException(
+      entityName,
+      `operations.${id}.${key}`,
+      `'${id}' is a standard operation, whose ${key} is fixed — remove it, or give the custom ` +
+        `operation you meant to declare an id of its own`,
+    );
+  }
 }
 
 /**
