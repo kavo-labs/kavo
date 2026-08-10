@@ -101,6 +101,18 @@ export const STANDARD_OPERATIONS: Readonly<Record<StandardOperationId, StandardO
 const STANDARD_IDS: ReadonlySet<string> = new Set(Object.keys(STANDARD_OPERATIONS));
 
 /**
+ * Whether an id is one of the standard eight — the same set the registry
+ * builds from, so the two can never drift.
+ *
+ * Internal to core (absent from the barrel, ADR-0010): the engine needs it
+ * to scope a guard to custom operations, and nothing outside the package
+ * has asked.
+ */
+export function isStandardOperationId(id: string): boolean {
+  return STANDARD_IDS.has(id);
+}
+
+/**
  * The same ids keyed by their lowercase spelling, which is how a custom id
  * is checked for being a standard one with the wrong case
  * (`createOperationRegistry`).

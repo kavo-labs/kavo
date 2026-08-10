@@ -26,6 +26,7 @@ import {
   QueryValidationException,
 } from "../errors/exceptions.js";
 import { nameList } from "../errors/message-hints.js";
+import { isStandardOperationId } from "../operations/default-operation-registry.js";
 import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
 import { cursorValuesOf, encodeCursor } from "../query/cursor.js";
@@ -600,11 +601,16 @@ export class KavoEngine<Entity extends object> {
       const listDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("list", descriptor.id);
       const pagination: Pagination<Entity> = context.query?.pagination ?? { limit: 0, offset: 0 };
       const listMeta = this.listMeta(listResult, context);
+      const items = serializer.serializeList(listResult.entities, listDto, context);
+      // First row only: this catches a declaration mistake, which is the
+      // same for every row, and checking all of them would be per-request
+      // work for a bootstrap-class error.
+      assertProjected(items[0], listResult.entities[0], descriptor, context, "list");
       return {
         operation: descriptor.id,
         item: null,
         list: {
-          items: serializer.serializeList(listResult.entities, listDto, context),
+          items,
           limit: pagination.limit,
           // A keyset page has no absolute position in the match set, and
           // `offset` is a non-nullable envelope field, so cursor pages report
@@ -638,6 +644,7 @@ export class KavoEngine<Entity extends object> {
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
     const item = serializer.serializeItem(result as Entity, itemDto, context);
+    assertProjected(item, result, descriptor, context, "item");
     // `context.config` is the per-call view, so `caching.etag` honors an
     // override at any scope down to this one request.
     const etag = context.config.settings.caching.etag ? await computeEtag(item) : null;
@@ -807,4 +814,62 @@ function compactMeta(meta: ListMetaDto | undefined): ListMetaDto | undefined {
  */
 function registeredIds<Entity extends object>(registry: OperationRegistry<Entity>): string {
   return nameList(registry.all().map((descriptor) => descriptor.id));
+}
+
+/**
+ * A custom operation whose handler returned a shape sharing **no** field
+ * with the response projection fails loudly instead of serving `{}`
+ * (#181).
+ *
+ * A custom operation is the one place a handler's result is not the entity
+ * by contract, so it is the one place the projection can empty a value
+ * entirely. `dto.output` is how a result with its own shape declares
+ * itself; with none, the result is filtered to the entity's columns plus
+ * its computed fields, and a result that shares none of them survives as an
+ * empty object. Nothing said so — not a type error, not a log line — and
+ * the static types actively disagreed: `CustomOperationResult` types
+ * `run`'s return as the handler's own return type when no `dto.output` is
+ * declared, so the signature promised the shape while the wire served `{}`.
+ *
+ * Scoped to custom ids deliberately. A standard operation's result *is* the
+ * entity by contract, so an empty projection there is a different bug with
+ * a different fix, and `dto.output` is not the answer to it.
+ *
+ * Zero intersection is the test, not "narrower than the result": a genuine
+ * narrowing — a handler returning a row with a subset of the entity's
+ * fields — is exactly what the projection is for and must stay silent.
+ *
+ * Skipped under an explicit `fields=`, because sparse selection can empty
+ * the projection on its own and the message would then blame the wrong
+ * thing. That request is the client's mistake, and a narrowed read of an
+ * operation whose shape is already wrong will trip this the moment the
+ * fieldset comes off.
+ *
+ * This is `withListMeta`'s pattern (`with-list-meta.ts`): a handler that
+ * returned a shape the envelope cannot use raises a request-time
+ * `ConfigurationException` keyed to the operation, rather than assembling
+ * something broken.
+ */
+function assertProjected<Entity>(
+  projected: unknown,
+  source: unknown,
+  descriptor: OperationDescriptor<Entity>,
+  context: KavoContext<Entity>,
+  slot: "item" | "list",
+): void {
+  if (isStandardOperationId(descriptor.id)) return;
+  if (context.query?.fields.root != null) return;
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return;
+  if (Object.keys(source).length === 0) return;
+  if (typeof projected !== "object" || projected === null || Object.keys(projected).length > 0) return;
+  const served = slot === "list" ? "every row of the list" : "the response";
+  throw new ConfigurationException(
+    context.entityName,
+    `operations.${descriptor.id}.dto.output`,
+    `the '${descriptor.id}' handler returned an object whose keys are ${nameList(Object.keys(source))}, and ` +
+      `none of those are fields of '${context.entityName}', so ${served} serialized to {}. A custom operation's result is ` +
+      `projected through the entity's '${slot}' shape unless the operation registers one of its own — ` +
+      `declare 'dto: { output: <YourResultDto> }' on the operation, with every field initialized so the ` +
+      `class has a runtime shape`,
+  );
 }
