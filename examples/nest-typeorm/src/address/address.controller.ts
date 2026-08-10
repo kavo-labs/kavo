@@ -1,6 +1,7 @@
-import { Controller, Get, Inject, Param, Post } from "@nestjs/common";
+import { Controller, Get, Inject, Param } from "@nestjs/common";
 import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
-import type { DefaultKavoService, EntityId, RequestPreconditions, WireQuery } from "@kavo/core";
+import type { DefaultKavoService, EntityId, KavoContext, RequestPreconditions, WireQuery } from "@kavo/core";
+import { NotFoundException } from "@kavo/core";
 import type { DataSource } from "typeorm";
 import { Address } from "./address.entity.js";
 import { CreateAddressDto, UpdateAddressDto, AddressItemDto, AddressListDto } from "./address.dtos.js";
@@ -19,20 +20,27 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  * still associate an address by id (`{"address": 1}` on `POST /owners` —
  * ADR-0014).
  *
- * `normalizePostalCode` and `validatePostalCode` below are both fully
- * custom, registry-independent routes (issue #26): plain native Nest
- * methods with no `operations` entry at all. Neither action has an
- * operation identity of its own, so neither wants the registry-generated
- * route/Swagger/param machinery `@Override` exists to keep — they own
- * their own `@Post`/`@Get`, `@Param`, and status entirely.
+ * `normalizePostalCodeOne` in the config below is a **custom operation**
+ * (issue #145): an `operations` key outside the standard eight, with a
+ * handler of its own and a route from `meta.routes`. Normalizing a stored
+ * postal code is an action with an operation identity — one row in, one
+ * row out — so it gets the registry entry, the generated route and Swagger
+ * document, the per-operation settings scope, and the automatic principal
+ * that come with one.
  *
- * The alternative for an action that *does* want an identity is a custom
- * operation — an `operations` key outside the standard eight, carrying its
- * own handler (issue #145). It needs a handler that can reach persistence
- * at *decoration* time (ADR-0012), and this app builds its `DataSource`
- * inside `KavoModule.forRootAsync`'s factory, which has not run yet. Both
- * routes below therefore stay native, and reach data through the
- * constructor-injected `base` service instead.
+ * Its handler reaches the database through `context.repository`
+ * (ADR-0025), which is what makes it writable *here*: this config object is
+ * evaluated when the class is defined (ADR-0012), and the `DataSource` this
+ * app uses is built inside `KavoModule.forRootAsync`'s factory, which has
+ * not run yet. There is nothing for the handler to close over, and it needs
+ * nothing.
+ *
+ * `validatePostalCode` below is the other shape: a fully custom,
+ * registry-independent route (issue #26), a plain native Nest method with
+ * no `operations` entry at all. Answering `{ valid }` about a row is not an
+ * operation on `Address` — it has no operation identity, no entity-shaped
+ * response, and nothing to gain from the registry — so it owns its own
+ * `@Get`, `@Param` and status entirely.
  */
 @Kavo(Address, {
   dto: {
@@ -40,6 +48,37 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
     update: UpdateAddressDto,
     item: AddressItemDto,
     list: AddressListDto,
+  },
+  operations: {
+    normalizePostalCodeOne: {
+      handler: {
+        /**
+         * `POST /addresses/:id/normalize-postal-code`. The input is the
+         * `{ id, body }` pair the engine assembles for an id-addressed
+         * write; this operation reads nothing from the body, since the
+         * value it corrects is already stored.
+         */
+        async execute({ id }: { id: EntityId }, context: KavoContext<Address>) {
+          const existing = await context.repository.findOneById(id, null, context);
+          if (existing === null) {
+            throw new NotFoundException({
+              messageParams: { entity: context.entityName, id: String(id) },
+              context: {
+                entityName: context.entityName,
+                operation: context.operation,
+                correlationId: context.correlationId,
+              },
+            });
+          }
+          const postalCode = normalizePostalCode(existing.postalCode);
+          assertValidPostalCode(postalCode);
+          // The same context back, so the write joins whatever transaction
+          // and soft-delete strategy the request resolved.
+          return context.repository.patch(id, { postalCode }, context);
+        },
+      },
+      meta: { routes: { method: "POST", path: ":id/normalize-postal-code" } },
+    },
   },
 })
 @Controller("addresses")
@@ -110,22 +149,6 @@ export class AddressController {
   async findOne(id: EntityId, query: WireQuery): Promise<unknown> {
     const address = await this.base.findOne(id as never, query as never);
     return { ...address, formattedAddress: `${address.street}, ${address.city} ${address.postalCode}` };
-  }
-
-  /**
-   * `POST /addresses/:id/normalize-postal-code` — a fully custom,
-   * registry-independent route (issue #26): reuses the same
-   * normalization/validation as `createOne`/`updateOne`/`patchOne`, applied
-   * to an already-persisted row, with no `operations` entry and none of
-   * `@Override`'s generated route/Swagger/param wiring. Nest defaults a
-   * plain `@Post` to a 201, matching what the registry would have produced.
-   */
-  @Post(":id/normalize-postal-code")
-  async normalizePostalCodeRoute(@Param("id") id: EntityId): Promise<unknown> {
-    const existing = await this.base.findOne(id as never);
-    const postalCode = normalizePostalCode(existing.postalCode);
-    assertValidPostalCode(postalCode);
-    return this.base.updateOne(id as never, { postalCode } as never);
   }
 
   /**
