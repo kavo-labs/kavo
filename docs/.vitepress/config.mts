@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vitepress";
+import { defineConfig, type HeadConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
 
 const hostname = "https://kavo.js.org";
@@ -32,25 +32,68 @@ const config = defineConfig({
   },
 
   head: [
+    [
+      "meta",
+      {
+        name: "keywords",
+        content: "TypeScript, CRUD, REST API, GraphQL, MCP, NestJS, TypeORM, Prisma, Mongoose, MikroORM, realtime",
+      },
+    ],
+    ["meta", { name: "robots", content: "index, follow" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "Kavo" }],
-    ["meta", { property: "og:title", content: "Kavo" }],
-    ["meta", { property: "og:description", content: "A production-grade CRUD framework for TypeScript" }],
-    ["meta", { name: "twitter:card", content: "summary" }],
-    ["meta", { name: "twitter:title", content: "Kavo" }],
-    ["meta", { name: "twitter:description", content: "A production-grade CRUD framework for TypeScript" }],
+    ["meta", { property: "og:locale", content: "en_US" }],
+    ["meta", { property: "og:image", content: `${hostname}/og-image.png` }],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    ["meta", { property: "og:image:alt", content: "Kavo — turn models into APIs" }],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    ["meta", { name: "twitter:image", content: `${hostname}/og-image.png` }],
+    ["meta", { name: "twitter:image:alt", content: "Kavo — turn models into APIs" }],
     ["meta", { name: "theme-color", content: "#7c5cff" }],
     ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
+    ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
   ],
 
   transformHead({ pageData }) {
     const path = pageData.relativePath.replace(/(^|\/)index\.md$/, "$1").replace(/\.md$/, "");
     const url = `${hostname}/${path}`;
+    const isHome = path === "";
+    const title = isHome ? "Kavo — Turn models into APIs" : `${pageData.title} | Kavo`;
+    const description = pageData.description || "A production-grade CRUD framework for TypeScript";
 
-    return [
+    const head: HeadConfig[] = [
       ["link", { rel: "canonical", href: url }],
       ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { name: "twitter:title", content: title }],
+      ["meta", { name: "twitter:description", content: description }],
     ];
+
+    if (isHome) {
+      head.push([
+        "script",
+        { type: "application/ld+json" },
+        JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "Kavo",
+          applicationCategory: "DeveloperApplication",
+          operatingSystem: "Node.js",
+          description: "A production-grade CRUD framework for TypeScript",
+          url: hostname,
+          image: `${hostname}/og-image.png`,
+          offers: {
+            "@type": "Offer",
+            price: "0",
+            priceCurrency: "USD",
+          },
+        }),
+      ]);
+    }
+
+    return head;
   },
 
   themeConfig: {

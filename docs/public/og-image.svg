@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9b7fe0"/>
+      <stop offset="100%" stop-color="#6a45e6"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f1ecff"/>
+    </linearGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.4" r="0.9">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#vignette)"/>
+  <rect width="1200" height="300" fill="url(#glow)"/>
+
+  <!-- brand mark, scaled up from favicon.svg -->
+  <g transform="translate(100, 165)">
+    <rect width="300" height="300" rx="84" fill="url(#bg)"/>
+    <rect width="300" height="150" rx="84" fill="url(#glow)"/>
+    <rect x="4.5" y="4.5" width="291" height="291" rx="79.5" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="3"/>
+    <path
+      d="M116 140.4 168.9 72.6H221.6L155.5 150.4L226.7 236.7H169.6L116 165.6V236.7H73.3V72.6H116Z"
+      fill="url(#mark)"
+    />
+  </g>
+
+  <text x="470" y="330" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="120" font-weight="700" fill="#ffffff">Kavo</text>
+  <text x="474" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="38" font-weight="500" fill="#f1ecff">Turn models into APIs</text>
+  <text x="474" y="450" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="26" font-weight="400" fill="#ffffff" fill-opacity="0.72">REST · GraphQL · MCP · Realtime, from one entity</text>
+</svg>
