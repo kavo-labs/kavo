@@ -390,6 +390,22 @@ Worth knowing before you reach for one:
 - **Custom routes are matched first.** Custom entries are registered ahead of the standard table, so `GET /orders/pending` reaches its own handler rather than `GET /orders/:id`. The flip side is that a custom entry whose `meta.routes` reproduces a standard route's shape takes that route.
 - **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it is a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
+- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `dto.output`, the handler's return value is filtered to the entity's columns plus its computed fields, exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its **own** shape needs a DTO:
+
+  ```ts
+  class ImportOutcomeDto {
+    applied = 0;
+    skus: string[] = [];
+  }
+
+  operations: {
+    importPricesMany: { handler, dto: { output: ImportOutcomeDto } },
+  }
+  ```
+
+  Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing. A result sharing **no** field with the entity used to serialize to `{}` in silence; since v0.9 it raises `KAVO_CONFIG_INVALID` naming the operation and pointing here.
+
+- **The route defaults to `POST` and `201`.** A custom id is absent from the standard route table, so it falls back to `POST /<controller>/<operation id>` with a `201` — a custom operation is a write against the collection until its `meta.routes` says otherwise. A read that returns an existing row almost certainly wants `meta: { routes: { method: "GET", path: ":id/summary", successStatus: 200 } }`.
 
 Custom operations are a REST and programmatic feature only: the GraphQL and MCP bindings expose the standard operations.
 

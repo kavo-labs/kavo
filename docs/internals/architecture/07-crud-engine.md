@@ -71,6 +71,28 @@ response is serialized, ETagged and conditionally answered like any other.
 nothing in the schema says which row it targets, so the request is refused
 rather than performed unguarded (§3a).
 
+That DTO fallback is where the genericity has a sharp edge, and it is worth
+naming rather than leaving as an inference. A standard operation's result
+_is_ the entity, so falling back to the entity's projection loses nothing. A
+custom operation's result is whatever its handler returns, so the same
+fallback silently filters it to the entity's columns — and a result sharing
+no field with them survives as `{}`. That shipped with a 201 and no signal
+of any kind, while `CustomOperationResult` typed `run`'s return as the
+handler's own return type, so the static types promised the shape the wire
+did not carry (#181).
+
+`mapResponse` now refuses that case: a **custom** id whose non-empty result
+projects to zero keys raises `ConfigurationException`
+(`operations.<id>.dto.output`) naming the operation and the keys it
+returned. Zero intersection is the test, not "narrower than the result" — a
+genuine narrowing is exactly what the projection is for. The guard is
+skipped under an explicit `fields=`, which can empty a projection on its
+own and would make the message blame the wrong thing, and it is scoped to
+custom ids because a standard operation's empty projection is a different
+bug that `dto.output` does not fix. The pattern is `withListMeta`'s: a
+handler that returned a shape the envelope cannot use fails at request time,
+keyed to the operation, rather than assembling something broken.
+
 In code it is called through `service.run("markPaidOne", { id, body })`,
 which is the same `engine.execute` the eight named methods make, typed from
 the operation's own `dto` override or, failing that, from the registered

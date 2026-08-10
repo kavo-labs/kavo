@@ -199,6 +199,15 @@ root `dto` slot of its own: `output` falls back to the entity's
 `item`/`list` slot and `input` to the entity's writable projection, which
 is what makes `dto` the only way to give it a shape of its own.
 
+That fallback is the right default for a result that _is_ a row, and a trap
+for one that is not: a handler returning `{ applied, skus }` against an
+entity with neither column serialized to `{}`, silently, while the static
+types promised the shape (#181). The engine now refuses a **custom**
+operation whose non-empty result projects to zero keys, naming the
+operation and pointing at `dto.output` (doc 07 §1a). A result that is a
+narrower entity shape is still served as-is; only zero intersection is
+treated as a declaration mistake.
+
 `query`'s effect is **typing only**, like the root `query` slot (§1): there
 is no validation subsystem, and the query normalizer parses wire params
 structurally against the allowlists regardless of which DTO class is
