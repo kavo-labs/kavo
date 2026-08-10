@@ -49,10 +49,25 @@ export interface IdentifiedWrite<Entity> {
  * special-cased. Each handler is one adapter call plus the "missing vs.
  * error" decision, which is the engine layer's to make: adapters return
  * `null`, handlers turn that into `NotFoundException`.
+ *
+ * **`adapter` is optional, and `createCrud` omits it.** Left out, each
+ * handler reads the request's own `context.repository` (ADR-0025), which is
+ * the same adapter the engine was built with and the same one a custom
+ * handler reaches. That is what makes these handlers usable from a place
+ * where no adapter exists yet — `withListMeta(builtInHandlers<Book>()
+ * ("findMany"), …)` inside a `@Kavo` config, evaluated at class-decoration
+ * time (ADR-0012), long before a `KavoModule.forRootAsync` factory has
+ * produced a `DataSource`.
+ *
+ * Passing one is still meaningful, and it means exactly one thing: run
+ * these behaviors against *that* adapter rather than the entity's own —
+ * a read replica, say, or a fake in a test.
  */
 export function builtInHandlers<Entity extends object>(
-  adapter: RepositoryAdapter<Entity>,
+  adapter?: RepositoryAdapter<Entity>,
 ): StandardHandlerFactory<Entity> {
+  const repositoryFor = (context: KavoContext<Entity>): RepositoryAdapter<Entity> => adapter ?? context.repository;
+
   const notFound = (context: KavoContext<Entity>, id: EntityId): never => {
     throw new NotFoundException({
       messageParams: { entity: context.entityName, id: String(id) },
@@ -70,12 +85,12 @@ export function builtInHandlers<Entity extends object>(
   const handlers: Record<StandardOperationId, OperationHandler<Entity, never, unknown>> = {
     createOne: {
       async execute(input: Partial<Entity>, context: KavoContext<Entity>) {
-        return adapter.create(input, context);
+        return repositoryFor(context).create(input, context);
       },
     },
     findOne: {
       async execute(id: EntityId, context: KavoContext<Entity>) {
-        const entity = await adapter.findOneById(id, context.query, context);
+        const entity = await repositoryFor(context).findOneById(id, context.query, context);
         return entity ?? notFound(context, id);
       },
     },
@@ -92,25 +107,26 @@ export function builtInHandlers<Entity extends object>(
         // exactly what the query asks for" — a custom adapter needs no
         // keyset awareness at all beyond honoring `readFilter` (ADR-0021,
         // ADR-0022).
+        const repository = repositoryFor(context);
         const keysetPaged = hasKeyset(query.pagination);
-        const fetched = await adapter.findMany(keysetPaged ? overFetch(query) : query, context);
+        const fetched = await repository.findMany(keysetPaged ? overFetch(query) : query, context);
         const hasMore = keysetPaged && fetched.length > query.pagination.limit;
         const entities = hasMore ? fetched.slice(0, query.pagination.limit) : fetched;
         // Counting deliberately uses the *unmodified* query: `total` is the
         // size of the whole match set, not of what remains after the
         // cursor/since boundary.
-        const total = query.count ? await adapter.count(query, context) : null;
+        const total = query.count ? await repository.count(query, context) : null;
         return keysetPaged ? { entities, total, hasMore } : { entities, total };
       },
     },
     updateOne: {
       async execute(input: IdentifiedWrite<Entity>, context: KavoContext<Entity>) {
-        return adapter.update(input.id, input.data, context);
+        return repositoryFor(context).update(input.id, input.data, context);
       },
     },
     patchOne: {
       async execute(input: IdentifiedWrite<Entity>, context: KavoContext<Entity>) {
-        return adapter.patch(input.id, input.data, context);
+        return repositoryFor(context).patch(input.id, input.data, context);
       },
     },
     deleteOne: {
@@ -118,7 +134,7 @@ export function builtInHandlers<Entity extends object>(
         // Hard or soft per `context.config.softDelete` — the strategy is
         // resolved at config time and applied by the adapter,
         // so there is no branch here.
-        await adapter.delete(id, context);
+        await repositoryFor(context).delete(id, context);
         return null;
       },
     },
@@ -126,12 +142,12 @@ export function builtInHandlers<Entity extends object>(
       async execute(id: EntityId, context: KavoContext<Entity>) {
         // Restore returns the revived row: it reuses the `item` DTO slot,
         // so no new DTO shape enters the system.
-        return adapter.restore(id, context);
+        return repositoryFor(context).restore(id, context);
       },
     },
     purgeOne: {
       async execute(id: EntityId, context: KavoContext<Entity>) {
-        await adapter.purge(id, context);
+        await repositoryFor(context).purge(id, context);
         return null;
       },
     },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KavoContext, StateKey } from "@kavo/core";
 import { DefaultKavoContextState, createKavo, createKavoContext } from "@kavo/core";
-import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
+import { InMemoryUserAdapter, User, unusedRepository, userMetadata } from "./support/user-fixture.js";
 
 /**
  * The per-request state bag (`context.state`), which is public
@@ -77,8 +77,9 @@ describe("DefaultKavoContextState", () => {
 describe("createKavoContext — state is per request", () => {
   it("hands every context its own bag", () => {
     const config = { entityName: "User" } as never;
-    const first = createKavoContext({ operation: "findOne", config });
-    const second = createKavoContext({ operation: "findOne", config });
+    const repository = unusedRepository();
+    const first = createKavoContext({ operation: "findOne", config, repository });
+    const second = createKavoContext({ operation: "findOne", config, repository });
 
     first.state.set(Attempts, 1);
 
@@ -88,9 +89,10 @@ describe("createKavoContext — state is per request", () => {
 
   it("generates a correlation id when the caller supplies none, and keeps one that is supplied", () => {
     const config = { entityName: "User" } as never;
+    const repository = unusedRepository();
 
-    const generated = createKavoContext({ operation: "findOne", config });
-    const forwarded = createKavoContext({ operation: "findOne", config, correlationId: "upstream-42" });
+    const generated = createKavoContext({ operation: "findOne", config, repository });
+    const forwarded = createKavoContext({ operation: "findOne", config, repository, correlationId: "upstream-42" });
 
     expect(generated.correlationId).toMatch(/^[0-9a-f-]{36}$/);
     expect(forwarded.correlationId).toBe("upstream-42");

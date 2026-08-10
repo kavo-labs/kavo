@@ -152,7 +152,8 @@ so rule 3 is a compile error before it is a bootstrap error.
   response is one request, and `KavoContext` describes that request, so a
   target's resolver is handed the _root_ operation's context:
   `GET /posts/1?include=author` gives an `Author` computed field a context
-  whose `entityName`, `operation`, `config` and `query` are Post's. Only
+  whose `entityName`, `operation`, `config`, `query` and `repository`
+  (ADR-0025) are Post's. Only
   the request-scoped members — `principal`, `correlationId`,
   `transaction`, `state` — are meaningful from a relation target. A
   per-target context was rejected as a worse lie: it would have to invent

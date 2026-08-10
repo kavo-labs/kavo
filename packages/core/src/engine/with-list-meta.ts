@@ -26,7 +26,10 @@ export type ListMetaContributor<Entity = unknown> = (
  * the same wrap-and-spread every time:
  *
  * ```ts
- * const handlers = builtInHandlers(adapter);
+ * // No adapter argument: the built-ins read the request's own
+ * // `context.repository` (ADR-0025), which is what lets this wrap be
+ * // written inside a `@Kavo` config, before one exists.
+ * const handlers = builtInHandlers<Book>();
  * kavo.createCrud(Book, {
  *   operations: {
  *     findMany: {
@@ -49,7 +52,7 @@ export type ListMetaContributor<Entity = unknown> = (
  * inner bag in hand and can spread it last: `{ ...mine, ...result.meta }`.
  *
  * The parameter is typed as `OperationHandler<Entity>` — exactly what both
- * `builtInHandlers(adapter)("findMany")` and `OperationConfig.handler`
+ * `builtInHandlers()("findMany")` and `OperationConfig.handler`
  * are — so the wrap composes with either without a cast. That erases the
  * inner output type, so the shape is checked at run time instead:
  * wrapping a handler that returns anything but a `FindManyResult` — both

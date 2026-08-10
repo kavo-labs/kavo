@@ -731,8 +731,9 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
   /**
    * `Address` overrides all five singular standard operations through
-   * `@Override`'d controller methods (issue #21/#23), and adds two fully
-   * custom, registry-independent routes (issue #26).
+   * `@Override`'d controller methods (issue #21/#23), declares one custom
+   * operation (`normalizePostalCodeOne`, issue #145), and adds one fully
+   * custom, registry-independent route (issue #26).
    */
   describe("Address operation overrides (issue #21)", () => {
     it("normalizes postalCode on create", async () => {
@@ -824,7 +825,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(Object.keys(narrowed.body).sort()).toEqual(["city", "formattedAddress", "postalCode", "street"]);
     });
 
-    it("corrects a dirty postalCode via the custom route", async () => {
+    it("corrects a dirty postalCode via the custom operation", async () => {
+      // The custom operation's handler is written inside the `@Kavo` config
+      // literal, which is evaluated when the class is defined — before this
+      // app's `DataSource` exists (it comes from `KavoModule.forRootAsync`'s
+      // factory). It reads and writes through `context.repository`
+      // (ADR-0025), and this is the proof that both halves reach the real
+      // database: the row is loaded, corrected, and still corrected on the
+      // next request.
       const created = await request(server())
         .post("/addresses")
         .send({ street: "1 Elm St", city: "Springfield", postalCode: "10001" })
@@ -833,16 +841,65 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       // Every write path through the API already normalizes on the way in
       // (createOne/updateOne/patchOne), so the only way to observe the
-      // custom route's own normalization actually doing something is to
+      // custom operation's own normalization actually doing something is to
       // seed a dirty value directly, bypassing the controller entirely.
       const dataSource = getApp().get<DataSource>(DATA_SOURCE);
       await dataSource.getRepository(Address).update(id, { postalCode: " 20002 " });
 
       const response = await request(server()).post(`/addresses/${id}/normalize-postal-code`).expect(201);
       expect(response.body.postalCode).toBe("20002");
+      // A registry entry, not a hand-written route: the response goes
+      // through the engine's serialization and gets the same `ETag` every
+      // single-row response gets (ADR-0020).
+      expect(response.headers.etag).toMatch(/^"[0-9a-f]{64}"$/);
 
       const fetched = await request(server()).get(`/addresses/${id}`).expect(200);
       expect(fetched.body.postalCode).toBe("20002");
+      // Serialized through the entity's `item` slot, `AddressItemDto`, the
+      // same as every other single-row Address response — `formattedAddress`
+      // is absent because that one is `findOne`'s override augmenting its
+      // own response, not part of what the engine projects.
+      expect(Object.keys(response.body).sort()).toEqual(["city", "id", "postalCode", "street"]);
+    });
+
+    it("documents the custom operation's route in the OpenAPI document", async () => {
+      const document = SwaggerModule.createDocument(
+        getApp(),
+        new DocumentBuilder().setTitle("t").setVersion("0").build(),
+      );
+
+      const operation = (
+        document.paths["/addresses/{id}/normalize-postal-code"] as { post?: { operationId?: string } } | undefined
+      )?.post;
+
+      expect(operation?.operationId).toBe("Address_normalizePostalCodeOne");
+    });
+
+    it("400s when the stored postalCode cannot be normalized into a valid one", async () => {
+      // The handler's `assertValidPostalCode` throws inside the engine now
+      // rather than inside a native route, so its exception travels the
+      // engine's error handler on the way out. Seeded directly, since
+      // every write path validates on the way in.
+      const created = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "Springfield", postalCode: "10001" })
+        .expect(201);
+      const id = created.body.id as number;
+      const dataSource = getApp().get<DataSource>(DATA_SOURCE);
+      await dataSource.getRepository(Address).update(id, { postalCode: "not-a-code" });
+
+      const response = await request(server())
+        .post(`/addresses/${id}/normalize-postal-code`)
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body).toMatchObject({ status: 400, code: "KAVO_QUERY_INVALID" });
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "postalCode", code: "KAVO_QUERY_INVALID_VALUE" }),
+      ]);
+
+      // Refused before the write, so the row still holds the bad value.
+      const fetched = await request(server()).get(`/addresses/${id}`).expect(200);
+      expect(fetched.body.postalCode).toBe("not-a-code");
     });
 
     it("404s when normalizing a nonexistent address", async () => {

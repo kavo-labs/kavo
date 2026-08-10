@@ -238,9 +238,11 @@ the rare caller wiring a query param manually outside this fixed position;
 the common case needs neither.
 
 **Fully custom, registry-independent routes** (issue #26) are a separate,
-simpler path that needs no `@Kavo` involvement at all — the only way to
-add an action with no operation identity of its own, since `EntityConfig`
-has no surface for registering a new operation id. The decoration-time
+simpler path that needs no `@Kavo` involvement at all — the way to add an
+action with no operation identity of its own. (An action that _has_ one is
+a custom operation instead: an `operations` key outside the standard eight,
+issue #145, whose handler reaches data through `context.repository`,
+ADR-0025.) The decoration-time
 loop only visits methods two ways: manual-method-wins (name matches a
 registry operation id) and the `@Override` map (name registered via
 `@Override`). A method matching neither — carrying its own native
@@ -278,9 +280,11 @@ the standard operations and should keep getting its route/Swagger/param
 metadata generated from config while only its implementation changes;
 reach for a plain native-decorated method for anything else — an action
 with no operation identity of its own needs none of that generated
-machinery. `examples/nest-typeorm/src/address/address.controller.ts`'s
-`normalizePostalCode` and `validatePostalCode` both take the plain
-native-decorated path.
+machinery. `examples/nest-typeorm/src/address/address.controller.ts` shows
+the split: `validatePostalCode` takes the plain native-decorated path,
+while `normalizePostalCodeOne` is a custom operation, because correcting a
+stored value on one row is an operation on `Address` and answering
+`{ valid }` about it is not.
 
 Mechanically, generated methods are defined on the prototype and
 decorated by _calling_ Nest's own decorators (`Post(path)(proto, name,

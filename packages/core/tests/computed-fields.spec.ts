@@ -612,7 +612,7 @@ describe("computed fields — on an included relation target", () => {
     // Documented on `ComputedFieldDescriptor.resolve` and in ADR-0019, and
     // pinned here so it cannot drift into a silent half-truth.
     let seen: KavoContext<Author> | null = null;
-    const { posts } = blog({
+    const { posts, authorAdapter, postAdapter } = blog({
       author: {
         computed: {
           initials: {
@@ -629,5 +629,11 @@ describe("computed fields — on an included relation target", () => {
     expect(seen).toMatchObject({ principal: { id: "u-7" } });
     // … while the entity-scoped ones describe the *root* operation.
     expect(seen).toMatchObject({ entityName: "Post", operation: "findOne" });
+    // `repository` is entity-scoped too, and it is the one that can act:
+    // typed `RepositoryAdapter<Author>` here, holding Post's adapter
+    // (ADR-0025). Pinned because the type says otherwise, so only a test
+    // can keep the documented caveat honest.
+    expect(seen!.repository).toBe(postAdapter);
+    expect(seen!.repository).not.toBe(authorAdapter);
   });
 });

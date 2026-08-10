@@ -34,8 +34,12 @@ operation's behavior; they differ in _where_ the replacement lives and what
 it can reach:
 
 - `operations.<id>.handler` is a plain `OperationHandler` object — no `this`,
-  no DI, just `execute(input, context)`. Use it when the override is pure
-  logic against the adapter/context Kavo already hands you.
+  no DI, just `execute(input, context)`. Its data access is
+  `context.repository`, the entity's own `RepositoryAdapter` (ADR-0025), so
+  it needs nothing in scope where it is written: pass the context back
+  (`context.repository.patch(id, data, context)`) and the call joins the
+  request's transaction and soft-delete strategy. Use it when the behavior
+  is logic plus this entity's own reads and writes.
 - `@Override` is a real controller method, decorated so `@Kavo` still emits
   that operation's route (method, path, status, params, Swagger) — only the
   function backing the route changes. Use it when the override needs
@@ -96,7 +100,10 @@ Every entry is an `OperationDescriptor`
 - `cardinality` — `"one" | "many"`, matching the id.
 - `enabled` — disabled entries stay registered but never execute.
 - `handler` — an `OperationHandler`: `execute(input, context)`. One contract for
-  built-in, overridden and custom operations alike.
+  built-in, overridden and custom operations alike, and one way to reach
+  persistence: `context.repository` (ADR-0025). A new built-in handler in
+  `engine/built-in-handlers.ts` reads it through `repositoryFor(context)`
+  rather than closing over an adapter.
 - `input` / `output` — explicit DTO classes, or `null` to take the slot default.
 - `meta` — the opaque, module-augmentable metadata bag.
 

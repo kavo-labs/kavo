@@ -130,6 +130,30 @@ export function contextStub(): KavoContext<User> {
   return {} as KavoContext<User>;
 }
 
+/**
+ * A `KavoContext.repository` for a test whose subject never reaches for it
+ * (ADR-0025 makes the field required). Every method throws rather than
+ * returning a plausible empty answer, so a test that starts depending on
+ * persistence says so instead of quietly passing against nothing.
+ */
+export function unusedRepository<Entity extends object = object>(): RepositoryAdapter<Entity> {
+  const refuse = (method: string) => (): never => {
+    throw new Error(`unusedRepository.${method} was called — this fixture only satisfies KavoContext.repository`);
+  };
+  return {
+    findOneById: refuse("findOneById"),
+    findOne: refuse("findOne"),
+    findMany: refuse("findMany"),
+    count: refuse("count"),
+    create: refuse("create"),
+    update: refuse("update"),
+    patch: refuse("patch"),
+    delete: refuse("delete"),
+    restore: refuse("restore"),
+    purge: refuse("purge"),
+  } as unknown as RepositoryAdapter<Entity>;
+}
+
 /** Multi-key comparator; list order is precedence, as `Sort` documents. */
 function comparatorFor(sort: readonly Sort<User>[]): (left: User, right: User) => number {
   return (left, right) => {

@@ -1,6 +1,7 @@
 import type { KavoContext, KavoContextState, StateKey } from "./kavo-context.js";
 import type { NormalizedQueryContext } from "../query/query-context.js";
 import type { OperationId } from "../operations/operation.js";
+import type { RepositoryAdapter } from "../persistence/repository-adapter.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 import type { TransactionContext } from "../persistence/transaction-manager.js";
 
@@ -34,6 +35,15 @@ export function randomUuid(): string {
 export interface KavoContextInit<Entity> {
   readonly operation: OperationId;
   readonly config: ResolvedEntityConfig<Entity>;
+  /**
+   * The entity's repository adapter (ADR-0025). Required rather than
+   * optional: every handler reaches persistence through it, so a context
+   * built without one produces a `TypeError` inside whatever handler runs
+   * next, far from whoever built the context. Nothing checks it at run
+   * time — the type is the guard, and a caller that erases it gets the
+   * deferred failure this shape exists to make unrepresentable.
+   */
+  readonly repository: RepositoryAdapter<Entity>;
   readonly principal?: unknown;
   readonly transaction?: TransactionContext | null;
   readonly query?: NormalizedQueryContext<Entity> | null;
@@ -50,6 +60,7 @@ export function createKavoContext<Entity>(init: KavoContextInit<Entity>): KavoCo
     entityName: init.config.entityName,
     operation: init.operation,
     config: init.config,
+    repository: init.repository,
     principal: init.principal ?? null,
     transaction: init.transaction ?? null,
     query: init.query ?? null,

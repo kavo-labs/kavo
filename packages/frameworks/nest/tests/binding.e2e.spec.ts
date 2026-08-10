@@ -4,8 +4,20 @@ import request from "supertest";
 import { Controller, Get, Inject, NotFoundException, Param, type INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
-import type { DefaultKavoService, NormalizedQueryContext, OperationHandler } from "@kavo/core";
-import { ConfigurationException, WireQuery } from "@kavo/core";
+import type {
+  DefaultKavoService,
+  FindManyResult,
+  KavoContext,
+  NormalizedQueryContext,
+  OperationHandler,
+} from "@kavo/core";
+import {
+  ConfigurationException,
+  NotFoundException as KavoNotFoundException,
+  WireQuery,
+  builtInHandlers,
+  withListMeta,
+} from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import {
   Kavo,
@@ -698,6 +710,112 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
       title: "TodoReceiptDto",
     });
+  });
+});
+
+describe("@Kavo custom operations reaching data (issue #152)", () => {
+  /**
+   * The wiring the integration docs recommend, and the reason this seam
+   * exists: the infrastructure is produced inside `forRootAsync`'s factory,
+   * which Nest runs when the module is instantiated — long after every
+   * `@Kavo` config literal in this file was evaluated (ADR-0012). The
+   * adapter is constructed *in* the factory, so nothing declared above it
+   * could have closed over one.
+   */
+  async function bootstrapAsync(controller: unknown): Promise<void> {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => {
+            adapter = new InMemoryTodoAdapter();
+            return { infrastructure: fakeInfrastructure(adapter) };
+          },
+        }),
+        KavoModule.forFeature([controller as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+  }
+
+  /** Load the row, write a field: the shape issue #145 was written for. */
+  @Kavo(Todo, {
+    operations: {
+      publishOne: {
+        handler: {
+          async execute(input: { id: number }, context: KavoContext<Todo>) {
+            const todo = await context.repository.findOneById(input.id, null, context);
+            if (todo === null) {
+              throw new KavoNotFoundException({
+                messageParams: { entity: context.entityName, id: String(input.id) },
+                context: {
+                  entityName: context.entityName,
+                  operation: context.operation,
+                  correlationId: context.correlationId,
+                },
+              });
+            }
+            return context.repository.patch(input.id, { done: true, title: `${todo.title} (published)` }, context);
+          },
+        },
+        meta: { routes: { method: "POST", path: ":id/publish" } },
+      },
+    },
+  })
+  @Controller("todos")
+  class PublishController {}
+
+  it("persists a write through the request's own repository", async () => {
+    await bootstrapAsync(PublishController);
+    await request(server()).post("/todos").send({ title: "write docs" }).expect(201);
+
+    const response = await request(server()).post("/todos/1/publish").expect(201);
+
+    expect(response.body).toMatchObject({ id: 1, done: true, title: "write docs (published)" });
+    // The row itself changed — the response is not a fabricated object.
+    const fetched = await request(server()).get("/todos/1").expect(200);
+    expect(fetched.body).toMatchObject({ id: 1, done: true, title: "write docs (published)" });
+    expect(adapter.rows[0]).toMatchObject({ done: true, title: "write docs (published)" });
+  });
+
+  it("answers the handler's own 404 as problem details when the row is missing", async () => {
+    await bootstrapAsync(PublishController);
+
+    const response = await request(server())
+      .post("/todos/999/publish")
+      .expect(404)
+      .expect("Content-Type", /application\/problem\+json/);
+
+    expect(response.body.code).toBe("KAVO_NOT_FOUND");
+  });
+
+  /**
+   * The other half of ADR-0025: a built-in handler wrapped at decoration
+   * time. `builtInHandlers<Todo>()` takes no adapter, so this composes
+   * where the old form could not, and the wrap still runs the real
+   * `findMany` against the adapter the factory built afterwards.
+   */
+  @Kavo(Todo, {
+    operations: {
+      findMany: {
+        handler: withListMeta(builtInHandlers<Todo>()("findMany"), (result: FindManyResult<Todo>) => ({
+          done: result.entities.filter((todo) => todo.done).length,
+        })),
+      },
+    },
+  })
+  @Controller("todos")
+  class ListMetaController {}
+
+  it("runs a decoration-time withListMeta wrap over the built-in findMany", async () => {
+    await bootstrapAsync(ListMetaController);
+    await request(server()).post("/todos").send({ title: "write docs", done: true }).expect(201);
+    await request(server()).post("/todos").send({ title: "write tests" }).expect(201);
+
+    const response = await request(server()).get("/todos").expect(200);
+
+    expect(response.body).toMatchObject({ total: 2, limit: 20, offset: 0, meta: { done: 1 } });
+    expect(response.body.items).toHaveLength(2);
   });
 });
 

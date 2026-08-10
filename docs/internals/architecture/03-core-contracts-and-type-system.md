@@ -237,6 +237,13 @@ definition-site record.
 `TransactionContext` is the exception: it is live, threaded through
 `KavoContext` and `KavoCallOptions` as an opaque adapter handle.
 
+`RepositoryAdapter` appears in two places by design. An ORM package
+implements it, and `KavoContext.repository` hands the entity's own
+implementation back to every handler, which is how a handler reaches
+persistence at all (ADR-0025). That is not a dependency leak in either
+direction: the shape is core's, and what implements it stays behind the
+seam.
+
 `Pagination` is a **union**, `OffsetPagination | CursorPagination<Entity>`,
 not a single scalar shape (ADR-0021). The discriminant is the _presence of
 `cursor`_, exposed as the guard `isCursorPagination`, rather than a `kind`

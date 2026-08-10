@@ -153,7 +153,14 @@ export interface StandardOperationsConfig<
 export interface CustomOperationConfig<Entity = unknown> extends Omit<DeepPartial<KavoSettings>, "operations"> {
   /** Registered but inert when `false` — the same seam a standard id has. */
   readonly enabled?: boolean;
-  /** The operation's behavior. Required: nothing else can supply it. */
+  /**
+   * The operation's behavior. Required: nothing else can supply it.
+   *
+   * It reads and writes through `context.repository`, the entity's own
+   * `RepositoryAdapter` (ADR-0025), so it needs nothing in scope where it
+   * is written — which is what makes it writable inside a `@Kavo` config,
+   * evaluated at class-decoration time (ADR-0012).
+   */
   readonly handler: OperationHandler<Entity>;
   /** Defaults to `"write"`. A `"read"` runs query resolution and takes no body. */
   readonly kind?: OperationKind;

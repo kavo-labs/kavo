@@ -48,10 +48,18 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    * **On an included relation target, `context` is the *root* request's.**
    * One response is one request, and `KavoContext` describes that request:
    * serving `GET /posts/1?include=author` hands an `Author` computed field
-   * a context whose `entityName`, `operation`, `config` and `query` are
-   * Post's. Only the request-scoped members — `principal`, `correlationId`,
-   * `transaction`, `state` — mean what they say from a relation target
-   * (ADR-0019).
+   * a context whose `entityName`, `operation`, `config`, `query` and
+   * `repository` are Post's. Only the request-scoped members —
+   * `principal`, `correlationId`, `transaction`, `state` — mean what they
+   * say from a relation target (ADR-0019).
+   *
+   * `context.repository` is the sharpest of those, because it is the only
+   * one that can *act*: from a relation target it is typed for this entity
+   * and holds the root entity's adapter, so a write through it would hit
+   * the wrong table under this row's id. A resolver should not reach for
+   * it at all — `resolve` is synchronous, so any adapter call is an
+   * unawaited promise, and one that ran per row would reintroduce the N+1
+   * this stage exists to avoid (ADR-0025).
    */
   resolve(entity: Entity, context: KavoContext<Entity>): unknown;
   /**

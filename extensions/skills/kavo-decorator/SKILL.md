@@ -180,9 +180,8 @@ generate. A decorated method never falls through to plain name-matching.
 
 ## Fully custom, registry-independent routes
 
-For an action with no operation identity of its own (`EntityConfig` has no
-surface for registering a new operation id), skip `@Kavo` machinery entirely
-— write an ordinary Nest method with its own `@Get`/`@Post`/etc. and its own
+For an action with no operation identity of its own, skip `@Kavo` machinery
+entirely — write an ordinary Nest method with its own `@Get`/`@Post`/etc. and its own
 `@Param`/`@Query`/`@Body` on the same class. `@Kavo` never inspects it (name
 matches neither the registry nor an `@Override`). Reach the bound service the
 same way:
@@ -204,8 +203,13 @@ export class UserController {
 ```
 
 See `examples/nest-typeorm/src/address/address.controller.ts` for a worked
-example (`normalizePostalCode`, `validatePostalCode`).
+example (`validatePostalCode`).
 
 **Rule of thumb:** reach for `@Override` when the action _is_ one of the
 standard operations and should keep its generated route/Swagger/param
-metadata; reach for a plain native-decorated method for anything else.
+metadata; declare a **custom operation** (an `operations` key outside the
+standard eight, with its own `handler` and `meta.routes`) when the action has
+an operation identity of its own and wants that same generated machinery —
+its handler reads and writes through `context.repository`, so it needs
+nothing in scope where it is declared; reach for a plain native-decorated
+method for anything else.

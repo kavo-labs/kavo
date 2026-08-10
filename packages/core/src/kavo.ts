@@ -130,9 +130,13 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         options.defaults,
         options.realtimeTransports,
       );
+      // `builtInHandlers()` takes no adapter: the built-ins read the
+      // request's `context.repository`, which the engine below fills from
+      // this same `adapter` (ADR-0025). One rule for every handler —
+      // built-in, overridden and custom reach persistence the same way.
       const registry = createOperationRegistry<Entity>(
         config as EntityConfig<Entity> | undefined,
-        builtInHandlers(adapter as unknown as RepositoryAdapter<Entity>),
+        builtInHandlers<Entity>(),
         resolved.settings.operations,
         resolved.entityName,
       );
@@ -155,9 +159,10 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
           new DefaultIncludeResolver(catalog) as IncludeResolver<Entity>,
         ),
         errorHandler: new DefaultErrorHandler(),
-        // The adapter is already both halves; the engine only ever reads
-        // through it, for the `If-Match` pre-read (ADR-0020).
-        reader: adapter as unknown as RepositoryAdapter<Entity>,
+        // Both halves: the engine reads through it for the `If-Match`
+        // pre-read (ADR-0020) and hands it to every handler on the
+        // request context (ADR-0025).
+        repository: adapter as unknown as RepositoryAdapter<Entity>,
       });
 
       // Every registered id, not just the standard table: a custom
