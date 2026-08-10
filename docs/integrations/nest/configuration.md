@@ -399,11 +399,17 @@ Worth knowing before you reach for one:
   }
 
   operations: {
-    importPricesMany: { handler, dto: { output: ImportOutcomeDto } },
+    // `One`, not `Many`: cardinality names the *response*, and this one
+    // answers with a single outcome however many rows it wrote.
+    importPricesOne: { handler, dto: { output: ImportOutcomeDto } },
   }
   ```
 
-  Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing. A result sharing **no** field with the entity used to serialize to `{}` in silence; since v0.9 it raises `KAVO_CONFIG_INVALID` naming the operation and pointing here.
+  Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing.
+
+  A result the projection empties **raises** rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of the three mistakes it is: no DTO and no field in common with the entity, a registered DTO the handler's keys do not match, or a registered DTO with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array — the last being what a handler that meant `cardinality: "many"` and left it at the default returns. It does **not** fire under an explicit `fields=`, which can empty a projection on its own.
+
+  Two things follow from it being a request-time refusal. The handler has already run, so a write it made through `context.repository` stands; and a partial strip — a result mixing entity fields with its own — is still silent, because that is what a projection is for.
 
 - **The route defaults to `POST` and `201`.** A custom id is absent from the standard route table, so it falls back to `POST /<controller>/<operation id>` with a `201` — a custom operation is a write against the collection until its `meta.routes` says otherwise. A read that returns an existing row almost certainly wants `meta: { routes: { method: "GET", path: ":id/summary", successStatus: 200 } }`.
 

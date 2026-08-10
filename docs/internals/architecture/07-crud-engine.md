@@ -81,17 +81,44 @@ of any kind, while `CustomOperationResult` typed `run`'s return as the
 handler's own return type, so the static types promised the shape the wire
 did not carry (#181).
 
-`mapResponse` now refuses that case: a **custom** id whose non-empty result
-projects to zero keys raises `ConfigurationException`
-(`operations.<id>.dto.output`) naming the operation and the keys it
-returned. Zero intersection is the test, not "narrower than the result" — a
-genuine narrowing is exactly what the projection is for. The guard is
-skipped under an explicit `fields=`, which can empty a projection on its
-own and would make the message blame the wrong thing, and it is scoped to
-custom ids because a standard operation's empty projection is a different
-bug that `dto.output` does not fix. The pattern is `withListMeta`'s: a
-handler that returned a shape the envelope cannot use fails at request time,
-keyed to the operation, rather than assembling something broken.
+`mapResponse` now refuses that case: a **custom** id whose result carried
+something and projects to zero keys raises `ConfigurationException`
+(`operations.<id>.dto.output`). Four details decide what it catches and what
+the message says.
+
+**What counts as "carried something"** is deliberately wider than "has own
+enumerable keys", which was the first cut and let three shapes through in
+silence — the exact symptom the guard exists to end. `Object.keys` misses a
+class instance whose fields are accessors, while `DefaultSerializer.project`
+emits with `key in source` and does not; it also misses a `Date`. And a
+non-empty **array** is what a handler that meant `cardinality: "many"` and
+left it at the default returns. All three now raise. A literally empty `{}`
+is still exempt: returning nothing meaningful is not a shape mistake.
+
+**Zero intersection is the test**, not "narrower than the result" — a genuine
+narrowing is exactly what the projection is for, so a result mixing entity
+fields with its own is still stripped silently.
+
+**The message names what the result was projected _through_.** With no
+`dto.output` it names the entity and says to declare one. With one registered
+it names that class and its keys, because the entity's fields are irrelevant
+and telling an author to declare a DTO they already declared sends them to
+fix the thing they got right. With one registered that has **no runtime
+shape** — the declared-only class `@kavo/nest` supports on purpose, so
+Swagger's decorators can answer — it names the missing initializers, since
+the projection has silently fallen back to the entity.
+
+**Two scopings.** The guard is skipped under an explicit `fields=`, which can
+empty a projection on its own and would make the message blame the wrong
+thing; and it is scoped to custom ids, because a standard operation's empty
+projection is a different bug that `dto.output` does not fix.
+
+The pattern is `withListMeta`'s: a handler that returned a shape the envelope
+cannot use fails at request time, keyed to the operation, rather than
+assembling something broken. It is a request-time `KAVO_CONFIG_INVALID`,
+which is why doc 06's catalog row covers both that and the bootstrap case —
+and it fires _after_ the handler ran, so a write it made through
+`context.repository` stands.
 
 In code it is called through `service.run("markPaidOne", { id, body })`,
 which is the same `engine.execute` the eight named methods make, typed from

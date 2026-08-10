@@ -545,7 +545,64 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
 
       const error = (await crud.run("probeMany").catch((thrown: unknown) => thrown)) as ConfigurationException;
       expect(error).toBeInstanceOf(ConfigurationException);
-      expect(error.message).toContain("every row of the list");
+      // "the first row", not "every row": the check reads index 0 only, and
+      // the message must not claim more than it verified.
+      expect(error.message).toContain("the first row of the list");
+      expect(error.messageParams).toMatchObject({ path: "operations.probeMany.dto.output" });
+    });
+
+    it("names the registered DTO, not the entity, when the DTO is what emptied the result", async () => {
+      // The message used to send an author who had already declared
+      // `dto.output` back to declare `dto.output`. With one registered, the
+      // entity's fields are irrelevant — the projection is the DTO's keys.
+      class OutcomeDto {
+        applied = 0;
+        skus: string[] = [];
+      }
+      const { crud } = withShape({ appliedCount: 3, skuList: ["a"] }, { dto: { output: OutcomeDto } });
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error.message).toContain("registered 'OutcomeDto'");
+      expect(error.message).toContain("applied, skus");
+      expect(error.message).not.toContain("declare 'dto: { output:");
+    });
+
+    it("names the missing initializers when a registered DTO has no runtime shape", async () => {
+      // The declared-only DTO `@kavo/nest` supports on purpose, so Swagger's
+      // own decorators can answer. The projection falls back to the entity,
+      // and the fault is the erased fields rather than a missing DTO.
+      class DeclaredOnlyDto {
+        declare applied: number;
+      }
+      const { crud } = withShape({ applied: 3 }, { dto: { output: DeclaredOnlyDto } });
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error.message).toContain("'DeclaredOnlyDto' declares no runtime fields");
+      expect(error.message).toContain("give each field an initializer".replace("give", "Give"));
+    });
+
+    it("refuses a class instance whose fields are accessors", async () => {
+      // `Object.keys` never sees a prototype getter, but the serializer
+      // emits with `key in source` and does — so this shape slipped through
+      // the first cut of the guard and served {} exactly as #181 reports.
+      class Outcome {
+        get applied(): number {
+          return 3;
+        }
+      }
+      const { crud } = withShape(new Outcome());
+      await expect(crud.run("probeOne")).rejects.toBeInstanceOf(ConfigurationException);
+    });
+
+    it("refuses a non-empty array from a cardinality-one operation", async () => {
+      // What a handler that meant `cardinality: "many"` and left it at the
+      // default returns. It projected to {} in silence.
+      const { crud } = withShape([{ applied: 1 }, { applied: 2 }]);
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error.message).toContain('cardinality: "many"');
     });
 
     it("leaves an empty list alone — there is no row to judge", async () => {

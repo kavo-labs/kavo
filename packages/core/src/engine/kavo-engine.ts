@@ -26,6 +26,7 @@ import {
   QueryValidationException,
 } from "../errors/exceptions.js";
 import { nameList } from "../errors/message-hints.js";
+import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { isStandardOperationId } from "../operations/default-operation-registry.js";
 import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
@@ -605,7 +606,14 @@ export class KavoEngine<Entity extends object> {
       // First row only: this catches a declaration mistake, which is the
       // same for every row, and checking all of them would be per-request
       // work for a bootstrap-class error.
-      assertProjected(items[0], listResult.entities[0], descriptor, context, "list");
+      validateProjectedResult(
+        items[0],
+        listResult.entities[0],
+        listDto as DtoClass | null,
+        descriptor,
+        context,
+        "list",
+      );
       return {
         operation: descriptor.id,
         item: null,
@@ -644,7 +652,7 @@ export class KavoEngine<Entity extends object> {
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
     const item = serializer.serializeItem(result as Entity, itemDto, context);
-    assertProjected(item, result, descriptor, context, "item");
+    validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
     // `context.config` is the per-call view, so `caching.etag` honors an
     // override at any scope down to this one request.
     const etag = context.config.settings.caching.etag ? await computeEtag(item) : null;
@@ -850,26 +858,99 @@ function registeredIds<Entity extends object>(registry: OperationRegistry<Entity
  * `ConfigurationException` keyed to the operation, rather than assembling
  * something broken.
  */
-function assertProjected<Entity>(
+function validateProjectedResult<Entity>(
   projected: unknown,
   source: unknown,
+  dto: DtoClass | null,
   descriptor: OperationDescriptor<Entity>,
   context: KavoContext<Entity>,
   slot: "item" | "list",
 ): void {
   if (isStandardOperationId(descriptor.id)) return;
   if (context.query?.fields.root != null) return;
-  if (typeof source !== "object" || source === null || Array.isArray(source)) return;
-  if (Object.keys(source).length === 0) return;
+  if (!carriesSomething(source)) return;
   if (typeof projected !== "object" || projected === null || Object.keys(projected).length > 0) return;
-  const served = slot === "list" ? "every row of the list" : "the response";
+  const served = slot === "list" ? "the first row of the list" : "the response";
   throw new ConfigurationException(
     context.entityName,
     `operations.${descriptor.id}.dto.output`,
-    `the '${descriptor.id}' handler returned an object whose keys are ${nameList(Object.keys(source))}, and ` +
-      `none of those are fields of '${context.entityName}', so ${served} serialized to {}. A custom operation's result is ` +
-      `projected through the entity's '${slot}' shape unless the operation registers one of its own — ` +
-      `declare 'dto: { output: <YourResultDto> }' on the operation, with every field initialized so the ` +
-      `class has a runtime shape`,
+    `the '${descriptor.id}' handler returned ${describeResult(source)}, so ${served} serialized to {}. ` +
+      projectedAgainst(dto, context.entityName, slot),
+  );
+}
+
+/**
+ * Whether the handler's result had anything for the projection to keep.
+ *
+ * Deliberately wider than `Object.keys(source).length > 0`, which was the
+ * first cut and let three shapes through in silence — the exact #181 symptom
+ * the guard exists to end:
+ *
+ * - a **class instance whose fields are accessors**, since getters live on
+ *   the prototype and `Object.keys` never sees them, while
+ *   `DefaultSerializer.project` emits with `key in source` and does;
+ * - a **`Date`**, or any other boxed value with no own enumerable keys;
+ * - a **non-empty array**, which is what a handler that meant
+ *   `cardinality: "many"` and left it at the default returns.
+ *
+ * A plain `{}` is still exempt: a handler that returns nothing meaningful is
+ * not making a declaration mistake about its shape.
+ */
+function carriesSomething(source: unknown): boolean {
+  if (typeof source !== "object" || source === null) return false;
+  if (Array.isArray(source)) return source.length > 0;
+  if (Object.keys(source).length > 0) return true;
+  // Anything that is not a plain object carries state somewhere the own-key
+  // check cannot see. `null` prototype means a bare dictionary, which the
+  // key check above already judged.
+  const prototype = Object.getPrototypeOf(source) as object | null;
+  return prototype !== Object.prototype && prototype !== null;
+}
+
+/** The result's shape, for the first half of the message. */
+function describeResult(source: unknown): string {
+  if (Array.isArray(source)) {
+    return `an array of ${source.length} item(s) — a collection result needs 'cardinality: "many"' on the operation`;
+  }
+  const keys = Object.keys(source as object);
+  if (keys.length > 0) return `an object whose keys are ${nameList(keys)}`;
+  const name = (source as { constructor?: { name?: string } }).constructor?.name;
+  return `a ${name === undefined || name === "" ? "non-plain object" : name} instance, whose values are not own enumerable properties`;
+}
+
+/**
+ * The second half: what the result was projected *through*, which decides
+ * what the reader has to change.
+ *
+ * Naming the entity unconditionally was wrong. Where a `dto.output` is
+ * registered, the entity's fields are irrelevant — the projection is the
+ * DTO's keys — and telling an author to "declare `dto: { output: … }`" when
+ * they already did sends them to fix the thing they got right. Where one is
+ * registered but has no runtime shape (a declared-only class, which
+ * `@kavo/nest` supports on purpose so Swagger's decorators can answer), the
+ * fallback is the entity's projection and the missing initializers are the
+ * actual fault.
+ */
+function projectedAgainst(dto: DtoClass | null, entityName: string, slot: "item" | "list"): string {
+  if (dto === null) {
+    return (
+      `A custom operation's result is projected through the entity's '${slot}' shape unless the operation ` +
+      `registers one of its own, and none of those keys are fields of '${entityName}' — declare ` +
+      `'dto: { output: <YourResultDto> }' on the operation, with every field initialized so the class has a ` +
+      `runtime shape`
+    );
+  }
+  const keys = dtoShapeKeys(dto);
+  if (keys === null) {
+    return (
+      `The registered '${dto.name || "(anonymous)"}' declares no runtime fields — TypeScript erases an ` +
+      `uninitialized class field, so 'applied!: number' declares nothing at runtime and the projection falls ` +
+      `back to '${entityName}'. Give each field an initializer ('applied = 0')`
+    );
+  }
+  return (
+    `The result was projected through the registered '${dto.name || "(anonymous)"}', which declares ` +
+    `${nameList(keys)} — none of which the handler returned. The DTO and the handler disagree about the ` +
+    `result's shape; change whichever is wrong`
   );
 }
