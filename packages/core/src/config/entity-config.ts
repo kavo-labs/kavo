@@ -30,6 +30,9 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
  * dropped. When omitted, the allowlists derive from the `query` DTO or
  * entity metadata at bootstrap.
  *
+ * `filterable` and `sortable` govern the request only. `selectable`
+ * governs the request **and the response** (ADR-0026) — see its own note.
+ *
  * `selectable` is the only key computed-field names may appear in:
  * `filterable`/`sortable` stay typed to real paths, because a computed
  * field has no column to translate to `WHERE`/`ORDER BY` (ADR-0019). The
@@ -39,6 +42,19 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
 export interface QueryAllowlists<Entity = unknown, Computed extends string = never> {
   readonly filterable?: QueryFieldSelector<Entity>;
   readonly sortable?: QueryFieldSelector<Entity>;
+  /**
+   * What a request may name in `fields=`, **and** what a response carries
+   * when it sends no `fields=` at all (ADR-0026).
+   *
+   * The second half is what makes this a confidentiality control rather
+   * than a validation list: a column left off is not served, so
+   * `selectable` is the one-line way to keep a credential out of every
+   * response. Omit the key and the projection is unchanged — every column
+   * plus every declared computed field.
+   *
+   * A registered `dto.item`/`dto.list` wins outright where both are
+   * present: the DTO is the narrower, more specific statement.
+   */
   readonly selectable?: QueryFieldSelector<Entity, Computed>;
 }
 

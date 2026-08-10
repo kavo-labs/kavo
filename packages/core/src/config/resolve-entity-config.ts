@@ -70,6 +70,10 @@ export function resolveEntityConfig<Entity extends object>(
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
+  // Explicit configuration is what turns `selectable` into a projection
+  // (ADR-0026); an unwritten list narrows nothing. See
+  // `ResolvedEntityConfig.projection` for why the provenance is load-bearing.
+  const projection = entityConfig?.allowlists?.selectable === undefined ? null : allowlists.selectable;
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
     globalDefaults,
@@ -111,6 +115,7 @@ export function resolveEntityConfig<Entity extends object>(
       return perOperation.get(operation) ?? entitySettings;
     },
     allowlists,
+    projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
     computed,
