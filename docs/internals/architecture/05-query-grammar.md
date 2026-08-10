@@ -247,6 +247,13 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   (`KAVO_QUERY_INVALID_FIELD`), never a silent drop. Programmatic
   callers (`findMany({ filter })`) pass through the **same** allowlist
   and limit checks — typed input skips coercion, not security.
+- **`selectable` governs the response as well as the request:** where
+  `filterable` and `sortable` only gate what a request may name, an
+  _explicitly configured_ `selectable` also narrows the default projection,
+  so a column left off it is not serialized at all. That is what makes it a
+  confidentiality control rather than a validation list. Omit the key and
+  the projection is unchanged
+  ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 - **Computed fields are selectable only:** a declared computed field
   (doc 04 §7) joins the _selectable_ default and never the filterable or
   sortable one — it has no column to translate to `WHERE`/`ORDER BY`, so

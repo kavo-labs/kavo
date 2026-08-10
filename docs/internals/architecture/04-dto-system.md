@@ -42,11 +42,17 @@ The metadata seam (`EntityMetadata`, doc 09 §1) supplies the field list
 the defaults derive from:
 
 - **Readable projection** (`item`/`list` default): every scalar column,
-  plus every computed field the entity declares (§7). Relation properties
+  plus every computed field the entity declares (§7), **intersected with
+  `allowlists.selectable` when that key is configured explicitly**
+  ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
+  which is how a column is kept out of every response without registering a
+  DTO at all. Relation properties
   are excluded unless the request includes them deliberately; a class
   getter or method never appears on its own — it is not a column, and an
   entity-class getter that seems to work is an accident of the ORM handing
   the engine class instances ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
+  A registered DTO wins outright over the allowlist rather than
+  intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
   scalar column with `generated: false`. Generated columns (auto ids,
   `@CreateDateColumn`, versions) can never be written from a request

@@ -160,6 +160,8 @@ GET /books?fields=id,title
 
 Sparse fieldset for the root resource, validated against the `selectable` allowlist. Narrow an included relation the same way: `fields[author]=id,name`.
 
+`selectable` also decides what a response carries when no `fields=` is sent, so it is the one place to keep a column out of every response — see [Allowlists](/integrations/nest/configuration#allowlists).
+
 ## Computed fields
 
 A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total, a flag that depends on who is asking. They are declared once on the entity's config:

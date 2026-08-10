@@ -265,6 +265,10 @@ const config = defineConfig({
                 text: "0025 — Handlers reach persistence through the request context",
                 link: "/internals/adr/0025-handlers-reach-persistence-through-the-context",
               },
+              {
+                text: "0026 — selectable narrows the response projection",
+                link: "/internals/adr/0026-selectable-narrows-the-response-projection",
+              },
             ],
           },
         ],

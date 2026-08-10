@@ -235,13 +235,25 @@ What a request may filter, sort, and select on — including relation paths. Any
 })
 ```
 
-| Field        | Type                                                          | What it does                    |
-| ------------ | ------------------------------------------------------------- | ------------------------------- |
-| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }` | Fields usable in `filter[...]`. |
-| `sortable`   | same shape                                                    | Fields usable in `sort=`.       |
-| `selectable` | same shape                                                    | Fields usable in `fields=`.     |
+| Field        | Type                                                          | What it does                                                 |
+| ------------ | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }` | Fields usable in `filter[...]`.                              |
+| `sortable`   | same shape                                                    | Fields usable in `sort=`.                                    |
+| `selectable` | same shape                                                    | Fields usable in `fields=`, **and what a response carries**. |
 
 `{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field) except these", resolved at bootstrap against exactly the base set that key's plain default uses. Omit a key entirely and it derives from the `query` DTO or entity metadata instead.
+
+**How to keep a column out of every response.** Name `selectable` and leave the column off it, or exclude it — both forms do the same thing:
+
+```ts
+@Kavo(User, {
+  allowlists: { selectable: { exclude: ["apiKey"] } },
+})
+```
+
+`apiKey` is then absent from `findOne`, `findMany`, and the row echoed back by `createOne`/`updateOne`/`patchOne`, and naming it in `fields=` is a 400. Writing the key at all is what turns it on: omit `selectable` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
+
+Two things to know about the edges. A registered `dto.item`/`dto.list` **wins outright** where both are present, rather than intersecting — the DTO is the narrower, more specific statement, so use it when the response shape is more than a subset of columns. And an included relation is projected by its **own** target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden everywhere `user` is included.
 
 ### `computed`
 
@@ -273,7 +285,9 @@ Keep it a pure function of the entity as well (plus `context.principal` where a 
 
 **`resolve` receives the full fetched row**, not the projected object — selection is "kept internally, stripped late", so every column is present regardless of `fields=` or the registered `item` DTO. A computed field can therefore surface a value a narrowed DTO or `selectable` list deliberately hides. That is deliberate (`resolve` is server-authored code, the same trust level as `exposeInternals`), but it makes the resolver part of the exposure decision: narrowing the DTO does not narrow what the resolver can see.
 
-**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does **not** pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present". An explicit `allowlists.selectable` list naming the field overrides the flag — an explicit list is always the deliberate answer.
+**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does **not** pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present".
+
+The flag and an explicit `allowlists.selectable` list say different things, deliberately. The flag is a default about _nameability_ and leaves the projection alone. An explicit list is a statement about the **response**, so a list that omits the field — or excludes it — drops it from responses too. Where both are present the explicit list wins, as it always has ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
 On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query` and `repository` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](#the-principal) option extracted for the root request, or `null` when no option is set.
 
