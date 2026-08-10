@@ -146,7 +146,7 @@ export class BooksController {}
 
 <div class="ai-section">
   <p class="ai-title">Built for agentic development</p>
-  <p class="ai-subtitle">Built with Claude Code, and shipped with skills so your agent moves just as fast.</p>
+  <p class="ai-subtitle">Built with Claude Code, and shipped with skills so Claude, Codex, Antigravity, and other coding agents move just as fast.</p>
   <div class="ai-install">
 
 ```
