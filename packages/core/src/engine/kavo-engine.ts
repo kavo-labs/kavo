@@ -496,6 +496,11 @@ export class KavoEngine<Entity extends object> {
       settings,
       settingsFor: () => settings,
       allowlists: config.allowlists,
+      // Structural, like `computed` below: the projection is derived from
+      // `allowlists.selectable` at bootstrap (ADR-0026), and allowlists are
+      // outside the settings precedence chain, so a per-call override
+      // cannot widen what a response serves.
+      projection: config.projection,
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.

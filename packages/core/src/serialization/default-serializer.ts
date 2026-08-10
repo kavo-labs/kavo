@@ -51,7 +51,11 @@ function selectionSet(selection: readonly string[] | null | undefined): Readonly
  * Projection sources, in order:
  * 1. An explicit DTO class with initialized fields → its key set.
  * 2. Otherwise the entity-derived default: every scalar column from
- *    adapter metadata, plus every declared computed field (ADR-0019).
+ *    adapter metadata, plus every declared computed field (ADR-0019),
+ *    **intersected with an explicitly configured `allowlists.selectable`**
+ *    (ADR-0026). A DTO wins outright: it is the narrower, more specific
+ *    statement, and intersecting the two would make a DTO that deliberately
+ *    exposes a field silently not do so.
  *
  * A key that names a computed field is produced by calling the
  * descriptor's `resolve`, never by reading it off the row — which is what
@@ -71,9 +75,10 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     metadata: EntityMetadata<Entity>,
     private readonly catalog?: EntityCatalog,
     computed: ComputedFieldMap<Entity> = {},
+    projection: readonly string[] | null = null,
   ) {
     this.rootProjection = {
-      keys: [...metadata.fields.map((field) => field.name), ...Object.keys(computed)],
+      keys: narrowToProjection([...metadata.fields.map((field) => field.name), ...Object.keys(computed)], projection),
       relations: new Set(metadata.relations.map((relation) => relation.name)),
       computed,
     };
@@ -182,12 +187,38 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     if (info === undefined) return { keys: null, relations: NO_RELATIONS, computed: NO_COMPUTED_FIELDS };
     const dto = info.config.dto.resolve(node.relation.cardinality === "many" ? "list" : "item", "findMany");
     const computed: ErasedComputedFields = info.config.computed;
+    // The target's own `selectable`, not the root's: an include never
+    // widens what its target exposes, and that has to hold for the
+    // projection allowlist as well as for the DTO (ADR-0026). Without it,
+    // hiding a credential on `User` would leak it again the moment some
+    // other entity included `user`.
     return {
-      keys: dtoShapeKeys(dto) ?? [...info.metadata.fields.map((field) => field.name), ...Object.keys(computed)],
+      keys:
+        dtoShapeKeys(dto) ??
+        narrowToProjection(
+          [...info.metadata.fields.map((field) => field.name), ...Object.keys(computed)],
+          info.config.projection as readonly string[] | null,
+        ),
       relations: new Set(info.metadata.relations.map((relation) => relation.name)),
       computed,
     };
   }
+}
+
+/**
+ * The entity-derived key set, narrowed to an explicitly configured
+ * `allowlists.selectable` (ADR-0026). `null` leaves it alone, which is what
+ * an entity that never configured the key gets.
+ *
+ * Filtering the derived list rather than using the allowlist directly keeps
+ * the derived order and, more importantly, keeps the projection a subset of
+ * what the entity actually has: an explicit `selectable` may legitimately
+ * name a relation path, which is not a key this projection ever emits.
+ */
+function narrowToProjection(derived: readonly string[], projection: readonly string[] | null): readonly string[] {
+  if (projection === null) return derived;
+  const allowed = new Set(projection);
+  return derived.filter((key) => allowed.has(key));
 }
 
 /**

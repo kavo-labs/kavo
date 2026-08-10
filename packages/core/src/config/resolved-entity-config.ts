@@ -31,6 +31,23 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   settingsFor(operation: OperationId): KavoSettings;
   readonly allowlists: ResolvedQueryAllowlists<Entity>;
   /**
+   * The default response projection: what a read serves when the request
+   * sends no `fields=` and no `item`/`list` DTO is registered.
+   *
+   * `null` means "the entity-derived default" — every scalar column plus
+   * every declared computed field. A non-null value is
+   * {@link ResolvedQueryAllowlists.selectable}, and it is non-null exactly
+   * when `allowlists.selectable` was configured explicitly (ADR-0026).
+   *
+   * The provenance is the whole point, and is why this is not simply read
+   * off `allowlists.selectable`. Unconfigured, that list resolves to a base
+   * set that is *almost* the derived projection but drops computed fields
+   * declaring `selectable: false` — fields whose documented contract is to
+   * stay in the projection while being unnameable in `fields=`. Narrowing
+   * by a list nobody wrote would silently retire that contract.
+   */
+  readonly projection: readonly FieldPath<Entity>[] | null;
+  /**
    * The delete strategy resolved for this scope — `hard` with
    * a `null` field for everything that isn't soft-deletable, so adapters
    * branch on one object instead of re-deriving the decision.

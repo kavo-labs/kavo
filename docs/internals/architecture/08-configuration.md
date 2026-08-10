@@ -81,7 +81,10 @@ All merging happens **once at bootstrap** (`resolveEntityConfig`) into a
 deep-frozen `ResolvedEntityConfig`: entity-scope settings, precomputed
 per-operation views behind `settingsFor(operation)`, resolved allowlists
 (explicit, or derived from own scalar columns plus any selectable computed
-fields), the cached `DtoResolver`, the validated `computed` map, and the
+fields), the default response `projection` (`null` unless
+`allowlists.selectable` was configured explicitly —
+[ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
+the cached `DtoResolver`, the validated `computed` map, and the
 relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the

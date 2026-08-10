@@ -160,6 +160,8 @@ GET /books?fields=id,title
 
 Sparse fieldset for the root resource, validated against the `selectable` allowlist. Narrow an included relation the same way: `fields[author]=id,name`.
 
+`selectable` also decides what a response carries when no `fields=` is sent, so it is the one place to keep a column out of every response — see [Allowlists](/integrations/nest/configuration#allowlists).
+
 ## Computed fields
 
 A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total, a flag that depends on who is asking. They are declared once on the entity's config:
@@ -262,7 +264,9 @@ Kavo refuses rather than quietly proceeds. A `412 KAVO_PRECONDITION_UNSUPPORTED`
 
 `If-Match` on a `GET` is the one case Kavo ignores instead of refusing: a read cannot overwrite anything, and `If-None-Match` above is the read-side conditional.
 
-**A hand-written or `@Override`'d route enforces nothing by itself.** The check runs inside Kavo's engine, so a controller method you wrote replaces it along with everything else — it receives the `If-Match` tokens as its last parameter and must pass them on (`this.base.updateOne(id, data, { preconditions })`) for the guard to apply. See [`caching`](/integrations/nest/configuration#caching).
+**A hand-written or `@Override`'d route enforces nothing by itself.** The check runs inside Kavo's engine, so a controller method you wrote replaces it — it receives the `If-Match` tokens as its last parameter and must pass them on (`this.base.updateOne(id, data, { preconditions })`) for the guard to apply.
+
+The `ETag` is the exception: an `@Override` on a single-item operation gets it without asking, because `@Kavo` hashes whatever the method returns. A plain hand-written route (no `@Override`) is outside that and carries no Kavo tag at all. See [`caching`](/integrations/nest/configuration#caching).
 
 ### Two things to know
 

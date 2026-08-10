@@ -70,6 +70,7 @@ export function resolveEntityConfig<Entity extends object>(
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
+  const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
     globalDefaults,
@@ -111,6 +112,7 @@ export function resolveEntityConfig<Entity extends object>(
       return perOperation.get(operation) ?? entitySettings;
     },
     allowlists,
+    projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
     computed,
@@ -393,6 +395,42 @@ function validateSincePagination<Entity extends object>(
  * outside `base` can never appear via `exclude` and stays fail-closed like
  * the plain default.
  */
+/**
+ * The default response projection, or `null` for "leave it derived"
+ * (ADR-0026).
+ *
+ * Explicit configuration is the trigger: an unwritten `selectable` narrows
+ * nothing, which is what keeps this change confined to entities that asked
+ * for it.
+ *
+ * The two spellings resolve against **different bases**, and that asymmetry
+ * is the whole point rather than an oversight. A plain array is the author's
+ * own list and is used verbatim. `{ exclude }` means "everything except
+ * these", and *everything* here has to be the readable projection — every
+ * column plus **every** declared computed field — not `selectableBase`,
+ * which drops computed fields declaring `selectable: false`.
+ *
+ * Resolving `{ exclude }` against the narrower base retires a contract the
+ * author never touched: `selectable: false` is documented as keeping a field
+ * in the projection while making its name a 400 in `fields=`, so
+ * `{ exclude: ["email"] }` would silently delete an unrelated audit field
+ * from every response. That is the same "narrowing by a list nobody wrote"
+ * this function exists to prevent, one level down.
+ */
+function resolveProjection<Entity extends object>(
+  metadata: EntityMetadata<Entity>,
+  entityConfig: EntityConfig<Entity> | undefined,
+  computed: ComputedFieldMap<Entity>,
+  allowlists: ResolvedQueryAllowlists<Entity>,
+): readonly FieldPath<Entity>[] | null {
+  const selector = entityConfig?.allowlists?.selectable;
+  if (selector === undefined) return null;
+  if (!("exclude" in selector)) return allowlists.selectable;
+  const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
+  const excluded = new Set(selector.exclude as readonly string[]);
+  return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
+}
+
 function resolveFieldSelector<Entity>(
   base: readonly FieldPath<Entity>[],
   selector: QueryFieldSelector<Entity> | undefined,

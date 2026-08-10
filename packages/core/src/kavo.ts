@@ -151,7 +151,12 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         metadata: metadata as EntityMetadata<Entity>,
         config: resolved,
         registry,
-        serializer: new DefaultSerializer(metadata as EntityMetadata<Entity>, catalog, resolved.computed),
+        serializer: new DefaultSerializer(
+          metadata as EntityMetadata<Entity>,
+          catalog,
+          resolved.computed,
+          resolved.projection as readonly string[] | null,
+        ),
         deserializer: new DefaultDeserializer(metadata as EntityMetadata<Entity>, catalog, resolved.computed),
         normalizer: new QueryNormalizer(
           metadata as EntityMetadata<Entity>,

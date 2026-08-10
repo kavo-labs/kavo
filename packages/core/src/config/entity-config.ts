@@ -30,6 +30,9 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
  * dropped. When omitted, the allowlists derive from the `query` DTO or
  * entity metadata at bootstrap.
  *
+ * `filterable` and `sortable` govern the request only. `selectable`
+ * governs the request **and the response** (ADR-0026) — see its own note.
+ *
  * `selectable` is the only key computed-field names may appear in:
  * `filterable`/`sortable` stay typed to real paths, because a computed
  * field has no column to translate to `WHERE`/`ORDER BY` (ADR-0019). The
@@ -39,6 +42,28 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
 export interface QueryAllowlists<Entity = unknown, Computed extends string = never> {
   readonly filterable?: QueryFieldSelector<Entity>;
   readonly sortable?: QueryFieldSelector<Entity>;
+  /**
+   * What a request may name in `fields=`, **and** what a response carries
+   * when it sends no `fields=` at all (ADR-0026).
+   *
+   * The second half is what makes this a confidentiality control rather
+   * than a validation list: a column left off is not served. Omit the key
+   * and the projection is unchanged — every column plus every declared
+   * computed field.
+   *
+   * **It closes the response body and nothing else.** `filterable` and
+   * `sortable` default to every column independently, so
+   * `filter[apiKey][like]=a%` binary-searches the value and `sort=apiKey`
+   * leaks its ordering; the writable projection is derived separately, so
+   * the column is still writable — and this key makes that write
+   * *invisible* by removing the echo. Hiding a credential means narrowing
+   * all three allowlists and registering a write DTO (ADR-0026 §6).
+   *
+   * A registered `dto.item`/`dto.list` with a runtime shape **replaces**
+   * the projection rather than intersecting with it, so it wins even where
+   * it is *wider*. Where you register one, it — not this key — is the
+   * narrowing statement.
+   */
   readonly selectable?: QueryFieldSelector<Entity, Computed>;
 }
 

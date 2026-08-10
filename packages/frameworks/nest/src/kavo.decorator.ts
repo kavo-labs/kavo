@@ -1,10 +1,25 @@
-import { Body, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, Req, UseInterceptors } from "@nestjs/common";
+import {
+  Body,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Req,
+  StreamableFile,
+  UseInterceptors,
+} from "@nestjs/common";
+import { isObservable } from "rxjs";
 import type {
   ClassRef,
   DefaultKavoService,
   EntityConfig,
   EntityInput,
   KavoCallOptions,
+  KavoResponse,
   OperationDescriptor,
   OperationId,
   OperationsConfig,
@@ -12,12 +27,12 @@ import type {
   RequestPreconditions,
   StandardOperationId,
 } from "@kavo/core";
-import { ConfigurationException, createOperationRegistry } from "@kavo/core";
+import { ConfigurationException, computeEtag, createOperationRegistry } from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
 import type { OverrideMetadata } from "./override.decorator.js";
 import type { KavoPrincipalExtractor, KavoPrincipalRequest } from "./principal.js";
 import { ConditionalRequest } from "./conditional-request.decorator.js";
-import { KavoResponseInterceptor } from "./kavo-response.interceptor.js";
+import { KavoResponseInterceptor, isKavoResponse } from "./kavo-response.interceptor.js";
 import {
   KAVO_CONTROLLER_METADATA,
   KAVO_OVERRIDE_METADATA,
@@ -147,7 +162,7 @@ interface ResolvedRoute {
  * function backing it changes — resolved first, ahead of manual-method-wins,
  * so a decorated method never falls through to plain name-matching.
  *
- * **A replaced method owns its own conditional-request handling.** Kavo
+ * **A replaced method owns the precondition, but not the `ETag`.** Kavo
  * enforces `If-Match` inside the engine (ADR-0020), so a method that does
  * not reach the engine cannot have it enforced for it: a hand-written or
  * `@Override`'d `updateOne` that ignores its `preconditions` parameter
@@ -156,8 +171,14 @@ interface ResolvedRoute {
  * `ConditionalRequest` parameter is applied to overrides too, so the
  * tokens are handed to the method. Forward them, either as
  * `service.<op>(…, { preconditions })` on the typed surface or by
- * returning `service.engine.execute({ …, preconditions })`, which
- * additionally puts the `ETag` back on the response. The same goes for the
+ * returning `service.engine.execute({ …, preconditions })`.
+ *
+ * The `ETag` half is *not* the method's to arrange: `applyOverrideEtag`
+ * hashes a bare return, so an override delegating to the typed service
+ * still serves the tag a generated route would (ADR-0027). Before that,
+ * the header simply went missing and the host framework's own weak tag
+ * stood in for it — which looked like working conditional requests and
+ * guarded nothing (#186). The same goes for the
  * principal: a generated route resolves it from the module's `principal`
  * extractor per request, a replaced method must pass it on itself, and
  * `boundKavoPrincipal(this, request)` is how it reaches the extractor the
@@ -240,6 +261,7 @@ export function Kavo<
         applySwaggerMetadata(controller.prototype, methodName, descriptor, route, entity, erasedConfig);
       } else {
         assertNoOwnParamMetadata(controller.prototype, overrideMethodName, entity.name, descriptor.id);
+        applyOverrideEtag(controller.prototype, overrideMethodName, descriptor);
         applyRouteDecorators(controller.prototype, overrideMethodName, descriptor, route);
         applySwaggerMetadata(controller.prototype, overrideMethodName, descriptor, route, entity, erasedConfig);
       }
@@ -285,6 +307,113 @@ function collectOverrides(
     }
   }
   return overrides;
+}
+
+/**
+ * Gives an `@Override`'d single-item route the `ETag` a generated one
+ * carries (ADR-0027).
+ *
+ * The interceptor that sets the header only acts on an engine envelope, and
+ * the natural way to write an override is to delegate to the typed service
+ * — `this.base.patchOne(id, body, { principal })` — which discards the
+ * envelope by design. So the override returned a bare item, the interceptor
+ * left it alone, and **the host framework filled in its own weak tag**.
+ * Express's default is convincing: reads carry an `ETag`, `If-None-Match`
+ * answers `304`, and the tag changes when the body does. Three of the four
+ * observable behaviours are right. The missing one is the `412`, which is
+ * the only one that protects data, so an application checking "do
+ * conditional requests work?" by hand saw them pass while every `If-Match`
+ * write was a silent lost update (#186).
+ *
+ * Promoting a bare return to an envelope here fixes that at the one point
+ * that can see both the operation's config and the value actually being
+ * served. An override that already returns `service.engine.execute(...)` is
+ * untouched, and so is one on a `many` operation, since a collection has no
+ * ETag (ADR-0020).
+ *
+ * **What this does not do is evaluate `If-Match`.** That happens inside the
+ * engine, against a canonical read, and only when the override forwards its
+ * `preconditions` parameter. What changes is that forwarding now *works*:
+ * previously the client held the host framework's tag, which could never
+ * equal the engine's content hash, so forwarding turned a silent no-op into
+ * a permanent `412`.
+ */
+function applyOverrideEtag(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+): void {
+  // A collection response has no tag to give: a list's identity spans
+  // pagination, sort and filter, which ADR-0020 leaves out of scope.
+  if (descriptor.cardinality === "many") return;
+  const original = prototype[methodName] as (this: unknown, ...args: unknown[]) => unknown;
+  async function promoted(this: Partial<BoundController>, ...args: unknown[]): Promise<unknown> {
+    const result = (await original.apply(this, args)) as unknown;
+    // An envelope is already tagged; `null`/`undefined` is a void operation
+    // (`deleteOne`), which has no representation to hash.
+    if (result === null || result === undefined || isKavoResponse(result)) return result;
+    // Values Nest resolves *after* the handler returns. Wrapping an
+    // Observable in an envelope is the one way this function can break a
+    // working route outright: `InterceptorsConsumer.transformDeferred`
+    // flattens a handler result that *is* a Promise or an Observable, and an
+    // Observable nested one level down inside a plain object is not
+    // flattened by anything — the body ships as `{}`. `StreamableFile`
+    // survives the round trip but would be hashed, which is meaningless work
+    // over a file handle's internals and a plausible cycle for
+    // `canonicalize`. Neither is a representation, so neither is tagged.
+    if (isObservable(result) || result instanceof StreamableFile) return result;
+    const service = this[KAVO_SERVICE_PROPERTY];
+    // Unbound (a controller outside `KavoModule`'s discovery) means there
+    // is no config to consult, and guessing `etag: true` would add a header
+    // the app may have turned off. Leave it exactly as the override wrote it.
+    if (service === undefined) return result;
+    if (!service.engine.config.settingsFor(descriptor.id).caching.etag) return result;
+    return {
+      operation: descriptor.id,
+      item: result,
+      list: null,
+      etag: await computeEtag(result),
+      // `If-None-Match` is answered by the engine against its own
+      // representation. This wrapper never saw the request's preconditions
+      // — they went to the override — so it reports the tag and nothing more.
+      // The host framework may still answer `304` off the header this sets;
+      // ADR-0027 records that as the deliberate limit.
+      notModified: false,
+    } satisfies KavoResponse;
+  }
+  Object.defineProperty(promoted, "name", { value: methodName });
+  copyFunctionMetadata(original, promoted);
+  Object.defineProperty(prototype, methodName, { value: promoted, writable: true, configurable: true });
+}
+
+/**
+ * Move every `Reflect` metadata key from the original method to the
+ * replacement, which is what makes replacing it safe.
+ *
+ * Nest keys method-level metadata on the **function object**, not on the
+ * prototype-and-name pair: `SetMetadata` writes to `descriptor.value`, and so
+ * do `UseGuards`, `UseInterceptors`, `UseFilters`, `UsePipes`, `Version`,
+ * `Header`, `Sse` and every `@nestjs/swagger` method decorator. The read side
+ * matches — `PathsExplorer` takes `instance[methodName]` and reflects off
+ * whatever function is there now.
+ *
+ * Method decorators run at class-definition time, before the `@Kavo` class
+ * decorator, so an app's metadata is already on the original. Swapping in a
+ * bare function drops all of it, and the failure is silent and severe: an
+ * `@Override` carrying `@UseGuards(TenantGuard)` — which is exactly the
+ * shape #186's own reproduction describes, since overriding is the
+ * documented workaround for row scoping having no seam (#138) — would serve
+ * the route with its guard removed.
+ *
+ * This is `RouterExplorer.copyMetadataToCallback`'s approach, and the call
+ * order around it matters: copying *before* `applyRouteDecorators` means
+ * Kavo's own `UseInterceptors` appends onto the copied array through
+ * `extendArrayMetadata`, so `KavoResponseInterceptor` stays innermost.
+ */
+function copyFunctionMetadata(from: object, to: object): void {
+  for (const key of Reflect.getMetadataKeys(from)) {
+    Reflect.defineMetadata(key, Reflect.getMetadata(key, from) as unknown, to);
+  }
 }
 
 /**
@@ -362,12 +491,13 @@ function applyRouteDecorators(
   // The envelope unwrap / `ETag` / `304` interceptor (ADR-0020), applied
   // to **both** paths. On a generated handler it is the only thing that
   // turns the engine's `KavoResponse` into an HTTP response. On an
-  // `@Override`'d one it is a no-op unless that method returns an engine
-  // envelope of its own — `isKavoResponse` guards it — which is exactly
-  // how an override opts back in to the header: return
-  // `service.engine.execute(...)` rather than the typed service's
-  // unwrapped item. An *instance* rather than a class, so it needs no DI
-  // registration in whatever module the controller ends up in.
+  // `@Override`'d one it sees an envelope either way, because
+  // `applyOverrideEtag` ran first and promoted a bare return into one
+  // (ADR-0027) — so the `ETag` is set on both paths, and the `304` is not,
+  // since only an override returning `service.engine.execute(...)` carries a
+  // `notModified` the engine actually computed. An *instance* rather than a
+  // class, so it needs no DI registration in whatever module the controller
+  // ends up in.
   UseInterceptors(new KavoResponseInterceptor())(prototype, methodName, propertyDescriptor);
 }
 

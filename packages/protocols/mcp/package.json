@@ -35,6 +35,11 @@
   "peerDependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   }

@@ -146,7 +146,14 @@ See [ETags and conditional requests](/using-the-api#etags-and-conditional-reques
 
 **Redaction belongs in the DTO, not in an interceptor.** Kavo's `KavoResponseInterceptor` is method-scoped and therefore innermost: it sets the `ETag` before any controller- or app-level interceptor runs. An outer interceptor that strips fields per role would ship a hash of the _unredacted_ representation next to a redacted body — and a client's `If-Match` built from it would never match. Shape the response with a per-operation `item` DTO, which the engine serializes through before hashing.
 
-**An `@Override`'d method enforces `If-Match` only if it forwards it.** The check lives in the engine, so a method you wrote in place of a generated one bypasses it. `@Kavo` still hands the tokens to the method as its last parameter; pass them on with `{ preconditions }` on the typed service, or return `service.engine.execute({ …, preconditions })` to also get the `ETag` header back.
+**An `@Override`'d method gets the `ETag` for free, and enforces `If-Match` only if it forwards it.** The split is worth reading carefully, because the two halves come from different places ([ADR-0027](/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition)):
+
+- **The tag is automatic.** An override on a single-item operation can return the typed service's item — `this.base.patchOne(id, body, { principal })` — and `@Kavo` hashes it into the same strong `ETag` a generated route would serve. Nothing to opt into.
+- **The precondition is not.** `If-Match` is evaluated inside the engine, against a canonical read, so it only runs if the method passes its `preconditions` parameter on: either as `{ preconditions }` on the typed service, or by returning `service.engine.execute({ …, preconditions })`.
+
+Before v0.9 the tag was not automatic, and the host framework filled in its own weak one instead. That is the failure worth recognizing if you are on an older version: reads carried an `ETag`, `If-None-Match` answered `304`, and the tag changed with the body — everything except the `412` that protects data, so a route could look fully conditional while every guarded write was a silent lost update. Assert the tag's **shape** (`/^"[0-9a-f]{64}"$/`), not its presence.
+
+One limit survives. The engine compares `If-Match` against what `findOne` would serve for that id, so an override serving a **reshaped** representation hands out a tag the check can never match, and every conditional write answers `412`. Serve the canonical shape, or set `caching: { etag: false }` for that operation and own the concurrency control yourself.
 
 ### `softDelete`
 
@@ -235,13 +242,38 @@ What a request may filter, sort, and select on — including relation paths. Any
 })
 ```
 
-| Field        | Type                                                          | What it does                    |
-| ------------ | ------------------------------------------------------------- | ------------------------------- |
-| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }` | Fields usable in `filter[...]`. |
-| `sortable`   | same shape                                                    | Fields usable in `sort=`.       |
-| `selectable` | same shape                                                    | Fields usable in `fields=`.     |
+| Field        | Type                                                          | What it does                                                 |
+| ------------ | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }` | Fields usable in `filter[...]`.                              |
+| `sortable`   | same shape                                                    | Fields usable in `sort=`.                                    |
+| `selectable` | same shape                                                    | Fields usable in `fields=`, **and what a response carries**. |
 
 `{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field) except these", resolved at bootstrap against exactly the base set that key's plain default uses. Omit a key entirely and it derives from the `query` DTO or entity metadata instead.
+
+**How to keep a column out of every response.** Name `selectable` and leave the column off it, or exclude it — both forms do the same thing:
+
+```ts
+@Kavo(User, {
+  allowlists: { selectable: { exclude: ["apiKey"] } },
+})
+```
+
+`apiKey` is then absent from `findOne`, `findMany`, `restoreOne`, any custom operation's result, and the row echoed back by `createOne`/`updateOne`/`patchOne`; naming it in `fields=` is a 400. Writing the key at all is what turns it on: omit `selectable` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
+
+::: danger `selectable` alone is not a credential control
+It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
+
+| Door                      | Still open after `selectable`                                                                                                             | Close it with                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `filter[apiKey][like]=a%` | yes — `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                          | name `filterable` explicitly, without the column                    |
+| `sort=apiKey`             | yes — `sortable` defaults to every column, and ordering leaks the column across pages                                                     | name `sortable` explicitly, without the column                      |
+| `PATCH {"apiKey":"…"}`    | yes — writable columns are derived separately, and after this change the write is **invisible**, because the response no longer echoes it | register `dto.update` (`patch` falls back to it) without the column |
+| response body             | no                                                                                                                                        | `selectable`                                                        |
+
+The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write DTO.
+:::
+
+Two more edges. A registered `dto.item`/`dto.list` with a runtime shape **replaces** the projection rather than intersecting with it, so `selectable` does not fence a column the DTO names — even where the DTO is _wider_. Register the DTO as the narrowing statement when you use one. And an included relation is projected by its **own** target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden wherever `user` is included — provided `User` itself went through `@Kavo`/`createCrud`. A relation target that never did gets a derived config, which configures nothing and serves its full column set.
 
 ### `computed`
 
@@ -273,7 +305,9 @@ Keep it a pure function of the entity as well (plus `context.principal` where a 
 
 **`resolve` receives the full fetched row**, not the projected object — selection is "kept internally, stripped late", so every column is present regardless of `fields=` or the registered `item` DTO. A computed field can therefore surface a value a narrowed DTO or `selectable` list deliberately hides. That is deliberate (`resolve` is server-authored code, the same trust level as `exposeInternals`), but it makes the resolver part of the exposure decision: narrowing the DTO does not narrow what the resolver can see.
 
-**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does **not** pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present". An explicit `allowlists.selectable` list naming the field overrides the flag — an explicit list is always the deliberate answer.
+**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does **not** pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present".
+
+The flag and an explicit `allowlists.selectable` list say different things, deliberately. The flag is a default about _nameability_ and leaves the projection alone. An explicit list is a statement about the **response**, so a list that omits the field — or excludes it — drops it from responses too. Where both are present the explicit list wins, as it always has ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
 On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query` and `repository` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](#the-principal) option extracted for the root request, or `null` when no option is set.
 
