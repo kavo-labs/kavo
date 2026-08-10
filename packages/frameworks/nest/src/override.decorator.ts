@@ -54,9 +54,18 @@ export interface OverrideMetadata {
  * | --------------------------- | --------- | ------------------------------------------------------------------------- |
  * | Route, params, Swagger      | yes       | same wiring as a generated route                                          |
  * | `ETag` on a single item     | yes       | supplied for a bare return by `@Kavo` (ADR-0027)                          |
+ * | Method decorators you added | yes       | `@UseGuards`, `@SetMetadata`, `@Version`, … are copied onto the wrapper   |
  * | `If-Match` → `412`          | **no**    | evaluated in the engine; reaches it only if you forward `preconditions`   |
- * | `If-None-Match` → `304`     | **no**    | same                                                                      |
+ * | `If-None-Match` → `304`     | not Kavo's | the host framework answers it off the tag above; see below               |
  * | Row scoping, auth           | n/a       | never Kavo's; that is why you are overriding                              |
+ *
+ * The `304` row is the one worth reading twice. Kavo reports
+ * `notModified: false` for a promoted return, because the promotion never
+ * saw the request's `If-None-Match` — those went to your method. Express
+ * then answers `304` anyway, from `req.fresh`, because a strong `ETag` is
+ * now on the response; another adapter may not. If you need the `304` to be
+ * Kavo's answer rather than the host's, return `service.engine.execute(...)`
+ * so the engine evaluates the precondition itself.
  *
  * So an override that only needs the tag can ignore all of this: return the
  * typed service's item and `@Kavo` hashes it. One that needs the

@@ -1,8 +1,17 @@
 import "reflect-metadata";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { Controller, Inject, type INestApplication } from "@nestjs/common";
+import {
+  type CanActivate,
+  Controller,
+  Inject,
+  Injectable,
+  SetMetadata,
+  UseGuards,
+  type INestApplication,
+} from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { from, type Observable } from "rxjs";
 import type { DefaultKavoService, RequestPreconditions } from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import { Kavo, KavoModule, Override, getKavoServiceToken, parseEntityTags } from "@kavo/nest";
@@ -347,6 +356,18 @@ describe("If-Match through a replaced controller method", () => {
   class ForwardingTodoController {
     constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
 
+    /**
+     * The read has to be overridden too, or the round-trip test below is
+     * reading a *generated* route's tag and proving nothing new — which is
+     * what it did when first written. #186's shape is every route
+     * overridden, so the tag the client holds must come from the override
+     * path for the test to mean anything.
+     */
+    @Override()
+    async findOne(id: string, query: unknown): Promise<unknown> {
+      return this.base.findOne(id as never, query as never);
+    }
+
     @Override()
     async updateOne(id: string, body: Partial<Todo>, preconditions: RequestPreconditions | null): Promise<unknown> {
       return this.base.engine.execute({
@@ -378,12 +399,11 @@ describe("If-Match through a replaced controller method", () => {
     expect(applied.headers["etag"]).toMatch(/^"[0-9a-f]{64}"$/);
   });
 
-  it("serves a tag a forwarding override will actually accept", async () => {
-    // The round trip #186 could not close. A client reads, holds the tag,
-    // and writes with it; if the read served the host framework's weak tag
-    // and the write compared against the engine's content hash, the two
-    // could never match and forwarding `preconditions` turned a silent
-    // no-op into a permanent 412.
+  it("serves a tag from an overridden read that a forwarding override then accepts", async () => {
+    // The round trip #186 could not close, and it only tests the fix
+    // because BOTH routes are overridden: the tag comes off the promoted
+    // return, not off a generated route. Pre-fix this fails on the shape
+    // assertion, since the read carried no Kavo tag at all.
     await bootstrap(ForwardingTodoController);
     await seed();
 
@@ -395,9 +415,167 @@ describe("If-Match through a replaced controller method", () => {
     expect(adapter.rows[0]).toMatchObject({ title: "accepted" });
   });
 
-  it("leaves the override's return alone when caching is off for the operation", async () => {
-    // The wrapper reads the operation's own resolved settings, so an app
-    // that turned ETags off does not get one bolted back on.
+  it("issues the same tag an unoverridden route would for the same row", async () => {
+    // Shape alone would pass for a wrapper that hashed the envelope, or the
+    // pre-serialization entity. The promise is "the same strong ETag a
+    // generated route would serve", so the two are compared directly.
+    await bootstrap(CachedTodoController);
+    const generated = await seed();
+
+    await app.close();
+    await bootstrap(ForwardingTodoController);
+    await seed();
+    const overridden = (await request(server()).get("/todos/1").expect(200)).headers["etag"];
+
+    expect(overridden).toBe(generated);
+  });
+
+  it("keeps a method-level guard on an override, which replacing the method used to drop", async () => {
+    // The regression that mattered most, and the one the rest of this suite
+    // was structurally blind to: every other @UseGuards in these tests is
+    // class-level, which is the placement that survives a prototype swap.
+    // Nest keys method metadata on the FUNCTION, so an @Override carrying
+    // @UseGuards(...) lost it — and overriding is the documented workaround
+    // for row scoping (#138), so those are exactly the routes carrying an
+    // app's authorization.
+    @Injectable()
+    class DenyGuard implements CanActivate {
+      canActivate(): boolean {
+        return false;
+      }
+    }
+
+    @Kavo(Todo)
+    @Controller("todos")
+    class GuardedTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      @UseGuards(DenyGuard)
+      @SetMetadata("roles", ["admin"])
+      async findOne(id: string, query: unknown): Promise<unknown> {
+        return this.base.findOne(id as never, query as never);
+      }
+    }
+
+    await bootstrap(GuardedTodoController);
+    await seed();
+
+    await request(server()).get("/todos/1").expect(403);
+    // And the SetMetadata half, which a Reflector-based @Roles decorator
+    // reads the same way — asserted off the routed function, since that is
+    // the object Nest reflects on.
+    const routed = GuardedTodoController.prototype["findOne"] as object;
+    expect(Reflect.getMetadata("roles", routed)).toEqual(["admin"]);
+  });
+
+  it("leaves an Observable return alone rather than sealing it inside an envelope", async () => {
+    // Nest flattens a handler result that IS an Observable. One nested a
+    // level down inside an envelope is flattened by nothing, and the body
+    // ships as {} — the wrapper's one way to break a working route.
+    @Kavo(Todo)
+    @Controller("todos")
+    class StreamingTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      findOne(id: string, query: unknown): Observable<unknown> {
+        return from(this.base.findOne(id as never, query as never));
+      }
+    }
+
+    await bootstrap(StreamingTodoController);
+    await seed();
+
+    const read = await request(server()).get("/todos/1").expect(200);
+    expect(read.body).toMatchObject({ title: "write docs" });
+    // No tag: an Observable is not a representation to hash.
+    expect(read.headers["etag"]).toBeUndefined();
+  });
+
+  it("sets no tag on an overridden collection read", async () => {
+    // ADR-0020 leaves collection ETags out of scope, and the wrapper's
+    // cardinality skip is what keeps that true on the override path.
+    @Kavo(Todo)
+    @Controller("todos")
+    class ListingTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      async findMany(query: unknown): Promise<unknown> {
+        return this.base.findMany(query as never);
+      }
+    }
+
+    await bootstrap(ListingTodoController);
+    await seed();
+
+    expect((await request(server()).get("/todos").expect(200)).headers["etag"]).toBeUndefined();
+  });
+
+  it("sets no tag on an overridden bodyless delete", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class DeletingTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      async deleteOne(id: string): Promise<unknown> {
+        return this.base.deleteOne(id as never);
+      }
+    }
+
+    await bootstrap(DeletingTodoController);
+    await seed();
+
+    expect((await request(server()).delete("/todos/1").expect(204)).headers["etag"]).toBeUndefined();
+  });
+
+  it("does not unwrap an override that already returns an engine envelope", async () => {
+    // The pass-through branch. Shape assertions alone would stay green if
+    // the wrapper double-wrapped, so the body is checked for envelope keys.
+    await bootstrap(ForwardingTodoController);
+    await seed();
+
+    const written = await request(server()).put("/todos/1").send({ title: "enveloped" }).expect(200);
+    expect(written.body).not.toHaveProperty("operation");
+    expect(written.body).not.toHaveProperty("notModified");
+    expect(written.body).toMatchObject({ title: "enveloped" });
+  });
+
+  it("reads caching.etag at the operation scope, not just the entity's", async () => {
+    // `settingsFor` falls back to entity settings, so configuring the
+    // entity would pass even if per-operation resolution were bypassed.
+    // One operation off and its sibling on is what actually pins it.
+    @Kavo(Todo, { operations: { updateOne: { caching: { etag: false } } } })
+    @Controller("todos")
+    class MixedTodoController {
+      constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
+
+      @Override()
+      async updateOne(id: string, body: Partial<Todo>): Promise<unknown> {
+        return this.base.updateOne(id as never, body as never);
+      }
+
+      @Override()
+      async patchOne(id: string, body: Partial<Todo>): Promise<unknown> {
+        return this.base.patchOne(id as never, body as never);
+      }
+    }
+
+    await bootstrap(MixedTodoController);
+    await seed();
+
+    expect((await request(server()).put("/todos/1").send({ title: "a" }).expect(200)).headers["etag"]).toBeUndefined();
+    expect((await request(server()).patch("/todos/1").send({ title: "b" }).expect(200)).headers["etag"]).toMatch(
+      /^"[0-9a-f]{64}"$/,
+    );
+  });
+
+  it("leaves the override's return alone when caching is off entity-wide", async () => {
+    // The entity scope, which `settingsFor` falls back to. The test above
+    // is the per-operation half; both matter because the fallback is what
+    // makes an app-wide opt-out work at all.
     @Kavo(Todo, { caching: { etag: false } })
     @Controller("todos")
     class UncachedTodoController {

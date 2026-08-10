@@ -64,7 +64,50 @@ operation), when the controller is unbound, and when
 back while nothing in the workspace needed it; this is the consumer ADR-0010
 asks for. What the export promises is "the tag Kavo would set for this
 representation", not the algorithm, so ADR-0020's option to supersede the
-content hash with a version column stays open.
+content hash with a version column stays open. **This ADR amends ADR-0020**,
+whose point 7 states the opposite rule and whose consequences give a second,
+separate reason for keeping `computeEtag` off the barrel; the amendment is
+recorded there.
+
+**1a. Replacing the method copies its metadata, or the promotion is a
+security regression.** Nest keys method-level metadata on the **function
+object** — `SetMetadata`, `UseGuards`, `UseInterceptors`, `UseFilters`,
+`UsePipes`, `Version`, `Header` and every `@nestjs/swagger` method decorator
+all write to `descriptor.value`, and `PathsExplorer` reflects off whatever
+function is on the prototype at scan time. Method decorators run before the
+`@Kavo` class decorator, so a bare swap drops everything the application
+attached.
+
+Measured, against this repo's Nest: an `@Override` carrying
+`@UseGuards(DenyGuard)` went from `403` to `200`, and `Reflector.get("roles",
+handler)` from `["admin"]` to `undefined`. Overriding is the documented
+answer to row scoping having no seam (#138), so overridden routes are
+precisely the ones carrying an app's authorization — the fix would have
+introduced a worse bug than the one it closed. `applyOverrideEtag` copies
+every metadata key onto the replacement before the route decorators run,
+which is what `RouterExplorer.copyMetadataToCallback` does, and the order
+matters: copying first lets Kavo's own `UseInterceptors` append rather than
+overwrite, so `KavoResponseInterceptor` stays innermost.
+
+**1b. Values Nest resolves after the handler returns are not promoted.**
+`InterceptorsConsumer.transformDeferred` flattens a handler result that _is_
+a Promise or an Observable; one nested a level down inside an envelope is
+flattened by nothing, and the body ships as `{}`. So an `Observable` return
+is passed through untouched — this is the one way the promotion could break
+a working route outright. `StreamableFile` is passed through for a milder
+reason: it would survive, but hashing a file handle's internals is
+meaningless work and a plausible cycle for `canonicalize`, which has no cycle
+guard.
+
+**1c. `If-None-Match` becomes the host framework's answer, not Kavo's.** The
+promotion reports `notModified: false`, because it never saw the request's
+preconditions. Express then answers `304` anyway — `req.fresh` reads the
+`ETag` header this now sets, independently of the app's own `etag` setting —
+so an overridden read gains conditional-read behaviour it did not have, from
+the host rather than from the engine, and another adapter may not do the
+same. That is a real asymmetry and it is documented on `@Override` rather
+than papered over. An override that wants the `304` to be Kavo's answer
+returns `service.engine.execute(...)`.
 
 **2. `If-Match` stays the override's to forward, and is documented as
 such.** Evaluating it is engine work: it needs a canonical read of the row
