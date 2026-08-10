@@ -93,6 +93,10 @@ view. It matters most under `@Kavo`, where this config literal is evaluated
 when the controller class is defined (ADR-0012) and there is no adapter,
 infrastructure or `DataSource` in scope to close over.
 
+One thing such a write does not do is notify realtime subscribers: the
+event vocabulary is keyed by standard operation id (doc 18), so a custom
+operation emits nothing however it changes the row.
+
 Two bootstrap errors are worth knowing about, both naming the entity and
 the key path. A custom entry with no `handler` cannot run, so it is refused
 rather than registered. And an id that differs from a standard one only by
