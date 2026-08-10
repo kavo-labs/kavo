@@ -126,7 +126,7 @@ The rules, all governed by
 
 | Aspect                  | Behavior                                                                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Default projection      | Included in `item`/`list` automatically — no DTO registration needed                                                             |
+| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowlists.selectable` omits it (ADR-0026)                         |
 | Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
 | `selectable`            | Joined by default, so `fields=fullName` works; `selectable: false` opts out                                                      |
 | `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |

@@ -91,6 +91,16 @@ describe("allowlists.selectable narrows the response projection", () => {
         COLUMNS.filter((name) => name !== "email").sort(),
       );
     });
+
+    it("echoes the full allowed key set from createOne, not merely one absence", async () => {
+      // The five tests above assert `not.toHaveProperty("email")`, which
+      // would also pass if the projection collapsed entirely. The create
+      // echo is the case worth pinning positively: it is the argument for
+      // why a read-only fix would have been worthless.
+      const crud = crudFor(HIDES_EMAIL);
+      const created = await crud.createOne({ name: "Grace", email: "g@x.io", age: 45 } as never);
+      expect(Object.keys(created as object).sort()).toEqual(COLUMNS.filter((name) => name !== "email").sort());
+    });
   });
 
   describe("the spellings", () => {

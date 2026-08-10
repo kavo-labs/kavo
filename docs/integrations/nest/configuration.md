@@ -251,9 +251,22 @@ What a request may filter, sort, and select on — including relation paths. Any
 })
 ```
 
-`apiKey` is then absent from `findOne`, `findMany`, and the row echoed back by `createOne`/`updateOne`/`patchOne`, and naming it in `fields=` is a 400. Writing the key at all is what turns it on: omit `selectable` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
+`apiKey` is then absent from `findOne`, `findMany`, `restoreOne`, any custom operation's result, and the row echoed back by `createOne`/`updateOne`/`patchOne`; naming it in `fields=` is a 400. Writing the key at all is what turns it on: omit `selectable` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
-Two things to know about the edges. A registered `dto.item`/`dto.list` **wins outright** where both are present, rather than intersecting — the DTO is the narrower, more specific statement, so use it when the response shape is more than a subset of columns. And an included relation is projected by its **own** target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden everywhere `user` is included.
+::: danger `selectable` alone is not a credential control
+It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
+
+| Door                      | Still open after `selectable`                                                                                                             | Close it with                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `filter[apiKey][like]=a%` | yes — `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                          | name `filterable` explicitly, without the column                    |
+| `sort=apiKey`             | yes — `sortable` defaults to every column, and ordering leaks the column across pages                                                     | name `sortable` explicitly, without the column                      |
+| `PATCH {"apiKey":"…"}`    | yes — writable columns are derived separately, and after this change the write is **invisible**, because the response no longer echoes it | register `dto.update` (`patch` falls back to it) without the column |
+| response body             | no                                                                                                                                        | `selectable`                                                        |
+
+The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write DTO.
+:::
+
+Two more edges. A registered `dto.item`/`dto.list` with a runtime shape **replaces** the projection rather than intersecting with it, so `selectable` does not fence a column the DTO names — even where the DTO is _wider_. Register the DTO as the narrowing statement when you use one. And an included relation is projected by its **own** target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden wherever `user` is included — provided `User` itself went through `@Kavo`/`createCrud`. A relation target that never did gets a derived config, which configures nothing and serves its full column set.
 
 ### `computed`
 

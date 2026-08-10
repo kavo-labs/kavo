@@ -89,6 +89,16 @@ the projection while being unnameable in `fields=`. Narrowing by a list
 nobody wrote would silently retire that contract, and would break apps that
 never configured the key — the one group this change must not touch.
 
+The same reasoning applies one level down, and the first cut of this change
+got it wrong. The two spellings resolve against **different bases**: a plain
+array is the author's own list and is used verbatim, while `{ exclude }`
+resolves against the _readable projection_ — every column plus **every**
+declared computed field — not against the selectable base. Resolving
+`{ exclude }` against the narrower base meant `{ exclude: ["email"] }`
+silently deleted an unrelated `selectable: false` audit field from every
+response, which is "narrowing by a list nobody wrote" wearing a different
+hat.
+
 The flag and the explicit list therefore now say different things, which is
 the point of having both. `selectable: false` is a default about
 _nameability_. An explicit list is a statement about the _response_.
@@ -105,8 +115,30 @@ it, hiding a credential on `User` would leak it again the moment any other
 entity included `user`.
 
 **5. The `fields=` 400 message is left alone.** It enumerates the selectable
-list as though that described what is served — which, after decision 1, it
-does.
+list as though that described what is served, and after decision 1 that is
+accurate in the case the message actually fires in: an explicitly configured
+list with no runtime-shaped `item` DTO. It stays inaccurate in two others —
+where a DTO wins (decision 3), and where the list is unconfigured and omits
+`selectable: false` computed fields that _are_ served. Rewording it to cover
+those would make it longer and less useful in the case it is for.
+
+**6. What this does not close.** `selectable` bounds the **response body**,
+and a column worth hiding has three other doors, none of which this decision
+touches:
+
+| Door                      | Why it stays open                                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `filter[apiKey][like]=a%` | `filterable` defaults to every column, independently. `LIKE`/`GT`/`LT` binary-search a value in `O(log n)` requests — the same oracle ADR-0021 §2 refuses for cursor sort keys |
+| `sort=apiKey`             | `sortable` defaults the same way; ordering leaks the column across pages                                                                                                       |
+| `PATCH {"apiKey":"…"}`    | the writable projection is derived separately, and this change makes the write **invisible** by removing the echo                                                              |
+
+They are left open because closing them from `selectable` would mean one key
+silently rewriting three others, which is the opposite of the explicitness
+this ADR is built on. What changes is the documentation: the adopter-facing
+answer to "keep this column out of every response" is now stated as all four
+doors, not one. Calling `selectable` "the one-line answer to keeping a
+credential out of a response" — as an earlier draft of this ADR did — was
+the same overstatement that produced #149 in the first place.
 
 ## Consequences
 
@@ -130,11 +162,39 @@ that it is no longer the _only_ way to keep a column out of a response, so an
 adopter reaching for a credential control is now pointed at `selectable`,
 which fails loudly on a misspelling and narrows for real.
 
-**Adopters get one sentence instead of a decision.** "Keep a column out of
+**`ResolvedEntityConfig` gains a required member.** It is barrel-exported, so
+anyone hand-constructing one — through a cast, which is how the in-repo tests
+do it — now has an incomplete object with no compile error. ADR-0019 recorded
+the same break for `computed`; this is its sibling.
+
+**An `If-Match` guard is exactly as wide as the projection.** `canonicalEtag`
+hashes the _served_ representation, so a concurrent change confined to a
+column off `selectable` no longer changes the tag and no longer trips a 412.
+That was already true for a registered `item` DTO; this extends it to a
+config key adopters are steered toward. The confidentiality win and the
+integrity loss are the same mechanism, and ADR-0020 should be read alongside
+this.
+
+**Decision 4 holds only for registered entities.** A relation target that
+never went through `createCrud`/`@Kavo` gets a config derived from metadata
+alone, which configures nothing — so its full column set is served through
+an `include`, however the root is narrowed.
+
+**`{ exclude }` still fails open on a name that matches nothing.**
+`resolveFieldSelector` does no existence check, so `{ exclude: ["apikey"] }`
+excludes nothing and serves the column. `FieldPath` catches this at compile
+time for a properly typed entity and degrades to bare `string` for
+`any`/index-signature ones, and is defeated by a cast. The plain-list
+spelling fails closed (the field vanishes); the exclude spelling does not.
+A bootstrap existence check is the obvious follow-up and is deliberately not
+bundled here.
+
+**Adopters get a shorter answer, not a one-line one.** "Keep a column out of
 every response" was previously answerable only by "register an `item` DTO,
 and remember to initialize every field, and remember to name every computed
-field you still want". It is now `allowlists.selectable`, with the DTO still
-available for shapes that are more than a subset of columns.
+field you still want". The response half is now one key; the filter, sort and
+write halves are still three more, and decision 6 is where that is stated
+rather than glossed.
 
 **`fields=` still narrows further and never wider**, unchanged: selection is
 applied after the projection resolves, so it can only subset what

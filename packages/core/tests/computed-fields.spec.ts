@@ -249,6 +249,23 @@ describe("computed fields — selection", () => {
     });
   });
 
+  it("keeps a `selectable: false` field when an { exclude } list names something else", async () => {
+    // The interaction ADR-0026 §2 promises and the first cut of it broke.
+    // `{ exclude }` resolves against the *readable* projection — every
+    // column plus every declared computed field — not against the selectable
+    // base, which drops `selectable: false` fields. Resolving against the
+    // narrower base deleted an audit field the author never named, from
+    // every response, because they excluded an unrelated column.
+    const { crud } = await seeded({
+      computed: { shout: { ...shout, selectable: false } },
+      allowlists: { selectable: { exclude: ["email"] } },
+    } as never);
+
+    const item = (await crud.findOne(1)) as unknown as Record<string, unknown>;
+    expect(item["shout"]).toBe("ADA");
+    expect(item).not.toHaveProperty("email");
+  });
+
   it("lets an explicit selectable list override the descriptor's `selectable: false`", async () => {
     // The descriptor's flag governs the *derived* default; naming the field
     // in an explicit list is the same deliberate opt-in that an explicit

@@ -47,13 +47,22 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * when it sends no `fields=` at all (ADR-0026).
    *
    * The second half is what makes this a confidentiality control rather
-   * than a validation list: a column left off is not served, so
-   * `selectable` is the one-line way to keep a credential out of every
-   * response. Omit the key and the projection is unchanged — every column
-   * plus every declared computed field.
+   * than a validation list: a column left off is not served. Omit the key
+   * and the projection is unchanged — every column plus every declared
+   * computed field.
    *
-   * A registered `dto.item`/`dto.list` wins outright where both are
-   * present: the DTO is the narrower, more specific statement.
+   * **It closes the response body and nothing else.** `filterable` and
+   * `sortable` default to every column independently, so
+   * `filter[apiKey][like]=a%` binary-searches the value and `sort=apiKey`
+   * leaks its ordering; the writable projection is derived separately, so
+   * the column is still writable — and this key makes that write
+   * *invisible* by removing the echo. Hiding a credential means narrowing
+   * all three allowlists and registering a write DTO (ADR-0026 §6).
+   *
+   * A registered `dto.item`/`dto.list` with a runtime shape **replaces**
+   * the projection rather than intersecting with it, so it wins even where
+   * it is *wider*. Where you register one, it — not this key — is the
+   * narrowing statement.
    */
   readonly selectable?: QueryFieldSelector<Entity, Computed>;
 }
