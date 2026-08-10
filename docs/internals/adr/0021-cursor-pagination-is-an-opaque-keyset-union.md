@@ -232,6 +232,34 @@ programmatic one. The rules:
   a documentation change, so neither belongs in the change that made the
   documentation honest.
 
+- a **date** sort key is safe only where the backend stores dates in one
+  canonical form, and that is a second **known, unenforced limitation**. The
+  keyset is an ordinary filter AST, so its comparison is whatever the backend
+  does with the bound value; on a backend that stores a date as **text** the
+  comparison is lexical, and one column can hold two spellings of the same
+  instant. SQLite is where this bites, and the common configuration is the
+  one that hits it (#185):
+
+  | Written by                                                               | Stored as                 |
+  | ------------------------------------------------------------------------ | ------------------------- |
+  | a SQL default — TypeORM renders `@CreateDateColumn` as `datetime('now')` | `2026-08-10 14:51:07`     |
+  | the driver, binding a JS `Date`                                          | `2026-08-10 14:51:07.000` |
+
+  Lexically the first is _strictly less_ than the second, so a keyset over
+  rows written by the default compares every one of them as before the
+  cursor: `col < v` matches the whole page again and `col = v` never fires,
+  which kills the tiebreaker chain as well. The page repeats, the token
+  repeats, and §5's advance guard is what catches it. The same mismatch
+  makes `ORDER BY` itself order the two spellings apart, so no bind-side
+  normalization can fix it — both the predicate and the ordering would have
+  to be normalized together, which is a change to how sorts are emitted and
+  is deferred rather than smuggled in here.
+
+  **Therefore: on SQLite, a cursor sort key must be a column every row was
+  written to through the driver** — a `date` column with a SQL default is not
+  one. Postgres and MySQL store dates as a real type and compare them as one,
+  and are unaffected.
+
 Rejections are `KAVO_QUERY_CONFLICTING_PARAMS` on field `sort` (or
 `KAVO_QUERY_INVALID_FIELD` on the field itself, for the allowlist gates),
 and are reported _without_ also decoding the cursor — a cursor checked
