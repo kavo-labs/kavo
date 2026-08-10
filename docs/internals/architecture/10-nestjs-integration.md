@@ -317,10 +317,23 @@ Two pieces, both applied programmatically at decoration time:
   needs no DI registration. It sets the `ETag` header from the
   envelope, turns `notModified` into a bodyless `304`, and unwraps to
   `item`/`list` — being the innermost interceptor, nothing downstream
-  ever sees the envelope. It acts only on an engine envelope, so an
-  override returning its own value is untouched; an override returning
-  `service.engine.execute(...)` gets the identical treatment rather
-  than silently losing the header.
+  ever sees the envelope. It acts only on an engine envelope, and an
+  `@Override` reaches it holding one either way: `applyOverrideEtag`
+  runs first and promotes a bare return into an envelope carrying the
+  tag ([ADR-0027](/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition)).
+  What an override returning `service.engine.execute(...)` additionally
+  gets is the `304`, since `notModified` is the engine's answer against
+  the request's own `If-None-Match`.
+- **`applyOverrideEtag`** (`kavo.decorator.ts`), applied only on the
+  `@Override` path and only for `cardinality: "one"`. It replaces the
+  method with one that awaits the original and, unless the result is
+  already an envelope, is `null`/`undefined`, is an `Observable` or a
+  `StreamableFile`, or the operation has `caching.etag` off, returns a
+  `KavoResponse` carrying `computeEtag(result)`. It **copies every
+  `Reflect` metadata key from the original onto the replacement** —
+  Nest keys method metadata on the function object, so without that an
+  `@Override` carrying `@UseGuards` or a `SetMetadata`-based decorator
+  would be routed with it silently dropped.
 
 `If-Match` enforcement is the engine's, not the binding's, so a method
 that replaces a generated one bypasses it — `@Override`'d or plain

@@ -269,6 +269,10 @@ const config = defineConfig({
                 text: "0026 — selectable narrows the response projection",
                 link: "/internals/adr/0026-selectable-narrows-the-response-projection",
               },
+              {
+                text: "0027 — An @Override inherits the ETag, but not the precondition",
+                link: "/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition",
+              },
             ],
           },
         ],

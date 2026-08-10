@@ -262,18 +262,46 @@ uninstallable — and npm does not allow republishing a version to correct it.
 
 ## 8. Dependency classification (decided now, executed later)
 
-| Package          | `dependencies`                             | `peerDependencies`                                                                                                                 |
-| ---------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `@kavo/core`     | — (none, ever)                             | —                                                                                                                                  |
-| `@kavo/typeorm`  | `@kavo/core`                               | `typeorm`                                                                                                                          |
-| `@kavo/prisma`   | `@kavo/core`                               | `@prisma/client`                                                                                                                   |
-| `@kavo/mongoose` | `@kavo/core`                               | `mongoose`                                                                                                                         |
-| `@kavo/mikroorm` | `@kavo/core`                               | `@mikro-orm/core`                                                                                                                  |
-| `@kavo/sse`      | `@kavo/core`                               | — (none)                                                                                                                           |
-| `@kavo/graphql`  | `@kavo/core`                               | `graphql`                                                                                                                          |
-| `@kavo/mcp`      | `@kavo/core`                               | `@modelcontextprotocol/sdk`                                                                                                        |
-| `@kavo/nest`     | `@kavo/core`, `@kavo/graphql`, `@kavo/mcp` | `@nestjs/common`, `@nestjs/core`, `graphql`, `@modelcontextprotocol/sdk` (+ `@nestjs/swagger`, all three protocol peers, optional) |
+| Package          | `dependencies`                             | `peerDependencies`                                                                                                                                  |
+| ---------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@kavo/core`     | — (none, ever)                             | —                                                                                                                                                   |
+| `@kavo/typeorm`  | `@kavo/core`                               | `typeorm`                                                                                                                                           |
+| `@kavo/prisma`   | `@kavo/core`                               | `@prisma/client`                                                                                                                                    |
+| `@kavo/mongoose` | `@kavo/core`                               | `mongoose`                                                                                                                                          |
+| `@kavo/mikroorm` | `@kavo/core`                               | `@mikro-orm/core`                                                                                                                                   |
+| `@kavo/sse`      | `@kavo/core`                               | — (none)                                                                                                                                            |
+| `@kavo/graphql`  | `@kavo/core`                               | `graphql` (optional)                                                                                                                                |
+| `@kavo/mcp`      | `@kavo/core`                               | `@modelcontextprotocol/sdk` (optional)                                                                                                              |
+| `@kavo/nest`     | `@kavo/core`, `@kavo/graphql`, `@kavo/mcp` | `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs`; plus `graphql`, `@modelcontextprotocol/sdk` and `@nestjs/swagger`, all three optional |
 
 Peers, not dependencies, because the consumer's app owns the TypeORM/Prisma/
 Mongoose/MikroORM/Nest instance — a second copy via a nested dependency would fracture
 `instanceof` checks and DI tokens.
+
+**Optional where the package is somebody's transitive dependency.** The rule
+is topological, not about how badly the package needs its peer — every peer
+here is required to _use_ the package that declares it, `graphql` and
+`typeorm` alike.
+
+What separates them is who ends up installing it. An ORM adapter is nobody's
+dependency: `@kavo/typeorm` only ever reaches a tree because someone asked
+for it, so a required peer is a clear install-time error for a user who
+already opted in. A protocol binding is a hard `dependency` of `@kavo/nest`
+(ADR-0016's sanctioned sideways edge), so a required peer there is
+force-installed on every user who never opted into the protocol at all —
+which is #148: `graphql`, the MCP SDK and its `zod` subtree in every
+REST-only install.
+
+Both hops have to say optional, because a package manager resolves the
+binding and then the binding's own peer; marking only `@kavo/nest`'s copy
+changed nothing. `tests/release-workflow.spec.ts` asserts both, since the
+failure is silent — the manifest still installs, the tree is just bigger.
+
+The two bindings sit at different points on the trade. `@kavo/mcp` is free:
+it references the SDK as a type only, so it runs without it. `@kavo/graphql`
+value-imports `graphql` at module scope, so installing that package alone
+without its peer throws `ERR_MODULE_NOT_FOUND` on first import — a runtime
+error where a required peer would have given an install-time one. That is
+the deliberate half of the trade, and it is acceptable because the person
+who installed `@kavo/graphql` is by definition someone who opted in; the
+person it protects is the REST-only adopter who never touched it.
