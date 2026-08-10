@@ -265,6 +265,10 @@ const config = defineConfig({
                 text: "0025 — Handlers reach persistence through the request context",
                 link: "/internals/adr/0025-handlers-reach-persistence-through-the-context",
               },
+              {
+                text: "0027 — An @Override inherits the ETag, but not the precondition",
+                link: "/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition",
+              },
             ],
           },
         ],
