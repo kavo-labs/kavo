@@ -16,6 +16,9 @@
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.06"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
+    <clipPath id="markClip">
+      <rect width="300" height="300" rx="84"/>
+    </clipPath>
   </defs>
 
   <rect width="1200" height="630" fill="url(#bg)"/>
@@ -25,7 +28,7 @@
   <!-- brand mark, scaled up from favicon.svg -->
   <g transform="translate(100, 165)">
     <rect width="300" height="300" rx="84" fill="url(#bg)"/>
-    <rect width="300" height="150" rx="84" fill="url(#glow)"/>
+    <rect width="300" height="150" fill="url(#glow)" clip-path="url(#markClip)"/>
     <rect x="4.5" y="4.5" width="291" height="291" rx="79.5" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="3"/>
     <path
       d="M116 140.4 168.9 72.6H221.6L155.5 150.4L226.7 236.7H169.6L116 165.6V236.7H73.3V72.6H116Z"
