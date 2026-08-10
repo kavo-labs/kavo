@@ -15,13 +15,13 @@
 }
 
 ::selection {
-  background: rgba(130, 87, 255, 0.55);
-  color: inherit;
+  background: #8257ff;
+  color: #14101f;
 }
 
 .dark ::selection {
-  background: rgba(178, 130, 255, 0.6);
-  color: inherit;
+  background: #b282ff;
+  color: #14101f;
 }
 
 .VPHero {
