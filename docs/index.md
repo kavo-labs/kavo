@@ -268,8 +268,13 @@ GET /books
 ```json
 {
   "items": [
-    { "id": 42, "title": "The Left Hand of Darkness", "status": "published" },
-    { "id": 41, "title": "Kindred", "status": "published" }
+    {
+      "id": 42,
+      "title": "The Left Hand of Darkness",
+      "status": "published",
+      "author": { "id": 7, "name": "Ursula K. Le Guin" }
+    },
+    { "id": 41, "title": "Kindred", "status": "published", "author": { "id": 3, "name": "Octavia E. Butler" } }
   ],
   "limit": 20,
   "offset": 0,
