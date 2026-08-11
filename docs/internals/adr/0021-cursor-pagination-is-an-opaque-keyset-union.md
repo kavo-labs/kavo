@@ -249,11 +249,26 @@ programmatic one. The rules:
   rows written by the default compares every one of them as before the
   cursor: `col < v` matches the whole page again and `col = v` never fires,
   which kills the tiebreaker chain as well. The page repeats, the token
-  repeats, and §5's advance guard is what catches it. The same mismatch
-  makes `ORDER BY` itself order the two spellings apart, so no bind-side
-  normalization can fix it — both the predicate and the ordering would have
-  to be normalized together, which is a change to how sorts are emitted and
-  is deferred rather than smuggled in here.
+  repeats, and §5's advance guard is what catches it.
+
+  No bind-side repair exists. Both spellings can coexist in one column —
+  rows inserted before a default was added, rows written by a migration,
+  rows written by the driver — so no single bound form compares correctly
+  against all of them. `ORDER BY` reads that same text the same way, so
+  where the spellings are mixed the ordering is already wrong before a
+  keyset is involved; the keyset is merely where it becomes visible.
+
+  **A canonicalizing fix was considered and rejected** (#185). Wrapping the
+  keyset predicate _and_ the `ORDER BY` in `strftime('%Y-%m-%d %H:%M:%f', …)`
+  for date columns on a sqlite-family driver is correct even against mixed
+  spellings, and it still costs more than it returns. The column's index can
+  then serve neither the seek nor the sort, so every cursor page becomes a
+  scan and a sort — the one property keyset pagination exists to provide.
+  Sort emission becomes conditional on the driver, a seam only one path ever
+  exercises. And it would live in `@kavo/typeorm`, so `@kavo/mikroorm` and
+  `@kavo/prisma` over sqlite keep the limitation and the rule below has to be
+  stated regardless. Stating it once, and letting §5's guard catch a
+  violation loudly, is the better trade.
 
   **Therefore: on SQLite, a cursor sort key must be a column every row was
   written to through the driver** — a `date` column with a SQL default is not
