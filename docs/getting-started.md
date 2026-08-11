@@ -65,16 +65,18 @@ Kavo never bundles your framework or your ORM. Each package declares what it exp
 - **`@kavo/prisma`** — `@prisma/client` (`^5.0.0 || ^6.0.0`).
 - **`@kavo/mongoose`** — `mongoose` (`^7.0.0 || ^8.0.0`).
 - **`@kavo/mikroorm`** — `@mikro-orm/core` (`^7.0.0`), plus the MikroORM driver package your database needs.
-- **`@kavo/graphql`** — `graphql` (`^17.0.0`).
-- **`@kavo/mcp`** — `@modelcontextprotocol/sdk` (`^1.0.0`).
+- **`@kavo/graphql`** — `graphql` (`^17.0.0`), optional.
+- **`@kavo/mcp`** — `@modelcontextprotocol/sdk` (`^1.0.0`), optional.
 
-Three of `@kavo/nest`'s own peers are declared **optional** — `@nestjs/swagger` (`^8.0.0 || ^11.0.0`) for generated OpenAPI docs, `graphql` (`^17.0.0`) for the GraphQL controller, and `@modelcontextprotocol/sdk` (`^1.0.0`) for the MCP controller — so nothing makes you configure a protocol you don't serve. They may still land in your dependency tree either way: `@kavo/nest` depends on `@kavo/graphql` and `@kavo/mcp`, and those two declare `graphql` and `@modelcontextprotocol/sdk` as _required_ peers. npm, pnpm, and bun install required peers automatically, so both arrive even in a REST-only app; yarn does not, and reports them as unmet peers instead. Optional here means you never have to import or wire them.
+Three of `@kavo/nest`'s own peers are declared **optional** — `@nestjs/swagger` (`^8.0.0 || ^11.0.0`) for generated OpenAPI docs, `graphql` (`^17.0.0`) for the GraphQL controller, and `@modelcontextprotocol/sdk` (`^1.0.0`) for the MCP controller — so nothing makes you configure a protocol you don't serve.
+
+**Both hops say optional**, which is what keeps them out of the tree. `@kavo/nest` depends on `@kavo/graphql` and `@kavo/mcp` outright, so your package manager resolves the binding and then the binding's peer; while those two declared theirs required, npm, pnpm and bun installed `graphql` and the MCP SDK into every REST-only app anyway. Both are optional on both hops now, so a REST-only install gets neither, and you add the protocol library when you opt into the protocol.
 
 ### GraphQL and MCP
 
 The same entities can be served over GraphQL and the Model Context Protocol, through the same engine.
 
-Inside a Nest app you never install the Kavo bindings directly — `@kavo/nest` depends on `@kavo/graphql`, and on `@kavo/mcp` as of the next release. Add only the protocol library you intend to use:
+Inside a Nest app you never install the Kavo bindings directly — `@kavo/nest` depends on both `@kavo/graphql` and `@kavo/mcp`. Add only the protocol library you intend to use:
 
 ::: code-group
 

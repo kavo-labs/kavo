@@ -460,6 +460,187 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
     expect(list).toMatchObject({ items: [expect.objectContaining({ name: "Ada" })], total: 1, offset: 0 });
   });
 
+  describe("a result the entity projection empties (#181)", () => {
+    /** A handler returning a shape with no field in common with `User`. */
+    function withShape(result: unknown, entry: Record<string, unknown> = {}) {
+      const { crud, adapter } = makeCrud({
+        operations: {
+          probeOne: {
+            handler: {
+              async execute() {
+                return result;
+              },
+            },
+            ...entry,
+          },
+        },
+      } as never);
+      return { crud, adapter };
+    }
+
+    it("refuses rather than serving {}", async () => {
+      // The silent version of this shipped `{}` with a 201, and the static
+      // types disagreed with it: `CustomOperationResult` types `run`'s
+      // return as the handler's own return type when no `dto.output` is
+      // declared, so the signature promised `{ probed, checkedAt }` while
+      // the wire served nothing at all.
+      const { crud } = withShape({ probed: true, checkedAt: "now" });
+      await expect(crud.run("probeOne")).rejects.toBeInstanceOf(ConfigurationException);
+    });
+
+    it("names the operation, what it returned, and dto.output as the fix", async () => {
+      const { crud } = withShape({ probed: true, checkedAt: "now" });
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error.code).toBe("KAVO_CONFIG_INVALID");
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "operations.probeOne.dto.output" });
+      expect(error.message).toContain("keys are checkedAt, probed");
+      expect(error.message).toContain("dto: { output:");
+    });
+
+    it("leaves a genuine narrowing alone", async () => {
+      // A subset of the entity's fields is exactly what the projection is
+      // for. Only zero intersection is a mistake.
+      const { crud } = withShape({ id: 7, name: "Ada" });
+      expect(await crud.run("probeOne")).toEqual({ id: 7, name: "Ada" });
+    });
+
+    it("leaves a registered dto.output alone", async () => {
+      class ProbeResultDto {
+        probed = false;
+        checkedAt = "";
+      }
+      const { crud } = withShape({ probed: true, checkedAt: "now" }, { dto: { output: ProbeResultDto } });
+      expect(await crud.run("probeOne")).toEqual({ probed: true, checkedAt: "now" });
+    });
+
+    it("leaves a void result alone", async () => {
+      const { crud } = withShape(null);
+      await expect(crud.run("probeOne")).resolves.toBeNull();
+    });
+
+    it("does not blame the operation when it was fields= that emptied the projection", async () => {
+      // A sparse fieldset can empty a projection on its own, and the message
+      // would then point at a `dto.output` that is not the problem. The
+      // client's request is the mistake here, and the operation trips the
+      // real guard the moment the fieldset comes off.
+      const { crud } = withShape({ id: 7, name: "Ada" }, { kind: "read" });
+      expect(await crud.run("probeOne", { query: { fields: ["email"] } } as never)).toEqual({});
+    });
+
+    it("checks a many-cardinality operation on its first row", async () => {
+      const { crud } = makeCrud({
+        operations: {
+          probeMany: {
+            kind: "read",
+            cardinality: "many",
+            handler: {
+              async execute() {
+                return { entities: [{ probed: true }], total: 1 };
+              },
+            },
+          },
+        },
+      } as never);
+
+      const error = (await crud.run("probeMany").catch((thrown: unknown) => thrown)) as ConfigurationException;
+      expect(error).toBeInstanceOf(ConfigurationException);
+      // "the first row", not "every row": the check reads index 0 only, and
+      // the message must not claim more than it verified.
+      expect(error.message).toContain("the first row of the list");
+      expect(error.messageParams).toMatchObject({ path: "operations.probeMany.dto.output" });
+    });
+
+    it("names the registered DTO, not the entity, when the DTO is what emptied the result", async () => {
+      // The message used to send an author who had already declared
+      // `dto.output` back to declare `dto.output`. With one registered, the
+      // entity's fields are irrelevant — the projection is the DTO's keys.
+      class OutcomeDto {
+        applied = 0;
+        skus: string[] = [];
+      }
+      const { crud } = withShape({ appliedCount: 3, skuList: ["a"] }, { dto: { output: OutcomeDto } });
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error.message).toContain("registered 'OutcomeDto'");
+      expect(error.message).toContain("applied, skus");
+      expect(error.message).not.toContain("declare 'dto: { output:");
+    });
+
+    it("names the missing initializers when a registered DTO has no runtime shape", async () => {
+      // The declared-only DTO `@kavo/nest` supports on purpose, so Swagger's
+      // own decorators can answer. The projection falls back to the entity,
+      // and the fault is the erased fields rather than a missing DTO.
+      class DeclaredOnlyDto {
+        declare applied: number;
+      }
+      const { crud } = withShape({ applied: 3 }, { dto: { output: DeclaredOnlyDto } });
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error.message).toContain("'DeclaredOnlyDto' declares no runtime fields");
+      expect(error.message).toContain("give each field an initializer".replace("give", "Give"));
+    });
+
+    it("refuses a class instance whose fields are accessors", async () => {
+      // `Object.keys` never sees a prototype getter, but the serializer
+      // emits with `key in source` and does — so this shape slipped through
+      // the first cut of the guard and served {} exactly as #181 reports.
+      class Outcome {
+        get applied(): number {
+          return 3;
+        }
+      }
+      const { crud } = withShape(new Outcome());
+      await expect(crud.run("probeOne")).rejects.toBeInstanceOf(ConfigurationException);
+    });
+
+    it("refuses a non-empty array from a cardinality-one operation", async () => {
+      // What a handler that meant `cardinality: "many"` and left it at the
+      // default returns. It projected to {} in silence.
+      const { crud } = withShape([{ applied: 1 }, { applied: 2 }]);
+      const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
+
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error.message).toContain('cardinality: "many"');
+    });
+
+    it("leaves an empty list alone — there is no row to judge", async () => {
+      const { crud } = makeCrud({
+        operations: {
+          probeMany: {
+            kind: "read",
+            cardinality: "many",
+            handler: {
+              async execute() {
+                return { entities: [], total: 0 };
+              },
+            },
+          },
+        },
+      } as never);
+      expect(await crud.run("probeMany")).toMatchObject({ items: [], total: 0 });
+    });
+
+    it("leaves a standard operation alone, whatever its handler returns", async () => {
+      // A standard operation's result *is* the entity by contract, so an
+      // empty projection there is a different bug and `dto.output` is not
+      // its fix. Scoping the guard is what keeps the message honest.
+      const { crud } = makeCrud({
+        operations: {
+          findOne: {
+            handler: {
+              async execute() {
+                return { unrelated: true } as never;
+              },
+            },
+          },
+        },
+      } as never);
+      await expect(crud.findOne(1)).resolves.toEqual({});
+    });
+  });
+
   it("raises OperationDisabledException for a custom operation switched off", async () => {
     const { crud } = withPromote({ enabled: false });
     await expect(crud.run("promoteOne")).rejects.toBeInstanceOf(OperationDisabledException);

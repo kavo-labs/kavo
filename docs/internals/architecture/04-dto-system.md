@@ -42,11 +42,17 @@ The metadata seam (`EntityMetadata`, doc 09 §1) supplies the field list
 the defaults derive from:
 
 - **Readable projection** (`item`/`list` default): every scalar column,
-  plus every computed field the entity declares (§7). Relation properties
+  plus every computed field the entity declares (§7), **intersected with
+  `allowlists.selectable` when that key is configured explicitly**
+  ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
+  which is how a column is kept out of every response without registering a
+  DTO at all. Relation properties
   are excluded unless the request includes them deliberately; a class
   getter or method never appears on its own — it is not a column, and an
   entity-class getter that seems to work is an accident of the ORM handing
   the engine class instances ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
+  A registered DTO wins outright over the allowlist rather than
+  intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
   scalar column with `generated: false`. Generated columns (auto ids,
   `@CreateDateColumn`, versions) can never be written from a request
@@ -120,7 +126,7 @@ The rules, all governed by
 
 | Aspect                  | Behavior                                                                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Default projection      | Included in `item`/`list` automatically — no DTO registration needed                                                             |
+| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowlists.selectable` omits it (ADR-0026)                         |
 | Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
 | `selectable`            | Joined by default, so `fields=fullName` works; `selectable: false` opts out                                                      |
 | `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |
@@ -198,6 +204,15 @@ offers all three and the mismatch is caught at bootstrap. It also has no
 root `dto` slot of its own: `output` falls back to the entity's
 `item`/`list` slot and `input` to the entity's writable projection, which
 is what makes `dto` the only way to give it a shape of its own.
+
+That fallback is the right default for a result that _is_ a row, and a trap
+for one that is not: a handler returning `{ applied, skus }` against an
+entity with neither column serialized to `{}`, silently, while the static
+types promised the shape (#181). The engine now refuses a **custom**
+operation whose non-empty result projects to zero keys, naming the
+operation and pointing at `dto.output` (doc 07 §1a). A result that is a
+narrower entity shape is still served as-is; only zero intersection is
+treated as a declaration mistake.
 
 `query`'s effect is **typing only**, like the root `query` slot (§1): there
 is no validation subsystem, and the query normalizer parses wire params

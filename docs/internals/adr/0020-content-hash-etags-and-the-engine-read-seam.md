@@ -186,3 +186,26 @@ Only the name and the declared type changed. `createCrud` always passed the
 whole adapter, and the pre-read described above is unchanged; the engine
 also hands that adapter to every handler on the request context (ADR-0025),
 which is a use the narrower name no longer described.
+
+**Amendment (issue #186, ADR-0027):** point 7's rule — "it acts only on an
+engine envelope, so an override returning its own value is untouched" — no
+longer holds, and the consequence bullet excluding `computeEtag` from the
+core barrel is withdrawn.
+
+`@Kavo` now promotes an `@Override`'d single-item route's bare return into an
+envelope carrying the tag, so the header is set on both paths and
+`computeEtag` is exported for it. What point 7 got right and ADR-0027 keeps
+is the split: the **precondition** is still only evaluated when the override
+forwards it, because that needs a canonical read from inside `execute`.
+
+The barrel exclusion was argued here on two grounds. The consumer ground is
+spent — there is one now. The offline-hash-oracle ground does not transfer:
+it is about disclosing a tag to a remote client, which is unchanged, not
+about whether an in-process package can compute one. `@kavo/nest` could
+already read any tag it liked off `KavoResponse`.
+
+What ADR-0027 does not change is the reasoning behind the exclusion's
+_other_ half: `canonicalize` stays unexported, and the export promises "the
+tag Kavo would set for this representation" rather than the algorithm, so
+this ADR's option to supersede the content hash with a version column stays
+open.

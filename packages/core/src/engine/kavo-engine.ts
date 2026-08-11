@@ -26,6 +26,8 @@ import {
   QueryValidationException,
 } from "../errors/exceptions.js";
 import { nameList } from "../errors/message-hints.js";
+import { dtoShapeKeys } from "../dto/dto-shape.js";
+import { isStandardOperationId } from "../operations/default-operation-registry.js";
 import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
 import { cursorValuesOf, encodeCursor } from "../query/cursor.js";
@@ -494,6 +496,11 @@ export class KavoEngine<Entity extends object> {
       settings,
       settingsFor: () => settings,
       allowlists: config.allowlists,
+      // Structural, like `computed` below: the projection is derived from
+      // `allowlists.selectable` at bootstrap (ADR-0026), and allowlists are
+      // outside the settings precedence chain, so a per-call override
+      // cannot widen what a response serves.
+      projection: config.projection,
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
@@ -600,11 +607,23 @@ export class KavoEngine<Entity extends object> {
       const listDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("list", descriptor.id);
       const pagination: Pagination<Entity> = context.query?.pagination ?? { limit: 0, offset: 0 };
       const listMeta = this.listMeta(listResult, context);
+      const items = serializer.serializeList(listResult.entities, listDto, context);
+      // First row only: this catches a declaration mistake, which is the
+      // same for every row, and checking all of them would be per-request
+      // work for a bootstrap-class error.
+      validateProjectedResult(
+        items[0],
+        listResult.entities[0],
+        listDto as DtoClass | null,
+        descriptor,
+        context,
+        "list",
+      );
       return {
         operation: descriptor.id,
         item: null,
         list: {
-          items: serializer.serializeList(listResult.entities, listDto, context),
+          items,
           limit: pagination.limit,
           // A keyset page has no absolute position in the match set, and
           // `offset` is a non-nullable envelope field, so cursor pages report
@@ -638,6 +657,7 @@ export class KavoEngine<Entity extends object> {
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
     const item = serializer.serializeItem(result as Entity, itemDto, context);
+    validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
     // `context.config` is the per-call view, so `caching.etag` honors an
     // override at any scope down to this one request.
     const etag = context.config.settings.caching.etag ? await computeEtag(item) : null;
@@ -825,4 +845,135 @@ function compactMeta(meta: ListMetaDto | undefined): ListMetaDto | undefined {
  */
 function registeredIds<Entity extends object>(registry: OperationRegistry<Entity>): string {
   return nameList(registry.all().map((descriptor) => descriptor.id));
+}
+
+/**
+ * A custom operation whose handler returned a shape sharing **no** field
+ * with the response projection fails loudly instead of serving `{}`
+ * (#181).
+ *
+ * A custom operation is the one place a handler's result is not the entity
+ * by contract, so it is the one place the projection can empty a value
+ * entirely. `dto.output` is how a result with its own shape declares
+ * itself; with none, the result is filtered to the entity's columns plus
+ * its computed fields, and a result that shares none of them survives as an
+ * empty object. Nothing said so — not a type error, not a log line — and
+ * the static types actively disagreed: `CustomOperationResult` types
+ * `run`'s return as the handler's own return type when no `dto.output` is
+ * declared, so the signature promised the shape while the wire served `{}`.
+ *
+ * Scoped to custom ids deliberately. A standard operation's result *is* the
+ * entity by contract, so an empty projection there is a different bug with
+ * a different fix, and `dto.output` is not the answer to it.
+ *
+ * Zero intersection is the test, not "narrower than the result": a genuine
+ * narrowing — a handler returning a row with a subset of the entity's
+ * fields — is exactly what the projection is for and must stay silent.
+ *
+ * Skipped under an explicit `fields=`, because sparse selection can empty
+ * the projection on its own and the message would then blame the wrong
+ * thing. That request is the client's mistake, and a narrowed read of an
+ * operation whose shape is already wrong will trip this the moment the
+ * fieldset comes off.
+ *
+ * This is `withListMeta`'s pattern (`with-list-meta.ts`): a handler that
+ * returned a shape the envelope cannot use raises a request-time
+ * `ConfigurationException` keyed to the operation, rather than assembling
+ * something broken.
+ */
+function validateProjectedResult<Entity>(
+  projected: unknown,
+  source: unknown,
+  dto: DtoClass | null,
+  descriptor: OperationDescriptor<Entity>,
+  context: KavoContext<Entity>,
+  slot: "item" | "list",
+): void {
+  if (isStandardOperationId(descriptor.id)) return;
+  if (context.query?.fields.root != null) return;
+  if (!carriesSomething(source)) return;
+  if (typeof projected !== "object" || projected === null || Object.keys(projected).length > 0) return;
+  const served = slot === "list" ? "the first row of the list" : "the response";
+  throw new ConfigurationException(
+    context.entityName,
+    `operations.${descriptor.id}.dto.output`,
+    `the '${descriptor.id}' handler returned ${describeResult(source)}, so ${served} serialized to {}. ` +
+      projectedAgainst(dto, context.entityName, slot),
+  );
+}
+
+/**
+ * Whether the handler's result had anything for the projection to keep.
+ *
+ * Deliberately wider than `Object.keys(source).length > 0`, which was the
+ * first cut and let three shapes through in silence — the exact #181 symptom
+ * the guard exists to end:
+ *
+ * - a **class instance whose fields are accessors**, since getters live on
+ *   the prototype and `Object.keys` never sees them, while
+ *   `DefaultSerializer.project` emits with `key in source` and does;
+ * - a **`Date`**, or any other boxed value with no own enumerable keys;
+ * - a **non-empty array**, which is what a handler that meant
+ *   `cardinality: "many"` and left it at the default returns.
+ *
+ * A plain `{}` is still exempt: a handler that returns nothing meaningful is
+ * not making a declaration mistake about its shape.
+ */
+function carriesSomething(source: unknown): boolean {
+  if (typeof source !== "object" || source === null) return false;
+  if (Array.isArray(source)) return source.length > 0;
+  if (Object.keys(source).length > 0) return true;
+  // Anything that is not a plain object carries state somewhere the own-key
+  // check cannot see. `null` prototype means a bare dictionary, which the
+  // key check above already judged.
+  const prototype = Object.getPrototypeOf(source) as object | null;
+  return prototype !== Object.prototype && prototype !== null;
+}
+
+/** The result's shape, for the first half of the message. */
+function describeResult(source: unknown): string {
+  if (Array.isArray(source)) {
+    return `an array of ${source.length} item(s) — a collection result needs 'cardinality: "many"' on the operation`;
+  }
+  const keys = Object.keys(source as object);
+  if (keys.length > 0) return `an object whose keys are ${nameList(keys)}`;
+  const name = (source as { constructor?: { name?: string } }).constructor?.name;
+  return `a ${name === undefined || name === "" ? "non-plain object" : name} instance, whose values are not own enumerable properties`;
+}
+
+/**
+ * The second half: what the result was projected *through*, which decides
+ * what the reader has to change.
+ *
+ * Naming the entity unconditionally was wrong. Where a `dto.output` is
+ * registered, the entity's fields are irrelevant — the projection is the
+ * DTO's keys — and telling an author to "declare `dto: { output: … }`" when
+ * they already did sends them to fix the thing they got right. Where one is
+ * registered but has no runtime shape (a declared-only class, which
+ * `@kavo/nest` supports on purpose so Swagger's decorators can answer), the
+ * fallback is the entity's projection and the missing initializers are the
+ * actual fault.
+ */
+function projectedAgainst(dto: DtoClass | null, entityName: string, slot: "item" | "list"): string {
+  if (dto === null) {
+    return (
+      `A custom operation's result is projected through the entity's '${slot}' shape unless the operation ` +
+      `registers one of its own, and none of those keys are fields of '${entityName}' — declare ` +
+      `'dto: { output: <YourResultDto> }' on the operation, with every field initialized so the class has a ` +
+      `runtime shape`
+    );
+  }
+  const keys = dtoShapeKeys(dto);
+  if (keys === null) {
+    return (
+      `The registered '${dto.name || "(anonymous)"}' declares no runtime fields — TypeScript erases an ` +
+      `uninitialized class field, so 'applied!: number' declares nothing at runtime and the projection falls ` +
+      `back to '${entityName}'. Give each field an initializer ('applied = 0')`
+    );
+  }
+  return (
+    `The result was projected through the registered '${dto.name || "(anonymous)"}', which declares ` +
+    `${nameList(keys)} — none of which the handler returned. The DTO and the handler disagree about the ` +
+    `result's shape; change whichever is wrong`
+  );
 }
