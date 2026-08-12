@@ -379,9 +379,32 @@ surface (ADR-0020) — the `ETag` response header, `If-None-Match` + `304`
 on single-item reads, `If-Match` + `412` on single-row writes, gated on
 as much of `caching.etag` as decoration time can see (entity and
 operation scope; the global scope arrives later, with
-`KavoModule.forRoot`). Allowlist-derived
-per-field query documentation needs ORM metadata, which doesn't exist at
-decoration time — revisited in a future DX pass.
+`KavoModule.forRoot`).
+
+The generic syntax of `filter`/`sort`/`limit`/`offset`/`fields` (doc 5),
+`include`/`fields[relation]`, and `If-None-Match`/`If-Match` is documented
+**once**, in the exported `KAVO_API_GUIDE` string (`swagger.ts`) — not
+repeated as identical boilerplate on every route of every entity. An app
+splices it into its own top-level document description
+(`new DocumentBuilder().setDescription(...)`); the reference apps' `main.ts`
+do this. Per-route `ApiQuery`/`ApiHeader` descriptions then carry only what
+the guide can't say:
+
+- `filter`/`sort`/`fields` carry the entity's actual
+  `allowlists.filterable`/`sortable`/`selectable` fields, when decoration
+  time can tell (issue #171). An **explicit array** selector resolves to
+  exactly the same value `resolveAllowlists` would produce, with no ORM
+  metadata involved, so reading it straight off the raw `EntityConfig` is
+  not a guess. The unconfigured default and an `{ exclude }` selector both
+  resolve against the entity's own columns — ORM metadata that doesn't
+  exist yet at decoration time (ADR-0012) — so those params carry no
+  description at all, deferring entirely to the shared guide rather than
+  imply a narrower list than actually exists.
+- `include` carries which relations are actually includable on the entity,
+  the same way. `fields[relation]` carries no description at all — its
+  relation name is already the param name.
+- `limit`/`offset` and `If-None-Match`/`If-Match` carry no per-route
+  description at all, either way: none of the four ever varies by entity.
 
 The success-response schema is chosen by the descriptor's cardinality
 rather than by a list of operation ids, matching what `mapResponse`
