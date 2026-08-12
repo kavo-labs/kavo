@@ -20,6 +20,7 @@ import {
 } from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import {
+  KAVO_API_GUIDE,
   Kavo,
   KavoModule,
   Override,
@@ -1448,8 +1449,136 @@ describe("@Kavo relation includes", () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     const include = params.find((param) => param.name === "include");
-    expect(include?.description).toContain("Includable: list");
-    expect(params.map((param) => param.name)).toContain("fields[list]");
+    // The generic "comma-separated, dot-separated for nesting" syntax now
+    // lives only in `KAVO_API_GUIDE`; `include`'s own description
+    // carries just the entity-specific allowlist.
+    expect(include?.description).toBe("Includable: list.");
+    const fieldsList = params.find((param) => param.name === "fields[list]");
+    expect(fieldsList).toBeDefined();
+    // `fields[relation]`'s relation name is already the param name, so it
+    // carries no description at all.
+    expect(fieldsList?.description).toBeUndefined();
+  });
+
+  it("documents that no relation is includable, on an entity that opted nothing in", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class ClosedController {}
+
+    await app.close();
+    await bootstrap(ClosedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const include = params.find((param) => param.name === "include");
+    expect(include?.description).toBe("No relation is includable on this entity.");
+  });
+});
+
+describe("@Kavo Swagger allowlist-aware query docs", () => {
+  @Kavo(Todo, { allowlists: { filterable: ["title", "priority"], sortable: ["priority"] } })
+  @Controller("todos")
+  class RestrictedController {}
+
+  beforeEach(async () => {
+    await bootstrap(RestrictedController);
+  });
+
+  it("names the entity's explicit filterable and sortable allowlists in the generated docs", async () => {
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const filter = params.find((param) => param.name === "filter");
+    const sort = params.find((param) => param.name === "sort");
+    // The generic filter/sort syntax now lives only in
+    // `KAVO_API_GUIDE`, so the per-route description carries
+    // nothing but what that shared guide can't say.
+    expect(filter?.description).toBe("Allowed fields: title, priority.");
+    expect(sort?.description).toBe("Allowed fields: priority.");
+  });
+
+  it("carries no description when an allowlist has no explicit array", async () => {
+    // `selectable` is unconfigured here, so its actual base set can only be
+    // resolved with ORM metadata — unavailable at decoration time. There is
+    // nothing entity-specific to say, so the param defers entirely to
+    // `KAVO_API_GUIDE` rather than claim a narrower list than the
+    // entity really allows.
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const fields = params.find((param) => param.name === "fields");
+    expect(fields?.description).toBeUndefined();
+  });
+
+  it("carries no description for an exclude-shaped allowlist", async () => {
+    @Kavo(Todo, { allowlists: { filterable: { exclude: ["id"] } } })
+    @Controller("todos")
+    class ExcludingController {}
+
+    await app.close();
+    await bootstrap(ExcludingController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const filter = params.find((param) => param.name === "filter");
+    expect(filter?.description).toBeUndefined();
+  });
+
+  it("documents an explicit empty allowlist as a closed door, not a blank description", async () => {
+    @Kavo(Todo, { allowlists: { sortable: [] } })
+    @Controller("todos")
+    class NoSortController {}
+
+    await app.close();
+    await bootstrap(NoSortController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const sort = params.find((param) => param.name === "sort");
+    expect(sort?.description).toBe("No field is allowed.");
+  });
+
+  it("carries no description at all on limit/offset — their syntax is always generic", async () => {
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    expect(params.find((param) => param.name === "limit")?.description).toBeUndefined();
+    expect(params.find((param) => param.name === "offset")?.description).toBeUndefined();
+  });
+});
+
+describe("KAVO_API_GUIDE", () => {
+  it("documents the generic filter/sort/limit/offset/fields syntax once, for apps to splice into their own document description", () => {
+    expect(KAVO_API_GUIDE).toContain("filter[field][operator]=value");
+    expect(KAVO_API_GUIDE).toContain("'-' prefix = descending");
+    expect(KAVO_API_GUIDE).toContain("clamped to the configured maximum");
+    expect(KAVO_API_GUIDE).toContain("zero-based index");
+    expect(KAVO_API_GUIDE).toContain("sparse fieldset");
+  });
+
+  it("documents the generic include/fields[relation] syntax", () => {
+    expect(KAVO_API_GUIDE).toContain("dot-separated for nesting");
+    expect(KAVO_API_GUIDE).toContain("sparse fieldset for an included relation node");
+  });
+
+  it("documents the generic If-None-Match/If-Match conditional-request semantics", () => {
+    expect(KAVO_API_GUIDE).toContain("a matching entity-tag answers 304 with no body");
+    expect(KAVO_API_GUIDE).toContain("Take the tag from an unnarrowed read");
+  });
+});
+
+describe("@Kavo Swagger conditional-request headers carry no per-route description", () => {
+  @Kavo(Todo)
+  @Controller("todos")
+  class ConditionalController {}
+
+  beforeEach(async () => {
+    await bootstrap(ConditionalController);
+  });
+
+  it("documents If-None-Match/If-Match with no description — the semantics live only in KAVO_API_GUIDE", async () => {
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    type HeaderParam = { name: string; in: string; description?: string };
+    const getParams = (document.paths["/todos/{id}"]?.get?.parameters ?? []) as HeaderParam[];
+    const putParams = (document.paths["/todos/{id}"]?.put?.parameters ?? []) as HeaderParam[];
+    const ifNoneMatch = getParams.find((p) => p.name === "If-None-Match" && p.in === "header");
+    const ifMatch = putParams.find((p) => p.name === "If-Match" && p.in === "header");
+    expect(ifNoneMatch?.description).toBeUndefined();
+    expect(ifMatch?.description).toBeUndefined();
   });
 });
 

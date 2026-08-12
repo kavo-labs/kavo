@@ -1,6 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { KAVO_API_GUIDE } from "@kavo/nest";
 import { AppModule } from "./app.module.js";
 import { createPostgresOrm, createSqliteOrm } from "./database.js";
 
@@ -38,7 +39,8 @@ async function bootstrap(): Promise<void> {
           "sorting, pagination, layered config, RFC 9457 problem-details " +
           "errors, `?include=owner`/`?include=pets`/`?include=tags` " +
           "relations loaded by populate, filtering and sorting across a " +
-          "relation path, and soft delete with restore/purge on owners.",
+          "relation path, and soft delete with restore/purge on owners.\n\n" +
+          KAVO_API_GUIDE,
       )
       .setVersion("0.0.0")
       .build(),

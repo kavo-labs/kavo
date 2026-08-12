@@ -14,7 +14,7 @@ import type { ComputedFieldDescriptor } from "./computed-field.js";
  * `exclude` is resolved against the entity's own columns at bootstrap
  * (`resolveAllowlists`), never evaluated eagerly here — the `@Kavo(...)`
  * config object is built at class-decoration time, before any ORM metadata
- * exists (ADR-0013), so there is nothing to resolve `exclude` against yet.
+ * exists (ADR-0012), so there is nothing to resolve `exclude` against yet.
  *
  * `Extra` widens both forms with names that are not paths on the entity —
  * only ever the entity's declared computed-field names, and only on

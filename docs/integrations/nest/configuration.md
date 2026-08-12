@@ -250,6 +250,8 @@ What a request may filter, sort, and select on — including relation paths. Any
 
 `{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field) except these", resolved at bootstrap against exactly the base set that key's plain default uses. Omit a key entirely and it derives from the `query` DTO or entity metadata instead.
 
+When `@nestjs/swagger` is installed, an explicit array here also names the generated `filter`/`sort`/`fields` `ApiQuery` descriptions with the entity's actual allowed fields. `{ exclude: [...] }` and an omitted key carry no per-route description at all — resolving either needs ORM metadata, which doesn't exist yet at `@Kavo` decoration time (see [ADR-0012](/internals/adr/0012-decoration-time-route-generation)). The generic `filter`/`sort`/`limit`/`offset`/`fields` syntax itself isn't repeated on every route — it's exported once as `KAVO_API_GUIDE` from `@kavo/nest`, for splicing into your own `DocumentBuilder().setDescription(...)` (see the reference apps' `main.ts`).
+
 **How to keep a column out of every response.** Name `selectable` and leave the column off it, or exclude it — both forms do the same thing:
 
 ```ts

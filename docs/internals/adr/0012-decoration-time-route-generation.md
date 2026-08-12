@@ -48,6 +48,9 @@ array.
   truth; the two can't drift.
 - Manual-method-wins is a one-line `hasOwnProperty` check at decoration
   time.
-- Limitation: decoration time has no ORM metadata, so Swagger docs can't
-  enumerate allowlist-derived per-field query params yet (doc 10 §4);
-  acceptable for now, revisited as a future DX option.
+- Limitation: decoration time has no ORM metadata, so Swagger docs can only
+  name an entity's allowlisted `filter`/`sort`/`fields` params when the
+  allowlist is an explicit array — which resolves identically with or
+  without metadata (issue #171); the unconfigured default and an
+  `{ exclude }` selector both need metadata to resolve and keep the
+  generic, unrestricted description (doc 10 §4).
