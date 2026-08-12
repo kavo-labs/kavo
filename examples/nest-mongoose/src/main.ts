@@ -2,6 +2,7 @@ import "reflect-metadata";
 import mongoose from "mongoose";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { KAVO_API_GUIDE } from "@kavo/nest";
 import { AppModule } from "./app.module.js";
 
 /**
@@ -24,7 +25,8 @@ async function bootstrap(): Promise<void> {
           "with filtering, sorting, pagination, layered config, RFC 9457 " +
           "problem-details errors, an `?include=author` relation loaded by " +
           "populate, and soft delete with restore/purge. Ids are MongoDB " +
-          "`_id` values, rendered as hex strings.",
+          "`_id` values, rendered as hex strings.\n\n" +
+          KAVO_API_GUIDE,
       )
       .setVersion("0.0.0")
       .build(),

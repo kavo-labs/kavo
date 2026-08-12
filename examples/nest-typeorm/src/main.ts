@@ -5,7 +5,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
-import { getKavoServiceToken } from "@kavo/nest";
+import { KAVO_API_GUIDE, getKavoServiceToken } from "@kavo/nest";
 import { createTransport } from "@kavo/sse";
 import { AppModule } from "./app.module.js";
 import { Owner } from "./owner/owner.entity.js";
@@ -64,7 +64,8 @@ async function bootstrap(): Promise<void> {
           "(`?include=owner`, `?include=pets`) and soft delete on owners. " +
           "Owner writes also publish over SSE — see the realtime example " +
           "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
-          "optionally `&filter[...]=...`).",
+          "optionally `&filter[...]=...`).\n\n" +
+          KAVO_API_GUIDE,
       )
       .setVersion("0.0.0")
       .build(),

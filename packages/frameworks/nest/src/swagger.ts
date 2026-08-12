@@ -1,5 +1,12 @@
 import { createRequire } from "node:module";
-import type { ClassRef, DtoResolver, EntityConfig, OperationDescriptor, OperationDtoMap } from "@kavo/core";
+import type {
+  ClassRef,
+  DtoResolver,
+  EntityConfig,
+  OperationDescriptor,
+  OperationDtoMap,
+  QueryFieldSelector,
+} from "@kavo/core";
 import { DefaultDtoResolver } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
 import { isSchemaHint, readSchemaHint, type SchemaHint } from "./schema-hints.js";
@@ -87,19 +94,89 @@ function cachingEnabled(config: EntityConfig<object> | undefined, operationId: s
   return perOperation ?? scoped?.caching?.etag ?? true;
 }
 
-const LIST_QUERY_PARAMS: readonly { name: string; description: string }[] = [
-  {
-    name: "filter",
-    description:
-      "Filter conditions: filter[field][operator]=value (operators: eq, ne, " +
-      "gt, gte, lt, lte, in, notIn, like, ilike, between, isNull, " +
-      "isNotNull; or/and/not groups; JSON escape hatch via filter={...}).",
-  },
-  { name: "sort", description: "Comma-separated fields; '-' prefix = descending." },
-  { name: "limit", description: "Page size (clamped to the configured maximum)." },
-  { name: "offset", description: "Zero-based index of the first returned row." },
-  { name: "fields", description: "Sparse fieldset: comma-separated field names." },
-];
+/**
+ * The generic syntax of every query param and conditional-request header a
+ * generated route can carry — identical on every route of every entity in
+ * every app, so it is documented **once** here rather than repeated as
+ * boilerplate across a Swagger document's routes (issue #171 follow-up).
+ * An app splices this into its own top-level document description, e.g.
+ * `new DocumentBuilder().setDescription(\`...\${KAVO_API_GUIDE}\`)`.
+ * Per-route `ApiQuery`/`ApiHeader` descriptions then carry only what this
+ * general guide *can't* say: which fields/relations this entity's config
+ * actually allows (see `listQueryParams` and the `include` block below).
+ * Conditional-request headers have nothing entity-specific to add at all —
+ * `If-None-Match`/`If-Match`'s semantics never vary by entity — so they
+ * carry no per-route description whatsoever, deferring entirely to this
+ * guide (ADR-0020).
+ */
+export const KAVO_API_GUIDE = `### List query parameters
+
+- \`filter\`: filter[field][operator]=value (operators: eq, ne, gt, gte, lt, lte, in, notIn, like, ilike, between, isNull, isNotNull; or/and/not groups; JSON escape hatch via filter={...}).
+- \`sort\`: comma-separated fields; '-' prefix = descending.
+- \`limit\`: page size (clamped to the configured maximum).
+- \`offset\`: zero-based index of the first returned row.
+- \`fields\`: sparse fieldset — comma-separated field names.
+
+Each list route's own \`filter\`/\`sort\`/\`fields\` parameter description names which fields are actually allowed, where the entity's config makes that known.
+
+### Relation includes (every read route)
+
+- \`include\`: comma-separated relation paths to embed, dot-separated for nesting (e.g. \`include=owner,pets.tags\`).
+- \`fields[relation]\`: sparse fieldset for an included relation node (e.g. \`fields[owner]=id,name\`).
+
+Each read route's own \`include\` parameter description names which relations are actually includable on that entity.
+
+### Conditional requests (single-row routes only)
+
+- \`If-None-Match\`: revalidate a cached copy — a matching entity-tag answers 304 with no body.
+- \`If-Match\`: apply this write only if the row's current ETag is one of these entity-tags. Take the tag from an unnarrowed read — a \`fields=\`/\`include=\`-narrowed one identifies a different representation and will not match.`;
+
+/**
+ * The `filter`/`sort`/`limit`/`offset`/`fields` params on a list route.
+ * `limit`/`offset` carry no per-route description at all — their syntax is
+ * always generic, so it lives only in `KAVO_API_GUIDE`.
+ * `filter`/`sort`/`fields` carry a description exactly when decoration
+ * time can name the entity's actual allowlisted fields (issue #171):
+ *
+ * `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
+ * (`packages/core/src/config/resolve-entity-config.ts`): it merges from
+ * nowhere but the entity's own `EntityConfig` — no global default, no
+ * per-operation override — so, unlike `cachingEnabled` above, there is no
+ * later-arriving scope this can miss. Only its **shape** limits what can be
+ * read here: an explicit array selector is used verbatim by
+ * `resolveFieldSelector`, with no ORM metadata involved, so it is exactly
+ * the value `ResolvedEntityConfig.allowlists` will carry — reading it off
+ * the raw config is not a guess. The unconfigured default and `{ exclude }`
+ * both resolve against the entity's own columns, which come from ORM
+ * metadata that does not exist yet at `@Kavo` decoration time (ADR-0012) —
+ * the same limitation `QueryFieldSelector`'s own doc comment names for
+ * `exclude` — so those carry no description, deferring entirely to the
+ * general guide, rather than imply a narrower list than actually exists.
+ */
+function listQueryParams(config: EntityConfig<object> | undefined): readonly { name: string; description?: string }[] {
+  const allowlists = config?.allowlists;
+  return [
+    { name: "filter", description: allowedFieldsDescription(allowlists?.filterable) },
+    { name: "sort", description: allowedFieldsDescription(allowlists?.sortable) },
+    { name: "limit" },
+    { name: "offset" },
+    { name: "fields", description: allowedFieldsDescription(allowlists?.selectable) },
+  ];
+}
+
+function allowedFieldsDescription(selector: QueryFieldSelector<object> | undefined): string | undefined {
+  const fields = explicitAllowlist(selector);
+  if (fields === null) return undefined;
+  // An explicit empty array is a real, allowed configuration ("nothing is
+  // filterable"), and must read as a closed door rather than as nothing to
+  // say at all — the same distinction `includableRelations` draws below.
+  return fields.length === 0 ? "No field is allowed." : `Allowed fields: ${fields.join(", ")}.`;
+}
+
+function explicitAllowlist(selector: QueryFieldSelector<object> | undefined): readonly string[] | null {
+  if (selector === undefined || "exclude" in selector) return null;
+  return selector;
+}
 
 export function applySwaggerMetadata(
   prototype: Record<string, unknown>,
@@ -134,13 +211,13 @@ export function applySwaggerMetadata(
   // same normalizer.
   const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
   if (isList) {
-    for (const param of LIST_QUERY_PARAMS) {
+    for (const param of listQueryParams(config)) {
       apply(
         swagger.ApiQuery({
           name: param.name,
           required: false,
           type: String,
-          description: param.description,
+          ...(param.description !== undefined ? { description: param.description } : {}),
         }),
       );
     }
@@ -149,6 +226,12 @@ export function applySwaggerMetadata(
   // Includes are documented from the entity config's relation allowlist —
   // the only relation knowledge decoration time has (ADR-0012). Every read
   // supports `include` with identical semantics, single-item ones included.
+  // The generic `include`/`fields[relation]` syntax lives only in
+  // `KAVO_API_GUIDE`; per-route, `include` carries just which
+  // relations this entity actually allows (mirroring `listQueryParams`
+  // above), and `fields[relation]` carries no description at all — its
+  // relation name is already the param name, so there is nothing
+  // entity-specific left to add.
   if (descriptor.kind === "read") {
     const includable = includableRelations(config);
     apply(
@@ -158,9 +241,8 @@ export function applySwaggerMetadata(
         type: String,
         description:
           includable.length === 0
-            ? "Relation paths to embed. No relation is includable on this entity."
-            : `Comma-separated relation paths to embed, dot-separated for nesting. ` +
-              `Includable: ${includable.join(", ")}.`,
+            ? "No relation is includable on this entity."
+            : `Includable: ${includable.join(", ")}.`,
       }),
     );
     for (const relation of includable) {
@@ -169,7 +251,6 @@ export function applySwaggerMetadata(
           name: `fields[${relation}]`,
           required: false,
           type: String,
-          description: `Sparse fieldset for the included '${relation}' node.`,
         }),
       );
     }
@@ -191,7 +272,9 @@ export function applySwaggerMetadata(
   // precedence chain at bootstrap; decoration time can only see the entity
   // and operation scopes of it (ADR-0012), so a `false` at the global scope
   // leaves these documented and inert — the same limitation the query-param
-  // documentation above already lives with.
+  // documentation above already lives with. `If-None-Match`/`If-Match`'s own
+  // semantics never vary by entity, so their `ApiHeader` carries no
+  // description at all — the full explanation lives only in `KAVO_API_GUIDE`.
   const cached = cachingEnabled(config, descriptor.id);
   // Collection responses carry no ETag (ADR-0020) — which is a statement
   // about cardinality, not about one operation id.
@@ -206,25 +289,10 @@ export function applySwaggerMetadata(
   );
   if (cached && route.hasIdParam) {
     if (descriptor.kind === "read") {
-      apply(
-        swagger.ApiHeader({
-          name: "If-None-Match",
-          required: false,
-          description: "Revalidate a cached copy: a matching entity-tag answers 304 with no body.",
-        }),
-      );
+      apply(swagger.ApiHeader({ name: "If-None-Match", required: false }));
       apply(swagger.ApiResponse({ status: 304, description: "The client's cached representation is still current." }));
     } else {
-      apply(
-        swagger.ApiHeader({
-          name: "If-Match",
-          required: false,
-          description:
-            "Apply this write only if the row's current ETag is one of these entity-tags. " +
-            "Take the tag from an unnarrowed read — a 'fields='/'include='-narrowed one identifies " +
-            "a different representation and will not match.",
-        }),
-      );
+      apply(swagger.ApiHeader({ name: "If-Match", required: false }));
       apply(
         swagger.ApiResponse({
           status: 412,
