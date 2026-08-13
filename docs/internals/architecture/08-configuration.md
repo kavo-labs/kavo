@@ -18,6 +18,9 @@ built-in defaults → global (createKavo) → entity (createCrud)
 | `pagination.count`                                                      | `true`                                         | `false` skips the count query; envelope reports `total: null`                                                                                 |
 | `query.maxFilterDepth` / `maxInValues`                                  | 3 / 100                                        |                                                                                                                                               |
 | `query.defaultSort`                                                     | `[]` (unset)                                   | order applied when a request supplies no `sort` (issue #56); see below                                                                        |
+| `query.search.enabled`                                                  | `false`                                        | `search[query]` is a 400 until turned on (issue #156, doc 05 §4)                                                                              |
+| `query.search.mode`                                                     | `"substring"`                                  | `"substring"` \| `"words"`; per-call override via `search[mode]`                                                                              |
+| `query.search.driver`                                                   | `"orm"`                                        | reserved discriminator — the only value accepted today; config-only, no wire counterpart                                                      |
 | `errors.exposeInternals`                                                | `false`                                        | leak driver detail into responses                                                                                                             |
 | `relations.maxIncludeDepth` / `maxIncludedNodes`                        | 2 / 10                                         | include depth budget and total node cap                                                                                                       |
 | `relations.edges.<name>`                                                | `{}`                                           | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowlists.includable`, entity scope only (ADR-0028) |
@@ -121,9 +124,9 @@ bootstrap rather than as a surprising response later
   spellings, by name for `{ ["__proto__"]: … }` and by inspecting the
   declared record's prototype for the object-literal `{ __proto__: … }`,
   which invokes the prototype setter and never reaches `Object.keys`;
-- a computed name in a configured `allowlists.filterable`/`sortable` —
-  there is no column to translate to `WHERE`/`ORDER BY`, and in-memory
-  post-fetch filtering is rejected rather than deferred;
+- a computed name in a configured `allowlists.filterable`/`sortable`/
+  `searchable` — there is no column to translate to `WHERE`/`ORDER BY`, and
+  in-memory post-fetch filtering is rejected rather than deferred;
 - a computed name declared by a registered `create`/`update`/`patch` DTO
   class — the value could only ever be discarded, and the DTO's runtime
   shape is what `@kavo/nest` builds `@ApiBody` from, so OpenAPI would
@@ -144,6 +147,16 @@ global/entity/operation scope, and when a per-call override is merged
 fast at the scope that introduced it instead of producing a broken
 `ORDER BY` on the first request that hits it. Doc 05 covers the
 request-time semantics (client `sort` vs. this fallback).
+
+### `allowlists.searchable`
+
+Same `QueryFieldSelector` shape and resolution as `filterable`/`sortable`/
+`selectable`, but its zero-config default is narrower: every own
+**string-kind** column, not every own column — a non-string column has
+nothing an `ILIKE` fragment can usefully match. Relation paths are
+permitted (unlike `filterable`/`sortable`), reusing the per-path join
+machinery `filter[...]` already resolves for relation filters. See doc 05
+§4 for the wire grammar it gates.
 
 ### `relations.edges.<name>.defaultInclude`
 

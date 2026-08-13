@@ -100,7 +100,7 @@ describe("coerceScalar — locale-independent wire coercion", () => {
 
   it("passes a value with no column metadata through as a string", () => {
     // Relation paths have no entry in the root entity's column map; the
-    // database compares them (doc 05 §4 records the open gap).
+    // database compares them (doc 05 §5 records the open gap).
     expect(coerceScalar("Helsinki", "profile.city", undefined)).toBe("Helsinki");
     expect(coerceScalar(42, "profile.rating", undefined)).toBe("42");
   });

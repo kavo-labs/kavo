@@ -376,7 +376,7 @@ describe("DefaultFilterParser — malformed bracket keys", () => {
  * Relation-path filtering (`filter[author.name][eq]=Ada`) is allowlist-gated
  * like everything else, and its value is *not* coerced: coercion consults
  * the root entity's column metadata only, where a dotted path has no entry
- * (doc 05 §4). Both halves are asserted through the real `parse()` path —
+ * (doc 05 §5). Both halves are asserted through the real `parse()` path —
  * `coerceScalar`/`parseBracketKey` are unit-tested in isolation elsewhere,
  * which cannot show that the parser wires them together this way.
  */
