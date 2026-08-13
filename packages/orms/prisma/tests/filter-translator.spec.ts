@@ -328,3 +328,47 @@ describe("translateFilter — relation paths", () => {
     });
   });
 });
+
+/**
+ * `search[query]` (issue #156) is synthesized by `QueryNormalizer` into
+ * ordinary `Filter`/`FilterGroup`/`ILIKE` AST nodes — no adapter-level code
+ * changed to support it. `%term%` translates to Prisma's `contains`, per
+ * the wildcard-position table above.
+ */
+describe("translateFilter — search[...] synthesis (issue #156)", () => {
+  it("translates a substring-mode OR group across two searched fields to 'contains'", () => {
+    expect(
+      translate(group("OR", [condition("title", "ILIKE", "%dune%"), condition("blurb", "ILIKE", "%dune%")])),
+    ).toEqual({
+      OR: [{ title: { contains: "dune" } }, { blurb: { contains: "dune" } }],
+    });
+  });
+
+  it("translates a words-mode AND of per-word OR groups", () => {
+    expect(
+      translate(
+        group("AND", [
+          group("OR", [condition("title", "ILIKE", "%blue%"), condition("blurb", "ILIKE", "%blue%")]),
+          group("OR", [condition("title", "ILIKE", "%book%"), condition("blurb", "ILIKE", "%book%")]),
+        ]),
+      ),
+    ).toEqual({
+      AND: [
+        { OR: [{ title: { contains: "blue" } }, { blurb: { contains: "blue" } }] },
+        { OR: [{ title: { contains: "book" } }, { blurb: { contains: "book" } }] },
+      ],
+    });
+  });
+
+  it("nests a relation-path field the same way an ordinary relation filter does", () => {
+    expect(
+      translate(group("OR", [condition("title", "ILIKE", "%ada%"), condition("author.name", "ILIKE", "%ada%")])),
+    ).toEqual({
+      OR: [{ title: { contains: "ada" } }, { author: { name: { contains: "ada" } } }],
+    });
+  });
+
+  it("narrows to a single search[fields] entry as a single condition, no OR wrapper", () => {
+    expect(translate(condition("title", "ILIKE", "%dune%"))).toEqual({ title: { contains: "dune" } });
+  });
+});
