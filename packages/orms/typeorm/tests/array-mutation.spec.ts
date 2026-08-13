@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DataSource } from "typeorm";
-import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import { NotFoundException, type RepositoryAdapter } from "@kavo/core";
 import { createInfrastructure } from "@kavo/typeorm";
 
@@ -29,8 +29,33 @@ class Novel {
   writer!: Writer;
 }
 
+/** A `ManyToMany` fixture — a junction-table write, architecturally distinct
+ * from `Writer.novels`'s foreign-key-column write above. */
+@Entity()
+class Article {
+  @PrimaryGeneratedColumn()
+  id!: number;
+
+  @Column("varchar")
+  title!: string;
+
+  @ManyToMany(() => Topic)
+  @JoinTable()
+  topics!: Topic[];
+}
+
+@Entity()
+class Topic {
+  @PrimaryGeneratedColumn()
+  id!: number;
+
+  @Column("varchar")
+  name!: string;
+}
+
 let dataSource: DataSource;
 let adapter: RepositoryAdapter<Writer>;
+let articleAdapter: RepositoryAdapter<Article>;
 
 function context(operation = "replaceNovels") {
   return { entityName: "Writer", operation, config: { softDelete: { strategy: "hard" } } } as never;
@@ -40,11 +65,12 @@ beforeAll(async () => {
   dataSource = new DataSource({
     type: "better-sqlite3",
     database: ":memory:",
-    entities: [Writer, Novel],
+    entities: [Writer, Novel, Article, Topic],
     synchronize: true,
   });
   await dataSource.initialize();
   adapter = createInfrastructure(dataSource).adapterFor(Writer);
+  articleAdapter = createInfrastructure(dataSource).adapterFor(Article);
 });
 
 afterAll(async () => {
@@ -54,6 +80,8 @@ afterAll(async () => {
 beforeEach(async () => {
   await dataSource.getRepository(Novel).clear();
   await dataSource.getRepository(Writer).clear();
+  await dataSource.getRepository(Article).clear();
+  await dataSource.getRepository(Topic).clear();
 });
 
 async function seed(): Promise<{ writerId: number; novelIds: number[] }> {
@@ -120,5 +148,60 @@ describe("TypeOrmRepositoryAdapter#replaceRelation (arrayMutation's replace stra
 
   it("raises NotFoundException for a parent id that does not exist", async () => {
     await expect(adapter.replaceRelation!(999999, "novels", [], context())).rejects.toThrowError(NotFoundException);
+  });
+
+  it("raises NotFoundException for a member id that does not exist, rather than a silent no-op", async () => {
+    const { writerId, novelIds } = await seed();
+    await expect(adapter.replaceRelation!(writerId, "novels", [novelIds[0]!, 999999], context())).rejects.toThrowError(
+      NotFoundException,
+    );
+
+    // The rejected write must not have partially applied.
+    const remaining = await dataSource.getRepository(Novel).find({ where: { writer: { id: writerId } } });
+    expect(remaining.map((novel) => novel.id).sort()).toEqual([...novelIds].sort());
+  });
+});
+
+function articleContext(operation = "replaceTopics") {
+  return { entityName: "Article", operation, config: { softDelete: { strategy: "hard" } } } as never;
+}
+
+async function seedArticle(): Promise<{ articleId: number; topicIds: number[] }> {
+  const article = await dataSource.getRepository(Article).save({ title: "Piece" });
+  const topics = await dataSource.getRepository(Topic).save([{ name: "A" }, { name: "B" }]);
+  return { articleId: article.id, topicIds: topics.map((topic) => topic.id) };
+}
+
+describe("TypeOrmRepositoryAdapter#replaceRelation — ManyToMany (junction-table writes)", () => {
+  it("adds and removes members through the junction table", async () => {
+    const { articleId, topicIds } = await seedArticle();
+    await articleAdapter.replaceRelation!(articleId, "topics", [topicIds[0]!], articleContext());
+
+    const remaining = await dataSource
+      .getRepository(Article)
+      .findOne({ where: { id: articleId }, relations: { topics: true } });
+    expect(remaining?.topics.map((topic) => topic.id)).toEqual([topicIds[0]]);
+  });
+
+  it("clears every member when memberIds is null", async () => {
+    const { articleId } = await seedArticle();
+    await articleAdapter.replaceRelation!(articleId, "topics", null, articleContext());
+
+    const remaining = await dataSource
+      .getRepository(Article)
+      .findOne({ where: { id: articleId }, relations: { topics: true } });
+    expect(remaining?.topics).toEqual([]);
+  });
+
+  it("raises NotFoundException for a nonexistent member id, rather than a silent no-op", async () => {
+    const { articleId, topicIds } = await seedArticle();
+    await expect(
+      articleAdapter.replaceRelation!(articleId, "topics", [topicIds[0]!, 999999], articleContext()),
+    ).rejects.toThrowError(NotFoundException);
+
+    const remaining = await dataSource
+      .getRepository(Article)
+      .findOne({ where: { id: articleId }, relations: { topics: true } });
+    expect(remaining?.topics).toEqual([]);
   });
 });

@@ -18,6 +18,7 @@ import {
   readFilter,
 } from "@kavo/core";
 import type { DataSource, DeepPartial, ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
+import { In } from "typeorm";
 import { FilterTranslator } from "./filter-translator.js";
 import { mapDriverError } from "./error-mapping.js";
 
@@ -473,6 +474,29 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       const desiredIds = new Set(memberIds ?? []);
       const toAdd = [...desiredIds].filter((memberId) => !currentIds.has(memberId));
       const toRemove = [...currentIds].filter((memberId) => !desiredIds.has(memberId));
+      if (toAdd.length > 0) {
+        // `addAndRemove` on a to-many owned by a foreign-key column (the
+        // one-to-many case) issues `UPDATE … WHERE id IN (…)`, which simply
+        // affects zero rows for a member id that doesn't exist — no
+        // constraint violation for `mapDriverError` to translate. Checked
+        // explicitly so a nonexistent member id is a 404, not a silent
+        // no-op the caller reads back as success.
+        const targetRepository = this.dataSource.getRepository<ObjectLiteral>(
+          relationMetadata.inverseEntityMetadata.target as ClassRef<ObjectLiteral>,
+        );
+        const found = await targetRepository.find({
+          where: { [relatedIdField]: In(toAdd) } as never,
+          select: { [relatedIdField]: true } as never,
+        });
+        const foundIds = new Set(found.map((row) => row[relatedIdField] as EntityId));
+        const missing = toAdd.filter((memberId) => !foundIds.has(memberId));
+        if (missing.length > 0) {
+          throw new NotFoundException({
+            messageParams: { entity: relationMetadata.inverseEntityMetadata.name, id: missing.join(", ") },
+            context: errorContext(context),
+          });
+        }
+      }
       if (toAdd.length > 0 || toRemove.length > 0) {
         await relationBuilder.addAndRemove(toAdd, toRemove);
       }
