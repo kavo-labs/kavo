@@ -94,17 +94,41 @@ resolved allowlist for the same reason.
 **This is a breaking change to `EntityConfig`/`RelationEdgeSettings`'s public
 shape.** Any app writing `relations.edges.<name>.includable` needs a
 migration: move the relation names to `allowlists.includable`, keep any
-`defaultInclude`/`maxDepth`/`strategy` on `relations.edges.<name>` as before.
+`maxDepth`/`strategy` on `relations.edges.<name>` as before. `defaultInclude`
+needs more care than a mechanical move if it was set at **global**
+(`defaults`) scope — see the next consequence.
 
 **`includable` can no longer be set at global (`createKavo`) or per-operation
-scope.** `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS` —
-it merges from nowhere but the entity's own `EntityConfig`, exactly like
+scope, and a global `defaultInclude` now fails loudly instead of silently.**
+`allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS` — it merges
+from nowhere but the entity's own `EntityConfig`, exactly like
 `filterable`/`sortable`/`selectable` already did (`swagger.ts` documents the
-same limitation for those three). A relation reachable only through
-`include=` and never given its own `createCrud`/`@Kavo` call — legitimate,
-and covered in doc 12 §2 — can no longer have that relation's own further
-relations opened by a caller-side global default; opening them now requires
-giving that target entity its own `createCrud`/`@Kavo` registration.
+same limitation for those three). Before this change, a global
+`defaults.relations.edges.<name>.defaultInclude: true` was safe: naming the
+relation in `edges` at all was itself the opt-in, so it needed no companion
+grant. It is not safe to leave in place now — `validateIncludableRelations`
+cross-checks `defaultInclude` against `allowlists.includable`, which cannot
+be set at that same global scope, so a global `defaultInclude: true` with no
+matching entity-level grant is a bootstrap `ConfigurationException` on every
+entity that happens to have a relation of that name. This is deliberate
+(failing loudly at bootstrap is preferable to the alternative — silently
+dropping the setting, which would be `defaultInclude`'s own contract broken
+silently), but it means the migration is not purely mechanical for this one
+sub-key: `defaultInclude` set at global scope has to move down to each
+entity's own `relations.edges.<name>`, alongside that entity's
+`allowlists.includable` grant, not just have its host relation renamed.
+Separately: a relation reachable only through `include=` and never given its
+own `createCrud`/`@Kavo` call — legitimate, and covered in doc 12 §2 — can no
+longer have that relation's own further relations opened by a caller-side
+global default; opening them now requires giving that target entity its own
+`createCrud`/`@Kavo` registration.
+
+**`DefaultRelationRegistry`'s constructor signature changed, and it is a
+barrel export.** `(descriptors, edges, entityName)` became `(descriptors,
+includable, edges, entityName)` — a parameter inserted in the middle, not
+appended. Any caller constructing one directly (outside the
+`resolveEntityConfig` call this ADR's decision lives in) needs to add the new
+`includable: readonly string[]` argument in the right position.
 
 **Swagger's `include`/`fields[relation]` docs read `allowlists.includable`
 instead of `relations.edges`, with one added case.** `{ exclude }` cannot be
@@ -115,22 +139,27 @@ the same limitation the other three allowlist keys already have — so
 advertises the `include` parameter without a description rather than omitting
 a parameter that may well do something.
 
-**`{ exclude }` fails open on a name that matches nothing — the same hazard
-ADR-0026 §"Consequences" documents for `selectable`, but landing on a
-fail-closed gate this time.** `resolveIncludableSelector` does no existence
-check, so `{ exclude: ["ptes"] }` on an entity whose relation is actually
-named `pets` excludes nothing and opens **every** relation — the typo defeats
-the exclusion rather than producing a bootstrap error, because the base set
-subtracts a name that was never in it. `IncludePath<Entity, 1>` catches this
-at compile time for a properly typed config; it does not for a config built
+**`{ exclude }`'s own names are existence-checked, unlike the other three
+allowlist keys' `{ exclude }` form.** An earlier draft of this change left
+`resolveIncludableSelector` with no existence check on `{ exclude }`'s names,
+mirroring `resolveFieldSelector`'s behavior for `filterable`/`sortable`/
+`selectable` — a name that matches nothing there silently excludes nothing
+(the same hazard ADR-0026 §"Consequences" documents for `selectable`, left
+open as a follow-up). That mirroring was wrong for this key specifically:
+`{ exclude: ["ptes"] }` on an entity whose relation is actually named `pets`
+would have excluded nothing and opened **every** relation — the typo
+defeating the exclusion rather than producing a bootstrap error, on the one
+allowlist whose whole posture is fail-closed by default. Unlike
+`selectable`'s version of the hazard, which costs one served column, this one
+would have cost the entire relation surface. `resolveIncludableSelector`
+therefore checks `{ exclude }`'s names against the entity's real relations
+and throws `ConfigurationException` at `allowlists.includable.exclude` on a
+typo, the same fail-fast treatment the plain-array form already had.
+`IncludePath<Entity, 1>` still catches most typos at compile time for a
+properly typed config; this check is what catches the rest — a config built
 through `as never`/erasure, which every ORM adapter's own tests use for
 relation names that don't type-check cleanly against a marker class or a
-lean-document shape (ADR-0017, ADR-0018). Unlike `selectable`'s version of
-this hazard — which costs one served column — this one costs the entire
-relation surface, on the one allowlist whose whole posture is fail-closed. A
-bootstrap existence check on `{ exclude }`'s names, the same follow-up
-ADR-0026 left open for its own case, is the fix and is deliberately not
-bundled here.
+lean-document shape (ADR-0017, ADR-0018).
 
 ## References
 

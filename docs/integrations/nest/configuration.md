@@ -141,11 +141,23 @@ open it to `include=`.
 `relations.edges.<name>.includable: true` was the opt-in — naming a relation
 here, with no `includable` key at all, opened it by default. That key is
 gone. Move each opted-in relation name to `allowlists.includable` (below);
-keep any `defaultInclude`/`maxDepth`/`strategy` on `relations.edges.<name>`
-exactly where it was. `allowlists.includable` is entity-scope-only config
-(no global `defaults`, no per-operation override), so a permission
-previously granted through a global default now needs its own
-`createCrud`/`@Kavo` registration per entity.
+keep any `maxDepth`/`strategy` on `relations.edges.<name>` exactly where it
+was. `allowlists.includable` is entity-scope-only config (no global
+`defaults`, no per-operation override), so a permission previously granted
+through a global default now needs its own `createCrud`/`@Kavo` registration
+per entity.
+
+**`defaultInclude` needs its own care if it was set at global (`defaults`)
+scope.** Before this change, naming a relation in a global
+`defaults.relations.edges.<name>` was itself the opt-in, so a global
+`defaultInclude: true` was safe by construction. It is not safe to leave
+where it was: `allowlists.includable` cannot be set globally, so a global
+`defaultInclude: true` with no _entity-level_ `allowlists.includable` naming
+that relation is now a **bootstrap crash** (`ConfigurationException`) on
+every entity that happens to have a relation of that name — not a silent
+no-op. Move `defaultInclude: true` down to each entity's own
+`relations.edges.<name>` alongside that entity's `allowlists.includable`
+grant, rather than leaving it at global scope.
 
 ### `caching`
 

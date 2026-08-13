@@ -115,9 +115,20 @@ describe("include resolution", () => {
   });
 
   it("fails at bootstrap when relations.edges names a relation the entity does not have", () => {
-    expect(() => blog({ author: { relations: { edges: { ghosts: { strategy: "join" } } } } })).toThrow(
-      ConfigurationException,
-    );
+    try {
+      blog({ author: { relations: { edges: { ghosts: { strategy: "join" } } } } });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      // A distinct path from the sibling allowlists.includable typo check
+      // above — edges (tuning) and includable (permission) are two
+      // different config keys that both fail fast on the same kind of
+      // typo, and the path is what tells them apart.
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "relations.edges.ghosts",
+      });
+    }
   });
 
   it("merges overlapping paths into one tree", async () => {

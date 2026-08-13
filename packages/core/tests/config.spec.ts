@@ -225,6 +225,10 @@ describe("resolveEntityConfig — bootstrap", () => {
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author.operations.findMany",
+        path: "relations.edges.posts",
+      });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
   });
@@ -243,8 +247,26 @@ describe("resolveEntityConfig — allowlists.includable", () => {
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "relations.edges.posts",
+      });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
+  });
+
+  it("rejects defaultInclude set at global scope when no entity opts the relation into allowlists.includable", () => {
+    // Migration hazard: `relations.edges.<name>.defaultInclude` at global
+    // `defaults` scope used to be safe — naming the relation at all was the
+    // opt-in before this PR. It is not safe now: `allowlists.includable` is
+    // entity-scope-only, so a global defaultInclude with no matching entity
+    // grant is a bootstrap crash on every entity sharing that relation name,
+    // not a silent no-op. Pinning the crash here so a future change to this
+    // cross-check doesn't silently turn it into the no-op adopters might
+    // expect.
+    expect(() =>
+      resolveEntityConfig(authorMetadata, undefined, { relations: { edges: { posts: { defaultInclude: true } } } }),
+    ).toThrow(ConfigurationException);
   });
 
   it("accepts defaultInclude on a relation allowlists.includable named", () => {
@@ -267,7 +289,31 @@ describe("resolveEntityConfig — allowlists.includable", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "allowlists.includable",
+      });
       expect((error as ConfigurationException).detail).toContain("ghosts");
+    }
+  });
+
+  it("fails fast on a typo'd relation name in allowlists.includable's { exclude } form", () => {
+    // Unlike `resolveFieldSelector`'s `{ exclude }` (filterable/sortable/
+    // selectable), which silently excludes nothing on a name that matches
+    // nothing, `includable`'s `{ exclude }` checks its own names — a typo
+    // here would otherwise open every relation instead of leaving the
+    // intended one closed, the opposite of what the author wrote.
+    try {
+      resolveEntityConfig(authorMetadata, { allowlists: { includable: { exclude: ["ptes" as never] } } }, undefined);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "allowlists.includable.exclude",
+      });
+      expect((error as ConfigurationException).detail).toContain("ptes");
     }
   });
 

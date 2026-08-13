@@ -296,7 +296,7 @@ function resolveAllowlists<Entity extends object>(
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
     selectable: resolveFieldSelector(selectableBase, configured?.selectable),
-    includable: resolveIncludableSelector(relationNames, configured?.includable),
+    includable: resolveIncludableSelector(metadata.name, relationNames, configured?.includable),
   };
   for (const key of ["filterable", "sortable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
@@ -484,16 +484,36 @@ function resolveFieldSelector<Entity>(
  * `includable`'s own resolver, not `resolveFieldSelector` reused: the
  * unconfigured default is `[]`, not `base` — the opt-in direction
  * `QueryAllowlists.includable`'s doc comment calls out (ADR-0028). An
- * explicit array is used verbatim; `{ exclude }` still resolves against
- * `base` (every relation), so `{ exclude: [] }` is the one spelling that
- * opts every relation in at once.
+ * explicit array is used verbatim (and is checked for typos later, when
+ * `DefaultRelationRegistry` builds the registry); `{ exclude }` still
+ * resolves against `base` (every relation), so `{ exclude: [] }` is the one
+ * spelling that opts every relation in at once.
+ *
+ * `{ exclude }`'s own names *are* checked here, unlike `resolveFieldSelector`'s
+ * — a name that matches nothing in `base` would otherwise silently exclude
+ * nothing, so `{ exclude: ["ptes"] }` on an entity whose relation is actually
+ * `pets` would open *every* relation instead of the one name meant to stay
+ * closed. That is a worse failure mode here than on `filterable`/`sortable`/
+ * `selectable`: this is the one allowlist that is fail-closed by default, so
+ * a typo silently flipping it wide open is exactly the mistake the opt-in
+ * default exists to prevent.
  */
 function resolveIncludableSelector<Entity>(
+  entityName: string,
   base: readonly IncludePath<Entity, 1>[],
   selector: RelationFieldSelector<Entity> | undefined,
 ): readonly IncludePath<Entity, 1>[] {
   if (selector === undefined) return [];
   if (!("exclude" in selector)) return selector;
+  const known = new Set<string>(base as readonly string[]);
+  for (const name of selector.exclude) {
+    if (known.has(name as string)) continue;
+    throw new ConfigurationException(
+      entityName,
+      "allowlists.includable.exclude",
+      `'${name}' is not a relation of ${entityName} (relations: ${[...known].join(", ") || "none"})`,
+    );
+  }
   const excluded = new Set(selector.exclude);
   return base.filter((path) => !excluded.has(path));
 }
