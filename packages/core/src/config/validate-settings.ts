@@ -79,6 +79,22 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     }
   }
 
+  bool("query.search.enabled", settings.query.search.enabled);
+  if (settings.query.search.mode !== "substring" && settings.query.search.mode !== "words") {
+    throw new ConfigurationException(
+      entityName,
+      "query.search.mode",
+      `expected "substring" or "words", got ${JSON.stringify(settings.query.search.mode)}`,
+    );
+  }
+  if (settings.query.search.driver !== "orm") {
+    throw new ConfigurationException(
+      entityName,
+      "query.search.driver",
+      `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(settings.query.search.driver)}`,
+    );
+  }
+
   bool("errors.exposeInternals", settings.errors.exposeInternals);
 
   positiveInt("relations.maxIncludeDepth", settings.relations.maxIncludeDepth);

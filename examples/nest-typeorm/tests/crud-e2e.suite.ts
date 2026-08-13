@@ -107,6 +107,29 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(response.body.items.map((c: { name: string }) => c.name)).toEqual(["Tigger", "Whiskers"]);
     });
 
+    it("free-text searches the searchable allowlist (issue #156)", async () => {
+      // Cats already seeded by the first test in this file — no reset
+      // between tests, and the suite relies on execution order (as every
+      // test below this point already does).
+      const substring = await request(server()).get("/cats").query("search[query]=hisk").expect(200);
+      expect(substring.body.items.map((c: { name: string }) => c.name)).toEqual(["Whiskers"]);
+
+      // Composes (AND) with an existing filter[...]. Both "Shadow" and
+      // "Whiskers" contain "h"; "Mittens"/"Tigger" don't share both traits.
+      const combined = await request(server())
+        .get("/cats")
+        .query("search[query]=h&filter[size][eq]=small&sort=name")
+        .expect(200);
+      expect(combined.body.items.map((c: { name: string }) => c.name)).toEqual(["Shadow", "Whiskers"]);
+
+      // Off by default: TagController never set `query.search.enabled` —
+      // this is CatController's own opt-in, not process-wide.
+      const disabled = await request(server()).get("/tags").query("search[query]=x").expect(400);
+      expect(disabled.body.errors).toEqual([
+        expect.objectContaining({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      ]);
+    });
+
     it("applies sparse fieldsets after DTO mapping", async () => {
       const response = await request(server()).get("/cats").query("fields=id,name&sort=name&limit=1").expect(200);
       expect(Object.keys(response.body.items[0])).toEqual(["id", "name"]);
@@ -299,6 +322,26 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(selected.body.errors).toEqual([
         expect.objectContaining({ field: "deletedAt", code: "KAVO_QUERY_INVALID_FIELD" }),
       ]);
+    });
+
+    it("free-text searches every own string column by default (issue #156)", async () => {
+      // Owner leaves `allowlists.searchable` unconfigured, so it defaults to
+      // every own string column: `name` and `email` both match.
+      await request(server()).post("/owners").send({ name: "Ada Lovelace", email: "lovelace@x.io" }).expect(201);
+      await request(server()).post("/owners").send({ name: "Hopper", email: "grace.h@x.io" }).expect(201);
+
+      const byName = await request(server()).get("/owners").query("search[query]=lovelace").expect(200);
+      expect(byName.body.items.map((o: { name: string }) => o.name)).toEqual(["Ada Lovelace"]);
+
+      const byEmail = await request(server()).get("/owners").query("search[query]=grace.h@").expect(200);
+      expect(byEmail.body.items.map((o: { name: string }) => o.name)).toEqual(["Hopper"]);
+
+      // `search[fields]` narrows to a subset of the resolved allowlist.
+      const narrowed = await request(server())
+        .get("/owners")
+        .query("search[query]=grace.h@x.io&search[fields]=name")
+        .expect(200);
+      expect(narrowed.body.items).toEqual([]);
     });
 
     it("leaves hard-delete entities without restore or purge routes", async () => {

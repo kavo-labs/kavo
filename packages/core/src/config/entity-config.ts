@@ -98,6 +98,25 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * instead of a fail-open one.
    */
   readonly includable?: RelationFieldSelector<Entity>;
+  /**
+   * What `search[fields]` may narrow to, and the full field set a
+   * `search[query]` searches when it does not. Same shape and default
+   * posture as `filterable`/`sortable`: when unconfigured, every own
+   * **string**-kind column (relation paths are never included by default,
+   * same as the other three keys) — narrower than `filterable`'s "every own
+   * column" default, since a non-string column has nothing an `ILIKE`
+   * fragment can usefully match.
+   *
+   * Unlike `filterable`/`sortable`, entries **may** be relation paths
+   * (`'brand.name'`) — search is a single free-text term spread across
+   * whatever fields make sense for a "search box", and a relation path is
+   * exactly the shape `filterable` already resolves join/nesting for.
+   *
+   * `searchable` only grants *which fields* a search may touch; whether
+   * `search[query]` is accepted at all is `query.search.enabled`
+   * (`KavoSettings`), off by default — see doc 05 §4.
+   */
+  readonly searchable?: QueryFieldSelector<Entity>;
 }
 
 /**

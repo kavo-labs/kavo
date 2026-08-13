@@ -283,6 +283,9 @@ function resolveAllowlists<Entity extends object>(
   computed: ComputedFieldMap<Entity>,
 ): ResolvedQueryAllowlists<Entity> {
   const ownColumns = metadata.fields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
+  const stringColumns = metadata.fields
+    .filter((field) => field.kind === "string")
+    .map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
   const selectableBase = [
     ...(ownColumns as readonly string[]),
     ...Object.keys(computed).filter((name) => computed[name]?.selectable !== false),
@@ -297,16 +300,47 @@ function resolveAllowlists<Entity extends object>(
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
     selectable: resolveFieldSelector(selectableBase, configured?.selectable),
     includable: resolveIncludableSelector(metadata.name, relationNames, configured?.includable),
+    // Unlike `filterable`/`sortable`, its unconfigured default is narrower
+    // than "every own column" — a non-string column has nothing an `ILIKE`
+    // fragment can usefully match (doc 05 §4).
+    searchable: resolveFieldSelector(stringColumns, configured?.searchable),
   };
-  for (const key of ["filterable", "sortable"] as const) {
+  const COMPUTED_REJECTION = {
+    filterable: { verb: "filtered on", clause: "WHERE" },
+    sortable: { verb: "sorted on", clause: "ORDER BY" },
+    searchable: { verb: "searched on", clause: "WHERE" },
+  } as const;
+  for (const key of ["filterable", "sortable", "searchable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
       if (!Object.prototype.hasOwnProperty.call(computed, field)) continue;
+      const { verb, clause } = COMPUTED_REJECTION[key];
       throw new ConfigurationException(
         metadata.name,
         `allowlists.${key}`,
-        `'${field}' is a computed field on '${metadata.name}', which can never be ${
-          key === "filterable" ? "filtered on" : "sorted on"
-        } — it has no column to translate to ${key === "filterable" ? "WHERE" : "ORDER BY"}`,
+        `'${field}' is a computed field on '${metadata.name}', which can never be ${verb} — ` +
+          `it has no column to translate to ${clause}`,
+      );
+    }
+  }
+  // `searchable`'s *default* is filtered to string-kind own columns, but an
+  // explicit override is used verbatim (`resolveFieldSelector`) — so a
+  // deliberately (or mistakenly) named non-string own column would
+  // otherwise slip past bootstrap and only fail at request time, as a raw
+  // driver error (`LOWER(int)` has no meaning) rather than the clean 400
+  // every other misconfiguration in this file produces. Own columns are
+  // checkable here; a relation-path entry (`'brand.createdAt'`) is not —
+  // its target metadata isn't in scope — so it stays unchecked, the same
+  // laxity `filterable`/`sortable` already have for relation paths.
+  const fieldKinds = new Map(metadata.fields.map((field) => [field.name, field.kind]));
+  for (const field of allowlists.searchable as readonly string[]) {
+    if (field.includes(".")) continue;
+    const kind = fieldKinds.get(field);
+    if (kind !== undefined && kind !== "string") {
+      throw new ConfigurationException(
+        metadata.name,
+        "allowlists.searchable",
+        `'${field}' is a '${kind}'-kind column on '${metadata.name}', which an 'ILIKE' fragment ` +
+          `cannot usefully match — 'searchable' entries must be string-kind columns, or relation paths`,
       );
     }
   }

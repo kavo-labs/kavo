@@ -174,3 +174,68 @@ describe("translateFilter — relation paths", () => {
     expect(translate(condition("author", "EQ", "abc"), WITH_RELATIONS)).toEqual({ author: { $eq: "abc" } });
   });
 });
+
+/**
+ * `search[query]` (issue #156) is synthesized by `QueryNormalizer` into
+ * ordinary `Filter`/`FilterGroup`/`ILIKE` AST nodes — no adapter-level code
+ * changed to support it. `%term%` translates to the unanchored `$regex`
+ * `likeToRegExpSource` already produces for an interior wildcard.
+ */
+describe("translateFilter — search[...] synthesis (issue #156)", () => {
+  it("translates a substring-mode OR group across two searched fields to unanchored $regex", () => {
+    expect(
+      translate({
+        kind: "group",
+        operator: "OR",
+        children: [condition("title", "ILIKE", "%dune%"), condition("blurb", "ILIKE", "%dune%")],
+      } as FilterExpression),
+    ).toEqual({
+      $or: [
+        { title: { $regex: `^.*dune.*${END}`, $options: "is" } },
+        { blurb: { $regex: `^.*dune.*${END}`, $options: "is" } },
+      ],
+    });
+  });
+
+  it("translates a words-mode AND of per-word OR groups", () => {
+    const wordGroup = (word: string): FilterExpression => ({
+      kind: "group",
+      operator: "OR",
+      children: [condition("title", "ILIKE", `%${word}%`), condition("blurb", "ILIKE", `%${word}%`)],
+    });
+    expect(
+      translate({
+        kind: "group",
+        operator: "AND",
+        children: [wordGroup("blue"), wordGroup("book")],
+      } as FilterExpression),
+    ).toEqual({
+      $and: [
+        {
+          $or: [
+            { title: { $regex: `^.*blue.*${END}`, $options: "is" } },
+            { blurb: { $regex: `^.*blue.*${END}`, $options: "is" } },
+          ],
+        },
+        {
+          $or: [
+            { title: { $regex: `^.*book.*${END}`, $options: "is" } },
+            { blurb: { $regex: `^.*book.*${END}`, $options: "is" } },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("passes an embedded-document relation-path field through the same way an ordinary filter does", () => {
+    expect(translate(condition("address.city", "ILIKE", "%paris%"), WITH_RELATIONS)).toEqual({
+      "address.city": { $regex: `^.*paris.*${END}`, $options: "is" },
+    });
+  });
+
+  it("narrows to a single search[fields] entry as a single condition, no OR wrapper", () => {
+    expect(translate(condition("title", "ILIKE", "%dune%"))).toEqual({
+      title: { $regex: `^.*dune.*${END}`, $options: "is" },
+    });
+  });
+});

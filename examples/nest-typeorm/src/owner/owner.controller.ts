@@ -25,6 +25,11 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * `@kavo/sse`, so `GET /realtime?channel=Owner.<id>` or
  * `?channel=Owner` (every owner, issue #160's collection channel) streams
  * these events over `text/event-stream`.
+ *
+ * Search: `GET /owners?search[query]=ada` free-text searches every own
+ * string column — `name` and `email` — since `allowlists.searchable` is
+ * left unconfigured here (contrast Cat's explicit array): the zero-config
+ * default. `search[fields]=name` narrows a given request to just one.
  */
 @Kavo(Owner, {
   dto: {
@@ -36,6 +41,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
   caching: { etag: false },
   realtime: { enabled: true, events: {} },
   softDelete: { strategy: "soft" },
+  query: { search: { enabled: true } },
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves
   // to every own column except this one, without hand-enumerating the rest.

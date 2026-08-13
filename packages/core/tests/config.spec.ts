@@ -140,6 +140,78 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.filterable).toContain("status");
   });
 
+  it("defaults searchable to every own string-kind column, unlike filterable's every-column default", () => {
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    // `age` (number), `status` (enum), `createdAt` (date), `id` (number) are
+    // excluded — only `name`/`email` are string-kind.
+    expect(config.allowlists.searchable).toEqual(["name", "email"]);
+    expect(config.allowlists.filterable).toContain("age");
+  });
+
+  it("uses an explicit searchable array verbatim, including a relation path", () => {
+    const config = resolveEntityConfig(
+      authorMetadata,
+      { allowlists: { searchable: ["name", "posts.title" as never] } },
+      undefined,
+    );
+    expect(config.allowlists.searchable).toEqual(["name", "posts.title"]);
+  });
+
+  it("resolves searchable { exclude } against the string-column base, not every column", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { searchable: { exclude: ["email"] } } }, undefined);
+    expect(config.allowlists.searchable).toEqual(["name"]);
+  });
+
+  it("rejects a computed field named in allowlists.searchable", () => {
+    try {
+      resolveEntityConfig(
+        userMetadata,
+        {
+          computed: { fullName: { resolve: () => "" } },
+          allowlists: { searchable: ["fullName" as never] },
+        },
+        undefined,
+      );
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "User",
+        path: "allowlists.searchable",
+      });
+      expect((error as ConfigurationException).message).toContain("searched on");
+    }
+  });
+
+  it("rejects an explicit searchable entry naming a non-string own column", () => {
+    try {
+      resolveEntityConfig(userMetadata, { allowlists: { searchable: ["age" as never] } }, undefined);
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "User",
+        path: "allowlists.searchable",
+      });
+      expect((error as ConfigurationException).message).toContain("'number'-kind");
+    }
+  });
+
+  it("does not kind-check a relation-path searchable entry (no target metadata in scope)", () => {
+    // `posts.authorId` is a number-kind column on the relation target, not
+    // on `Author` itself — unreachable from `Author`'s own `metadata.fields`,
+    // so it is accepted verbatim rather than rejected, the same laxity
+    // `filterable`/`sortable` already have for relation paths.
+    const config = resolveEntityConfig(
+      authorMetadata,
+      { allowlists: { searchable: ["posts.authorId" as never] } },
+      undefined,
+    );
+    expect(config.allowlists.searchable).toEqual(["posts.authorId"]);
+  });
+
   it("resolves an entity-scope defaultSort", () => {
     const config = resolveEntityConfig(
       userMetadata,

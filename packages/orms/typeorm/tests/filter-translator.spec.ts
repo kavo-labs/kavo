@@ -336,3 +336,47 @@ describe("FilterTranslator — relation paths", () => {
     expect(sql).toContain(`("root"."title" = :p0)`);
   });
 });
+
+/**
+ * `search[query]` (issue #156) is synthesized by `QueryNormalizer` into
+ * ordinary `Filter`/`FilterGroup`/`ILIKE` AST nodes before it ever reaches
+ * an adapter — no adapter-level code changed to support it. These tests
+ * translate the exact shapes the normalizer produces, confirming the claim.
+ */
+describe("FilterTranslator — search[...] synthesis (issue #156)", () => {
+  it("translates a substring-mode OR group across two searched fields", () => {
+    const { sql } = translate(
+      group("OR", [condition("title", "ILIKE", "%dune%"), condition("blurb", "ILIKE", "%dune%")]),
+    );
+    expect(predicateOf(sql)).toBe(
+      `((LOWER("root"."title") LIKE LOWER(:p0) ESCAPE :p0Escape) OR (LOWER("root"."blurb") LIKE LOWER(:p1) ESCAPE :p1Escape))`,
+    );
+  });
+
+  it("translates a words-mode AND of per-word OR groups", () => {
+    const sql = whereOf(
+      group("AND", [
+        group("OR", [condition("title", "ILIKE", "%blue%"), condition("blurb", "ILIKE", "%blue%")]),
+        group("OR", [condition("title", "ILIKE", "%book%"), condition("blurb", "ILIKE", "%book%")]),
+      ]),
+    );
+    expect(sql).toContain(`LOWER("root"."title") LIKE LOWER(:p0)`);
+    expect(sql).toContain(`LOWER("root"."blurb") LIKE LOWER(:p1)`);
+    expect(sql).toContain(`LOWER("root"."title") LIKE LOWER(:p2)`);
+    expect(sql).toContain(`LOWER("root"."blurb") LIKE LOWER(:p3)`);
+    expect(sql).toMatch(/^\(\(.+\) AND \(.+\)\)$/);
+  });
+
+  it("joins a relation-path field the same way an ordinary relation filter does", () => {
+    const { sql } = translate(
+      group("OR", [condition("title", "ILIKE", "%ada%"), condition("author.name", "ILIKE", "%ada%")]),
+    );
+    expect(sql).toContain(`LEFT JOIN "author" "root__author"`);
+    expect(sql).toContain(`LOWER("root__author"."name") LIKE LOWER(:p1)`);
+  });
+
+  it("narrows to a single search[fields] entry as a single ILIKE condition, no OR wrapper", () => {
+    const { sql } = translate(condition("title", "ILIKE", "%dune%"));
+    expect(predicateOf(sql)).toBe(`(LOWER("root"."title") LIKE LOWER(:p0) ESCAPE :p0Escape)`);
+  });
+});

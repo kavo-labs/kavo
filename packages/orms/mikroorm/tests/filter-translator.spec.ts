@@ -124,3 +124,65 @@ describe("translateFilter — groups", () => {
     expect(empty("AND")).toEqual({});
   });
 });
+
+/**
+ * `search[query]` (issue #156) is synthesized by `QueryNormalizer` into
+ * ordinary `Filter`/`FilterGroup`/`ILIKE` AST nodes — no adapter-level code
+ * changed to support it. `%term%` reaches SQL `$like`/`$ilike` verbatim, per
+ * the operator table above.
+ */
+describe("translateFilter — search[...] synthesis (issue #156)", () => {
+  it("translates a substring-mode OR group across two searched fields", () => {
+    expect(
+      translate(
+        {
+          kind: "group",
+          operator: "OR",
+          children: [condition("title", "ILIKE", "%dune%"), condition("blurb", "ILIKE", "%dune%")],
+        } as FilterExpression,
+        insensitive,
+      ),
+    ).toEqual({
+      $or: [{ title: { $ilike: "%dune%" } }, { blurb: { $ilike: "%dune%" } }],
+    });
+  });
+
+  it("translates a words-mode AND of per-word OR groups", () => {
+    const wordGroup = (word: string): FilterExpression =>
+      ({
+        kind: "group",
+        operator: "OR",
+        children: [condition("title", "ILIKE", `%${word}%`), condition("blurb", "ILIKE", `%${word}%`)],
+      }) as FilterExpression;
+    expect(
+      translate(
+        { kind: "group", operator: "AND", children: [wordGroup("blue"), wordGroup("book")] } as FilterExpression,
+        insensitive,
+      ),
+    ).toEqual({
+      $and: [
+        { $or: [{ title: { $ilike: "%blue%" } }, { blurb: { $ilike: "%blue%" } }] },
+        { $or: [{ title: { $ilike: "%book%" } }, { blurb: { $ilike: "%book%" } }] },
+      ],
+    });
+  });
+
+  it("nests a relation-path field the same way an ordinary relation filter does", () => {
+    expect(
+      translate(
+        {
+          kind: "group",
+          operator: "OR",
+          children: [condition("title", "ILIKE", "%ada%"), condition("author.name", "ILIKE", "%ada%")],
+        } as FilterExpression,
+        insensitive,
+      ),
+    ).toEqual({
+      $or: [{ title: { $ilike: "%ada%" } }, { author: { name: { $ilike: "%ada%" } } }],
+    });
+  });
+
+  it("narrows to a single search[fields] entry as a single condition, no OR wrapper", () => {
+    expect(translate(condition("title", "ILIKE", "%dune%"), insensitive)).toEqual({ title: { $ilike: "%dune%" } });
+  });
+});

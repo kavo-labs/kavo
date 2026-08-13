@@ -119,6 +119,34 @@ describe("validateSettings — query limits", () => {
   });
 });
 
+describe("validateSettings — query.search", () => {
+  it("defaults to disabled, substring mode, and the 'orm' driver", () => {
+    expect(BUILT_IN_DEFAULTS.query.search).toEqual({ enabled: false, mode: "substring", driver: "orm" });
+  });
+
+  it("rejects a non-boolean search.enabled", () => {
+    for (const value of ["true", 1, null]) {
+      expectRejected({ query: { search: { enabled: value } } }, "query.search.enabled", value);
+    }
+  });
+
+  it("rejects a search.mode outside substring/words", () => {
+    for (const value of ["Substring", "word", 1, null]) {
+      expectRejected({ query: { search: { mode: value } } }, "query.search.mode", value);
+    }
+  });
+
+  it("rejects any search.driver other than 'orm'", () => {
+    for (const value of ["postgres", "meilisearch", "", null]) {
+      expectRejected({ query: { search: { driver: value } } }, "query.search.driver", value);
+    }
+  });
+
+  it("accepts an explicit, well-formed search setting", () => {
+    expect(() => accept({ query: { search: { enabled: true, mode: "words", driver: "orm" } } })).not.toThrow();
+  });
+});
+
 describe("validateSettings — errors", () => {
   it("rejects a non-boolean exposeInternals", () => {
     for (const value of ["false", 0, null]) {

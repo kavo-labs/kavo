@@ -193,6 +193,67 @@ describe("@Kavo route generation", () => {
 });
 
 /**
+ * `search[query]`/`search[mode]`/`search[fields]` (issue #156), through a
+ * generated route — the wire-grammar mirror of `packages/core/tests/
+ * query-normalizer.spec.ts`'s unit coverage. `Todo` has exactly one
+ * string-kind column (`title`), so it also proves the default `searchable`
+ * allowlist (every own string column) with no explicit configuration.
+ */
+describe("@Kavo search[...] (issue #156)", () => {
+  @Kavo(Todo, { query: { search: { enabled: true } } })
+  @Controller("todos")
+  class SearchController {}
+
+  beforeEach(async () => {
+    await bootstrap(SearchController);
+    await request(server()).post("/todos").send({ title: "write docs" }).expect(201);
+    await request(server()).post("/todos").send({ title: "buy milk" }).expect(201);
+  });
+
+  it("synthesizes an ILIKE condition over the default searchable allowlist (substring, default mode)", async () => {
+    await request(server()).get("/todos?search[query]=doc").expect(200);
+    expect(adapter.lastQuery?.filter.root).toEqual({
+      kind: "condition",
+      field: "title",
+      operator: "ILIKE",
+      value: "%doc%",
+    });
+  });
+
+  it("ANDs one OR group per word in words mode", async () => {
+    await request(server()).get("/todos?search[query]=write docs&search[mode]=words").expect(200);
+    expect(adapter.lastQuery?.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        { kind: "condition", field: "title", operator: "ILIKE", value: "%write%" },
+        { kind: "condition", field: "title", operator: "ILIKE", value: "%docs%" },
+      ],
+    });
+  });
+});
+
+describe("@Kavo search[...] rejected when not enabled (issue #156)", () => {
+  @Kavo(Todo)
+  @Controller("todos")
+  class DisabledSearchController {}
+
+  beforeEach(async () => {
+    await bootstrap(DisabledSearchController);
+  });
+
+  it("rejects search[query] with a 400 problem-details document", async () => {
+    const response = await request(server())
+      .get("/todos?search[query]=doc")
+      .expect(400)
+      .expect("Content-Type", /application\/problem\+json/);
+    expect(response.body.errors).toContainEqual(
+      expect.objectContaining({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+    );
+  });
+});
+
+/**
  * Regression, over real HTTP because that is where the damage was: a single
  * anonymous GET whose query string carried a `__proto__` bracket segment used
  * to write into `Object.prototype`, and the write then leaked into every
@@ -1557,6 +1618,61 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     expect(params.find((param) => param.name === "limit")?.description).toBeUndefined();
     expect(params.find((param) => param.name === "offset")?.description).toBeUndefined();
+  });
+});
+
+/**
+ * `search[query]`/`search[mode]`/`search[fields]` docs (issue #156) are
+ * applied later than the rest — deferred to `KavoModule`'s discovery binder
+ * (`applySearchQueryDocs`), because whether they belong on the route
+ * depends on `query.search.enabled` resolved through the full precedence
+ * chain, and `allowlists.searchable`'s default/`{ exclude }` cases need ORM
+ * metadata that doesn't exist at `@Kavo` decoration time.
+ */
+describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
+  it("documents search[query]/search[mode]/search[fields] with the resolved searchable allowlist when enabled", async () => {
+    @Kavo(Todo, { query: { search: { enabled: true } } })
+    @Controller("todos")
+    class SearchDocsController {}
+
+    await bootstrap(SearchDocsController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const query = params.find((param) => param.name === "search[query]");
+    const mode = params.find((param) => param.name === "search[mode]");
+    const fields = params.find((param) => param.name === "search[fields]");
+    expect(query).toBeDefined();
+    expect(mode).toBeDefined();
+    // Unlike `filter`/`sort`/`fields` at decoration time, this is the fully
+    // *resolved* allowlist (ORM metadata already exists by the time this
+    // runs) — `title` is Todo's one string-kind column, the zero-config
+    // default.
+    expect(fields?.description).toBe("Allowed fields: title. Requires search[query].");
+  });
+
+  it("omits search[...] params entirely when search is not enabled", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class NoSearchController {}
+
+    await bootstrap(NoSearchController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    expect(params.find((param) => param.name === "search[query]")).toBeUndefined();
+    expect(params.find((param) => param.name === "search[mode]")).toBeUndefined();
+    expect(params.find((param) => param.name === "search[fields]")).toBeUndefined();
+  });
+
+  it("documents an explicit empty searchable allowlist as a closed door", async () => {
+    @Kavo(Todo, { query: { search: { enabled: true } }, allowlists: { searchable: [] } })
+    @Controller("todos")
+    class EmptySearchableController {}
+
+    await bootstrap(EmptySearchableController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const fields = params.find((param) => param.name === "search[fields]");
+    expect(fields?.description).toBe("No field is searchable. Requires search[query].");
   });
 });
 

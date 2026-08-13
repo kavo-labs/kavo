@@ -105,11 +105,14 @@ This is the shape of `defaults` above, and also of every entity-scope, operation
 
 ### `query`
 
-| Field            | Type              | Default | What it does                                                                                                                                                                                                        |
-| ---------------- | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxFilterDepth` | `number`          | `3`     | Max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other).                                                                                                                                 |
-| `maxInValues`    | `number`          | `100`   | Max array length for `in`, `notIn`, and `between` filter operators.                                                                                                                                                 |
-| `defaultSort`    | `readonly Sort[]` | `[]`    | Sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright — it never merges with this. Validated against the sortable allowlist, same as client-supplied sort. |
+| Field            | Type                       | Default       | What it does                                                                                                                                                                                                        |
+| ---------------- | -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxFilterDepth` | `number`                   | `3`           | Max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other).                                                                                                                                 |
+| `maxInValues`    | `number`                   | `100`         | Max array length for `in`, `notIn`, and `between` filter operators.                                                                                                                                                 |
+| `defaultSort`    | `readonly Sort[]`          | `[]`          | Sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright — it never merges with this. Validated against the sortable allowlist, same as client-supplied sort. |
+| `search.enabled` | `boolean`                  | `false`       | Whether `search[query]` is accepted at all — a 400 until turned on, even though `allowlists.searchable` itself defaults to every own string column. See [Search](/using-the-api#search).                            |
+| `search.mode`    | `"substring"` \| `"words"` | `"substring"` | Default `search[mode]` when a request doesn't override it per call.                                                                                                                                                 |
+| `search.driver`  | `"orm"`                    | `"orm"`       | Reserved discriminator for a future pluggable search backend — the only value accepted today. Config-only; there is no `search[driver]` wire token.                                                                 |
 
 ### `errors`
 
@@ -264,18 +267,20 @@ What a request may filter, sort, select, and include — including relation path
     sortable: ["id", "title"],
     selectable: ["id", "title", "author"],
     includable: ["author"],
+    searchable: ["title", "author"],
   },
 })
 ```
 
-| Field        | Type                                                                                    | What it does                                                                                                                                          |
-| ------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`                           | Fields usable in `filter[...]`.                                                                                                                       |
-| `sortable`   | same shape                                                                              | Fields usable in `sort=`.                                                                                                                             |
-| `selectable` | same shape                                                                              | Fields usable in `fields=`, **and what a response carries**.                                                                                          |
-| `includable` | `readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }` | Relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)). |
+| Field        | Type                                                                                    | What it does                                                                                                                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`                           | Fields usable in `filter[...]`.                                                                                                                                                                                                                                               |
+| `sortable`   | same shape                                                                              | Fields usable in `sort=`.                                                                                                                                                                                                                                                     |
+| `selectable` | same shape                                                                              | Fields usable in `fields=`, **and what a response carries**.                                                                                                                                                                                                                  |
+| `includable` | `readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }` | Relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).                                                                                                                         |
+| `searchable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`                           | Fields `search[query]`/`search[fields]` may search — relation paths permitted (unlike `filterable`/`sortable`). Default: every own **string-kind** column, not every own column. Also gated by `query.search.enabled` (off by default) — see [Search](/using-the-api#search). |
 
-`{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field; for `includable`, every own relation) except these", resolved at bootstrap against exactly the base set that key's plain default uses.
+`{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field; for `includable`, every own relation; for `searchable`, every own **string-kind** column) except these", resolved at bootstrap against exactly the base set that key's plain default uses.
 
 **`includable` is the one key here that does not default to "everything".** Omit `filterable`/`sortable`/`selectable` and it derives from the `query` DTO or entity metadata — every own column. Omit `includable` and it resolves to `[]` — **no relation is includable** — the same opt-in posture `relations.edges` had before this key existed. Write `{ exclude: [] }` to opt every own relation in at once; that is the one spelling that crosses the fail-closed default rather than narrowing a fail-open one.
 

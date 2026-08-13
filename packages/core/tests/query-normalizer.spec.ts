@@ -162,6 +162,224 @@ describe("QueryNormalizer — wire params", () => {
   });
 });
 
+describe("QueryNormalizer — search[...]", () => {
+  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: { enabled: true } } }, undefined);
+
+  it("rejects search[query] when search.enabled is false (the default)", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+  });
+
+  it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
+    const emptySearchable = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true } }, allowlists: { searchable: [] } },
+      undefined,
+    );
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+  });
+
+  it("synthesizes an OR group of ILIKE conditions across the searchable allowlist (substring, default)", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "ada" }, searchEnabled);
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "OR",
+      children: [
+        { kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" },
+        { kind: "condition", field: "email", operator: "ILIKE", value: "%ada%" },
+      ],
+    });
+  });
+
+  it("splits on whitespace and ANDs one OR group per word in words mode", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, searchEnabled);
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        {
+          kind: "group",
+          operator: "OR",
+          children: [
+            { kind: "condition", field: "name", operator: "ILIKE", value: "%blue%" },
+            { kind: "condition", field: "email", operator: "ILIKE", value: "%blue%" },
+          ],
+        },
+        {
+          kind: "group",
+          operator: "OR",
+          children: [
+            { kind: "condition", field: "name", operator: "ILIKE", value: "%iphone%" },
+            { kind: "condition", field: "email", operator: "ILIKE", value: "%iphone%" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("narrows to search[fields], a subset of the searchable allowlist", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "ada", "search[fields]": "name" }, searchEnabled);
+    expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
+  });
+
+  it("rejects a search[fields] entry outside the searchable allowlist", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "ada", "search[fields]": "name,age" }, searchEnabled),
+    );
+    expect(issues[0]).toMatchObject({ field: "age", code: "KAVO_QUERY_INVALID_FIELD" });
+  });
+
+  it("rejects an invalid search[mode] value", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "ada", "search[mode]": "fuzzy" }, searchEnabled),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[mode]", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it("rejects search[mode] without search[query]", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[mode]": "words" }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
+  });
+
+  it("rejects search[fields] without search[query]", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[fields]": "name" }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
+  });
+
+  it("escapes a literal '%' and '_' in the search term rather than treating them as wildcards", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "50%_off", "search[fields]": "name" }, searchEnabled);
+    expect(query.filter.root).toMatchObject({ operator: "ILIKE", value: "%50\\%\\_off%" });
+  });
+
+  it("caps the number of words in words mode at query.maxInValues", () => {
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true }, maxInValues: 2 } },
+      undefined,
+    );
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+  });
+
+  it("caps the *product* of word count and searched-field count, not just word count alone", () => {
+    // `userMetadata` has two searchable fields by default (name, email).
+    // Two words × two fields = 4 synthesized conditions — over a cap of 3 —
+    // even though the word count alone (2) is under it. A cap that only
+    // checked `terms.length` would let this through.
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true }, maxInValues: 3 } },
+      undefined,
+    );
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, tightCap),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+  });
+
+  it("lets the same product through once search[fields] narrows it under the cap", () => {
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true }, maxInValues: 3 } },
+      undefined,
+    );
+    // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
+    const query = normalizer.normalizeWire(
+      { "search[query]": "blue iphone", "search[mode]": "words", "search[fields]": "name" },
+      tightCap,
+    );
+    expect(query.filter.root).toMatchObject({ kind: "group", operator: "AND" });
+  });
+
+  it("still 400s on an unrelated filter issue without also raising a spurious search issue", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "filter[nope][eq]": "1", "search[query]": "ada" }, searchEnabled),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ field: "nope", code: "KAVO_QUERY_INVALID_FIELD" });
+  });
+
+  it("ANDs the synthesized search fragment with an existing filter[...] condition", () => {
+    const query = normalizer.normalizeWire(
+      { "search[query]": "ada", "search[fields]": "name", "filter[age][gte]": "18" },
+      searchEnabled,
+    );
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        { kind: "condition", field: "age", operator: "GTE", value: 18 },
+        { kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" },
+      ],
+    });
+  });
+
+  it("rejects search[query] arriving as a repeated-key array rather than a scalar", () => {
+    // The wire binding flattens a repeated `?search[query]=a&search[query]=b`
+    // into an array before the normalizer ever sees it (the same shape a
+    // repeated `limit=` arrives as) — this must reject it, not stringify or
+    // silently take the first value.
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": ["a", "b"] }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it("rejects search[fields] arriving as a non-string value", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "ada", "search[fields]": ["name"] }, searchEnabled),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[fields]", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
+    const relationSearchable = resolveEntityConfig(
+      authorMetadata,
+      { query: { search: { enabled: true } }, allowlists: { searchable: ["name", "posts.title" as never] } },
+      undefined,
+    );
+    const authorNormalizer = new QueryNormalizer(authorMetadata);
+    const query = authorNormalizer.normalizeWire({ "search[query]": "ada" }, relationSearchable);
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "OR",
+      children: [
+        { kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" },
+        { kind: "condition", field: "posts.title", operator: "ILIKE", value: "%ada%" },
+      ],
+    });
+  });
+
+  it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
+    const independent = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true } }, allowlists: { filterable: [], searchable: ["name"] } },
+      undefined,
+    );
+    const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
+    expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
+  });
+
+  it("applies the precedence chain global → entity → operation to query.search", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      {
+        query: { search: { enabled: true, mode: "words" } },
+        operations: { findMany: { query: { search: { mode: "substring" } } } },
+      },
+      { query: { search: { mode: "substring" } } },
+    );
+    // Entity scope overrides global mode, but leaves `enabled` (set only at
+    // entity scope) untouched rather than reverting it to the built-in
+    // default — a partial per-scope override must not wipe sibling keys.
+    expect(config.settings.query.search).toEqual({ enabled: true, mode: "words", driver: "orm" });
+    // The operation scope's narrower override wins for that operation only.
+    expect(config.settingsFor("findMany").query.search).toEqual({ enabled: true, mode: "substring", driver: "orm" });
+    expect(config.settingsFor("findOne").query.search.mode).toBe("words");
+  });
+});
+
 describe("QueryNormalizer — onlyDeleted", () => {
   it("rejects onlyDeleted=true when the entity is not soft-deletable (wire)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ onlyDeleted: "true" }, config));

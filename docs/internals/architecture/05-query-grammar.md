@@ -238,7 +238,101 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   relation that is not on the entity's inclusion allowlist is a 400, never
   a silent omission.
 
-## 4. Security & robustness
+## 4. Search
+
+`search[query]=<term>` (issue #156) is a free-text search across an
+explicit, per-entity allowlist of fields — the "search box" case, distinct
+from `filter[...]`'s single-field, single-operator predicates. It composes
+with the existing filter grammar rather than introducing a second
+mechanism: `search[query]` is normalized into a synthetic `Filter` AST
+fragment (an `OR` group of `ILIKE` conditions, one per searched field) that
+is `AND`-ed into whatever `filter[...]` conditions are already present. No
+new `FilterOperator`, no adapter code — every `FilterTranslator` already
+handles an arbitrary `OR` group of `ILIKE` conditions, the exact shape a
+synthesized fragment produces.
+
+```
+GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,description
+```
+
+- **`search[query]=<term>`** — the free-text search term. Required
+  whenever any other `search[...]` key is present; `search[mode]` or
+  `search[fields]` without it is `KAVO_QUERY_CONFLICTING_PARAMS`.
+- **`search[mode]=substring|words`** — optional per-call override of the
+  resolved `query.search.mode` setting (`substring` default). Exact-case
+  matched, like every wire token in this grammar — an unknown value is
+  `KAVO_QUERY_INVALID_VALUE`.
+  - **`substring`:** one `OR` group, one `ILIKE '%term%'` condition per
+    searched field.
+  - **`words`:** the term splits on whitespace; one `OR` group per word,
+    `AND`-ed together — every word must match somewhere, in any searched
+    field, independently. The synthesized width — word count × searched-field
+    count, one `ILIKE` condition per pair — is capped at `query.maxInValues`
+    (the same limit `in`/`notIn`/`between` reuse, §3); past it,
+    `KAVO_QUERY_LIMIT_EXCEEDED`. Unlike those operators this is not an array
+    value, and both factors matter: `searchable`'s own default is _every_ own
+    string column, so a wide allowlist alone — with no unusually long query —
+    can still exceed the cap.
+- **`search[fields]=<comma-list>`** — optional. Narrows which fields this
+  call searches to a subset of the entity's resolved `allowlists.searchable`
+  set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
+  allowlist-rejection family `filter[...]`/`sort=`/`fields=` use). Omitted,
+  every field in `searchable` is searched.
+
+**Allowlist.** `EntityConfig.allowlists.searchable` — same
+`QueryFieldSelector` shape as `filterable`/`sortable`/`selectable`, and
+relation paths are permitted (`'brand.name'`), reusing the per-path join
+machinery `filter[...]` already has for relation filters. Unlike
+`filterable`/`sortable`, its zero-config default is narrower than "every
+own column": every own **string-kind** column, since a non-string column
+has nothing an `ILIKE` fragment can usefully match — a bootstrap
+`ConfigurationException` if an explicit override names one anyway (own
+columns only; a relation-path leaf's kind is not checked). An explicit
+empty allowlist (`searchable: []`) is a deliberate "no fields"
+configuration — searching still 400s, the same as `filterable: []` would.
+
+Every synthesized pattern (`%term%`) carries a leading wildcard, so it can
+never use a plain B-tree index — a `searchable` column that needs to
+support real query volume wants a trigram (Postgres `pg_trgm` `GIN`) index
+or equivalent, same as any other leading-wildcard `LIKE`/`ILIKE` query
+would.
+
+**Gate.** `search[query]` is rejected outright
+(`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `query.search.enabled` resolves to
+`true` — off by default, resolved through the standard global → entity →
+operation → per-call precedence chain (doc 08). This keeps "does this
+endpoint support search at all" an explicit decision even though
+`searchable`'s own default is permissive. The same rejection covers a
+`searchable` that resolves empty.
+
+`query.search.driver` is a **reserved discriminator**, not a pluggable
+backend seam: `'orm'` is the only value this schema accepts today, kept so
+a future `'postgres'` (native full-text) or `'meilisearch'` driver can land
+additively without a breaking config change. It is config-only — there is
+no `search[driver]` wire token, and callers never choose the backend
+per-request.
+
+**Escaping.** A literal `%` or `_` in a search term is escaped with the
+same backslash convention `like`/`ilike` use (§3) before the `%term%`
+pattern is built, so a term is always matched literally, never as a SQL
+wildcard the caller did not intend.
+
+**Composition example:**
+
+```
+GET /products?search[query]=iphone&filter[status][eq]=active
+
+→ AND(
+    status EQ 'active',
+    OR( name ILIKE '%iphone%', description ILIKE '%iphone%' )
+  )
+```
+
+**Wire-only.** There is no programmatic `QueryContext.search` — a
+programmatic caller composes the equivalent `ILIKE` conditions directly
+through `filter`, the same way it composes any other filter.
+
+## 5. Security & robustness
 
 - **Allowlists:** every entity resolves filterable/sortable/selectable
   lists at bootstrap — explicitly configured, or defaulting to the
@@ -293,7 +387,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   `QueryValidationException`, so a client fixes its request in one round
   trip (`errors[]` in the problem-details body).
 
-## 5. Normalization pipeline
+## 6. Normalization pipeline
 
 ```
 raw query string (flat bracket keys)

@@ -36,6 +36,26 @@ export interface PaginationSettings {
   };
 }
 
+/** `search[mode]` values — substring (default) or per-word (doc 05 §4). */
+export type SearchMode = "substring" | "words";
+
+/**
+ * Reserved discriminator for a future pluggable search backend — `'orm'`
+ * is the only value this schema accepts today (issue #156). It exists so a
+ * later `'postgres'` (native full-text) or `'meilisearch'` driver can land
+ * additively, without a breaking config change now; it is config-only and
+ * has no wire counterpart — callers never choose the backend per-request.
+ */
+export type SearchDriver = "orm";
+
+export interface SearchSettings {
+  /** `search[query]` is rejected with a 400 unless this is `true`. */
+  readonly enabled: boolean;
+  /** `substring`: one `ILIKE '%term%'` per field. `words`: one per word, AND-ed. */
+  readonly mode: SearchMode;
+  readonly driver: SearchDriver;
+}
+
 export interface QuerySettings {
   /** Max nesting depth of the filter AST. */
   readonly maxFilterDepth: number;
@@ -48,6 +68,8 @@ export interface QuerySettings {
    * client-supplied sort fields are at request time.
    */
   readonly defaultSort: readonly Sort[];
+  /** `search[query]` free-text search (doc 05 §4). */
+  readonly search: SearchSettings;
 }
 
 export interface ErrorSettings {

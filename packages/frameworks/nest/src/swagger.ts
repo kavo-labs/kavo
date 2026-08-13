@@ -98,8 +98,9 @@ export const KAVO_API_GUIDE = `### List query parameters
 - \`limit\`: page size (clamped to the configured maximum).
 - \`offset\`: zero-based index of the first returned row.
 - \`fields\`: sparse fieldset — comma-separated field names.
+- \`search[query]\`: free-text search across the entity's searchable fields, composed (AND) with any \`filter\`. \`search[mode]\` (\`substring\`, the default, or \`words\`) and \`search[fields]\` (narrows to a subset of the entity's searchable fields) are optional modifiers, and require \`search[query]\` to be present. Only present on entities that have search enabled — see this route's own \`search[fields]\` description.
 
-Each list route's own \`filter\`/\`sort\`/\`fields\` parameter description names which fields are actually allowed, where the entity's config makes that known.
+Each list route's own \`filter\`/\`sort\`/\`fields\`/\`search[fields]\` parameter description names which fields are actually allowed, where the entity's config makes that known.
 
 ### Relation includes (every read route)
 
@@ -396,6 +397,79 @@ export function applyConditionalRequestDocs(
       );
     }
   }
+}
+
+/**
+ * The `search[query]`/`search[mode]`/`search[fields]` params on a list
+ * route (issue #156) — deferred the same way `applyConditionalRequestDocs`
+ * is, and for the same reason: whether they belong on the route depends on
+ * `query.search.enabled`, resolved through the *full* precedence chain
+ * (built-in default → global → entity → operation), which only exists once
+ * `KavoModule`'s discovery binder resolves the entity's config —
+ * `KavoBinder.onModuleInit`, long after `@Kavo` decoration ran (ADR-0012).
+ *
+ * Unlike `filter`/`sort`/`fields` at decoration time, this late binding is
+ * strictly *better* documentation for `search[fields]`, not a fallback:
+ * `service.engine.config.allowlists.searchable` is the fully **resolved**
+ * allowlist (ORM metadata already exists by `onModuleInit`), so the
+ * `{ exclude }`/unconfigured-default cases that leave `filter`/`sort`/
+ * `fields` undescribed at decoration time (`listQueryParams`'s doc comment)
+ * are no obstacle here — `searchable` is always a concrete array by the
+ * time this runs.
+ *
+ * Omitted entirely when search isn't enabled, the same treatment
+ * `applyConditionalRequestDocs` gives the conditional-request surface when
+ * `caching.etag` resolves `false` — advertising a parameter that would
+ * always 400 is worse than not documenting it at all.
+ */
+const alreadySearchDocumented = new WeakSet<object>();
+
+export function applySearchQueryDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  enabled: boolean,
+  searchable: readonly string[],
+): void {
+  const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
+  if (!enabled || !isList) return;
+  const swagger = loadSwagger();
+  if (swagger === null) return;
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadySearchDocumented.has(method)) return;
+  alreadySearchDocumented.add(method);
+  const apply = (decorator: MethodDecorator): void => {
+    decorator(prototype, methodName, propertyDescriptor);
+  };
+
+  apply(
+    swagger.ApiQuery({
+      name: "search[query]",
+      required: false,
+      type: String,
+      description: "Free-text search term, composed (AND) with any filter[...] on this request.",
+    }),
+  );
+  apply(
+    swagger.ApiQuery({
+      name: "search[mode]",
+      required: false,
+      type: String,
+      description: "'substring' (default) or 'words'. Requires search[query].",
+    }),
+  );
+  apply(
+    swagger.ApiQuery({
+      name: "search[fields]",
+      required: false,
+      type: String,
+      description:
+        (searchable.length === 0 ? "No field is searchable." : `Allowed fields: ${searchable.join(", ")}.`) +
+        " Requires search[query].",
+    }),
+  );
 }
 
 /**
