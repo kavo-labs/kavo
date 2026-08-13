@@ -88,7 +88,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     if (typeof edge !== "object" || edge === null) {
       throw new ConfigurationException(entityName, path, `expected an object, got ${JSON.stringify(edge)}`);
     }
-    if (edge.includable !== undefined) bool(`${path}.includable`, edge.includable);
     if (edge.defaultInclude !== undefined) bool(`${path}.defaultInclude`, edge.defaultInclude);
     if (edge.maxDepth !== undefined) positiveInt(`${path}.maxDepth`, edge.maxDepth);
     if (edge.strategy !== undefined && !["join", "batch", "auto"].includes(edge.strategy)) {
@@ -98,13 +97,10 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected "join", "batch", or "auto", got ${JSON.stringify(edge.strategy)}`,
       );
     }
-    if (edge.defaultInclude === true && edge.includable === false) {
-      throw new ConfigurationException(
-        entityName,
-        path,
-        "defaultInclude requires an includable relation — it would load a relation clients cannot ask for",
-      );
-    }
+    // `defaultInclude` vs. `allowlists.includable` (permission) is cross-
+    // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
+    // not here — this function only sees `KavoSettings`, and `allowlists`
+    // is entity-typed config outside that schema (ADR-0028).
   }
 
   // `softDelete` is the one key in this schema that `false` disables

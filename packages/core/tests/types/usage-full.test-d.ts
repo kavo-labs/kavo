@@ -55,8 +55,7 @@ const authors = kavo.createCrud(Author, {
     item: AuthorItemDto,
     list: AuthorListDto,
   },
-  allowlists: { filterable: ["name"], sortable: ["name"], selectable: ["id", "name"] },
-  relations: { edges: { posts: { includable: true } } },
+  allowlists: { filterable: ["name"], sortable: ["name"], selectable: ["id", "name"], includable: ["posts"] },
   operations: {
     findMany: { handler: promote },
   },

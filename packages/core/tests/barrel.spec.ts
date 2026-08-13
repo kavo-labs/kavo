@@ -174,6 +174,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "RelationCardinality",
   "RelationDescriptor",
   "RelationEdgeSettings",
+  "RelationFieldSelector",
   "RelationLoadStrategy",
   "RelationRegistry",
   "RelationSettings",

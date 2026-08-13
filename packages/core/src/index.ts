@@ -91,6 +91,7 @@ export type {
   StandardOperationsConfig,
   QueryAllowlists,
   QueryFieldSelector,
+  RelationFieldSelector,
 } from "./config/entity-config.js";
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
 export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/resolved-entity-config.js";

@@ -1,11 +1,12 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
-import type { EntityConfig, OperationConfig, QueryFieldSelector } from "./entity-config.js";
+import type { EntityConfig, OperationConfig, QueryFieldSelector, RelationFieldSelector } from "./entity-config.js";
 import type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./resolved-entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
+import type { IncludePath } from "../types/include-path.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
@@ -79,6 +80,7 @@ export function resolveEntityConfig<Entity extends object>(
   validateSettings(entityName, entitySettings);
   validateDefaultSort(entityName, entitySettings, allowlists);
   validateSincePagination(entityName, metadata, entitySettings, allowlists);
+  validateIncludableRelations(entityName, entitySettings, allowlists);
 
   // Per-operation settings views, precomputed for every operation that
   // declares overrides. `false` (disabled) contributes no settings — the
@@ -97,6 +99,7 @@ export function resolveEntityConfig<Entity extends object>(
     validateSettings(scope, merged);
     validateDefaultSort(scope, merged, allowlists);
     validateSincePagination(scope, metadata, merged, allowlists);
+    validateIncludableRelations(scope, merged, allowlists);
     // Resolve for its validation side effect: a per-operation scope that
     // demands soft delete on an entity without a marker field must fail at
     // bootstrap, not on the first request (the engine recomputes the
@@ -116,7 +119,12 @@ export function resolveEntityConfig<Entity extends object>(
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
     computed,
-    relations: new DefaultRelationRegistry<Entity>(metadata.relations, entitySettings.relations.edges, entityName),
+    relations: new DefaultRelationRegistry<Entity>(
+      metadata.relations,
+      allowlists.includable as readonly string[],
+      entitySettings.relations.edges,
+      entityName,
+    ),
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
     realtimeTransports: Object.freeze([...realtimeTransports]),
@@ -279,11 +287,16 @@ function resolveAllowlists<Entity extends object>(
     ...(ownColumns as readonly string[]),
     ...Object.keys(computed).filter((name) => computed[name]?.selectable !== false),
   ] as unknown as readonly FieldPath<Entity>[];
+  const relationNames = metadata.relations.map((relation) => relation.name) as unknown as readonly IncludePath<
+    Entity,
+    1
+  >[];
   const configured = entityConfig?.allowlists;
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
     selectable: resolveFieldSelector(selectableBase, configured?.selectable),
+    includable: resolveIncludableSelector(relationNames, configured?.includable),
   };
   for (const key of ["filterable", "sortable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
@@ -318,6 +331,32 @@ export function validateDefaultSort<Entity>(
         scope,
         "query.defaultSort",
         `field '${entry.field}' is not in the sortable allowlist`,
+      );
+    }
+  }
+}
+
+/**
+ * Cross-checks `relations.edges.<name>.defaultInclude` against
+ * `allowlists.includable` (ADR-0028): `defaultInclude: true` on a relation
+ * the entity never opted into `include=` would load something clients
+ * cannot ask for — the same rule `validate-settings.ts` enforced when
+ * `defaultInclude` and `includable` lived on the same `edges` entry, now
+ * checked against the allowlist that carries permission instead.
+ */
+function validateIncludableRelations<Entity>(
+  scope: string,
+  settings: KavoSettings,
+  allowlists: ResolvedQueryAllowlists<Entity>,
+): void {
+  const includable = new Set(allowlists.includable as readonly string[]);
+  for (const [name, edge] of Object.entries(settings.relations.edges)) {
+    if (edge.defaultInclude === true && !includable.has(name)) {
+      throw new ConfigurationException(
+        scope,
+        `relations.edges.${name}`,
+        `defaultInclude requires an includable relation — '${name}' is not on allowlists.includable, ` +
+          `so it would load a relation clients cannot ask for`,
       );
     }
   }
@@ -436,6 +475,24 @@ function resolveFieldSelector<Entity>(
   selector: QueryFieldSelector<Entity> | undefined,
 ): readonly FieldPath<Entity>[] {
   if (selector === undefined) return base;
+  if (!("exclude" in selector)) return selector;
+  const excluded = new Set(selector.exclude);
+  return base.filter((path) => !excluded.has(path));
+}
+
+/**
+ * `includable`'s own resolver, not `resolveFieldSelector` reused: the
+ * unconfigured default is `[]`, not `base` — the opt-in direction
+ * `QueryAllowlists.includable`'s doc comment calls out (ADR-0028). An
+ * explicit array is used verbatim; `{ exclude }` still resolves against
+ * `base` (every relation), so `{ exclude: [] }` is the one spelling that
+ * opts every relation in at once.
+ */
+function resolveIncludableSelector<Entity>(
+  base: readonly IncludePath<Entity, 1>[],
+  selector: RelationFieldSelector<Entity> | undefined,
+): readonly IncludePath<Entity, 1>[] {
+  if (selector === undefined) return [];
   if (!("exclude" in selector)) return selector;
   const excluded = new Set(selector.exclude);
   return base.filter((path) => !excluded.has(path));

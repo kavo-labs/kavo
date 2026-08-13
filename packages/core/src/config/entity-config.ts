@@ -1,6 +1,7 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
+import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
@@ -24,11 +25,24 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
   readonly (FieldPath<Entity> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity> | Extra)[] };
 
 /**
- * Security allowlists: what a request may filter, sort, and
- * select on — including relation paths. Anything outside an allowlist is
+ * One relation allowlist key's raw configuration — the same array-or-
+ * `{ exclude }` shape as {@link QueryFieldSelector}, but typed against the
+ * entity's own top-level relation names ({@link IncludePath} capped to
+ * depth 1) rather than every field path. `include=` addresses one relation
+ * segment at a time from the root, so permission is granted per relation,
+ * not per dotted path — `blog.name` is a `filterable`/`sortable` path but
+ * `blog` is the unit `includable` grants or withholds.
+ */
+export type RelationFieldSelector<Entity> =
+  readonly IncludePath<Entity, 1>[] | { readonly exclude: readonly IncludePath<Entity, 1>[] };
+
+/**
+ * Security allowlists: what a request may filter, sort, select, and
+ * include — including relation paths. Anything outside an allowlist is
  * rejected with a 400 (`QueryValidationException`), never silently
- * dropped. When omitted, the allowlists derive from the `query` DTO or
- * entity metadata at bootstrap.
+ * dropped. When omitted, `filterable`/`sortable`/`selectable` derive from
+ * the `query` DTO or entity metadata at bootstrap; `includable` does not
+ * — see its own note.
  *
  * `filterable` and `sortable` govern the request only. `selectable`
  * governs the request **and the response** (ADR-0026) — see its own note.
@@ -65,6 +79,25 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * narrowing statement.
    */
   readonly selectable?: QueryFieldSelector<Entity, Computed>;
+  /**
+   * What a request may name in `include=` — which relations, one path
+   * segment at a time from the root, a client may embed at all
+   * (ADR-0028). `relations.edges.<name>` (`KavoSettings`, settings.ts)
+   * still tunes `defaultInclude`/`maxDepth`/`strategy` for a relation once
+   * it is includable, but grants no permission itself: naming a relation
+   * there without also naming it here does not open it.
+   *
+   * **Opt-in, unlike every other key on this interface.**
+   * `filterable`/`sortable`/`selectable` default to "every own
+   * column/field" when unconfigured — `includable` defaults the other way:
+   * an unconfigured `includable` means **no relation is includable**,
+   * mirroring the opt-in posture `relations.edges` had before this key
+   * existed. `{ exclude: [] }`, written explicitly, means the opposite —
+   * every relation includable — the same asymmetry `{ exclude }` already
+   * carries on the other three keys, just crossing a fail-closed default
+   * instead of a fail-open one.
+   */
+  readonly includable?: RelationFieldSelector<Entity>;
 }
 
 /**

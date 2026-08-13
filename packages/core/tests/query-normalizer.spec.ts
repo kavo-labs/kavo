@@ -31,11 +31,7 @@ const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
   if (entity === Author) return authorMetadata as unknown as EntityMetadata<object>;
   return undefined;
 });
-const postConfig = resolveEntityConfig(
-  postMetadata,
-  { relations: { edges: { comments: { includable: true } } } },
-  undefined,
-);
+const postConfig = resolveEntityConfig(postMetadata, { allowlists: { includable: ["comments"] } }, undefined);
 const postNormalizer = new QueryNormalizer<Post>(postMetadata, [], new DefaultIncludeResolver<Post>(postCatalog));
 
 describe("QueryNormalizer — wire params", () => {

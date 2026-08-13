@@ -25,8 +25,9 @@ export interface RelationDescriptor {
   readonly cardinality: RelationCardinality;
   /**
    * Whether clients may `include=` this relation. Defaults to `false` —
-   * inclusion is an opt-in allowlist, consistent with the filter/sort
-   * posture.
+   * inclusion is an opt-in allowlist, granted by `allowlists.includable`
+   * (`EntityConfig`, entity-config.ts, ADR-0028), consistent with the
+   * filter/sort/select posture.
    */
   readonly includable: boolean;
   /** Included even when the client doesn't ask. */
