@@ -266,11 +266,13 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
     searched field.
   - **`words`:** the term splits on whitespace; one `OR` group per word,
     `AND`-ed together — every word must match somewhere, in any searched
-    field, independently. The word count is capped at `query.maxInValues`
-    (the same limit `in`/`notIn`/`between` reuse, §3) — past it,
-    `KAVO_QUERY_LIMIT_EXCEEDED`. Unlike those operators this is not an
-    array value; the cap exists because word count × searched-field count
-    is otherwise an unbounded number of synthesized `ILIKE` conditions.
+    field, independently. The synthesized width — word count × searched-field
+    count, one `ILIKE` condition per pair — is capped at `query.maxInValues`
+    (the same limit `in`/`notIn`/`between` reuse, §3); past it,
+    `KAVO_QUERY_LIMIT_EXCEEDED`. Unlike those operators this is not an array
+    value, and both factors matter: `searchable`'s own default is _every_ own
+    string column, so a wide allowlist alone — with no unusually long query —
+    can still exceed the cap.
 - **`search[fields]=<comma-list>`** — optional. Narrows which fields this
   call searches to a subset of the entity's resolved `allowlists.searchable`
   set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
@@ -283,9 +285,17 @@ relation paths are permitted (`'brand.name'`), reusing the per-path join
 machinery `filter[...]` already has for relation filters. Unlike
 `filterable`/`sortable`, its zero-config default is narrower than "every
 own column": every own **string-kind** column, since a non-string column
-has nothing an `ILIKE` fragment can usefully match. An explicit empty
-allowlist (`searchable: []`) is a deliberate "no fields" configuration —
-searching still 400s, the same as `filterable: []` would.
+has nothing an `ILIKE` fragment can usefully match — a bootstrap
+`ConfigurationException` if an explicit override names one anyway (own
+columns only; a relation-path leaf's kind is not checked). An explicit
+empty allowlist (`searchable: []`) is a deliberate "no fields"
+configuration — searching still 400s, the same as `filterable: []` would.
+
+Every synthesized pattern (`%term%`) carries a leading wildcard, so it can
+never use a plain B-tree index — a `searchable` column that needs to
+support real query volume wants a trigram (Postgres `pg_trgm` `GIN`) index
+or equivalent, same as any other leading-wildcard `LIKE`/`ILIKE` query
+would.
 
 **Gate.** `search[query]` is rejected outright
 (`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `query.search.enabled` resolves to
