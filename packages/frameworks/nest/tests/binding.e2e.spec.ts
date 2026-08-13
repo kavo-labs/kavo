@@ -1362,7 +1362,7 @@ describe("@Kavo soft-delete routes", () => {
 });
 
 describe("@Kavo relation includes", () => {
-  @Kavo(Todo, { relations: { edges: { list: { includable: true } } } })
+  @Kavo(Todo, { allowlists: { includable: ["list"] } })
   @Controller("todos")
   class IncludingController {}
 
@@ -1471,6 +1471,25 @@ describe("@Kavo relation includes", () => {
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     const include = params.find((param) => param.name === "include");
     expect(include?.description).toBe("No relation is includable on this entity.");
+  });
+
+  it("carries no description for an exclude-shaped includable allowlist, and no fields[relation] params", async () => {
+    // `{ exclude }` cannot be resolved at decoration time — no ORM metadata
+    // exists yet (ADR-0012) — so `include` is still emitted (the set may be
+    // non-empty) but undescribed, the same treatment `filterable`/`sortable`/
+    // `selectable` already get for their own `{ exclude }` form.
+    @Kavo(Todo, { allowlists: { includable: { exclude: [] } } })
+    @Controller("todos")
+    class ExcludingIncludableController {}
+
+    await app.close();
+    await bootstrap(ExcludingIncludableController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const include = params.find((param) => param.name === "include");
+    expect(include).toBeDefined();
+    expect(include?.description).toBeUndefined();
+    expect(params.find((param) => param.name.startsWith("fields["))).toBeUndefined();
   });
 });
 

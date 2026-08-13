@@ -6,6 +6,7 @@ import type {
   OperationDescriptor,
   OperationDtoMap,
   QueryFieldSelector,
+  RelationFieldSelector,
 } from "@kavo/core";
 import { DefaultDtoResolver } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
@@ -221,13 +222,17 @@ export function applySwaggerMetadata(
         name: "include",
         required: false,
         type: String,
-        description:
-          includable.length === 0
-            ? "No relation is includable on this entity."
-            : `Includable: ${includable.join(", ")}.`,
+        ...(includable !== null
+          ? {
+              description:
+                includable.length === 0
+                  ? "No relation is includable on this entity."
+                  : `Includable: ${includable.join(", ")}.`,
+            }
+          : {}),
       }),
     );
-    for (const relation of includable) {
+    for (const relation of includable ?? []) {
       apply(
         swagger.ApiQuery({
           name: `fields[${relation}]`,
@@ -541,14 +546,25 @@ function schemaForHint(hint: SchemaHint): object {
   }
 }
 
-/** Relation names this entity's config opens to `include=`. */
-function includableRelations(config: EntityConfig<object> | undefined): readonly string[] {
-  const edges = (config as { relations?: { edges?: Record<string, { includable?: boolean }> } } | undefined)?.relations
-    ?.edges;
-  if (edges === undefined) return [];
-  return Object.entries(edges)
-    .filter(([, edge]) => edge.includable !== false)
-    .map(([name]) => name);
+/**
+ * Relation names this entity's config opens to `include=`
+ * (`allowlists.includable`, ADR-0028) — or `null` when decoration time
+ * cannot know the set at all.
+ *
+ * Unlike `filterable`/`sortable`/`selectable`, `includable` is opt-in: an
+ * unconfigured key resolves to `[]`, not "every relation" (`resolveAllowlists`
+ * in core), and that default needs no ORM metadata to compute — so `undefined`
+ * here is a real, known empty set, not an unknown one. Only an `{ exclude }`
+ * selector is unresolvable without ORM metadata (same limitation
+ * `listQueryParams` documents for the other three keys); `null` signals that
+ * case so the caller advertises `include` rather than omitting a parameter
+ * that may well do something.
+ */
+function includableRelations(config: EntityConfig<object> | undefined): readonly string[] | null {
+  const selector = (config?.allowlists as { includable?: RelationFieldSelector<object> } | undefined)?.includable;
+  if (selector === undefined) return [];
+  if ("exclude" in selector) return null;
+  return selector;
 }
 
 function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
