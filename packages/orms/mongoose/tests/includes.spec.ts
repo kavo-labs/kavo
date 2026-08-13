@@ -67,11 +67,11 @@ beforeAll(async () => {
   // string. The interfaces above are the shape the service actually
   // returns, which is what these tests assert.
   blogs = kavo.createCrud(models.Blog, {
-    relations: { edges: { articles: { includable: true } } },
+    allowlists: { includable: ["articles"] },
   }) as unknown as DefaultKavoService<Blog>;
   articles = kavo.createCrud(models.Article, {
     softDelete: { field: "deletedAt" },
-    relations: { edges: { blog: { includable: true }, notes: { includable: true } } },
+    allowlists: { includable: ["blog", "notes"] },
   } as never) as unknown as DefaultKavoService<Article>;
   kavo.createCrud(models.Note);
 });

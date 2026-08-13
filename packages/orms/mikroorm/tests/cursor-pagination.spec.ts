@@ -73,7 +73,7 @@ beforeAll(async () => {
   });
   posts = kavo.createCrud(Post, {
     softDelete: { field: "deletedAt" },
-    relations: { edges: { comments: { includable: true } } },
+    allowlists: { includable: ["comments"] },
   } as never) as DefaultKavoService<Post>;
 });
 
