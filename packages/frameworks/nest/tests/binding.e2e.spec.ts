@@ -1965,7 +1965,7 @@ describe("@Kavo Swagger request-body schemas", () => {
 
   type Operation = {
     parameters?: readonly { name: string; in: string }[];
-    responses?: Record<string, { headers?: Record<string, unknown> }>;
+    responses?: Record<string, { headers?: Record<string, unknown>; description?: string }>;
   };
   const operation = (path: string, verb: string): Operation | undefined =>
     (document.paths[path] as Record<string, Operation> | undefined)?.[verb];
@@ -1992,6 +1992,16 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(operation("/todos/{id}", "delete")?.responses?.["204"]?.headers).toBeUndefined();
   });
 
+  it("stays idempotent across the repeated bootstraps `beforeEach` gives DocumentedController (issue #198)", () => {
+    // `applyConditionalRequestDocs` runs again on every `onModuleInit`, but
+    // `DocumentedController`'s decorated methods are the same function
+    // objects across every `it` in this block — a second boot must not
+    // double up the header/response metadata `@nestjs/swagger` only ever
+    // appends or merges onto them.
+    expect(headerNames("/todos/{id}", "get").filter((name) => name === "If-None-Match")).toHaveLength(1);
+    expect(operation("/todos/{id}", "get")?.responses?.["200"]?.description).toBe("Success");
+  });
+
   it("documents nothing conditional when caching.etag is off for the entity", async () => {
     @Kavo(Todo, { caching: { etag: false } })
     @Controller("todos")
@@ -2004,6 +2014,38 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect((patch?.parameters ?? []).filter((p) => p.in === "header")).toHaveLength(0);
     expect(patch?.responses?.["412"]).toBeUndefined();
     expect(patch?.responses?.["200"]?.headers).toBeUndefined();
+  });
+
+  it("documents nothing conditional when caching.etag is off at the global scope (issue #198)", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class GlobalUncachedController {}
+    await app.close();
+    await bootstrap(GlobalUncachedController, { defaults: { caching: { etag: false } } });
+    const uncached = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+    const get = (uncached.paths["/todos/{id}"] as Record<string, Operation>)["get"];
+    const patch = (uncached.paths["/todos/{id}"] as Record<string, Operation>)["patch"];
+
+    expect((get?.parameters ?? []).filter((p) => p.in === "header")).toHaveLength(0);
+    expect(get?.responses?.["304"]).toBeUndefined();
+    expect(get?.responses?.["200"]?.headers).toBeUndefined();
+    expect((patch?.parameters ?? []).filter((p) => p.in === "header")).toHaveLength(0);
+    expect(patch?.responses?.["412"]).toBeUndefined();
+    expect(patch?.responses?.["200"]?.headers).toBeUndefined();
+  });
+
+  it("an entity-scoped caching.etag still wins over a global default (issue #198)", async () => {
+    @Kavo(Todo, { caching: { etag: true } })
+    @Controller("todos")
+    class ReenabledCachingController {}
+    await app.close();
+    await bootstrap(ReenabledCachingController, { defaults: { caching: { etag: false } } });
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+    const get = (document.paths["/todos/{id}"] as Record<string, Operation>)["get"];
+
+    expect((get?.parameters ?? []).filter((p) => p.in === "header").map((p) => p.name)).toContain("If-None-Match");
+    expect(get?.responses?.["304"]).toBeDefined();
+    expect(get?.responses?.["200"]?.headers).toHaveProperty("ETag");
   });
 });
 

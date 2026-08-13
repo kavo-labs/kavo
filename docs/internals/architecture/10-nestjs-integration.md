@@ -377,9 +377,22 @@ routes (doc 5), registered DTO classes as body schemas (`ApiBody`),
 problem-details response schemas for 400/404, and the conditional-request
 surface (ADR-0020) — the `ETag` response header, `If-None-Match` + `304`
 on single-item reads, `If-Match` + `412` on single-row writes, gated on
-as much of `caching.etag` as decoration time can see (entity and
-operation scope; the global scope arrives later, with
-`KavoModule.forRoot`).
+`caching.etag`.
+
+Unlike the rest of this list, that gate can't be applied at decoration
+time (ADR-0012): whether it's on depends on `caching.etag` resolved
+through the _full_ precedence chain, and the global scope only arrives
+later, with `KavoModule.forRoot`/`forRootAsync` (issue #198). So
+`applySwaggerMetadata` documents everything else immediately but stashes
+the route (`prototype`, `methodName`, `descriptor`, `route`) under
+`KAVO_CONDITIONAL_DOCS_METADATA`; `KavoModule`'s discovery binder
+(`KavoBinder`, the same `onModuleInit` pass that binds each entity's
+service) reads it back once `service.engine.config.settingsFor(id)`
+carries the entity's fully resolved settings, and calls
+`applyConditionalRequestDocs` with the true `caching.etag`. A module
+graph with no `KavoModule.forRoot`/`forRootAsync` — and so no working
+`@Kavo` service either — never reaches this pass, so no route is left
+half-documented.
 
 The generic syntax of `filter`/`sort`/`limit`/`offset`/`fields` (doc 5),
 `include`/`fields[relation]`, and `If-None-Match`/`If-Match` is documented

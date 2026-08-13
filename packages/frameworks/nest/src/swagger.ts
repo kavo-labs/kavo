@@ -76,25 +76,6 @@ const ETAG_RESPONSE_HEADER = {
 } as const;
 
 /**
- * Whether `caching.etag` is on for this operation, as far as decoration
- * time can tell (ADR-0012): the entity and operation scopes of the config
- * `@Kavo` was handed. The global scope arrives with
- * `KavoModule.forRoot`, long after this runs, so `true` is the answer when
- * neither scope says otherwise — matching the built-in default.
- */
-function cachingEnabled(config: EntityConfig<object> | undefined, operationId: string): boolean {
-  const scoped = config as
-    | {
-        caching?: { etag?: boolean };
-        operations?: Record<string, { caching?: { etag?: boolean } } | boolean | undefined>;
-      }
-    | undefined;
-  const operation = scoped?.operations?.[operationId];
-  const perOperation = typeof operation === "object" ? operation.caching?.etag : undefined;
-  return perOperation ?? scoped?.caching?.etag ?? true;
-}
-
-/**
  * The generic syntax of every query param and conditional-request header a
  * generated route can carry — identical on every route of every entity in
  * every app, so it is documented **once** here rather than repeated as
@@ -141,8 +122,9 @@ Each read route's own \`include\` parameter description names which relations ar
  * `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
  * (`packages/core/src/config/resolve-entity-config.ts`): it merges from
  * nowhere but the entity's own `EntityConfig` — no global default, no
- * per-operation override — so, unlike `cachingEnabled` above, there is no
- * later-arriving scope this can miss. Only its **shape** limits what can be
+ * per-operation override — so, unlike `caching.etag` (see
+ * `applyConditionalRequestDocs`), there is no later-arriving scope this can
+ * miss. Only its **shape** limits what can be
  * read here: an explicit array selector is used verbatim by
  * `resolveFieldSelector`, with no ORM metadata involved, so it is exactly
  * the value `ResolvedEntityConfig.allowlists` will carry — reading it off
@@ -267,41 +249,19 @@ export function applySwaggerMetadata(
     apply(swagger.ApiBody(bodyOptionsFor(bodyDto)));
   }
 
-  // Conditional requests (ADR-0020). Whether a *response* actually carries
-  // an `ETag` depends on `caching.etag`, which is resolved through the full
-  // precedence chain at bootstrap; decoration time can only see the entity
-  // and operation scopes of it (ADR-0012), so a `false` at the global scope
-  // leaves these documented and inert — the same limitation the query-param
-  // documentation above already lives with. `If-None-Match`/`If-Match`'s own
-  // semantics never vary by entity, so their `ApiHeader` carries no
-  // description at all — the full explanation lives only in `KAVO_API_GUIDE`.
-  const cached = cachingEnabled(config, descriptor.id);
-  // Collection responses carry no ETag (ADR-0020) — which is a statement
-  // about cardinality, not about one operation id.
-  const tagged = cached && route.status !== 204 && descriptor.cardinality !== "many";
+  // The success response's ETag header and the conditional-request
+  // headers/304/412 responses (ADR-0020) are applied later, by
+  // `applyConditionalRequestDocs` — see its doc comment for why: whether
+  // they belong on this route depends on `caching.etag` resolved through
+  // the *full* precedence chain, which decoration time cannot see
+  // (ADR-0012).
   apply(
     swagger.ApiResponse({
       status: route.status,
       description: "Success",
-      ...(tagged ? { headers: { ETag: ETAG_RESPONSE_HEADER } } : {}),
       ...successBodyFor(descriptor, route, entity, dtoResolver),
     }),
   );
-  if (cached && route.hasIdParam) {
-    if (descriptor.kind === "read") {
-      apply(swagger.ApiHeader({ name: "If-None-Match", required: false }));
-      apply(swagger.ApiResponse({ status: 304, description: "The client's cached representation is still current." }));
-    } else {
-      apply(swagger.ApiHeader({ name: "If-Match", required: false }));
-      apply(
-        swagger.ApiResponse({
-          status: 412,
-          description: "The If-Match precondition failed or cannot be evaluated (RFC 9457 problem details).",
-          schema: PROBLEM_DETAILS_SCHEMA,
-        }),
-      );
-    }
-  }
   apply(
     swagger.ApiResponse({
       status: 400,
@@ -326,6 +286,98 @@ export function applySwaggerMetadata(
         schema: PROBLEM_DETAILS_SCHEMA,
       }),
     );
+  }
+}
+
+/**
+ * The conditional-request surface of one route (ADR-0020): the `ETag`
+ * response header, and — on single-row routes — the `If-None-Match`/
+ * `If-Match` request header plus its `304`/`412` response. Applied
+ * separately from `applySwaggerMetadata`, and later, because whether any of
+ * this belongs on the route depends on `caching.etag` resolved through the
+ * *full* precedence chain (built-in default → global → entity →
+ * operation), and the global scope only arrives with
+ * `KavoModule.forRoot`/`forRootAsync` — long after `@Kavo` decoration runs
+ * (ADR-0012).
+ *
+ * `KavoModule`'s discovery binder (`KavoBinder`, `kavo.module.ts`) is what
+ * calls this: by `onModuleInit` it already resolved the entity's full
+ * config to bind the service, so it re-derives the true `cached` value from
+ * that resolution — `resolveEntityConfig`'s own precedence merge, not a
+ * second guess at it here — and calls this once per route the entity
+ * decorated, standard and `@Override`d alike. A caller with no
+ * `KavoModule.forRoot`/`forRootAsync` in its module graph never reaches
+ * this, so its routes carry no conditional-request docs at all, rather
+ * than the entity/operation-scope answer decoration time could have
+ * given — the same graph shape leaves them with no working `@Kavo`
+ * service either, so nothing about that app actually works yet.
+ *
+ * `If-None-Match`/`If-Match`'s own semantics never vary by entity, so
+ * their `ApiHeader` carries no description at all — the full explanation
+ * lives only in `KAVO_API_GUIDE`.
+ *
+ * Idempotent per method function: `KavoBinder`'s `onModuleInit` runs once
+ * per app *bootstrap*, but a decorated method's function object is shared
+ * process-wide (the controller class outlives any one app instance — the
+ * same reason `registeredKavoControllers` is process-scoped), and
+ * `@nestjs/swagger`'s own `ApiHeader`/`ApiResponse` decorators only ever
+ * append or merge, never replace. A second app bootstrapping the same
+ * class — deliberately common in `@kavo/nest`'s own tests — would
+ * otherwise double up every conditional-request header on every rebind.
+ * `alreadyDocumented` guards against exactly that; it freezes the first
+ * *positive* answer for a given method. Once a `cached: true` bootstrap has
+ * applied these docs and recorded the method, a later bootstrap of the same
+ * class that resolves `cached: false` returns at the `!cached` check above
+ * without ever consulting the set, so it cannot retract what the earlier
+ * bootstrap applied. A real app never notices, since it bootstraps exactly
+ * once.
+ */
+const alreadyDocumented = new WeakSet<object>();
+
+export function applyConditionalRequestDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  route: RouteShape,
+  cached: boolean,
+): void {
+  if (!cached) return;
+  const swagger = loadSwagger();
+  if (swagger === null) return;
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyDocumented.has(method)) return;
+  alreadyDocumented.add(method);
+  const apply = (decorator: MethodDecorator): void => {
+    decorator(prototype, methodName, propertyDescriptor);
+  };
+
+  // Collection responses carry no ETag (ADR-0020) — which is a statement
+  // about cardinality, not about one operation id.
+  const tagged = route.status !== 204 && descriptor.cardinality !== "many";
+  if (tagged) {
+    // No `description` here: `mergeResponseEntry` (`@nestjs/swagger`)
+    // concatenates a non-empty incoming description onto the existing one
+    // rather than replacing it, and the "Success" description was already
+    // applied at decoration time — repeating it here would render as
+    // "Success\n\nSuccess".
+    apply(swagger.ApiResponse({ status: route.status, headers: { ETag: ETAG_RESPONSE_HEADER } }));
+  }
+  if (route.hasIdParam) {
+    if (descriptor.kind === "read") {
+      apply(swagger.ApiHeader({ name: "If-None-Match", required: false }));
+      apply(swagger.ApiResponse({ status: 304, description: "The client's cached representation is still current." }));
+    } else {
+      apply(swagger.ApiHeader({ name: "If-Match", required: false }));
+      apply(
+        swagger.ApiResponse({
+          status: 412,
+          description: "The If-Match precondition failed or cannot be evaluated (RFC 9457 problem details).",
+          schema: PROBLEM_DETAILS_SCHEMA,
+        }),
+      );
+    }
   }
 }
 

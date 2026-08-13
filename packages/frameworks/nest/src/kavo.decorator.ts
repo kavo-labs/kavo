@@ -34,6 +34,7 @@ import type { KavoPrincipalExtractor, KavoPrincipalRequest } from "./principal.j
 import { ConditionalRequest } from "./conditional-request.decorator.js";
 import { KavoResponseInterceptor, isKavoResponse } from "./kavo-response.interceptor.js";
 import {
+  KAVO_CONDITIONAL_DOCS_METADATA,
   KAVO_CONTROLLER_METADATA,
   KAVO_OVERRIDE_METADATA,
   KAVO_PRINCIPAL_PROPERTY,
@@ -41,6 +42,19 @@ import {
 } from "./tokens.js";
 import { WireQueryPipe } from "./wire-query.pipe.js";
 import { applySwaggerMetadata } from "./swagger.js";
+
+/**
+ * One route whose conditional-request Swagger docs (ADR-0020) `@Kavo`
+ * couldn't finish at decoration time — see `applyConditionalRequestDocs`'s
+ * doc comment in `swagger.ts`. Stashed under `KAVO_CONDITIONAL_DOCS_METADATA`
+ * for `KavoModule`'s discovery binder to finish once the entity's config is
+ * fully resolved.
+ */
+export interface KavoConditionalDocEntry {
+  readonly methodName: string;
+  readonly descriptor: OperationDescriptor<object>;
+  readonly route: ResolvedRoute;
+}
 
 /** What `@Kavo` records on the controller for `KavoModule.forFeature`. */
 export interface KavoControllerMetadata {
@@ -236,6 +250,7 @@ export function Kavo<
 
     const registry = createOperationRegistry(erasedConfig, undefined, undefined, entity.name);
     const overrides = collectOverrides(controller.prototype, entity.name, registry);
+    const conditionalDocs: KavoConditionalDocEntry[] = [];
 
     for (const descriptor of registry.all()) {
       if (!descriptor.enabled) continue;
@@ -259,13 +274,16 @@ export function Kavo<
         }
         defineRoute(controller.prototype, methodName, descriptor, route);
         applySwaggerMetadata(controller.prototype, methodName, descriptor, route, entity, erasedConfig);
+        conditionalDocs.push({ methodName, descriptor, route });
       } else {
         assertNoOwnParamMetadata(controller.prototype, overrideMethodName, entity.name, descriptor.id);
         applyOverrideEtag(controller.prototype, overrideMethodName, descriptor);
         applyRouteDecorators(controller.prototype, overrideMethodName, descriptor, route);
         applySwaggerMetadata(controller.prototype, overrideMethodName, descriptor, route, entity, erasedConfig);
+        conditionalDocs.push({ methodName: overrideMethodName, descriptor, route });
       }
     }
+    Reflect.defineMetadata(KAVO_CONDITIONAL_DOCS_METADATA, conditionalDocs, target);
   };
 }
 
