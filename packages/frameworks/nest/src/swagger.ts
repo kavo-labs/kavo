@@ -214,32 +214,44 @@ export function applySwaggerMetadata(
   // relations this entity actually allows (mirroring `listQueryParams`
   // above), and `fields[relation]` carries no description at all — its
   // relation name is already the param name, so there is nothing
-  // entity-specific left to add.
+  // entity-specific left to add. When no relation is includable, the
+  // parameter could never do anything, so it is omitted entirely rather
+  // than advertised with a "nothing is includable" description.
   if (descriptor.kind === "read") {
     const includable = includableRelations(config);
-    apply(
-      swagger.ApiQuery({
-        name: "include",
-        required: false,
-        type: String,
-        ...(includable !== null
-          ? {
-              description:
-                includable.length === 0
-                  ? "No relation is includable on this entity."
-                  : `Includable: ${includable.join(", ")}.`,
-            }
-          : {}),
-      }),
-    );
-    for (const relation of includable ?? []) {
+    // `null` means decoration time cannot know the set (an `{ exclude }`
+    // selector) — the parameter may still do something, so it is emitted
+    // undescribed, the same treatment `filterable`/`sortable`/`selectable`
+    // get for their own `{ exclude }` form. An empty array is a known,
+    // closed set — the parameter could never do anything, so it is omitted
+    // entirely rather than advertised with a "nothing is includable"
+    // description.
+    if (includable === null) {
       apply(
         swagger.ApiQuery({
-          name: `fields[${relation}]`,
+          name: "include",
           required: false,
           type: String,
         }),
       );
+    } else if (includable.length > 0) {
+      apply(
+        swagger.ApiQuery({
+          name: "include",
+          required: false,
+          type: String,
+          description: `Includable: ${includable.join(", ")}.`,
+        }),
+      );
+      for (const relation of includable) {
+        apply(
+          swagger.ApiQuery({
+            name: `fields[${relation}]`,
+            required: false,
+            type: String,
+          }),
+        );
+      }
     }
   }
 
