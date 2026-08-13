@@ -5,3 +5,8 @@ packages:
   - packages/frameworks/*
   - packages/protocols/*
   - examples/*
+
+overrides:
+  "@mikro-orm/better-sqlite>better-sqlite3": "^13.0.2"
+  "js-yaml@<5.2.2": "^5.2.3"
+  "vitepress>vite": "^6.4.3"
