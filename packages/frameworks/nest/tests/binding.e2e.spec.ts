@@ -1460,7 +1460,7 @@ describe("@Kavo relation includes", () => {
     expect(fieldsList?.description).toBeUndefined();
   });
 
-  it("documents that no relation is includable, on an entity that opted nothing in", async () => {
+  it("omits the include query parameter on an entity that opted nothing in", async () => {
     @Kavo(Todo)
     @Controller("todos")
     class ClosedController {}
@@ -1469,8 +1469,8 @@ describe("@Kavo relation includes", () => {
     await bootstrap(ClosedController);
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
-    const include = params.find((param) => param.name === "include");
-    expect(include?.description).toBe("No relation is includable on this entity.");
+    expect(params.find((param) => param.name === "include")).toBeUndefined();
+    expect(params.find((param) => param.name.startsWith("fields["))).toBeUndefined();
   });
 
   it("carries no description for an exclude-shaped includable allowlist, and no fields[relation] params", async () => {
