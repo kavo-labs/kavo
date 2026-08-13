@@ -30,8 +30,8 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     filterable: ["id", "name", "age", "size", "owner.name"],
     sortable: ["id", "name", "age", "owner.name"],
     selectable: ["id", "name", "age", "size"],
+    includable: ["owner", "tags"],
   },
-  relations: { edges: { owner: { includable: true }, tags: { includable: true } } },
   operations: {
     patchOne: false,
   },

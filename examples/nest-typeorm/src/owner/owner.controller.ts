@@ -43,12 +43,13 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     filterable: { exclude: ["deletedAt"] },
     sortable: { exclude: ["deletedAt"] },
     selectable: { exclude: ["deletedAt"] },
+    // `include=pets` — opt-in per relation. Pets are a to-many, so they
+    // batch-load: one extra query per page of owners, never a joined row
+    // explosion under pagination. `address` is the to-one counterpart — it
+    // joins instead. Both are `auto`'s default, so no `relations.edges`
+    // tuning is needed.
+    includable: ["pets", "address"],
   },
-  // `include=pets` — opt-in per relation. Pets are a to-many,
-  // so they batch-load: one extra query per page of owners, never a joined
-  // row explosion under pagination. `address` is the to-one counterpart —
-  // it joins instead.
-  relations: { edges: { pets: { includable: true }, address: { includable: true } } },
   operations: {
     purgeOne: true,
     restoreOne: true,

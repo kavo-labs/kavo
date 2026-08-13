@@ -37,11 +37,11 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     filterable: { exclude: ["deletedAt"] },
     sortable: { exclude: ["deletedAt"] },
     selectable: { exclude: ["deletedAt"] },
+    // `include=pets` — opt-in per relation, and a to-many. `address` is the
+    // to-one counterpart. Neither disturbs root pagination: MikroORM
+    // resolves `populate` with its own queries either way (doc 17 §3).
+    includable: ["pets", "address"],
   },
-  // `include=pets` — opt-in per relation, and a to-many. `address` is the
-  // to-one counterpart. Neither disturbs root pagination: MikroORM resolves
-  // `populate` with its own queries either way (doc 17 §3).
-  relations: { edges: { pets: { includable: true }, address: { includable: true } } },
   operations: {
     purgeOne: true,
     restoreOne: true,

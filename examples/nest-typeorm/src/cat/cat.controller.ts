@@ -30,11 +30,12 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     filterable: ["id", "name", "age", "size"],
     sortable: ["id", "name", "age"],
     selectable: ["id", "name", "age", "size"],
+    includable: ["owner", "tags"],
   },
   // The to-one side of the owner edge joins; `tags` is a to-many (many-to-
-  // many) and batches. `fields[owner]=id,name` / `fields[tags]=id,name`
-  // narrow each embedded relation.
-  relations: { edges: { owner: { includable: true }, tags: { includable: true } } },
+  // many) and batches, both `auto`'s default — no `relations.edges` tuning
+  // needed. `fields[owner]=id,name` / `fields[tags]=id,name` narrow each
+  // embedded relation.
   operations: {
     patchOne: false,
   },

@@ -33,8 +33,8 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     filterable: ["_id", "title", "status", "tags", "author"],
     sortable: ["_id", "title", "createdAt"],
     selectable: ["_id", "title", "status", "tags", "body", "createdAt"],
+    includable: ["author"],
   },
-  relations: { edges: { author: { includable: true } } },
 })
 @Controller("articles")
 export class ArticleController {}
