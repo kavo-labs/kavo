@@ -33,6 +33,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     item: OwnerItemDto,
     list: OwnerListDto,
   },
+  caching: { etag: false },
   realtime: { enabled: true, events: {} },
   softDelete: { strategy: "soft" },
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
