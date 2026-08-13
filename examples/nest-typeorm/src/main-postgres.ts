@@ -16,21 +16,24 @@ const POSTGRES_OPTIONS = {
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule.forRoot(POSTGRES_OPTIONS));
 
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle("Kavo — Pet example (Postgres)")
-      .setDescription(
-        "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
-          "sorting, pagination, layered config, and RFC 9457 problem-details " +
-          "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
-          "model the schema, with opt-in relation includes " +
-          "(`?include=owner`, `?include=pets`) and soft delete on owners.",
-      )
-      .setVersion("0.0.0")
-      .build(),
-  );
-  SwaggerModule.setup("docs", app, document);
+  // See main.ts's own `buildDocument` factory for why this is deferred
+  // rather than built eagerly here.
+  const buildDocument = (): ReturnType<typeof SwaggerModule.createDocument> =>
+    SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder()
+        .setTitle("Kavo — Pet example (Postgres)")
+        .setDescription(
+          "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
+            "sorting, pagination, layered config, and RFC 9457 problem-details " +
+            "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
+            "model the schema, with opt-in relation includes " +
+            "(`?include=owner`, `?include=pets`) and soft delete on owners.",
+        )
+        .setVersion("0.0.0")
+        .build(),
+    );
+  SwaggerModule.setup("docs", app, buildDocument);
 
   await app.listen(3000);
 }

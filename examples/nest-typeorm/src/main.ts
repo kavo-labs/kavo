@@ -52,26 +52,32 @@ async function bootstrap(): Promise<void> {
   // indistinguishable from the server never responding.
   app.enableCors();
 
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle("Kavo — Pet example")
-      .setDescription(
-        "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
-          "sorting, pagination, layered config, and RFC 9457 problem-details " +
-          "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
-          "model the schema, with opt-in relation includes " +
-          "(`?include=owner`, `?include=pets`) and soft delete on owners.\n\n" +
-          "### Realtime (SSE)\n\n" +
-          "Owner writes also publish over SSE — see the realtime example " +
-          "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
-          "optionally `&filter[...]=...`).\n\n" +
-          KAVO_API_GUIDE,
-      )
-      .setVersion("0.0.0")
-      .build(),
-  );
-  SwaggerModule.setup("docs", app, document);
+  // `search[...]`/conditional-request Swagger docs finish in `KavoModule`'s
+  // discovery binder, an `onModuleInit` hook that hasn't run yet at this
+  // point in `bootstrap` — it fires inside `app.listen()` below. A factory
+  // here (rather than a plain document) defers `createDocument()` until the
+  // first request for the docs, by which point that hook has completed.
+  const buildDocument = (): ReturnType<typeof SwaggerModule.createDocument> =>
+    SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder()
+        .setTitle("Kavo — Pet example")
+        .setDescription(
+          "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
+            "sorting, pagination, layered config, and RFC 9457 problem-details " +
+            "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
+            "model the schema, with opt-in relation includes " +
+            "(`?include=owner`, `?include=pets`) and soft delete on owners.\n\n" +
+            "### Realtime (SSE)\n\n" +
+            "Owner writes also publish over SSE — see the realtime example " +
+            "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
+            "optionally `&filter[...]=...`).\n\n" +
+            KAVO_API_GUIDE,
+        )
+        .setVersion("0.0.0")
+        .build(),
+    );
+  SwaggerModule.setup("docs", app, buildDocument);
 
   // `@kavo/sse` has no authentication of its own and is host-framework-
   // agnostic (plain `IncomingMessage`/`ServerResponse`, which Express's
