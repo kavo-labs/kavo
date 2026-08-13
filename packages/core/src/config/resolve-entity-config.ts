@@ -322,6 +322,28 @@ function resolveAllowlists<Entity extends object>(
       );
     }
   }
+  // `searchable`'s *default* is filtered to string-kind own columns, but an
+  // explicit override is used verbatim (`resolveFieldSelector`) — so a
+  // deliberately (or mistakenly) named non-string own column would
+  // otherwise slip past bootstrap and only fail at request time, as a raw
+  // driver error (`LOWER(int)` has no meaning) rather than the clean 400
+  // every other misconfiguration in this file produces. Own columns are
+  // checkable here; a relation-path entry (`'brand.createdAt'`) is not —
+  // its target metadata isn't in scope — so it stays unchecked, the same
+  // laxity `filterable`/`sortable` already have for relation paths.
+  const fieldKinds = new Map(metadata.fields.map((field) => [field.name, field.kind]));
+  for (const field of allowlists.searchable as readonly string[]) {
+    if (field.includes(".")) continue;
+    const kind = fieldKinds.get(field);
+    if (kind !== undefined && kind !== "string") {
+      throw new ConfigurationException(
+        metadata.name,
+        "allowlists.searchable",
+        `'${field}' is a '${kind}'-kind column on '${metadata.name}', which an 'ILIKE' fragment ` +
+          `cannot usefully match — 'searchable' entries must be string-kind columns, or relation paths`,
+      );
+    }
+  }
   return deepFreeze(allowlists);
 }
 

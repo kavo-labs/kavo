@@ -868,20 +868,25 @@ function parseSearch<Entity>(
 
   const words = mode === "words" ? query.split(/\s+/).filter((word) => word !== "") : [query];
   const terms = words.length > 0 ? words : [query];
-  // `words` mode synthesizes one OR group (one ILIKE per searched field) per
-  // term — unlike `filter[...]`'s `IN`/`NOT_IN`/`BETWEEN`, that width has no
-  // built-in bound of its own (`maxFilterDepth` caps nesting depth, not a
-  // group's child count). `maxInValues` is already "how many operands may
-  // one param carry" — reused here rather than adding a second limit key,
-  // so an entity with many searchable fields times a many-word term cannot
-  // synthesize an unbounded predicate (thousands of ILIKE conditions and
-  // bound parameters) from a single query string.
+  // Synthesized width is `terms.length * fields.length` — one ILIKE
+  // condition per searched field, per term — unlike `filter[...]`'s
+  // `IN`/`NOT_IN`/`BETWEEN`, which has no analogous width multiplier
+  // (`maxFilterDepth` caps nesting depth, not a group's child count).
+  // Capping `terms.length` alone leaves the product unbounded whenever
+  // `searchable` (or a wide `search[fields]`) carries many entries — its
+  // own default is *every* own string column, so this is not a contrived
+  // case. `maxInValues` is already "how many operands may one param
+  // carry"; reused on the product, rather than adding a second limit key,
+  // so neither factor alone can still synthesize an unbounded predicate.
   const max = config.settings.query.maxInValues;
-  if (terms.length > max) {
+  const width = terms.length * fields.length;
+  if (width > max) {
     issues.push({
       field: "search[query]",
       code: "KAVO_QUERY_LIMIT_EXCEEDED",
-      detail: `'search[mode]=words' splits the query into ${terms.length} words; the maximum is ${max}.`,
+      detail:
+        `'search[mode]=words' would synthesize ${terms.length} words × ${fields.length} searched fields = ` +
+        `${width} conditions; the maximum is ${max}.`,
     });
     return filter;
   }
