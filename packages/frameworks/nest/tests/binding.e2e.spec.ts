@@ -1647,7 +1647,7 @@ describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
     // *resolved* allowlist (ORM metadata already exists by the time this
     // runs) — `title` is Todo's one string-kind column, the zero-config
     // default.
-    expect(fields?.description).toBe("Allowed fields: title. Requires search[query].");
+    expect(fields?.description).toBe("Allowed fields: title.");
   });
 
   it("omits search[...] params entirely when search is not enabled", async () => {
@@ -1672,7 +1672,7 @@ describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     const fields = params.find((param) => param.name === "search[fields]");
-    expect(fields?.description).toBe("No field is searchable. Requires search[query].");
+    expect(fields?.description).toBe("No field is searchable.");
   });
 });
 

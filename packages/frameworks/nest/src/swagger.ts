@@ -449,7 +449,6 @@ export function applySearchQueryDocs(
       name: "search[query]",
       required: false,
       type: String,
-      description: "Free-text search term, composed (AND) with any filter[...] on this request.",
     }),
   );
   apply(
@@ -457,7 +456,6 @@ export function applySearchQueryDocs(
       name: "search[mode]",
       required: false,
       type: String,
-      description: "'substring' (default) or 'words'. Requires search[query].",
     }),
   );
   apply(
@@ -465,9 +463,7 @@ export function applySearchQueryDocs(
       name: "search[fields]",
       required: false,
       type: String,
-      description:
-        (searchable.length === 0 ? "No field is searchable." : `Allowed fields: ${searchable.join(", ")}.`) +
-        " Requires search[query].",
+      description: searchable.length === 0 ? "No field is searchable." : `Allowed fields: ${searchable.join(", ")}.`,
     }),
   );
 }
