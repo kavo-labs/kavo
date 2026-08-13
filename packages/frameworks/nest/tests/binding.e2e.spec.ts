@@ -1621,6 +1621,61 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
   });
 });
 
+/**
+ * `search[query]`/`search[mode]`/`search[fields]` docs (issue #156) are
+ * applied later than the rest — deferred to `KavoModule`'s discovery binder
+ * (`applySearchQueryDocs`), because whether they belong on the route
+ * depends on `query.search.enabled` resolved through the full precedence
+ * chain, and `allowlists.searchable`'s default/`{ exclude }` cases need ORM
+ * metadata that doesn't exist at `@Kavo` decoration time.
+ */
+describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
+  it("documents search[query]/search[mode]/search[fields] with the resolved searchable allowlist when enabled", async () => {
+    @Kavo(Todo, { query: { search: { enabled: true } } })
+    @Controller("todos")
+    class SearchDocsController {}
+
+    await bootstrap(SearchDocsController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const query = params.find((param) => param.name === "search[query]");
+    const mode = params.find((param) => param.name === "search[mode]");
+    const fields = params.find((param) => param.name === "search[fields]");
+    expect(query).toBeDefined();
+    expect(mode).toBeDefined();
+    // Unlike `filter`/`sort`/`fields` at decoration time, this is the fully
+    // *resolved* allowlist (ORM metadata already exists by the time this
+    // runs) — `title` is Todo's one string-kind column, the zero-config
+    // default.
+    expect(fields?.description).toBe("Allowed fields: title. Requires search[query].");
+  });
+
+  it("omits search[...] params entirely when search is not enabled", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class NoSearchController {}
+
+    await bootstrap(NoSearchController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    expect(params.find((param) => param.name === "search[query]")).toBeUndefined();
+    expect(params.find((param) => param.name === "search[mode]")).toBeUndefined();
+    expect(params.find((param) => param.name === "search[fields]")).toBeUndefined();
+  });
+
+  it("documents an explicit empty searchable allowlist as a closed door", async () => {
+    @Kavo(Todo, { query: { search: { enabled: true } }, allowlists: { searchable: [] } })
+    @Controller("todos")
+    class EmptySearchableController {}
+
+    await bootstrap(EmptySearchableController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const fields = params.find((param) => param.name === "search[fields]");
+    expect(fields?.description).toBe("No field is searchable. Requires search[query].");
+  });
+});
+
 describe("KAVO_API_GUIDE", () => {
   it("documents the generic filter/sort/limit/offset/fields syntax once, for apps to splice into their own document description", () => {
     expect(KAVO_API_GUIDE).toContain("filter[field][operator]=value");

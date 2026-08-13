@@ -10,7 +10,7 @@ import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
 import { resolvePrincipalExtractor } from "./principal.js";
-import { applyConditionalRequestDocs } from "./swagger.js";
+import { applyConditionalRequestDocs, applySearchQueryDocs } from "./swagger.js";
 import {
   KAVO_INSTANCE,
   KAVO_MODULE_OPTIONS,
@@ -314,8 +314,21 @@ class KavoBinder implements OnModuleInit {
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
         for (const { methodName, descriptor, route } of conditionalDocs) {
-          const cached = service.engine.config.settingsFor(descriptor.id).caching.etag;
-          applyConditionalRequestDocs(prototype, methodName, descriptor, route, cached);
+          const settings = service.engine.config.settingsFor(descriptor.id);
+          applyConditionalRequestDocs(prototype, methodName, descriptor, route, settings.caching.etag);
+          // `search[...]` Swagger docs (issue #156) — deferred for the same
+          // reason as the conditional-request docs above (`applySearchQueryDocs`'s
+          // doc comment in swagger.ts): `query.search.enabled` needs the
+          // full precedence chain, and `allowlists.searchable` is only
+          // fully resolved once ORM metadata exists, neither of which
+          // `@Kavo` decoration time has.
+          applySearchQueryDocs(
+            prototype,
+            methodName,
+            descriptor,
+            settings.query.search.enabled,
+            service.engine.config.allowlists.searchable as readonly string[],
+          );
         }
       }
     }
