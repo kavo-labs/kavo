@@ -61,7 +61,8 @@ async function bootstrap(): Promise<void> {
           "sorting, pagination, layered config, and RFC 9457 problem-details " +
           "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
           "model the schema, with opt-in relation includes " +
-          "(`?include=owner`, `?include=pets`) and soft delete on owners. " +
+          "(`?include=owner`, `?include=pets`) and soft delete on owners.\n\n" +
+          "### Realtime (SSE)\n\n" +
           "Owner writes also publish over SSE — see the realtime example " +
           "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
           "optionally `&filter[...]=...`).\n\n" +
