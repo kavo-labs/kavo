@@ -273,6 +273,10 @@ const config = defineConfig({
                 text: "0027 — An @Override inherits the ETag, but not the precondition",
                 link: "/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition",
               },
+              {
+                text: "0028 — Relation inclusion permission moves into allowlists.includable",
+                link: "/internals/adr/0028-includable-relations-move-into-allowlists",
+              },
             ],
           },
         ],

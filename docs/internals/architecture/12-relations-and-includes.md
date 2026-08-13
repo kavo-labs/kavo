@@ -5,31 +5,37 @@ query string and the SQL is documented here.
 
 ```ts
 @Kavo(Owner, {
-  relations: { edges: { pets: { includable: true } } },
+  allowlists: { includable: ["pets"] },
 })
 ```
 
 Inclusion is an **allowlist**, exactly like filtering and sorting: ORM
 metadata supplies the shape of a relation (name, target, cardinality) and
 config supplies permission, which metadata can never know. A relation
-nobody opted in is a 400, never a silent omission.
+nobody opted in is a 400, never a silent omission. Permission and loading
+tuning are two different config keys (ADR-0028): `allowlists.includable`
+(entity-config.ts) grants `include=` access, one relation segment at a time
+from the root; `relations.edges.<name>` (settings.ts) only tunes
+`defaultInclude`/`maxDepth`/`strategy` for a relation once it is already
+includable — naming a relation in `edges` grants nothing by itself.
 
 ## 1. The registry
 
-`DefaultRelationRegistry` merges the two sources at bootstrap into one
+`DefaultRelationRegistry` merges three sources at bootstrap into one
 `RelationDescriptor` per edge:
 
-| Key                             | Source   | Default                              |
-| ------------------------------- | -------- | ------------------------------------ |
-| `name`, `target`, `cardinality` | metadata | —                                    |
-| `includable`                    | config   | `false` — naming the edge opts it in |
-| `defaultInclude`                | config   | `false`                              |
-| `maxDepth`                      | config   | inherit `relations.maxIncludeDepth`  |
-| `strategy`                      | config   | `auto`                               |
+| Key                             | Source                  | Default                                                                                             |
+| ------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
+| `name`, `target`, `cardinality` | metadata                | —                                                                                                   |
+| `includable`                    | `allowlists.includable` | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
+| `defaultInclude`                | `relations.edges`       | `false`                                                                                             |
+| `maxDepth`                      | `relations.edges`       | inherit `relations.maxIncludeDepth`                                                                 |
+| `strategy`                      | `relations.edges`       | `auto`                                                                                              |
 
-An edge naming a relation the entity does not have is a bootstrap
-`ConfigurationException`: an allowlist typo that silently permits nothing
-looks exactly like working config until the first client asks.
+A name in `allowlists.includable`, or in `relations.edges`, that the entity
+does not have is a bootstrap `ConfigurationException`: an allowlist typo
+that silently permits nothing looks exactly like working config until the
+first client asks.
 
 ## 2. Resolution (`DefaultIncludeResolver`)
 
@@ -93,7 +99,8 @@ and a second query is pure overhead:
 
 ```ts
 joinedBlogs = kavo.createCrud(Blog, {
-  relations: { edges: { articles: { includable: true, strategy: "join" } } },
+  allowlists: { includable: ["articles"] },
+  relations: { edges: { articles: { strategy: "join" } } },
 });
 ```
 
