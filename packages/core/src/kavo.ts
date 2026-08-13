@@ -18,6 +18,7 @@ import { DefaultDeserializer, DefaultSerializer } from "./serialization/default-
 import { QueryNormalizer } from "./query/query-normalizer.js";
 import { builtInHandlers } from "./engine/built-in-handlers.js";
 import { createOperationRegistry } from "./operations/default-operation-registry.js";
+import type { EntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultEntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
 import { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
@@ -147,6 +148,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         .filter((relation) => relation.write === true)
         .map((relation) => relation.name);
       requireArrayMutationSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
+      requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
       registerArrayMutationOperations<Entity>(
         registry,
         arrayMutationRelations,
@@ -286,6 +288,38 @@ function requireArrayMutationSupport<Entity extends object>(
     `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
       `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
   );
+}
+
+/**
+ * Fails fast at `createCrud` when a write-opted relation's target entity
+ * can't be resolved through the entity catalog — the same lookup
+ * `resolveArrayMutationMemberIds` (`kavo-engine.ts`) needs at request time to
+ * narrow a wire body down to `{id}` references (`DefaultDeserializer`'s
+ * `associate()`, via `catalog.get(relation.target())?.metadata.idField`).
+ * An unresolvable target would silently return an unnarrowed body there —
+ * scalars degrading to `undefined`, and an object's first enumerable value
+ * being taken as the id — rather than the clean `ConfigurationException`
+ * this raises instead, once, before any request can reach it. Registering
+ * the target through `createCrud` (or an `infrastructure` that can derive
+ * its metadata) closes the gap.
+ */
+function requireArrayMutationTargetsResolvable<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  catalog: EntityCatalog,
+): void {
+  for (const name of relationNames) {
+    const relation = config.relations.get(name);
+    if (relation === undefined) continue; // unreachable: relationNames came from this same registry
+    if (catalog.get(relation.target()) !== undefined) continue;
+    throw new ConfigurationException(
+      config.entityName,
+      `relations.edges.${name}.write`,
+      `'${name}' opts into array-mutation writes, but its target entity has no metadata this root can ` +
+        `resolve — pass it through 'createCrud', or an 'infrastructure' that can derive its metadata, ` +
+        `on the same root as '${config.entityName}'`,
+    );
+  }
 }
 
 /**

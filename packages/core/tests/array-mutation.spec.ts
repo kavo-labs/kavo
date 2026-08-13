@@ -103,6 +103,20 @@ describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", 
     const { crud } = makeAuthorCrud(false);
     expect(crud.engine.registry.has("replacePosts")).toBe(false);
   });
+
+  it("rejects a write-opted relation whose target the entity catalog cannot resolve", () => {
+    // `Post` is deliberately never registered on this root and carries no
+    // `infrastructure` fallback — the same condition that, unchecked, let
+    // `resolveArrayMutationMemberIds` silently fall back to an unnarrowed
+    // wire body at request time (a scalar id degrading to `undefined`, or
+    // an object's first value being taken as the id).
+    expect(() =>
+      createKavo().createCrud(Author, { relations: { edges: { posts: { write: true } } } } as never, {
+        adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
+        metadata: authorMetadata,
+      }),
+    ).toThrowError(ConfigurationException);
+  });
 });
 
 describe("registerArrayMutationOperations / replaceRelationOperationId / writeOptedInRelationNames", () => {
