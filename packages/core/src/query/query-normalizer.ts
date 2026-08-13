@@ -1,5 +1,5 @@
 import type { FieldSelection, FieldSelectionInput } from "./field-selection.js";
-import type { Filter, FilterExpression } from "./filter.js";
+import type { Filter, FilterCondition, FilterExpression } from "./filter.js";
 import type { NormalizedQueryContext, QueryContext } from "./query-context.js";
 import type { CursorPagination, Pagination, PaginationStrategy, SincePagination } from "./pagination.js";
 import type { Sort } from "./sort.js";
@@ -71,6 +71,7 @@ export class QueryNormalizer<Entity = unknown> {
     } catch (error) {
       collectIssues(error, issues);
     }
+    filter = parseSearch(rawParams, filter, config, issues);
 
     const clientSort = parseSort(rawParams["sort"], config, issues);
     let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
@@ -767,6 +768,159 @@ function parseFields<Entity>(
   return { root, relations };
 }
 
+/**
+ * `search[query]`/`search[mode]`/`search[fields]` (doc 05 §4): validated and
+ * synthesized here, in the normalizer, rather than the filter parser —
+ * `searchable` is an allowlist and `search.enabled`/`mode` are per-operation
+ * settings, both already in the normalizer's scope, and synthesis needs the
+ * already-parsed `filter` to `AND` the fragment into.
+ *
+ * Wire-only: there is no programmatic `QueryContext.search` — a programmatic
+ * caller composes the equivalent `ILIKE` conditions directly, the same way
+ * it composes any other filter.
+ */
+function parseSearch<Entity>(
+  rawParams: Readonly<Record<string, unknown>>,
+  filter: Filter<Entity>,
+  config: ResolvedEntityConfig<Entity>,
+  issues: QueryIssueDto[],
+): Filter<Entity> {
+  const query = rawParams["search[query]"];
+  const modeRaw = rawParams["search[mode]"];
+  const fieldsRaw = rawParams["search[fields]"];
+
+  if (!hasValue(query)) {
+    if (hasValue(modeRaw) || hasValue(fieldsRaw)) {
+      issues.push({
+        field: "search",
+        code: "KAVO_QUERY_CONFLICTING_PARAMS",
+        detail: `'search[mode]' and 'search[fields]' modify a search — they require 'search[query]', which was not given.`,
+      });
+    }
+    return filter;
+  }
+  if (typeof query !== "string") {
+    issues.push({
+      field: "search[query]",
+      code: "KAVO_QUERY_INVALID_VALUE",
+      detail: `'search[query]' must be a string.`,
+    });
+    return filter;
+  }
+
+  const searchable = config.allowlists.searchable as readonly string[];
+  if (!config.settings.query.search.enabled) {
+    issues.push({
+      field: "search[query]",
+      code: "KAVO_QUERY_UNSUPPORTED_PARAM",
+      detail:
+        `Query parameter 'search[query]' is not supported: search is not enabled for ${config.entityName}. ` +
+        `Set 'query.search.enabled' to true to turn it on.`,
+    });
+    return filter;
+  }
+  if (searchable.length === 0) {
+    issues.push({
+      field: "search[query]",
+      code: "KAVO_QUERY_UNSUPPORTED_PARAM",
+      detail:
+        `Query parameter 'search[query]' is not supported: ${config.entityName} has no searchable fields ` +
+        `('allowlists.searchable' resolves to an empty set).`,
+    });
+    return filter;
+  }
+
+  const before = issues.length;
+  let mode = config.settings.query.search.mode;
+  if (hasValue(modeRaw)) {
+    if (modeRaw !== "substring" && modeRaw !== "words") {
+      issues.push({
+        field: "search[mode]",
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: `'search[mode]' must be 'substring' or 'words', got '${String(modeRaw)}'.`,
+      });
+    } else {
+      mode = modeRaw;
+    }
+  }
+
+  let fields = searchable;
+  if (hasValue(fieldsRaw)) {
+    if (typeof fieldsRaw !== "string") {
+      issues.push({
+        field: "search[fields]",
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: `'search[fields]' must be a comma-separated field list.`,
+      });
+    } else {
+      const requested = fieldsRaw.split(",").filter((field) => field !== "");
+      let valid = true;
+      for (const field of requested) {
+        if (searchable.includes(field)) continue;
+        valid = false;
+        pushAllowlistIssue(field, "searching", config.entityName, searchable, issues);
+      }
+      if (valid) fields = requested;
+    }
+  }
+
+  if (issues.length > before) return filter;
+
+  const words = mode === "words" ? query.split(/\s+/).filter((word) => word !== "") : [query];
+  const terms = words.length > 0 ? words : [query];
+  // `words` mode synthesizes one OR group (one ILIKE per searched field) per
+  // term — unlike `filter[...]`'s `IN`/`NOT_IN`/`BETWEEN`, that width has no
+  // built-in bound of its own (`maxFilterDepth` caps nesting depth, not a
+  // group's child count). `maxInValues` is already "how many operands may
+  // one param carry" — reused here rather than adding a second limit key,
+  // so an entity with many searchable fields times a many-word term cannot
+  // synthesize an unbounded predicate (thousands of ILIKE conditions and
+  // bound parameters) from a single query string.
+  const max = config.settings.query.maxInValues;
+  if (terms.length > max) {
+    issues.push({
+      field: "search[query]",
+      code: "KAVO_QUERY_LIMIT_EXCEEDED",
+      detail: `'search[mode]=words' splits the query into ${terms.length} words; the maximum is ${max}.`,
+    });
+    return filter;
+  }
+  const groups = terms.map((term) => searchGroup<Entity>(fields, term));
+  const synthesized: FilterExpression<Entity> =
+    groups.length === 1
+      ? (groups[0] as FilterExpression<Entity>)
+      : { kind: "group", operator: "AND", children: groups };
+
+  const root: FilterExpression<Entity> =
+    filter.root === null ? synthesized : { kind: "group", operator: "AND", children: [filter.root, synthesized] };
+  return { root };
+}
+
+/** One `OR` group of `field ILIKE '%term%'`, one condition per searched field. */
+function searchGroup<Entity>(fields: readonly string[], term: string): FilterExpression<Entity> {
+  const pattern = `%${escapeLikeLiteral(term)}%`;
+  const conditions: FilterCondition<Entity>[] = fields.map((field) => ({
+    kind: "condition",
+    field: field as FieldPath<Entity>,
+    operator: "ILIKE",
+    value: pattern,
+  }));
+  return conditions.length === 1
+    ? (conditions[0] as FilterExpression<Entity>)
+    : { kind: "group", operator: "OR", children: conditions };
+}
+
+/**
+ * Escapes a literal `%`/`_` (and the backslash escape character itself)
+ * with the backslash convention the filter grammar's `like`/`ilike`
+ * operators already use (doc 05 §3) — the same escape every
+ * `FilterTranslator` already unescapes, so a search term never has its
+ * characters read back as SQL wildcards.
+ */
+function escapeLikeLiteral(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 function validateExpression<Entity>(
   expression: FilterExpression<Entity>,
   config: ResolvedEntityConfig<Entity>,
@@ -799,11 +953,17 @@ function validateExpression<Entity>(
 }
 
 /** Which allowlist each usage reads, so the caller names only the usage. */
-const ALLOWLIST_FOR: Readonly<Record<AllowlistUsage, "filterable" | "sortable" | "selectable">> = Object.freeze({
-  filtering: "filterable",
-  sorting: "sortable",
-  selection: "selectable",
-});
+const ALLOWLIST_FOR: Readonly<Record<AllowlistUsage, "filterable" | "sortable" | "selectable" | "searchable">> =
+  Object.freeze({
+    filtering: "filterable",
+    sorting: "sortable",
+    selection: "selectable",
+    // `requireAllowlisted` is never called with "searching" — `parseSearch`
+    // calls `pushAllowlistIssue` directly, since `search[fields]` narrows a
+    // different base set (`searchable`, not the standard three usages this
+    // helper serves). Present for type completeness against `AllowlistUsage`.
+    searching: "searchable",
+  });
 
 /**
  * The single allowlist gate for the programmatic entry point and the wire

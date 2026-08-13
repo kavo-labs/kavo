@@ -162,6 +162,132 @@ describe("QueryNormalizer — wire params", () => {
   });
 });
 
+describe("QueryNormalizer — search[...]", () => {
+  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: { enabled: true } } }, undefined);
+
+  it("rejects search[query] when search.enabled is false (the default)", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+  });
+
+  it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
+    const emptySearchable = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true } }, allowlists: { searchable: [] } },
+      undefined,
+    );
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+  });
+
+  it("synthesizes an OR group of ILIKE conditions across the searchable allowlist (substring, default)", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "ada" }, searchEnabled);
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "OR",
+      children: [
+        { kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" },
+        { kind: "condition", field: "email", operator: "ILIKE", value: "%ada%" },
+      ],
+    });
+  });
+
+  it("splits on whitespace and ANDs one OR group per word in words mode", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, searchEnabled);
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        {
+          kind: "group",
+          operator: "OR",
+          children: [
+            { kind: "condition", field: "name", operator: "ILIKE", value: "%blue%" },
+            { kind: "condition", field: "email", operator: "ILIKE", value: "%blue%" },
+          ],
+        },
+        {
+          kind: "group",
+          operator: "OR",
+          children: [
+            { kind: "condition", field: "name", operator: "ILIKE", value: "%iphone%" },
+            { kind: "condition", field: "email", operator: "ILIKE", value: "%iphone%" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("narrows to search[fields], a subset of the searchable allowlist", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "ada", "search[fields]": "name" }, searchEnabled);
+    expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
+  });
+
+  it("rejects a search[fields] entry outside the searchable allowlist", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "ada", "search[fields]": "name,age" }, searchEnabled),
+    );
+    expect(issues[0]).toMatchObject({ field: "age", code: "KAVO_QUERY_INVALID_FIELD" });
+  });
+
+  it("rejects an invalid search[mode] value", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "ada", "search[mode]": "fuzzy" }, searchEnabled),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[mode]", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it("rejects search[mode] without search[query]", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[mode]": "words" }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
+  });
+
+  it("rejects search[fields] without search[query]", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[fields]": "name" }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
+  });
+
+  it("escapes a literal '%' and '_' in the search term rather than treating them as wildcards", () => {
+    const query = normalizer.normalizeWire({ "search[query]": "50%_off", "search[fields]": "name" }, searchEnabled);
+    expect(query.filter.root).toMatchObject({ operator: "ILIKE", value: "%50\\%\\_off%" });
+  });
+
+  it("caps the number of words in words mode at query.maxInValues", () => {
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { query: { search: { enabled: true }, maxInValues: 2 } },
+      undefined,
+    );
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
+    );
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+  });
+
+  it("still 400s on an unrelated filter issue without also raising a spurious search issue", () => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeWire({ "filter[nope][eq]": "1", "search[query]": "ada" }, searchEnabled),
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ field: "nope", code: "KAVO_QUERY_INVALID_FIELD" });
+  });
+
+  it("ANDs the synthesized search fragment with an existing filter[...] condition", () => {
+    const query = normalizer.normalizeWire(
+      { "search[query]": "ada", "search[fields]": "name", "filter[age][gte]": "18" },
+      searchEnabled,
+    );
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        { kind: "condition", field: "age", operator: "GTE", value: 18 },
+        { kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" },
+      ],
+    });
+  });
+});
+
 describe("QueryNormalizer — onlyDeleted", () => {
   it("rejects onlyDeleted=true when the entity is not soft-deletable (wire)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ onlyDeleted: "true" }, config));

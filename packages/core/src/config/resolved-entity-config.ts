@@ -20,6 +20,7 @@ export interface ResolvedQueryAllowlists<Entity = unknown> {
   readonly sortable: readonly FieldPath<Entity>[];
   readonly selectable: readonly FieldPath<Entity>[];
   readonly includable: readonly IncludePath<Entity, 1>[];
+  readonly searchable: readonly FieldPath<Entity>[];
 }
 
 /**

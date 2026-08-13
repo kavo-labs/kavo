@@ -70,6 +70,7 @@ const ALLOWLIST_KEYS = Object.freeze({
   filtering: "filterable",
   sorting: "sortable",
   selection: "selectable",
+  searching: "searchable",
 } as const);
 
 /** How each usage reads as an adjective in front of "fields". */
@@ -77,6 +78,7 @@ const ALLOWLIST_ADJECTIVES = Object.freeze({
   filtering: "Filterable",
   sorting: "Sortable",
   selection: "Selectable",
+  searching: "Searchable",
 } as const);
 
 export type AllowlistUsage = keyof typeof ALLOWLIST_KEYS;

@@ -140,6 +140,41 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.filterable).toContain("status");
   });
 
+  it("defaults searchable to every own string-kind column, unlike filterable's every-column default", () => {
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    // `age` (number), `status` (enum), `createdAt` (date), `id` (number) are
+    // excluded — only `name`/`email` are string-kind.
+    expect(config.allowlists.searchable).toEqual(["name", "email"]);
+    expect(config.allowlists.filterable).toContain("age");
+  });
+
+  it("uses an explicit searchable array verbatim, including a relation path", () => {
+    const config = resolveEntityConfig(
+      authorMetadata,
+      { allowlists: { searchable: ["name", "posts.title" as never] } },
+      undefined,
+    );
+    expect(config.allowlists.searchable).toEqual(["name", "posts.title"]);
+  });
+
+  it("resolves searchable { exclude } against the string-column base, not every column", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { searchable: { exclude: ["email"] } } }, undefined);
+    expect(config.allowlists.searchable).toEqual(["name"]);
+  });
+
+  it("rejects a computed field named in allowlists.searchable", () => {
+    expect(() =>
+      resolveEntityConfig(
+        userMetadata,
+        {
+          computed: { fullName: { resolve: () => "" } },
+          allowlists: { searchable: ["fullName" as never] },
+        },
+        undefined,
+      ),
+    ).toThrowError(/searched on/);
+  });
+
   it("resolves an entity-scope defaultSort", () => {
     const config = resolveEntityConfig(
       userMetadata,

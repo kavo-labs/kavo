@@ -283,6 +283,9 @@ function resolveAllowlists<Entity extends object>(
   computed: ComputedFieldMap<Entity>,
 ): ResolvedQueryAllowlists<Entity> {
   const ownColumns = metadata.fields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
+  const stringColumns = metadata.fields
+    .filter((field) => field.kind === "string")
+    .map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
   const selectableBase = [
     ...(ownColumns as readonly string[]),
     ...Object.keys(computed).filter((name) => computed[name]?.selectable !== false),
@@ -297,16 +300,25 @@ function resolveAllowlists<Entity extends object>(
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
     selectable: resolveFieldSelector(selectableBase, configured?.selectable),
     includable: resolveIncludableSelector(metadata.name, relationNames, configured?.includable),
+    // Unlike `filterable`/`sortable`, its unconfigured default is narrower
+    // than "every own column" — a non-string column has nothing an `ILIKE`
+    // fragment can usefully match (doc 05 §4).
+    searchable: resolveFieldSelector(stringColumns, configured?.searchable),
   };
-  for (const key of ["filterable", "sortable"] as const) {
+  const COMPUTED_REJECTION = {
+    filterable: { verb: "filtered on", clause: "WHERE" },
+    sortable: { verb: "sorted on", clause: "ORDER BY" },
+    searchable: { verb: "searched on", clause: "WHERE" },
+  } as const;
+  for (const key of ["filterable", "sortable", "searchable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
       if (!Object.prototype.hasOwnProperty.call(computed, field)) continue;
+      const { verb, clause } = COMPUTED_REJECTION[key];
       throw new ConfigurationException(
         metadata.name,
         `allowlists.${key}`,
-        `'${field}' is a computed field on '${metadata.name}', which can never be ${
-          key === "filterable" ? "filtered on" : "sorted on"
-        } — it has no column to translate to ${key === "filterable" ? "WHERE" : "ORDER BY"}`,
+        `'${field}' is a computed field on '${metadata.name}', which can never be ${verb} — ` +
+          `it has no column to translate to ${clause}`,
       );
     }
   }
