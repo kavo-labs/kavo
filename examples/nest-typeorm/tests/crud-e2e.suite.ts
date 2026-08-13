@@ -750,7 +750,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         const tagA = await createTag("solo");
         const catId = await createCat([tagA]);
 
-        await request(server()).put(`/cats/${catId}/tags`).send(null as never).expect(200);
+        await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send(null as never)
+          .expect(200);
 
         expect(await tagsOf(catId)).toEqual([]);
       });

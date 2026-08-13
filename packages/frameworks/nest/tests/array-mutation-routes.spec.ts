@@ -48,6 +48,13 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
       }
     }
 
+    // manual-method-wins skips `defineRoute` entirely for a name already
+    // own to the prototype — the method itself must never have been
+    // decorated, not merely still return its own value alongside a
+    // generated route wired underneath it.
+    const method = OverriddenController.prototype.replaceTags;
+    expect(Reflect.getMetadata(PATH_METADATA, method)).toBeUndefined();
+    expect(Reflect.getMetadata(METHOD_METADATA, method)).toBeUndefined();
     expect(new OverriddenController().replaceTags()).toBe("manual");
   });
 });

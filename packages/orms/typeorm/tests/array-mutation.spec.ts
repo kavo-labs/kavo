@@ -1,7 +1,16 @@
 import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DataSource } from "typeorm";
-import { Column, Entity, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
+import {
+  Column,
+  DeleteDateColumn,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from "typeorm";
 import { NotFoundException, type RepositoryAdapter } from "@kavo/core";
 import { createInfrastructure } from "@kavo/typeorm";
 
@@ -27,6 +36,12 @@ class Novel {
 
   @ManyToOne(() => Writer, (writer) => writer.novels)
   writer!: Writer;
+
+  // Soft-deletable, so a member-id existence check can be pinned against a
+  // row that still exists physically but is excluded by TypeORM's own
+  // default `find()` scope (which `replaceRelation`'s existence check uses).
+  @DeleteDateColumn()
+  deletedAt!: Date | null;
 }
 
 /** A `ManyToMany` fixture — a junction-table write, architecturally distinct
@@ -159,6 +174,20 @@ describe("TypeOrmRepositoryAdapter#replaceRelation (arrayMutation's replace stra
     // The rejected write must not have partially applied.
     const remaining = await dataSource.getRepository(Novel).find({ where: { writer: { id: writerId } } });
     expect(remaining.map((novel) => novel.id).sort()).toEqual([...novelIds].sort());
+  });
+
+  it("raises NotFoundException for a soft-deleted member id, same as a nonexistent one", async () => {
+    // The existence check reuses the target repository's default `find()`,
+    // which excludes soft-deleted rows the same way every other read in
+    // this adapter does — a soft-deleted novel is not associable through
+    // `replaceRelation` even though the row still physically exists.
+    const { writerId } = await seed();
+    const [novel] = await dataSource.getRepository(Novel).save([{ title: "Ghost" }]);
+    await dataSource.getRepository(Novel).softDelete(novel!.id);
+
+    await expect(adapter.replaceRelation!(writerId, "novels", [novel!.id], context())).rejects.toThrowError(
+      NotFoundException,
+    );
   });
 });
 
