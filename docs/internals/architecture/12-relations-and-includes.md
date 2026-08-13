@@ -165,6 +165,44 @@ extension point are **ADR-0014**. `{"owner": 7}`, `{"owner": {"id": 7}}`,
 `{"tags": [1, {"id": 2}]}`, and `null` all work; anything more inside a
 relation object is narrowed to the id rather than half-honored.
 
+### Array-relation mutation (`arrayMutation`, ADR-0029)
+
+ADR-0014's named extension point — an explicit per-relation write policy —
+is `KavoSettings.arrayMutation: { strategy } | false`, resolved through the
+usual precedence chain, plus a per-relation opt-in:
+`relations.edges.<name>.write: true`. A relation not opted in keeps the
+plain associate-by-id behavior above; nothing here changes for it.
+
+Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` — but
+only **`replace`** is implemented today. Choosing `"resource"` or
+`"jsonPatch"` is a bootstrap `ConfigurationException`, not a silent no-op.
+
+`replace` is a whole-array `PUT` on the relation, still id-only per
+ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
+`{ remove: [...] }` shape, no JSON Patch ops:
+
+- For each relation with `write: true`, Kavo synthesizes one operation,
+  `replace<Relation>` (`replaceTags` for `tags`), routed at
+  `PUT /<entity>/:id/<relation>`. This is a registry entry like any other
+  (ADR-0006) — synthesized post-hoc by `registerArrayMutationOperations`
+  rather than declared through `EntityConfig.operations`, since nothing
+  there names it, but generated at decoration time exactly like every
+  other route (ADR-0012).
+- The body is an array of ids/`{id}` references, or `null` (empty array
+  and `null` both disassociate every current member). Any other top-level
+  shape raises `ArrayMutationInvalidShapeException`
+  (`KAVO_ARRAY_MUTATION_INVALID_SHAPE`, 400).
+- `write: true` is checked against the relation's real cardinality at
+  `createCrud` (`ConfigurationException` on a to-one relation — nothing to
+  replace), and a write-opted relation on an adapter without
+  `EntityWriter.replaceRelation` also fails at `createCrud` — the ORM
+  caveat ADR-0014 already states for association by id applies here too.
+- The response is the parent entity (its own `item` DTO slot), not the
+  relation's own member list.
+
+See **ADR-0029** for the full design, including why `resource`/`jsonPatch`
+and the non-`@kavo/typeorm` adapters are deliberately out of scope for now.
+
 ## 6. Not included
 
 Filtering or sorting _on_ an included node's rows (`include=posts` where
