@@ -21,6 +21,7 @@ import { createOperationRegistry } from "./operations/default-operation-registry
 import { DefaultEntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
 import { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
+import { registerArrayMutationOperations } from "./relations/array-mutation-operations.js";
 
 /**
  * Root-factory options. `GlobalConfig.defaults` is the
@@ -141,6 +142,24 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         resolved.entityName,
       );
       requireSoftDeletable(resolved, registry);
+      const arrayMutationRelations = resolved.relations
+        .all()
+        .filter((relation) => relation.write === true)
+        .map((relation) => relation.name);
+      requireArrayMutationSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
+      registerArrayMutationOperations<Entity>(
+        registry,
+        arrayMutationRelations,
+        resolved.entityName,
+        (relationName) => ({
+          // `replaceRelation` is confirmed present by `requireArrayMutationSupport`
+          // above, once, at bootstrap — never per request.
+          execute: (input: unknown, context) => {
+            const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
+            return context.repository.replaceRelation!(id, relationName, memberIds, context);
+          },
+        }),
+      );
 
       catalog.register(entity as ClassRef, {
         metadata: metadata as EntityMetadata<object>,
@@ -246,6 +265,27 @@ function requireSoftDeletable<Entity extends object>(
         `set softDelete.field to an existing column`,
     );
   }
+}
+
+/**
+ * Fails fast at `createCrud` when a relation opts into array-mutation
+ * writes but the repository adapter in use has no `replaceRelation` — the
+ * same ORM caveat ADR-0014's Consequences section already names for
+ * association by id: Kavo maps the payload, it does not synthesize a write
+ * an adapter declined to make. Checked once here rather than per request.
+ */
+function requireArrayMutationSupport<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  if (relationNames.length === 0 || typeof adapter.replaceRelation === "function") return;
+  throw new ConfigurationException(
+    config.entityName,
+    `relations.edges.${relationNames[0]}.write`,
+    `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
+      `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
+  );
 }
 
 /**

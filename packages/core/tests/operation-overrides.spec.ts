@@ -22,6 +22,7 @@ class CountingUserAdapter implements RepositoryAdapter<User> {
     delete: 0,
     restore: 0,
     purge: 0,
+    replaceRelation: 0,
   };
 
   constructor(private readonly inner: InMemoryUserAdapter = new InMemoryUserAdapter()) {}
