@@ -14,6 +14,15 @@ export const KAVO_CONTROLLER_METADATA = "kavo:controller";
 /** Reflect metadata key the `@Override` method decorator writes. */
 export const KAVO_OVERRIDE_METADATA = "kavo:override";
 
+/**
+ * Reflect metadata key the `@Kavo` decorator writes on controllers: the
+ * routes whose conditional-request Swagger docs (ADR-0020) couldn't be
+ * decided at decoration time, for `KavoModule`'s discovery binder to finish
+ * once the entity's config is fully resolved — see
+ * `applyConditionalRequestDocs`'s doc comment in `swagger.ts`.
+ */
+export const KAVO_CONDITIONAL_DOCS_METADATA = "kavo:conditionalDocs";
+
 /** Property the generated route methods read the injected service from. */
 export const KAVO_SERVICE_PROPERTY = "__kavoService";
 

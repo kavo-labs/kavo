@@ -4,15 +4,17 @@ import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
 import type { ClassRef, KavoInstance } from "@kavo/core";
 import { ConfigurationException, createKavo } from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
-import type { KavoControllerMetadata } from "./kavo.decorator.js";
+import type { KavoConditionalDocEntry, KavoControllerMetadata } from "./kavo.decorator.js";
 import { getRegisteredKavoControllers } from "./kavo.decorator.js";
 import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
 import { resolvePrincipalExtractor } from "./principal.js";
+import { applyConditionalRequestDocs } from "./swagger.js";
 import {
   KAVO_INSTANCE,
   KAVO_MODULE_OPTIONS,
+  KAVO_CONDITIONAL_DOCS_METADATA,
   KAVO_CONTROLLER_METADATA,
   KAVO_PRINCIPAL_PROPERTY,
   KAVO_SERVICE_PROPERTY,
@@ -299,8 +301,23 @@ class KavoBinder implements OnModuleInit {
       if (metatype === null || instance === undefined) continue;
       const metadata = Reflect.getMetadata(KAVO_CONTROLLER_METADATA, metatype) as KavoControllerMetadata | undefined;
       if (metadata === undefined) continue;
-      instance[KAVO_SERVICE_PROPERTY] = this.kavo.createCrud(metadata.entity, metadata.config);
+      const service = this.kavo.createCrud(metadata.entity, metadata.config);
+      instance[KAVO_SERVICE_PROPERTY] = service;
       instance[KAVO_PRINCIPAL_PROPERTY] = extractPrincipal;
+
+      // The conditional-request Swagger docs (ADR-0020) decoration time
+      // couldn't finish — see `applyConditionalRequestDocs`'s doc comment
+      // in swagger.ts — now that `service.engine.config` carries the
+      // entity's fully resolved settings, global scope included.
+      const conditionalDocs = Reflect.getMetadata(KAVO_CONDITIONAL_DOCS_METADATA, metatype) as
+        readonly KavoConditionalDocEntry[] | undefined;
+      if (conditionalDocs !== undefined) {
+        const prototype = metatype.prototype as Record<string, unknown>;
+        for (const { methodName, descriptor, route } of conditionalDocs) {
+          const cached = service.engine.config.settingsFor(descriptor.id).caching.etag;
+          applyConditionalRequestDocs(prototype, methodName, descriptor, route, cached);
+        }
+      }
     }
   }
 }
