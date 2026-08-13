@@ -71,6 +71,13 @@ export const ERROR_CATALOG = {
     title: "Conflict",
     message: "The operation conflicts with the current state of {entity}.",
   },
+  KAVO_ARRAY_MUTATION_INVALID_SHAPE: {
+    status: 400,
+    title: "Invalid array-mutation body",
+    message:
+      "The body for '{relation}' on {entity} must be an array of ids or id references, or null — the 'replace' " +
+      "strategy disables partial mutation (no add/remove shape, no patch ops).",
+  },
   KAVO_ALREADY_DELETED: {
     status: 409,
     title: "Already deleted",

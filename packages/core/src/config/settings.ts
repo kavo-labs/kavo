@@ -91,6 +91,18 @@ export interface RelationEdgeSettings {
   /** Overrides `maxIncludeDepth` for the subtree below this node. */
   readonly maxDepth?: number;
   readonly strategy?: RelationLoadStrategy;
+  /**
+   * Opts this relation into `arrayMutation` writes (ADR-0014's named
+   * extension point) — the per-relation half of the policy, `arrayMutation`
+   * itself is the strategy half. Only meaningful on a to-many relation;
+   * `write: true` on a to-one relation is a bootstrap `ConfigurationException`
+   * (`resolve-entity-config.ts`), since association by id already covers
+   * to-one writes and there is no array to mutate. Like `defaultInclude`,
+   * this is a permission a relation must be granted explicitly — it is
+   * independent of `allowlists.includable` (a relation can be write-opted-in
+   * without being read-includable, or vice versa).
+   */
+  readonly write?: boolean;
 }
 
 /** Relation inclusion limits and per-relation loading tuning. */
@@ -195,6 +207,25 @@ export interface RealtimeSettings {
   readonly onPublishError?: (error: unknown, transport: RealtimeTransport, event: RealtimeEventDto) => void;
 }
 
+/**
+ * `arrayMutation.strategy` values (ADR-0014's named extension point for
+ * write-side relations beyond associate-by-id). Only `"replace"` is
+ * implemented — a whole-array `PUT` on the relation, still id-only per
+ * ADR-0014, with partial mutation disabled. `"resource"` (per-relation
+ * sub-collection endpoints) and `"jsonPatch"` (RFC 6902 patch documents)
+ * are reserved discriminators, the same pattern `SearchDriver` uses for a
+ * not-yet-built backend: naming them now means a later issue adds behavior
+ * without a breaking config change. `validate-settings.ts` rejects them
+ * outright today, so choosing one fails at bootstrap instead of silently
+ * doing nothing.
+ */
+export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
+
+/** Array-relation write policy (config half — see `RelationDescriptor.write` for the per-relation opt-in). */
+export interface ArrayMutationSettings {
+  readonly strategy: ArrayMutationStrategy;
+}
+
 /** The full settings tree. */
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
@@ -204,6 +235,14 @@ export interface KavoSettings {
   readonly caching: CachingSettings;
   readonly softDelete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;
+  /**
+   * `false` disables array-relation mutation entirely, the same convention
+   * `softDelete`/`realtime` use. Even when set, a strategy only applies to
+   * relations that opt in via `relations.edges.<name>.write: true`
+   * (ADR-0014's Consequences section) — declaring a strategy here grants no
+   * relation anything by itself.
+   */
+  readonly arrayMutation: ArrayMutationSettings | false;
   /**
    * Global operation enablement, keyed by standard operation id — booleans
    * only, unlike the richer per-entity `EntityConfig.operations` (which also

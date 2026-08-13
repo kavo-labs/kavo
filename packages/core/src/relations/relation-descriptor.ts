@@ -35,4 +35,12 @@ export interface RelationDescriptor {
   /** Overrides the configured `maxIncludeDepth` below this node. */
   readonly maxDepth?: number;
   readonly strategy: RelationLoadStrategy;
+  /**
+   * Whether clients may mutate this relation's array through `arrayMutation`
+   * (ADR-0014's named extension point). Defaults to `false` — like
+   * `includable`, opt-in — granted by `relations.edges.<name>.write` in
+   * config and merged in here by `DefaultRelationRegistry`, then checked
+   * against `cardinality` at bootstrap (`resolve-entity-config.ts`).
+   */
+  readonly write?: boolean;
 }

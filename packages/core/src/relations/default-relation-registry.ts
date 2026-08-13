@@ -45,6 +45,18 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
           `'${name}' is not a relation of ${entityName} (relations: ${[...byName.keys()].join(", ") || "none"})`,
         );
       }
+      // `write: true` on a to-one relation has nothing to mutate —
+      // association by id already covers to-one writes (ADR-0014) — so it
+      // is rejected here, at bootstrap, the same way a mistuned `edges`
+      // entry is rejected elsewhere in this constructor.
+      if (edge.write === true && descriptor.cardinality !== "many") {
+        throw new ConfigurationException(
+          entityName,
+          `relations.edges.${name}.write`,
+          `'${name}' is a to-one relation — 'arrayMutation' write policy only applies to to-many relations, ` +
+            `which is what has an array to mutate`,
+        );
+      }
       // `edges` tunes loading only — it no longer touches `includable`
       // (ADR-0028): a relation can be tuned here without being includable,
       // and `defaultInclude: true` on one that isn't is rejected earlier,
@@ -54,6 +66,7 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
         ...(edge.defaultInclude !== undefined && { defaultInclude: edge.defaultInclude }),
         ...(edge.maxDepth !== undefined && { maxDepth: edge.maxDepth }),
         strategy: edge.strategy ?? descriptor.strategy,
+        ...(edge.write !== undefined && { write: edge.write }),
       });
     }
     this.relations = byName;

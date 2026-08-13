@@ -113,6 +113,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected "join", "batch", or "auto", got ${JSON.stringify(edge.strategy)}`,
       );
     }
+    if (edge.write !== undefined) bool(`${path}.write`, edge.write);
     // `defaultInclude` vs. `allowlists.includable` (permission) is cross-
     // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
     // not here — this function only sees `KavoSettings`, and `allowlists`
@@ -202,6 +203,36 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         entityName,
         "realtime.onPublishError",
         `expected a function, got ${JSON.stringify(realtime.onPublishError)}`,
+      );
+    }
+  }
+
+  if (settings.arrayMutation !== false) {
+    const arrayMutation = settings.arrayMutation;
+    if (typeof arrayMutation !== "object" || arrayMutation === null) {
+      throw new ConfigurationException(
+        entityName,
+        "arrayMutation",
+        `expected false or { strategy: "replace" | "resource" | "jsonPatch" }, got ${JSON.stringify(arrayMutation)}`,
+      );
+    }
+    if (
+      arrayMutation.strategy !== "replace" &&
+      arrayMutation.strategy !== "resource" &&
+      arrayMutation.strategy !== "jsonPatch"
+    ) {
+      throw new ConfigurationException(
+        entityName,
+        "arrayMutation.strategy",
+        `expected "replace", "resource", or "jsonPatch", got ${JSON.stringify(arrayMutation.strategy)}`,
+      );
+    }
+    if (arrayMutation.strategy === "resource" || arrayMutation.strategy === "jsonPatch") {
+      throw new ConfigurationException(
+        entityName,
+        "arrayMutation.strategy",
+        `"${arrayMutation.strategy}" is a reserved discriminator, not yet implemented — only "replace" is ` +
+          `supported today (see issue #206 and its follow-ups)`,
       );
     }
   }

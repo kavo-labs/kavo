@@ -78,6 +78,20 @@ export class ConflictException extends KavoException {
   }
 }
 
+/**
+ * A `replace`-strategy array-mutation body (`PUT /entity/:id/relation`) that
+ * is not the shape ADR-0014 defines for a to-many association — an array of
+ * scalar ids / `{ id }` references, or `null` — → 400. `replace` disables
+ * partial mutation outright (no `{ add: [...] }`/`{ remove: [...] }` shape,
+ * no JSON Patch ops), so a body attempting one is this, not a silent
+ * narrowing the way a deep nested write is silently narrowed elsewhere.
+ */
+export class ArrayMutationInvalidShapeException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_ARRAY_MUTATION_INVALID_SHAPE", options);
+  }
+}
+
 export class PersistenceException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_PERSISTENCE_FAILED", options);

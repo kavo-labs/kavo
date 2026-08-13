@@ -39,6 +39,7 @@ const SETTINGS_KEYS = [
   "caching",
   "softDelete",
   "realtime",
+  "arrayMutation",
 ] as const satisfies readonly (keyof KavoSettings)[];
 
 /**
@@ -81,6 +82,13 @@ export function resolveEntityConfig<Entity extends object>(
   validateDefaultSort(entityName, entitySettings, allowlists);
   validateSincePagination(entityName, metadata, entitySettings, allowlists);
   validateIncludableRelations(entityName, entitySettings, allowlists);
+  const relations = new DefaultRelationRegistry<Entity>(
+    metadata.relations,
+    allowlists.includable as readonly string[],
+    entitySettings.relations.edges,
+    entityName,
+  );
+  validateArrayMutationRelations(entityName, entitySettings, relations);
 
   // Per-operation settings views, precomputed for every operation that
   // declares overrides. `false` (disabled) contributes no settings — the
@@ -119,12 +127,7 @@ export function resolveEntityConfig<Entity extends object>(
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
     computed,
-    relations: new DefaultRelationRegistry<Entity>(
-      metadata.relations,
-      allowlists.includable as readonly string[],
-      entitySettings.relations.edges,
-      entityName,
-    ),
+    relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
     realtimeTransports: Object.freeze([...realtimeTransports]),
@@ -393,6 +396,31 @@ function validateIncludableRelations<Entity>(
           `so it would load a relation clients cannot ask for`,
       );
     }
+  }
+}
+
+/**
+ * Cross-checks a relation opted into `write` (`relations.edges.<name>.write`)
+ * against `arrayMutation`: `arrayMutation: false` disables array-relation
+ * mutation wholesale (the same convention `softDelete: false`/`realtime:
+ * false` use), so a relation still claiming `write: true` under it is a
+ * contradiction worth failing on at bootstrap rather than silently leaving
+ * the opt-in inert.
+ */
+function validateArrayMutationRelations<Entity>(
+  scope: string,
+  settings: KavoSettings,
+  relations: DefaultRelationRegistry<Entity>,
+): void {
+  if (settings.arrayMutation !== false) return;
+  for (const relation of relations.all()) {
+    if (relation.write !== true) continue;
+    throw new ConfigurationException(
+      scope,
+      `relations.edges.${relation.name}.write`,
+      `'${relation.name}' opts into array-mutation writes, but 'arrayMutation' is false for ${scope} — ` +
+        `set 'arrayMutation.strategy' (or drop 'write: true')`,
+    );
   }
 }
 
