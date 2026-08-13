@@ -165,7 +165,7 @@ describe("allowlists.selectable narrows the response projection", () => {
       kavo.createCrud(Author, authorConfig as never);
       kavo.createCrud(Comment);
       return kavo.createCrud(Post, {
-        relations: { edges: { author: { includable: true } } },
+        allowlists: { includable: ["author"] },
       } as never) as DefaultKavoService<Post>;
     }
 

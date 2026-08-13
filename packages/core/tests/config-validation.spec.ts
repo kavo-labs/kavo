@@ -178,14 +178,6 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("rejects a non-boolean includable", () => {
-    expectRejected(
-      { relations: { edges: { posts: { includable: "yes" } } } },
-      "relations.edges.posts.includable",
-      "yes",
-    );
-  });
-
   it("rejects a non-boolean defaultInclude", () => {
     expectRejected(
       { relations: { edges: { posts: { defaultInclude: 1 } } } },
@@ -206,15 +198,12 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("rejects defaultInclude on a relation clients cannot ask for", () => {
-    // The offending value here is the edge as a whole: neither key is
-    // wrong alone, the pair is.
-    const error = rejectionOf({
-      relations: { edges: { posts: { includable: false, defaultInclude: true } } },
-    });
-    expect(error.code).toBe("KAVO_CONFIG_INVALID");
-    expect(error.messageParams).toMatchObject({ entity: "User", path: "relations.edges.posts" });
-  });
+  // `defaultInclude` vs. permission (`allowlists.includable`) is no longer
+  // checkable by `validateSettings` alone — permission moved to entity-typed
+  // `EntityConfig.allowlists` (ADR-0028), outside the `KavoSettings` shape
+  // this file exercises. See `config.spec.ts`'s
+  // "resolveEntityConfig — allowlists.includable" describe block for that
+  // cross-check, now performed by `validateIncludableRelations`.
 
   it("accepts an edge that configures nothing — every sub-key is optional", () => {
     expect(() => accept({ relations: { edges: { posts: {} } } })).not.toThrow();
@@ -226,10 +215,10 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("accepts defaultInclude on an includable relation", () => {
-    expect(() =>
-      accept({ relations: { edges: { posts: { includable: true, defaultInclude: true, maxDepth: 1 } } } }),
-    ).not.toThrow();
+  it("accepts defaultInclude/maxDepth shape regardless of includable permission", () => {
+    // `validateSettings` only checks shape now — whether `posts` is actually
+    // includable is `resolveEntityConfig`'s `allowlists`-aware cross-check.
+    expect(() => accept({ relations: { edges: { posts: { defaultInclude: true, maxDepth: 1 } } } })).not.toThrow();
   });
 });
 

@@ -38,14 +38,13 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   });
   blogs = kavo.createCrud(Blog, {
-    relations: { edges: { articles: { includable: true } } },
+    allowlists: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    relations: { edges: { blog: { includable: true }, notes: { includable: true } } },
-    allowlists: { filterable: ["id", "title", "blog.name"] },
+    allowlists: { includable: ["blog", "notes"], filterable: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
-  kavo.createCrud(Note, { relations: { edges: { article: { includable: true } } } });
+  kavo.createCrud(Note, { allowlists: { includable: ["article"] } } as never);
 });
 
 afterAll(async () => {

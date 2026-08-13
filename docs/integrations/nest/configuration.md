@@ -119,20 +119,45 @@ This is the shape of `defaults` above, and also of every entity-scope, operation
 
 ### `relations`
 
-| Field              | Type                                             | Default | What it does                                                                                                                                                        |
-| ------------------ | ------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `maxIncludeDepth`  | `number`                                         | `2`     | Max nesting depth for `include=` chains (`include=owner.tags` is depth 2).                                                                                          |
-| `maxIncludedNodes` | `number`                                         | `10`    | Max total number of included relation nodes per request, across every branch of the include tree.                                                                   |
-| `edges`            | `Readonly<Record<string, RelationEdgeSettings>>` | `{}`    | Per-relation permissions, keyed by relation property name — see **`relations.edges`** below. Inclusion is opt-in: a relation absent here cannot be included at all. |
+| Field              | Type                                             | Default | What it does                                                                                                                                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxIncludeDepth`  | `number`                                         | `2`     | Max nesting depth for `include=` chains (`include=owner.tags` is depth 2).                                                                                                                                                                                                                                       |
+| `maxIncludedNodes` | `number`                                         | `10`    | Max total number of included relation nodes per request, across every branch of the include tree.                                                                                                                                                                                                                |
+| `edges`            | `Readonly<Record<string, RelationEdgeSettings>>` | `{}`    | Per-relation **loading tuning**, keyed by relation property name — see **`relations.edges`** below. Whether a relation may be included at all is `allowlists.includable`'s question, entity scope only — see **`allowlists`** below ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)). |
 
 **`relations.edges.<name>`** (`RelationEdgeSettings`):
 
 | Field            | Type                              | Default                                | What it does                                                                                                                                                              |
 | ---------------- | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `includable`     | `boolean`                         | `false`                                | Whether clients may `include=` this relation at all.                                                                                                                      |
-| `defaultInclude` | `boolean`                         | `false`                                | Include this relation even when the client doesn't ask for it.                                                                                                            |
+| `defaultInclude` | `boolean`                         | `false`                                | Include this relation even when the client doesn't ask for it. Requires the relation to also be named in `allowlists.includable` — a bootstrap error otherwise.           |
 | `maxDepth`       | `number`                          | (inherits `relations.maxIncludeDepth`) | Overrides the include-depth limit for the subtree below this relation only.                                                                                               |
 | `strategy`       | `"join"` \| `"batch"` \| `"auto"` | `"auto"`                               | How the relation loads: `join` (single query, correct for to-one), `batch` (per-level `WHERE parentId IN (...)`, correct for to-many), or `auto` (picks per cardinality). |
+
+An entry here tunes loading for a relation that is already includable; it
+grants no permission by itself — naming a relation in `edges` alone does not
+open it to `include=`.
+
+**Migrating from before v0.10 ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)):**
+`relations.edges.<name>.includable: true` was the opt-in — naming a relation
+here, with no `includable` key at all, opened it by default. That key is
+gone. Move each opted-in relation name to `allowlists.includable` (below);
+keep any `maxDepth`/`strategy` on `relations.edges.<name>` exactly where it
+was. `allowlists.includable` is entity-scope-only config (no global
+`defaults`, no per-operation override), so a permission previously granted
+through a global default now needs its own `createCrud`/`@Kavo` registration
+per entity.
+
+**`defaultInclude` needs its own care if it was set at global (`defaults`)
+scope.** Before this change, naming a relation in a global
+`defaults.relations.edges.<name>` was itself the opt-in, so a global
+`defaultInclude: true` was safe by construction. It is not safe to leave
+where it was: `allowlists.includable` cannot be set globally, so a global
+`defaultInclude: true` with no _entity-level_ `allowlists.includable` naming
+that relation is now a **bootstrap crash** (`ConfigurationException`) on
+every entity that happens to have a relation of that name — not a silent
+no-op. Move `defaultInclude: true` down to each entity's own
+`relations.edges.<name>` alongside that entity's `allowlists.includable`
+grant, rather than leaving it at global scope.
 
 ### `caching`
 
@@ -230,7 +255,7 @@ There's no `patch` DTO class to write on its own — it derives from `update`. S
 
 ### `allowlists`
 
-What a request may filter, sort, and select on — including relation paths. Anything outside an allowlist is rejected with a 400, never silently dropped:
+What a request may filter, sort, select, and include — including relation paths. Anything outside an allowlist is rejected with a 400, never silently dropped:
 
 ```ts
 @Kavo(Book, {
@@ -238,19 +263,23 @@ What a request may filter, sort, and select on — including relation paths. Any
     filterable: ["id", "title", "author"],
     sortable: ["id", "title"],
     selectable: ["id", "title", "author"],
+    includable: ["author"],
   },
 })
 ```
 
-| Field        | Type                                                          | What it does                                                 |
-| ------------ | ------------------------------------------------------------- | ------------------------------------------------------------ |
-| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }` | Fields usable in `filter[...]`.                              |
-| `sortable`   | same shape                                                    | Fields usable in `sort=`.                                    |
-| `selectable` | same shape                                                    | Fields usable in `fields=`, **and what a response carries**. |
+| Field        | Type                                                                                    | What it does                                                                                                                                          |
+| ------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `filterable` | `readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`                           | Fields usable in `filter[...]`.                                                                                                                       |
+| `sortable`   | same shape                                                                              | Fields usable in `sort=`.                                                                                                                             |
+| `selectable` | same shape                                                                              | Fields usable in `fields=`, **and what a response carries**.                                                                                          |
+| `includable` | `readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }` | Relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)). |
 
-`{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field) except these", resolved at bootstrap against exactly the base set that key's plain default uses. Omit a key entirely and it derives from the `query` DTO or entity metadata instead.
+`{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field; for `includable`, every own relation) except these", resolved at bootstrap against exactly the base set that key's plain default uses.
 
-When `@nestjs/swagger` is installed, an explicit array here also names the generated `filter`/`sort`/`fields` `ApiQuery` descriptions with the entity's actual allowed fields. `{ exclude: [...] }` and an omitted key carry no per-route description at all — resolving either needs ORM metadata, which doesn't exist yet at `@Kavo` decoration time (see [ADR-0012](/internals/adr/0012-decoration-time-route-generation)). The generic `filter`/`sort`/`limit`/`offset`/`fields` syntax itself isn't repeated on every route — it's exported once as `KAVO_API_GUIDE` from `@kavo/nest`, for splicing into your own `DocumentBuilder().setDescription(...)` (see the reference apps' `main.ts`).
+**`includable` is the one key here that does not default to "everything".** Omit `filterable`/`sortable`/`selectable` and it derives from the `query` DTO or entity metadata — every own column. Omit `includable` and it resolves to `[]` — **no relation is includable** — the same opt-in posture `relations.edges` had before this key existed. Write `{ exclude: [] }` to opt every own relation in at once; that is the one spelling that crosses the fail-closed default rather than narrowing a fail-open one.
+
+When `@nestjs/swagger` is installed, an explicit array here also names the generated `filter`/`sort`/`fields`/`include` `ApiQuery` descriptions with the entity's actual allowed fields/relations. `{ exclude: [...] }` and an omitted `filterable`/`sortable`/`selectable` key carry no per-route description at all — resolving either needs ORM metadata, which doesn't exist yet at `@Kavo` decoration time (see [ADR-0012](/internals/adr/0012-decoration-time-route-generation)). `includable`'s omitted case is different: the empty-set default needs no ORM metadata, so an omitted `includable` still gets a description ("No relation is includable on this entity") — only its own `{ exclude: [...] }` form is undescribed, for the same decoration-time reason. The generic `filter`/`sort`/`limit`/`offset`/`fields`/`include` syntax itself isn't repeated on every route — it's exported once as `KAVO_API_GUIDE` from `@kavo/nest`, for splicing into your own `DocumentBuilder().setDescription(...)` (see the reference apps' `main.ts`).
 
 **How to keep a column out of every response.** Name `selectable` and leave the column off it, or exclude it — both forms do the same thing:
 

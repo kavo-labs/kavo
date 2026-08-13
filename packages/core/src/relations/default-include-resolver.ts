@@ -89,12 +89,13 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       // A name that is not a relation at all and a relation the config never
       // opted in are the same rejection to the client, deliberately: the
       // registry keeps every metadata relation and flips `includable` only
-      // for configured edges, so wording the two differently would confirm
-      // the existence of the edges `relations.edges` closed on purpose (the
-      // disclosure rule in `errors/message-hints.ts`). What issue #7 was
-      // actually about — the message never naming the config key that grants
-      // inclusion — is fixed without that split, by stating the key as a
-      // conditional the developer can act on and a prober learns nothing from.
+      // for names on `allowlists.includable` (ADR-0028), so wording the two
+      // differently would confirm the existence of the relations that
+      // allowlist closed on purpose (the disclosure rule in
+      // `errors/message-hints.ts`). What issue #7 was actually about — the
+      // message never naming the config key that grants inclusion — is
+      // fixed without that split, by stating the key as a conditional the
+      // developer can act on and a prober learns nothing from.
       if (relation === undefined || !relation.includable) {
         const includable = includableNames(owner);
         issues.push({
@@ -104,8 +105,8 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
             `Relation '${draft.name}' is not includable on ${owner.entityName}${inPath(draft)}.` +
             `${suggestion(draft.name, includable)}` +
             ` Includable relations on ${owner.entityName}: ${nameList(includable)}.` +
-            ` If ${owner.entityName} has a '${draft.name}' relation, opt in with` +
-            ` relations.edges.${draft.name}.includable = true on the ${owner.entityName} config.`,
+            ` If ${owner.entityName} has a '${draft.name}' relation, opt in by naming it in` +
+            ` allowlists.includable on the ${owner.entityName} config.`,
         });
         continue;
       }

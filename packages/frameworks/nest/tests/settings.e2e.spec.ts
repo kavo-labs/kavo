@@ -7,7 +7,7 @@ import { withListMeta } from "@kavo/core";
 import type { DefaultKavoService, RealtimeEventDto, RealtimeTransport } from "@kavo/core";
 import type { KavoModuleOptions } from "@kavo/nest";
 import { Kavo, KavoModule, getKavoServiceToken } from "@kavo/nest";
-import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
+import { InMemoryTodoAdapter, Todo, TodoList, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 /**
@@ -32,7 +32,7 @@ interface BootstrapOptions {
   readonly realtimeTransports?: KavoModuleOptions["realtimeTransports"];
 }
 
-async function bootstrap(controller: unknown, options: BootstrapOptions = {}): Promise<void> {
+async function bootstrap(controller: unknown | readonly unknown[], options: BootstrapOptions = {}): Promise<void> {
   adapter = new InMemoryTodoAdapter();
   const infrastructure = fakeInfrastructure(adapter);
   const rootModule =
@@ -50,8 +50,9 @@ async function bootstrap(controller: unknown, options: BootstrapOptions = {}): P
           ...(options.paginationStrategies !== undefined && { paginationStrategies: options.paginationStrategies }),
           ...(options.realtimeTransports !== undefined && { realtimeTransports: options.realtimeTransports }),
         });
+  const controllers = Array.isArray(controller) ? controller : [controller];
   const moduleRef = await Test.createTestingModule({
-    imports: [rootModule, KavoModule.forFeature([controller as never])],
+    imports: [rootModule, KavoModule.forFeature(controllers as never)],
   }).compile();
   app = moduleRef.createNestApplication();
   httpServer = await listen(app);
@@ -110,17 +111,25 @@ describe("@Kavo allowlists — filterable/sortable/selectable enforced over HTTP
 
 describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", () => {
   // `Todo.list` and `TodoList.list` deliberately share the relation name,
-  // so one global `edges.list` entry opts both levels in at once (see
-  // `fake-infrastructure.ts`) — an `include=list.list` request is a
-  // genuine two-level tree, which a single relation can never produce
-  // once a positive integer is the smallest legal budget.
-  @Kavo(Todo)
+  // so `include=list.list` is a genuine two-level tree, which a single
+  // relation can never exceed once a positive integer is the smallest legal
+  // budget (see `fake-infrastructure.ts`). `includable` is entity-scope-only
+  // config (ADR-0028: `allowlists` merges from nowhere but the entity's own
+  // `EntityConfig`, no global default) — unlike before, when one global
+  // `relations.edges.list.includable` opened both levels at once, each
+  // level now needs its own `createCrud`/`@Kavo` registration, even though
+  // `TodoList` is never routed, only included.
+  @Kavo(Todo, { allowlists: { includable: ["list"] } })
   @Controller("todos")
   class NestedIncludeController {}
 
+  @Kavo(TodoList, { allowlists: { includable: ["list"] } })
+  @Controller("todolists")
+  class TodoListController {}
+
   it("rejects an include deeper than the configured maxIncludeDepth", async () => {
-    await bootstrap(NestedIncludeController, {
-      defaults: { relations: { maxIncludeDepth: 1, edges: { list: { includable: true } } } },
+    await bootstrap([NestedIncludeController, TodoListController], {
+      defaults: { relations: { maxIncludeDepth: 1 } },
     });
 
     const response = await request(server()).get("/todos?include=list.list").expect(400);
@@ -131,8 +140,8 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
   });
 
   it("rejects an include tree exceeding the configured maxIncludedNodes", async () => {
-    await bootstrap(NestedIncludeController, {
-      defaults: { relations: { maxIncludedNodes: 1, edges: { list: { includable: true } } } },
+    await bootstrap([NestedIncludeController, TodoListController], {
+      defaults: { relations: { maxIncludedNodes: 1 } },
     });
 
     const response = await request(server()).get("/todos?include=list.list").expect(400);
@@ -144,11 +153,12 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
 
   it("accepts an include within both budgets", async () => {
     @Kavo(Todo, {
-      relations: { maxIncludeDepth: 1, maxIncludedNodes: 1, edges: { list: { includable: true } } },
+      allowlists: { includable: ["list"] },
+      relations: { maxIncludeDepth: 1, maxIncludedNodes: 1 },
     })
     @Controller("todos")
     class RoomyController {}
-    await bootstrap(RoomyController);
+    await bootstrap([RoomyController, TodoListController]);
 
     await request(server()).get("/todos?include=list").expect(200);
   });

@@ -1,17 +1,25 @@
 import type { KavoSettings } from "./settings.js";
 import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
+import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver } from "../dto/dto.js";
 import type { OperationId } from "../operations/operation.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 
-/** Allowlists after bootstrap resolution — complete, never optional. */
+/**
+ * Allowlists after bootstrap resolution — complete, never optional.
+ *
+ * `includable` resolves the opposite direction from the other three keys:
+ * unconfigured, it is `[]` rather than "every relation" (ADR-0028) — see
+ * `QueryAllowlists.includable`'s doc comment for why.
+ */
 export interface ResolvedQueryAllowlists<Entity = unknown> {
   readonly filterable: readonly FieldPath<Entity>[];
   readonly sortable: readonly FieldPath<Entity>[];
   readonly selectable: readonly FieldPath<Entity>[];
+  readonly includable: readonly IncludePath<Entity, 1>[];
 }
 
 /**

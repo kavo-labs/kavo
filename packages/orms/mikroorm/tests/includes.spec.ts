@@ -62,18 +62,20 @@ beforeAll(async () => {
   orm = await newTestOrm([Blog, Article, Note]);
   kavo = createMikroOrmKavo(orm);
   blogs = kavo.createCrud(Blog, {
-    relations: { edges: { articles: { includable: true } } },
+    allowlists: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    relations: { edges: { blog: { includable: true }, notes: { includable: true } } },
-    // Filtering across a relation path is its own allowlist decision,
-    // independent of whether the relation may be included.
-    allowlists: { filterable: ["id", "title", "blog.name"] },
+    allowlists: {
+      includable: ["blog", "notes"],
+      // Filtering across a relation path is its own allowlist decision,
+      // independent of whether the relation may be included.
+      filterable: ["id", "title", "blog.name"],
+    },
   } as never) as DefaultKavoService<Article>;
   notes = kavo.createCrud(Note, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    relations: { edges: { article: { includable: true } } },
+    allowlists: { includable: ["article"] },
   }) as DefaultKavoService<Note>;
 });
 

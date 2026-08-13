@@ -80,26 +80,30 @@ beforeAll(async () => {
   await dataSource.initialize();
   kavo = createTypeOrmKavo(dataSource);
   blogs = kavo.createCrud(Blog, {
-    relations: { edges: { articles: { includable: true } } },
+    allowlists: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { strategy: "soft" },
-    relations: { edges: { blog: { includable: true }, notes: { includable: true } } },
-    // Filtering across a relation path is its own allowlist decision,
-    // independent of whether the relation may be included.
-    allowlists: { filterable: ["id", "title", "blog.name"] },
+    allowlists: {
+      includable: ["blog", "notes"],
+      // Filtering across a relation path is its own allowlist decision,
+      // independent of whether the relation may be included.
+      filterable: ["id", "title", "blog.name"],
+    },
   } as never) as DefaultKavoService<Article>;
-  kavo.createCrud(Note, { relations: { edges: { article: { includable: true } } } });
+  kavo.createCrud(Note, { allowlists: { includable: ["article"] } });
   // The same entity with the to-many forced to `join`: the case the
   // normative pagination rule exists for.
   joinedBlogs = createTypeOrmKavo(dataSource).createCrud(Blog, {
-    relations: { edges: { articles: { includable: true, strategy: "join" } } },
+    allowlists: { includable: ["articles"] },
+    relations: { edges: { articles: { strategy: "join" } } },
   }) as DefaultKavoService<Blog>;
   // A *to-one* forced to `batch`. Left on `auto` a to-one joins, so the
   // batched to-one path only exists when a config asks for it.
   batchedArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
     softDelete: { strategy: "soft" },
-    relations: { edges: { blog: { includable: true, strategy: "batch" } } },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "batch" } } },
   } as never) as DefaultKavoService<Article>;
 });
 

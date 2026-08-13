@@ -56,13 +56,14 @@ export interface ErrorSettings {
 }
 
 /**
- * Per-relation configuration — the config half of a
- * `RelationDescriptor`. ORM metadata supplies shape (name, target,
- * cardinality); this supplies *permission*, which metadata can never know.
+ * Per-relation *tuning* — the config half of a `RelationDescriptor` other
+ * than permission. ORM metadata supplies shape (name, target,
+ * cardinality); this supplies loading behavior once a relation is already
+ * includable. Permission itself lives on `allowlists.includable`
+ * (`EntityConfig`, entity-config.ts) instead, not here (ADR-0028) — naming
+ * a relation in `edges` no longer opts it in.
  */
 export interface RelationEdgeSettings {
-  /** Whether clients may `include=` this relation. Defaults to `false`. */
-  readonly includable?: boolean;
   /** Included even when the client doesn't ask. */
   readonly defaultInclude?: boolean;
   /** Overrides `maxIncludeDepth` for the subtree below this node. */
@@ -70,13 +71,17 @@ export interface RelationEdgeSettings {
   readonly strategy?: RelationLoadStrategy;
 }
 
-/** Relation inclusion limits and the per-relation allowlist. */
+/** Relation inclusion limits and per-relation loading tuning. */
 export interface RelationSettings {
   readonly maxIncludeDepth: number;
   readonly maxIncludedNodes: number;
   /**
-   * Per-relation overrides, keyed by relation property name. Inclusion is
-   * opt-in: a relation absent here is not includable.
+   * Per-relation loading overrides, keyed by relation property name —
+   * `defaultInclude`/`maxDepth`/`strategy` only. Whether a relation is
+   * includable at all is `allowlists.includable`'s question, not this
+   * one (ADR-0028); an entry here for a relation `allowlists.includable`
+   * never named still validates and applies its tuning, but grants no
+   * permission.
    */
   readonly edges: Readonly<Record<string, RelationEdgeSettings>>;
 }

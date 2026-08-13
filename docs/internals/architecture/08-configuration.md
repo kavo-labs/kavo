@@ -11,21 +11,21 @@ built-in defaults → global (createKavo) → entity (createCrud)
 
 `BUILT_IN_DEFAULTS` (`core/src/config/defaults.ts`):
 
-| Key                                                                     | Default                                        | Notes                                                                                            |
-| ----------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `pagination.defaultLimit` / `maxLimit`                                  | 20 / 100                                       | `defaultLimit ≤ maxLimit` enforced                                                               |
-| `pagination.strategy`                                                   | `"offset"`                                     | `"page"` built in; custom via `paginationStrategies`                                             |
-| `pagination.count`                                                      | `true`                                         | `false` skips the count query; envelope reports `total: null`                                    |
-| `query.maxFilterDepth` / `maxInValues`                                  | 3 / 100                                        |                                                                                                  |
-| `query.defaultSort`                                                     | `[]` (unset)                                   | order applied when a request supplies no `sort` (issue #56); see below                           |
-| `errors.exposeInternals`                                                | `false`                                        | leak driver detail into responses                                                                |
-| `relations.maxIncludeDepth` / `maxIncludedNodes`                        | 2 / 10                                         | include depth budget and total node cap                                                          |
-| `relations.edges.<name>`                                                | `{}`                                           | per-relation `includable` / `defaultInclude` / `maxDepth` / `strategy`                           |
-| `caching.etag`                                                          | `true`                                         | ETag on single-item responses + `If-None-Match`/`If-Match` (ADR-0020)                            |
-| `softDelete.field` / `strategy`                                         | `"deletedAt"` / `"auto"`                       | `auto` = soft when the entity has the marker field, `false` disables                             |
-| `realtime.enabled` / `events` / `subscribableFields` / `onPublishError` | `false` (unset) / `{}` (unset) / unset / unset | per-operation event toggles + field allowlist; registered transports are **not** here (ADR-0023) |
-| `operations.<id>`                                                       | `{}` (unset)                                   | global operation-enablement default (issue #38); see below                                       |
-| `bulk.mode` / `maxBatchSize`                                            | `"atomic"` / 500                               | reserved (bulk is not built)                                                                     |
+| Key                                                                     | Default                                        | Notes                                                                                                                                         |
+| ----------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pagination.defaultLimit` / `maxLimit`                                  | 20 / 100                                       | `defaultLimit ≤ maxLimit` enforced                                                                                                            |
+| `pagination.strategy`                                                   | `"offset"`                                     | `"page"` built in; custom via `paginationStrategies`                                                                                          |
+| `pagination.count`                                                      | `true`                                         | `false` skips the count query; envelope reports `total: null`                                                                                 |
+| `query.maxFilterDepth` / `maxInValues`                                  | 3 / 100                                        |                                                                                                                                               |
+| `query.defaultSort`                                                     | `[]` (unset)                                   | order applied when a request supplies no `sort` (issue #56); see below                                                                        |
+| `errors.exposeInternals`                                                | `false`                                        | leak driver detail into responses                                                                                                             |
+| `relations.maxIncludeDepth` / `maxIncludedNodes`                        | 2 / 10                                         | include depth budget and total node cap                                                                                                       |
+| `relations.edges.<name>`                                                | `{}`                                           | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowlists.includable`, entity scope only (ADR-0028) |
+| `caching.etag`                                                          | `true`                                         | ETag on single-item responses + `If-None-Match`/`If-Match` (ADR-0020)                                                                         |
+| `softDelete.field` / `strategy`                                         | `"deletedAt"` / `"auto"`                       | `auto` = soft when the entity has the marker field, `false` disables                                                                          |
+| `realtime.enabled` / `events` / `subscribableFields` / `onPublishError` | `false` (unset) / `{}` (unset) / unset / unset | per-operation event toggles + field allowlist; registered transports are **not** here (ADR-0023)                                              |
+| `operations.<id>`                                                       | `{}` (unset)                                   | global operation-enablement default (issue #38); see below                                                                                    |
+| `bulk.mode` / `maxBatchSize`                                            | `"atomic"` / 500                               | reserved (bulk is not built)                                                                                                                  |
 
 **Schema extensibility rule:** new features add keys to this schema —
 they never add a second config mechanism. The reserved keys above are
@@ -144,6 +144,17 @@ global/entity/operation scope, and when a per-call override is merged
 fast at the scope that introduced it instead of producing a broken
 `ORDER BY` on the first request that hits it. Doc 05 covers the
 request-time semantics (client `sort` vs. this fallback).
+
+### `relations.edges.<name>.defaultInclude`
+
+`defaultInclude: true` on a relation absent from `allowlists.includable` is a
+bootstrap `ConfigurationException` — it would load a relation clients cannot
+ask for ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
+`validateSettings` only ever sees `KavoSettings`, which does not carry
+`allowlists`, so this cross-check runs separately, in
+`validateIncludableRelations` (`resolve-entity-config.ts`), once `allowlists`
+has resolved — the same reason `query.defaultSort` and
+`pagination.since.field` are checked outside `validateSettings` too.
 
 ## 5. Root factory and framework skin
 

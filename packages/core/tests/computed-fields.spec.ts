@@ -534,7 +534,7 @@ describe("computed fields — on an included relation target", () => {
           initials: { resolve: (author: Author) => author.name.slice(0, 2) },
           label: { resolve: (author: Author) => `author:${author.name}` },
         },
-        relations: { edges: { posts: { includable: true } } },
+        allowlists: { includable: ["posts"] },
       }) as never,
     ) as DefaultKavoService<Author>;
     kavo.createCrud(
@@ -547,7 +547,7 @@ describe("computed fields — on an included relation target", () => {
       Post,
       (configs.post ?? {
         computed: { label: { resolve: (post: Post) => `post:${post.title}` } },
-        relations: { edges: { author: { includable: true }, comments: { includable: true } } },
+        allowlists: { includable: ["author", "comments"] },
       }) as never,
     ) as DefaultKavoService<Post>;
     postAdapter.rows.push(

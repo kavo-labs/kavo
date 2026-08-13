@@ -78,3 +78,26 @@ expectTypeOf<IncludePath<Tagged>>().toEqualTypeOf<"reviews">();
 // scalar field is.
 const primitiveArray: IncludePath<Tagged> = "tags";
 void primitiveArray;
+
+/**
+ * `IncludePath<Entity, 1>` is what `RelationFieldSelector` (entity-config.ts,
+ * ADR-0028) types `allowlists.includable` against: exactly the entity's own
+ * top-level relation names, with no dotted nesting — `include=` grants
+ * permission one relation segment at a time from the root, the same unit
+ * `relations.edges` keyed on before this change.
+ */
+expectTypeOf<IncludePath<Author, 1>>().toEqualTypeOf<"posts">();
+expectTypeOf<IncludePath<Post, 1>>().toEqualTypeOf<"author" | "comments">();
+expectTypeOf<IncludePath<Comment, 1>>().toEqualTypeOf<never>();
+
+// @ts-expect-error — a dotted nested path is not a top-level relation name.
+const nestedAtDepthOne: IncludePath<Author, 1> = "posts.comments";
+void nestedAtDepthOne;
+
+// @ts-expect-error — a scalar field is still not a relation, at any depth.
+const scalarAtDepthOne: IncludePath<Author, 1> = "name";
+void scalarAtDepthOne;
+
+// @ts-expect-error — a typo'd relation name still fails at depth 1.
+const typoAtDepthOne: IncludePath<Author, 1> = "postz";
+void typoAtDepthOne;

@@ -388,7 +388,7 @@ describe("PrismaRepositoryAdapter — query translation", () => {
 
   it("associates a relation by writing its scalar foreign-key field (ADR-0014)", async () => {
     const books = kavo.createCrud(Book, {
-      relations: { edges: { author: { includable: true } } },
+      allowlists: { includable: ["author"] },
     } as never) as DefaultKavoService<Book>;
     const author = (await authors.createOne({ email: "assoc@x.io", name: "Assoc", age: 1 } as never)) as Author;
 
