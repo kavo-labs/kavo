@@ -2,6 +2,12 @@
 
 Kavo's engine (`@kavo/core`) is ORM-agnostic — it talks to your data through a small adapter seam. `@kavo/nest` generates the routes; `@kavo/mongoose` adapts Kavo to a Mongoose model. This is the complete, minimal wiring for that combination.
 
+<script setup lang="ts">
+import StackPicker from "../../.vitepress/theme/components/StackPicker.vue";
+</script>
+
+<StackPicker orm="mongoose" />
+
 If you haven't yet, read [Getting started](/getting-started) first — this page assumes you already know what `@Kavo()` does and just needs the app-wiring.
 
 ::: code-group
