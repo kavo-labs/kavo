@@ -4,6 +4,14 @@ Kavo turns your ORM entities into a full REST CRUD API. Define the entity once, 
 
 Today Kavo supports NestJS as the framework, over TypeORM, Prisma, Mongoose, or MikroORM as the ORM. This guide uses Nest + TypeORM as its example stack; see [Nest + Prisma](/integrations/nest/prisma), [Nest + Mongoose](/integrations/nest/mongoose), and [Nest + MikroORM](/integrations/nest/mikroorm) for the equivalents.
 
+<script setup lang="ts">
+import StackPicker from "./.vitepress/theme/components/StackPicker.vue";
+</script>
+
+Pick your stack and jump straight to its wiring guide, or keep reading — this page walks through Nest + TypeORM.
+
+<StackPicker />
+
 ## Requirements
 
 - **Node.js 20 or newer** — every `@kavo/*` package declares `engines.node: ">=20"`, so your package manager will warn (or, under `engine-strict`, refuse) an install on an older release.
@@ -27,7 +35,7 @@ A `tsconfig.json` that satisfies all three:
 }
 ```
 
-`useDefineForClassFields: false` is load-bearing at `ES2022` and above. With it on, every declared field is emitted as a real class field, so a fresh entity carries an own key for _every_ column — set to `undefined` — whether the adapter hydrated it or not. A partially-hydrated entity then looks fully populated: Kavo projects a response with `Object.keys(entity)` when no field selection narrows it, so those columns surface in the body as `undefined` rather than being absent, and TypeORM's persistence diffing reads them as explicit values. With it off, only fields with an initializer are assigned and the rest are left to the prototype — which is what Kavo's own packages and both example apps compile with.
+`useDefineForClassFields: false` is load-bearing at `ES2022` and above. With it on, every declared field is emitted as a real class field set to `undefined` when not hydrated — so a partially-loaded entity looks fully populated, `undefined` values leak into responses instead of being absent, and TypeORM's persistence diffing treats them as explicit writes. With it off (what Kavo's own packages and both example apps use), only hydrated fields are set.
 
 ## Install
 
@@ -70,7 +78,7 @@ Kavo never bundles your framework or your ORM. Each package declares what it exp
 
 Three of `@kavo/nest`'s own peers are declared **optional** — `@nestjs/swagger` (`^8.0.0 || ^11.0.0`) for generated OpenAPI docs, `graphql` (`^17.0.0`) for the GraphQL controller, and `@modelcontextprotocol/sdk` (`^1.0.0`) for the MCP controller — so nothing makes you configure a protocol you don't serve.
 
-**Both hops say optional**, which is what keeps them out of the tree. `@kavo/nest` depends on `@kavo/graphql` and `@kavo/mcp` outright, so your package manager resolves the binding and then the binding's peer; while those two declared theirs required, npm, pnpm and bun installed `graphql` and the MCP SDK into every REST-only app anyway. Both are optional on both hops now, so a REST-only install gets neither, and you add the protocol library when you opt into the protocol.
+Both `@kavo/nest`'s dependency on the binding and the binding's own peer declare the protocol library optional, so a REST-only install pulls in neither `graphql` nor the MCP SDK — you add the protocol library yourself only when you use it.
 
 ### GraphQL and MCP
 
