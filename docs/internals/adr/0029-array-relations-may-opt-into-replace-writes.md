@@ -107,14 +107,124 @@ currently persisted one and calls `RelationQueryBuilder#addAndRemove` —
 the primitive that gets `set`-like replace semantics for a to-many edge,
 since TypeORM's own `.set()` exists only on the to-one side.
 
+## Amendment — `jsonPatch` (issue #211)
+
+`replace` disables partial mutation outright; this amendment ships the
+strategy that restores it: incremental `add`/`remove` of a write-opted
+relation's membership, and ordinary field patches, both through RFC 6902
+patch documents. `resource` and the non-`@kavo/typeorm` adapters remain
+out of scope, unchanged from the original decision above.
+
+**The overlap with `patchOne`.** `PATCH /entity/:id` already exists as the
+standard `patchOne` operation, and this strategy's request is also a
+`PATCH /entity/:id` — a second route would either collide or need its own
+disambiguating path segment nothing in the domain motivates. Instead
+`jsonPatch` reuses `patchOne`'s route outright and tells the two body
+shapes apart structurally: `patchOne`'s own DTO body is always a JSON
+_object_; an RFC 6902 patch document is always a JSON _array_. That is not
+a new rule invented for this amendment — `KavoEngine.resolveInput`'s
+`replace<Relation>` branch already turned exactly this same object-vs-array
+distinction into a routing decision for a different operation, so extending
+it to `patchOne` itself is the same seam, not a new one. An entity that
+never sets `arrayMutation.strategy: "jsonPatch"` sees `patchOne`'s contract
+completely unchanged: an array body there still degrades to `{},` exactly
+as `DefaultDeserializer.deserialize` has always treated any non-object
+body.
+
+**The patch vocabulary — two path shapes, deliberately narrow.** "No
+arbitrary path traversal" is enforced by only recognizing two shapes at
+all, not by a denylist checked after the fact:
+
+- `/<field>` (`add`/`replace` only) — a scalar, non-generated column. The
+  resulting `{ [field]: value, … }` is fed through the exact same `patch`
+  DTO deserializer an ordinary object body already goes through, so field
+  validation does not fork into a second code path. `remove` on a field
+  path is rejected: a partial-update payload has nothing to literally
+  delete — a client meaning "don't touch this field" already expresses
+  that by omitting the op.
+- `/<relation>/-` (`add`/`remove` only) — a relation with
+  `relations.edges.<name>.write: true`. `value` names the member: a scalar
+  id or an `{id}` reference, exactly `replace`'s own shape, resolved
+  through the same `associate()` normalization `create`/`update`/`replace`
+  already share. Addressing by **identity** rather than by RFC 6902's own
+  array-index convention is the "matching/orphan rules stated rather than
+  assumed" ADR-0014's Consequences section calls for: to-many relation
+  membership has no persisted order for an index to mean anything against,
+  so `-` (RFC 6902's append marker) is reused for both directions and the
+  member is always named by `value`, never by position. `replace` is
+  rejected on this shape outright — whole-array replacement is
+  `arrayMutation.strategy: "replace"`'s own surface, and the two strategies
+  stay mutually exclusive per relation rather than overlapping.
+
+Anything else — a malformed op, an `op` illegal for its path's shape, a
+path naming neither a writable field nor a write-opted relation, more than
+two segments — is `JsonPatchInvalidDocumentException`
+(`KAVO_JSON_PATCH_INVALID_DOCUMENT`, 400), raised by parsing the document
+alone, before any read or write is attempted.
+
+**The matching/orphan rules, stated.** Member existence is not a parsing
+question — the parser never sees the database — so it is answered by the
+write path instead, and each answer is a deliberate choice, not an
+assumption:
+
+- `add` naming an id with no matching row raises the same
+  `NotFoundException` `replaceRelation`'s own existence check already
+  raises for `replace` — one rule for "you named something that doesn't
+  exist," regardless of strategy.
+- `add` naming an id already a member is an idempotent no-op — set
+  semantics, the same as RFC 6902's own `add`-on-an-existing-object-member
+  behavior.
+- `remove` naming an id that is **not** currently a member raises
+  `JsonPatchTargetNotFoundException` (`KAVO_JSON_PATCH_TARGET_NOT_FOUND`, 404) rather than a silent no-op — RFC 6902 requires a `remove`'s target
+  location to exist, and a client that asked for a removal that already
+  isn't there finds out, rather than reading a 200 as confirmation that
+  something changed.
+
+**The write path and its atomicity.** `EntityWriter` gains a second
+optional method, `patchRelation?(id, relation, { add, remove }, context)`,
+alongside `replaceRelation` — same optionality reasoning: `createCrud`
+checks for it at bootstrap the moment a relation opts into `write` under
+`arrayMutation.strategy: "jsonPatch"` (`ConfigurationException` if absent).
+`@kavo/typeorm`'s implementation wraps the read that decides "is this
+`remove` target currently a member?" and the write it gates in one
+`dataSource.transaction`, closing the read-then-write race
+`replaceRelation`'s own doc comment names as a known gap — a concurrent
+writer can never make that judgment stale between the check and the
+removal. A document touching several relations is _not_ one transaction
+spanning all of them, though: `patchOne`'s built-in handler applies field
+changes first (`EntityWriter.patch`), then one `patchRelation` call per
+relation the document touched, each its own atomic unit. This is a stated
+scope limit, one level more atomic than `replace` already is, not a claim
+of whole-document atomicity — a later change could widen it without
+breaking the request or response shape.
+
+**Route generation stays mutually exclusive per strategy.** Before this
+amendment, `registerArrayMutationOperations` ran unconditionally for every
+write-opted relation, because `"replace"` was the only strategy that could
+ever reach it. Now that `"jsonPatch"` is real, both call sites
+(`createCrud` and `@Kavo`) gate that call on the resolved strategy being
+`"replace"` — an entity on `"jsonPatch"` gets no `replace<Relation>`
+route or registry entry at all, since that surface belongs to `replace`
+alone. `@Kavo`'s decoration-time view can only see what the entity itself
+declares (ADR-0012), not a global default, so an entity that relies on a
+_global_ `arrayMutation.strategy: "jsonPatch"` default without declaring
+it locally will still get a `replace<Relation>` route generated (decoration
+time assumes `"replace"`, the built-in default) that `createCrud`'s registry
+has no operation for — an `OperationNotRegisteredException` at request time.
+This is the same decoration/bootstrap mismatch class ADR-0013 already
+accepts for `restoreOne`/`purgeOne`'s cardinality check, recurring for a
+new setting rather than a new problem.
+
 ## Consequences
 
-- `resource` and `jsonPatch` remain unimplemented; choosing either is a
-  bootstrap error naming this ADR and the tracking issue, not a silently
-  inert config value or a 500 at request time.
+- `resource` remains unimplemented; choosing it is a bootstrap error naming
+  this ADR and the tracking issue, not a silently inert config value or a
+  500 at request time. `jsonPatch` is implemented per the amendment above
+  (issue #211).
 - `@kavo/prisma`, `@kavo/mongoose`, and `@kavo/mikroorm` do not implement
-  `replaceRelation` yet. An app on one of them that opts a relation into
-  `write` fails at bootstrap with a clear message, not a runtime surprise.
+  `replaceRelation` or `patchRelation` yet. An app on one of them that opts
+  a relation into `write` fails at bootstrap with a clear message, not a
+  runtime surprise.
 - The two-stage validation split (decoration-time route generation blind to
   cardinality, bootstrap-time rejection once metadata exists) mirrors
   ADR-0013 exactly, so a reader who already understands `restoreOne`/
