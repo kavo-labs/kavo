@@ -20,8 +20,11 @@ contributor-facing and is out of scope — untouched by this change.
 ## 1. Framework/ORM chooser
 
 A VitePress custom Vue component ("Stack Picker") renders at the top of every
-framework/ORM-scoped page: the integration pages and (once split) the
-configuration subpages.
+framework/ORM-scoped page: the integration pages (`getting-started.md`'s
+banner and the 4 ORM pages). It does NOT render on the 4 configuration
+subpages under `integrations/nest/configuration/` — those document Nest
+module/entity config that is the same regardless of ORM, so an ORM switcher
+there would misleadingly imply otherwise.
 
 - Two dropdowns: **Framework** (`Nest` — only option today, rendered as a
   single-item select so the UI doesn't need rework when a second framework
@@ -101,4 +104,4 @@ Per page:
 - `docs/integrations/nest/configuration.md` — becomes landing page.
 - `docs/integrations/nest/configuration/module-setup.md`,
   `settings.md`, `entity-config.md`, `operations.md` — new, split from the
-  old `configuration.md`, tone pass, embed Stack Picker.
+  old `configuration.md`, tone pass. Do NOT embed Stack Picker (see §1).
