@@ -4,6 +4,7 @@ import type { CatalogedErrorCode, KavoExceptionShape, QueryIssueDto } from "@kav
 import {
   AlreadyDeletedException,
   ArrayMutationInvalidShapeException,
+  ArrayMutationMemberNotFoundException,
   ConfigurationException,
   ConflictException,
   KavoException,
@@ -41,6 +42,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: { status: 400, title: "Invalid JSON Patch document" },
   KAVO_JSON_PATCH_TARGET_NOT_FOUND: { status: 404, title: "JSON Patch target not found" },
+  KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND: { status: 404, title: "Array-mutation member not found" },
   KAVO_ALREADY_DELETED: { status: 409, title: "Already deleted" },
   KAVO_NOT_DELETED: { status: 409, title: "Not deleted" },
   KAVO_PRECONDITION_FAILED: { status: 412, title: "Precondition failed" },
@@ -130,6 +132,11 @@ describe("exception hierarchy", () => {
     { exception: new NotFoundException(), code: "KAVO_NOT_FOUND", status: 404 },
     { exception: new ConflictException(), code: "KAVO_CONFLICT", status: 409 },
     { exception: new ArrayMutationInvalidShapeException(), code: "KAVO_ARRAY_MUTATION_INVALID_SHAPE", status: 400 },
+    {
+      exception: new ArrayMutationMemberNotFoundException(),
+      code: "KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND",
+      status: 404,
+    },
     { exception: new AlreadyDeletedException(), code: "KAVO_ALREADY_DELETED", status: 409 },
     { exception: new NotDeletedException(), code: "KAVO_NOT_DELETED", status: 409 },
     { exception: new OperationDisabledException(), code: "KAVO_OPERATION_DISABLED", status: 405 },

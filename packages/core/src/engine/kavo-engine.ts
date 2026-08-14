@@ -575,12 +575,24 @@ export class KavoEngine<Entity extends object> {
         // otherwise — everything else a read is given rides on
         // `context.query`.
         if (descriptor.kind === "read") return request.id === null ? null : this.coerceId(request.id);
-        // A `replace<Relation>` operation Kavo itself synthesized
-        // (`registerArrayMutationOperations`): its body is a bare array (or
-        // `null`), never an entity-shaped object, so it takes the
-        // array-mutation path instead of the ordinary DTO deserializer.
+        // A `replace`/`add`/`remove<Relation>` operation Kavo itself
+        // synthesized (`registerArrayMutationOperations`) takes the
+        // array-mutation path instead of the ordinary DTO deserializer:
+        // `replace`'s body is a bare array (or `null`, ADR-0014); `add`/
+        // `remove`'s (the `resource` strategy's single-member actions,
+        // ADR-0029's resource amendment) is a single scalar id or `{id}`
+        // reference — never an entity-shaped object either way. `list`
+        // (also `resource`) never reaches here: it is `kind: "read"`, so
+        // the branch above already returned the coerced id alone.
         const arrayMutation = descriptor.meta.arrayMutation;
         if (arrayMutation !== undefined) {
+          if (arrayMutation.action === "add" || arrayMutation.action === "remove") {
+            return {
+              id: this.coerceId(request.id),
+              relation: arrayMutation.relation,
+              memberId: this.resolveArrayMutationMemberId(arrayMutation.relation, request.body, context),
+            };
+          }
           return {
             id: this.coerceId(request.id),
             relation: arrayMutation.relation,
@@ -685,7 +697,11 @@ export class KavoEngine<Entity extends object> {
   ): readonly EntityId[] | null {
     if (body !== null && !Array.isArray(body)) {
       throw new ArrayMutationInvalidShapeException({
-        messageParams: { entity: context.entityName, relation },
+        messageParams: {
+          entity: context.entityName,
+          relation,
+          expected: "an array of ids or id references, or null — 'replace' disables partial mutation",
+        },
         context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
       });
     }
@@ -693,6 +709,33 @@ export class KavoEngine<Entity extends object> {
     const refs = wrapped[relation];
     if (refs === null || refs === undefined) return null;
     return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
+  }
+
+  /**
+   * A `resource`-strategy `add`/`remove` body (`POST`/`DELETE
+   * /entity/:id/relation`, ADR-0029's resource amendment): a single scalar
+   * id or `{id}` reference naming the one member the request targets —
+   * never an array (that shape is `replace`'s own whole-array surface) and
+   * never absent. Wraps the raw body as a one-element array and reuses
+   * `resolveArrayMutationMemberIds`'s own deserializer path, rather than
+   * duplicating `associate()` here, for the same reason that helper does.
+   */
+  private resolveArrayMutationMemberId(relation: string, body: unknown, context: KavoContext<Entity>): EntityId {
+    const invalid = (): never => {
+      throw new ArrayMutationInvalidShapeException({
+        messageParams: {
+          entity: context.entityName,
+          relation,
+          expected: "a single id or id reference naming exactly one member",
+        },
+        context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+      });
+    };
+    if (body === null || body === undefined || Array.isArray(body)) invalid();
+    const memberIds = this.resolveArrayMutationMemberIds(relation, [body], context);
+    const memberId = memberIds?.[0];
+    if (memberId === undefined) return invalid();
+    return memberId;
   }
 
   /**

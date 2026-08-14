@@ -22,7 +22,10 @@ import * as barrel from "@kavo/core";
  */
 const PUBLIC_SURFACE: readonly string[] = [
   "AlreadyDeletedException",
+  "ArrayMutationAction",
+  "ArrayMutationHandlerFactories",
   "ArrayMutationInvalidShapeException",
+  "ArrayMutationMemberNotFoundException",
   "BUILT_IN_DEFAULTS",
   "CachingSettings",
   "CatalogedErrorCode",
@@ -66,7 +69,10 @@ const PUBLIC_SURFACE: readonly string[] = [
   "DefaultOperationRegistry",
   "DefaultRelationRegistry",
   "DefaultSerializer",
+  "addRelationOperationId",
+  "listRelationOperationId",
   "registerArrayMutationOperations",
+  "removeRelationOperationId",
   "replaceRelationOperationId",
   "writeOptedInRelationNames",
   "DeleteStrategy",

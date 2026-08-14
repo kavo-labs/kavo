@@ -44,13 +44,13 @@ function makeAuthorCrud(edgesWrite: boolean) {
 }
 
 describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", () => {
-  it("rejects the reserved 'resource' strategy", () => {
+  it("accepts the 'resource' strategy with no write-opted relations (no adapter capability required)", () => {
     expect(() =>
       createKavo().createCrud(Author, { arrayMutation: { strategy: "resource" } } as never, {
         adapter: new SeededAdapter<Author>(),
         metadata: authorMetadata,
       }),
-    ).toThrowError(ConfigurationException);
+    ).not.toThrow();
   });
 
   it("accepts the 'jsonPatch' strategy with no write-opted relations (no adapter capability required)", () => {
@@ -139,7 +139,7 @@ describe("registerArrayMutationOperations / replaceRelationOperationId / writeOp
     expect(descriptor?.kind).toBe("write");
     expect(descriptor?.cardinality).toBe("one");
     expect(descriptor?.enabled).toBe(true);
-    expect(descriptor?.meta.arrayMutation).toEqual({ relation: "posts", strategy: "replace" });
+    expect(descriptor?.meta.arrayMutation).toEqual({ relation: "posts", strategy: "replace", action: "replace" });
   });
 
   it("registers an inspection-only handler when no handlerFactory is given", () => {
