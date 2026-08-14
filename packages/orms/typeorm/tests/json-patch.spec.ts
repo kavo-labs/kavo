@@ -2,7 +2,12 @@ import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DataSource } from "typeorm";
 import { Column, Entity, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
-import { JsonPatchTargetNotFoundException, NotFoundException, type RepositoryAdapter } from "@kavo/core";
+import {
+  ConfigurationException,
+  JsonPatchTargetNotFoundException,
+  NotFoundException,
+  type RepositoryAdapter,
+} from "@kavo/core";
 import { createInfrastructure } from "@kavo/typeorm";
 
 @Entity()
@@ -165,10 +170,20 @@ describe("TypeOrmRepositoryAdapter#patchRelation (arrayMutation's jsonPatch stra
     const call = adapter.patchRelation!(writerId, "novels", { add: [], remove: [999999] }, context());
     await expect(call).rejects.toThrowError(JsonPatchTargetNotFoundException);
     await expect(call).rejects.toMatchObject({ code: "KAVO_JSON_PATCH_TARGET_NOT_FOUND", status: 404 });
+    // The *parent* entity ('Writer') names the relation — 'novels' is one of
+    // Writer's own edges, not one of the missing member's ('Novel').
+    await expect(call).rejects.toMatchObject({ detail: expect.stringContaining("Writer") });
 
     // The rejected write must not have partially applied.
     const remaining = await dataSource.getRepository(Novel).find({ where: { writer: { id: writerId } } });
     expect(remaining.map((novel) => novel.id).sort()).toEqual([...novelIds].sort());
+  });
+
+  it("raises ConfigurationException for a relation name TypeORM doesn't know", async () => {
+    const { writerId } = await seed();
+    await expect(
+      adapter.patchRelation!(writerId, "notARelation", { add: [], remove: [] }, context()),
+    ).rejects.toThrowError(ConfigurationException);
   });
 
   it("does not remove any member when the remove list mixes a valid and an invalid target", async () => {

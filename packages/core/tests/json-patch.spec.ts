@@ -33,8 +33,11 @@ class JsonPatchCapableAdapter<Entity extends { id: number; posts?: unknown }> ex
 
     const missingRemovals = changes.remove.filter((memberId) => !current.has(memberId));
     if (missingRemovals.length > 0) {
+      // The parent entity (`Author`) — `relation` is one of *its* edges —
+      // matching `TypeOrmRepositoryAdapter#patchRelation`'s own
+      // `{ entity: context.entityName, relation }` convention.
       throw new JsonPatchTargetNotFoundException({
-        messageParams: { entity: "Post", relation, id: missingRemovals.join(", ") },
+        messageParams: { entity: context.entityName, relation, id: missingRemovals.join(", ") },
         context: { entityName: context.entityName, operation: context.operation },
       });
     }
@@ -317,6 +320,40 @@ describe("patchOne — jsonPatch document, relation ops", () => {
     } as never);
     await expect(call).rejects.toThrowError(JsonPatchTargetNotFoundException);
     await expect(call).rejects.toMatchObject({ code: "KAVO_JSON_PATCH_TARGET_NOT_FOUND", status: 404 });
+    // The *parent* entity ('Author') names the relation — 'posts' is one of
+    // Author's own edges, not one of the removed member's ('Post') — so the
+    // rendered message must not name the related entity instead.
+    await expect(call).rejects.toMatchObject({ detail: expect.stringContaining("Author") });
+  });
+
+  it("does not partially apply a document — field ops still commit even when the relation op is rejected", async () => {
+    // The stated scope limit (ADR-0029's jsonPatch amendment): field changes
+    // commit first via a separate adapter call, then one `patchRelation`
+    // call per relation — each its own atomic unit, not one transaction
+    // spanning the whole document. Pinning that here so a later change
+    // can't silently make it either more atomic (fields roll back on relation
+    // failure) or less (this stays true) without a test noticing.
+    const { crud } = makeAuthorCrud("jsonPatch");
+    const call = crud.engine.execute({
+      operation: "patchOne",
+      id: "1",
+      body: [
+        { op: "replace", path: "/name", value: "Grace" },
+        { op: "remove", path: "/posts/-", value: 99 },
+      ] as never,
+      query: null,
+      options: null,
+    } as never);
+    await expect(call).rejects.toThrowError(JsonPatchTargetNotFoundException);
+
+    const reread = await crud.engine.execute({
+      operation: "findOne",
+      id: "1",
+      body: null,
+      query: null,
+      options: null,
+    } as never);
+    expect(reread.item).toMatchObject({ id: 1, name: "Grace" });
   });
 
   it("propagates NotFoundException for an 'add' whose id matches no real row", async () => {
@@ -382,5 +419,67 @@ describe("patchOne — jsonPatch document, relation ops", () => {
         options: null,
       } as never),
     ).rejects.toThrowError(JsonPatchInvalidDocumentException);
+  });
+
+  it("rejects an index-addressed relation path — members are addressed by identity, not position", async () => {
+    const { crud } = makeAuthorCrud("jsonPatch");
+    await expect(
+      crud.engine.execute({
+        operation: "patchOne",
+        id: "1",
+        body: [{ op: "add", path: "/posts/0", value: 2 }] as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(JsonPatchInvalidDocumentException);
+  });
+
+  it("silently narrows a value with no id key, rather than rejecting it — same leniency 'replace' already has", async () => {
+    const { crud, adapter } = makeAuthorCrud("jsonPatch");
+    await crud.engine.execute({
+      operation: "patchOne",
+      id: "1",
+      body: [{ op: "add", path: "/posts/-", value: { name: "no id here" } }] as never,
+      query: null,
+      options: null,
+    } as never);
+    // Same element-level leniency `replace` already has (ADR-0014): an
+    // object with no `id` key narrows to `undefined`, filtered out —
+    // pinned here so a change to that shared `associate()` logic doesn't
+    // silently start rejecting these instead.
+    expect(adapter.calls).toEqual([{ id: 1, relation: "posts", changes: { add: [], remove: [] } }]);
+  });
+
+  it("treats an empty document as a clean no-op", async () => {
+    const { crud, adapter } = makeAuthorCrud("jsonPatch");
+    const response = await crud.engine.execute({
+      operation: "patchOne",
+      id: "1",
+      body: [] as never,
+      query: null,
+      options: null,
+    } as never);
+    expect(response.item).toMatchObject({ id: 1, name: "Ada" });
+    expect(adapter.calls).toEqual([]);
+  });
+
+  it("removing an id also named in the same document's 'add' fails on the not-a-member check, not a net no-op", async () => {
+    // Both ops target the same relation and are collected into one
+    // `patchRelation` call — the adapter (not the parser) is what decides
+    // "is this id currently a member", so pinning here that a same-document
+    // add+remove of one id is NOT quietly canceled out before reaching it.
+    const { crud } = makeAuthorCrud("jsonPatch");
+    await expect(
+      crud.engine.execute({
+        operation: "patchOne",
+        id: "1",
+        body: [
+          { op: "add", path: "/posts/-", value: 7 },
+          { op: "remove", path: "/posts/-", value: 7 },
+        ] as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(JsonPatchTargetNotFoundException);
   });
 });

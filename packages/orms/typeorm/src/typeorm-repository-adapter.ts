@@ -557,8 +557,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // row" question below, and not a silent no-op either.
         const missingRemovals = changes.remove.filter((memberId) => !currentIds.has(memberId));
         if (missingRemovals.length > 0) {
+          // The parent entity — `relation` is one of *its* edges, not one of
+          // `relatedEntityName`'s — matching `ArrayMutationInvalidShapeException`'s
+          // own `{ entity: context.entityName, relation }` convention
+          // (`kavo-engine.ts`).
           throw new JsonPatchTargetNotFoundException({
-            messageParams: { entity: relatedEntityName, relation, id: missingRemovals.join(", ") },
+            messageParams: { entity: context.entityName, relation, id: missingRemovals.join(", ") },
             context: errorContext(context),
           });
         }
