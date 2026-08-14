@@ -205,15 +205,32 @@ ever reach it. Now that `"jsonPatch"` is real, both call sites
 (`createCrud` and `@Kavo`) gate that call on the resolved strategy being
 `"replace"` — an entity on `"jsonPatch"` gets no `replace<Relation>`
 route or registry entry at all, since that surface belongs to `replace`
-alone. `@Kavo`'s decoration-time view can only see what the entity itself
-declares (ADR-0012), not a global default, so an entity that relies on a
-_global_ `arrayMutation.strategy: "jsonPatch"` default without declaring
-it locally will still get a `replace<Relation>` route generated (decoration
-time assumes `"replace"`, the built-in default) that `createCrud`'s registry
-has no operation for — an `OperationNotRegisteredException` at request time.
-This is the same decoration/bootstrap mismatch class ADR-0013 already
-accepts for `restoreOne`/`purgeOne`'s cardinality check, recurring for a
-new setting rather than a new problem.
+alone. `@Kavo`'s decoration-time view (`declaredArrayMutationStrategy`,
+`kavo.decorator.ts`) can only see what the entity itself declares
+(ADR-0012), not a global default, so an entity that relies on a _global_
+`arrayMutation.strategy: "jsonPatch"` default without declaring it locally
+would otherwise get a `replace<Relation>` route generated (decoration time
+assumes `"replace"`, the built-in default) that `createCrud`'s registry has
+no operation for.
+
+Unlike ADR-0013's own decoration/bootstrap split — which leaves an
+equivalent cardinality mismatch for `restoreOne`/`purgeOne` to surface as a
+runtime error — this one gets an explicit bootstrap-time guard, because
+`@kavo/nest` has a place both facts are knowable at once before the app ever
+serves traffic: `KavoModule`'s discovery binder (`KavoBinder.onModuleInit`,
+`kavo.module.ts`) runs after both the decorated entity's own config (which
+decoration time already used to decide whether to generate the route) and
+the bound service's fully resolved settings (which `createCrud` only
+produces once real infrastructure and global defaults exist) are available.
+`requireArrayMutationStrategyAgreement` re-derives
+`declaredArrayMutationStrategy` there and compares it against the resolved
+`arrayMutation.strategy`; a disagreement is a bootstrap `ConfigurationException`
+naming the entity, the relation(s), and the fix — the same "fail loudly at
+startup" posture `requireArrayMutationSupport`/`requireJsonPatchSupport`
+already have for adapter-capability gaps. Plain programmatic
+(non-`@kavo/nest`) usage has no decoration-time route to disagree with in
+the first place, so `createCrud` itself carries no such check — only the
+framework binding, which is where the two views can actually diverge, does.
 
 ## Consequences
 
