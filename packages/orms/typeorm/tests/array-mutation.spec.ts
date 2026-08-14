@@ -11,7 +11,7 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from "typeorm";
-import { NotFoundException, type RepositoryAdapter } from "@kavo/core";
+import { ArrayMutationMemberNotFoundException, NotFoundException, type RepositoryAdapter } from "@kavo/core";
 import { createInfrastructure } from "@kavo/typeorm";
 
 @Entity()
@@ -232,5 +232,87 @@ describe("TypeOrmRepositoryAdapter#replaceRelation — ManyToMany (junction-tabl
       .getRepository(Article)
       .findOne({ where: { id: articleId }, relations: { topics: true } });
     expect(remaining?.topics).toEqual([]);
+  });
+});
+
+describe("TypeOrmRepositoryAdapter#readRelation (arrayMutation's resource strategy, ADR-0029's resource amendment)", () => {
+  it("returns the parent row with the relation loaded", async () => {
+    const { writerId, novelIds } = await seed();
+    const read = await adapter.readRelation!(writerId, "novels", context("listNovels"));
+    expect(read.id).toBe(writerId);
+    expect(read.novels.map((novel) => novel.id).sort()).toEqual([...novelIds].sort());
+  });
+
+  it("raises NotFoundException for a parent id that does not exist", async () => {
+    await expect(adapter.readRelation!(999999, "novels", context("listNovels"))).rejects.toThrowError(
+      NotFoundException,
+    );
+  });
+});
+
+describe("TypeOrmRepositoryAdapter#addRelationMember (arrayMutation's resource strategy, ADR-0029's resource amendment)", () => {
+  it("adds a member that was not previously related", async () => {
+    const { writerId } = await seed();
+    const [novel] = await dataSource.getRepository(Novel).save([{ title: "Solo" }]);
+    const updated = await adapter.addRelationMember!(writerId, "novels", novel!.id, context("addNovels"));
+    expect(updated.novels.map((n) => n.id)).toContain(novel!.id);
+  });
+
+  it("is a no-op when the id is already a member", async () => {
+    const { writerId, novelIds } = await seed();
+    const updated = await adapter.addRelationMember!(writerId, "novels", novelIds[0]!, context("addNovels"));
+    expect(updated.novels.map((n) => n.id).sort()).toEqual([...novelIds].sort());
+  });
+
+  it("raises NotFoundException for a member id that does not exist", async () => {
+    const { writerId } = await seed();
+    await expect(adapter.addRelationMember!(writerId, "novels", 999999, context("addNovels"))).rejects.toThrowError(
+      NotFoundException,
+    );
+  });
+
+  it("raises NotFoundException for a parent id that does not exist", async () => {
+    const [novel] = await dataSource.getRepository(Novel).save([{ title: "Solo" }]);
+    await expect(adapter.addRelationMember!(999999, "novels", novel!.id, context("addNovels"))).rejects.toThrowError(
+      NotFoundException,
+    );
+  });
+
+  it("adds and removes members through the junction table (ManyToMany)", async () => {
+    const { articleId, topicIds } = await seedArticle();
+    const updated = await articleAdapter.addRelationMember!(
+      articleId,
+      "topics",
+      topicIds[0]!,
+      articleContext("addTopics"),
+    );
+    expect(updated.topics.map((t) => t.id)).toEqual([topicIds[0]]);
+  });
+});
+
+describe("TypeOrmRepositoryAdapter#removeRelationMember (arrayMutation's resource strategy, ADR-0029's resource amendment)", () => {
+  it("removes a currently-related member, keeping the rest", async () => {
+    const { writerId, novelIds } = await seed();
+    const updated = await adapter.removeRelationMember!(writerId, "novels", novelIds[0]!, context("removeNovels"));
+    expect(updated.novels.map((n) => n.id).sort()).toEqual([novelIds[1], novelIds[2]].sort());
+  });
+
+  it("raises ArrayMutationMemberNotFoundException for an id that is not currently a member", async () => {
+    const { writerId } = await seed();
+    await expect(
+      adapter.removeRelationMember!(writerId, "novels", 999999, context("removeNovels")),
+    ).rejects.toThrowError(ArrayMutationMemberNotFoundException);
+  });
+
+  it("removes a member through the junction table (ManyToMany)", async () => {
+    const { articleId, topicIds } = await seedArticle();
+    await articleAdapter.replaceRelation!(articleId, "topics", topicIds, articleContext());
+    const updated = await articleAdapter.removeRelationMember!(
+      articleId,
+      "topics",
+      topicIds[0]!,
+      articleContext("removeTopics"),
+    );
+    expect(updated.topics.map((t) => t.id)).toEqual([topicIds[1]]);
   });
 });

@@ -11,6 +11,7 @@ import type {
 } from "@kavo/core";
 import {
   AlreadyDeletedException,
+  ArrayMutationMemberNotFoundException,
   ConfigurationException,
   JsonPatchTargetNotFoundException,
   NotDeletedException,
@@ -601,6 +602,143 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
+  }
+
+  /**
+   * `arrayMutation`'s `resource` strategy (ADR-0029's resource amendment):
+   * `GET :id/<relation>`'s current-membership read. A pure read, unlike the
+   * three writes below — no transaction needed.
+   */
+  async readRelation(id: EntityId, relation: string, context: KavoContext<Entity>): Promise<Entity> {
+    try {
+      this.relationMetadataOf(this.dataSource, relation, context);
+      const reloaded = await this.repository.findOne({
+        where: { [this.idField]: id } as never,
+        relations: { [relation]: true } as never,
+      });
+      if (reloaded === null) throw this.notFound(id, context);
+      return reloaded;
+    } catch (error) {
+      throw mapDriverError(error, errorContext(context));
+    }
+  }
+
+  /**
+   * `arrayMutation`'s `resource` strategy: `POST :id/<relation>`, adding one
+   * member by id. Idempotent (an id already a member changes nothing);
+   * adding an id with no matching row raises `NotFoundException` — the same
+   * existence check `replaceRelation`/`patchRelation` already raise.
+   */
+  async addRelationMember(
+    id: EntityId,
+    relation: string,
+    memberId: EntityId,
+    context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    return this.mutateSingleRelationMember(id, relation, memberId, "add", context);
+  }
+
+  /**
+   * `arrayMutation`'s `resource` strategy: `DELETE :id/<relation>`, removing
+   * one member by id. Removing an id that is not currently a member raises
+   * `ArrayMutationMemberNotFoundException` rather than a silent no-op.
+   */
+  async removeRelationMember(
+    id: EntityId,
+    relation: string,
+    memberId: EntityId,
+    context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    return this.mutateSingleRelationMember(id, relation, memberId, "remove", context);
+  }
+
+  /**
+   * Shared transactional core of `addRelationMember`/`removeRelationMember`
+   * — the read that decides "is this id currently a member?" and the write
+   * it gates must commit together, the same reason `patchRelation`'s
+   * `jsonPatch` `add`/`remove` does: a concurrent writer can never make that
+   * judgment stale between the check and the change.
+   */
+  private async mutateSingleRelationMember(
+    id: EntityId,
+    relation: string,
+    memberId: EntityId,
+    action: "add" | "remove",
+    context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const existing = await manager.getRepository(this.entity).findOne({ where: { [this.idField]: id } as never });
+        if (existing === null) throw this.notFound(id, context);
+
+        const relationMetadata = this.relationMetadataOf(manager, relation, context);
+        const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
+        const relatedEntityName = relationMetadata.inverseEntityMetadata.name;
+
+        const relationBuilder = manager.createQueryBuilder().relation(this.entity, relation).of(id);
+        const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
+        const isMember = current.some((row) => row[relatedIdField] === memberId);
+
+        if (action === "remove") {
+          if (!isMember) {
+            throw new ArrayMutationMemberNotFoundException({
+              messageParams: { entity: context.entityName, relation, id: String(memberId) },
+              context: errorContext(context),
+            });
+          }
+          await relationBuilder.remove(memberId);
+        } else if (!isMember) {
+          // Idempotent: an `add` of an id already a member changes nothing.
+          const targetRepository = manager.getRepository<ObjectLiteral>(
+            relationMetadata.inverseEntityMetadata.target as ClassRef<ObjectLiteral>,
+          );
+          const found = await targetRepository.findOne({ where: { [relatedIdField]: memberId } as never });
+          if (found === null) {
+            throw new NotFoundException({
+              messageParams: { entity: relatedEntityName, id: String(memberId) },
+              context: errorContext(context),
+            });
+          }
+          await relationBuilder.add(memberId);
+        }
+
+        const reloaded = await manager.getRepository(this.entity).findOne({
+          where: { [this.idField]: id } as never,
+          relations: { [relation]: true } as never,
+        });
+        if (reloaded === null) throw this.notFound(id, context);
+        return reloaded;
+      });
+    } catch (error) {
+      throw mapDriverError(error, errorContext(context));
+    }
+  }
+
+  /**
+   * The relation's TypeORM metadata, by property name — shared by every
+   * `arrayMutation` primitive that needs the related entity's own id field
+   * and name. Takes the datasource-or-manager the caller is already
+   * scoped to (a bare read here, a transaction's `manager` in a write),
+   * rather than always reaching for `this.dataSource`, so a write's lookup
+   * stays inside the same transaction as the change it informs.
+   */
+  private relationMetadataOf(
+    source: DataSource | { readonly connection: DataSource },
+    relation: string,
+    context: KavoContext<Entity>,
+  ) {
+    const connection = "connection" in source ? source.connection : source;
+    const relationMetadata = connection
+      .getMetadata(this.entity)
+      .relations.find((candidate) => candidate.propertyName === relation);
+    if (relationMetadata === undefined) {
+      throw new ConfigurationException(
+        context.entityName,
+        `relations.edges.${relation}.write`,
+        `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
+      );
+    }
+    return relationMetadata;
   }
 
   private notFound(id: EntityId, context: KavoContext<Entity>): NotFoundException {
