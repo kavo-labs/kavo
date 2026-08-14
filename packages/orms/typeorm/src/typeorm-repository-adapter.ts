@@ -12,6 +12,7 @@ import type {
 import {
   AlreadyDeletedException,
   ConfigurationException,
+  JsonPatchTargetNotFoundException,
   NotDeletedException,
   NotFoundException,
   hasKeyset,
@@ -507,6 +508,92 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       });
       if (reloaded === null) throw this.notFound(id, context);
       return reloaded;
+    } catch (error) {
+      throw mapDriverError(error, errorContext(context));
+    }
+  }
+
+  /**
+   * `arrayMutation`'s `jsonPatch` strategy (ADR-0029's jsonPatch
+   * amendment): incremental add/remove of one relation's membership.
+   * Unlike `replaceRelation` above — whose read and write are two separate
+   * round trips, a known gap its own doc comment names — this method's
+   * read (current membership, which decides whether a `remove` target
+   * exists) and its write must commit together: `dataSource.transaction`
+   * wraps both, so a concurrent writer can never make the "is this id
+   * currently a member?" judgment stale by the time the removal executes.
+   */
+  async patchRelation(
+    id: EntityId,
+    relation: string,
+    changes: { readonly add: readonly EntityId[]; readonly remove: readonly EntityId[] },
+    context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const existing = await manager.getRepository(this.entity).findOne({ where: { [this.idField]: id } as never });
+        if (existing === null) throw this.notFound(id, context);
+
+        const relationMetadata = manager.connection
+          .getMetadata(this.entity)
+          .relations.find((candidate) => candidate.propertyName === relation);
+        if (relationMetadata === undefined) {
+          throw new ConfigurationException(
+            context.entityName,
+            `relations.edges.${relation}.write`,
+            `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
+          );
+        }
+        const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
+        const relatedEntityName = relationMetadata.inverseEntityMetadata.name;
+
+        const relationBuilder = manager.createQueryBuilder().relation(this.entity, relation).of(id);
+        const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
+        const currentIds = new Set(current.map((row) => row[relatedIdField] as EntityId));
+
+        // A `remove` target that isn't currently a member is a distinct,
+        // explicit failure (RFC 6902 requires a `remove`'s target location
+        // to exist) — not the same as `replaceRelation`'s "add of a missing
+        // row" question below, and not a silent no-op either.
+        const missingRemovals = changes.remove.filter((memberId) => !currentIds.has(memberId));
+        if (missingRemovals.length > 0) {
+          throw new JsonPatchTargetNotFoundException({
+            messageParams: { entity: relatedEntityName, relation, id: missingRemovals.join(", ") },
+            context: errorContext(context),
+          });
+        }
+
+        // Idempotent: an `add` of an id already a member changes nothing.
+        const toAdd = changes.add.filter((memberId) => !currentIds.has(memberId));
+        if (toAdd.length > 0) {
+          const targetRepository = manager.getRepository<ObjectLiteral>(
+            relationMetadata.inverseEntityMetadata.target as ClassRef<ObjectLiteral>,
+          );
+          const found = await targetRepository.find({
+            where: { [relatedIdField]: In(toAdd) } as never,
+            select: { [relatedIdField]: true } as never,
+          });
+          const foundIds = new Set(found.map((row) => row[relatedIdField] as EntityId));
+          const missing = toAdd.filter((memberId) => !foundIds.has(memberId));
+          if (missing.length > 0) {
+            throw new NotFoundException({
+              messageParams: { entity: relatedEntityName, id: missing.join(", ") },
+              context: errorContext(context),
+            });
+          }
+        }
+
+        if (toAdd.length > 0 || changes.remove.length > 0) {
+          await relationBuilder.addAndRemove(toAdd, changes.remove);
+        }
+
+        const reloaded = await manager.getRepository(this.entity).findOne({
+          where: { [this.idField]: id } as never,
+          relations: { [relation]: true } as never,
+        });
+        if (reloaded === null) throw this.notFound(id, context);
+        return reloaded;
+      });
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
