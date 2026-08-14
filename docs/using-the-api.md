@@ -30,7 +30,7 @@ GET /books?filter[pages][gte]=200&filter[pages][lt]=500
 
 Wire tokens are exact-case (`gte`, not `GTE`) — a misspelled or wrong-case operator is a 400, not silently ignored. `like`/`ilike` never auto-wrap wildcards; pass `%` yourself, and escape any literal `%`/`_` in the value with a backslash. Both apply to string columns only.
 
-`in`/`notIn` also accept the repeated-key form instead of a comma list, which is friendlier to URL-building libraries:
+`in`/`notIn` also accept the repeated-key form instead of a comma list:
 
 ```
 GET /books?filter[status][in][]=active&filter[status][in][]=pending
@@ -47,7 +47,7 @@ GET /books?filter[or][0][author][eq]=Tolkien&filter[or][1][author][eq]=Herbert
 GET /books?filter[not][status][eq]=banned
 ```
 
-For anything the bracket grammar gets awkward at, `filter` also accepts one JSON-encoded value as a full-power escape hatch. It parses into exactly the same filter tree as the bracket form, so the two are interchangeable — and if both are present on a request, they AND together:
+For anything the bracket grammar gets awkward at, `filter` also accepts one JSON-encoded value as a full-power escape hatch — it parses into the same filter tree as the bracket form, and if both are present on a request, they AND together:
 
 ```
 GET /books?filter={"or":[{"author":{"eq":"Tolkien"}},{"not":{"status":{"eq":"banned"}}}]}
@@ -67,13 +67,13 @@ GET /books?filter[author.country][eq]=UK
 GET /books?search[query]=dune
 ```
 
-`search[query]=<term>` is free-text search across a set of fields — the
-"search box" case, as opposed to `filter[...]`'s single-field predicates.
-It composes with any `filter[...]` already on the request (`AND`-ed
-together) rather than replacing it. It's off by default per entity — a
-plain 400 if the entity hasn't turned `query.search.enabled` on — and only
-searches fields on the entity's `searchable` allowlist (default: every own
-string column) — see [Configuration](/integrations/nest/configuration/entity-config#allowlists).
+`search[query]=<term>` is free-text search across a set of fields, as
+opposed to `filter[...]`'s single-field predicates. It composes with any
+`filter[...]` already on the request (`AND`-ed together) rather than
+replacing it. It's off by default per entity — a plain 400 if the entity
+hasn't turned `query.search.enabled` on — and only searches fields on the
+entity's `searchable` allowlist (default: every own string column) — see
+[Configuration](/integrations/nest/configuration/entity-config#allowlists).
 
 ```
 GET /books?search[query]=blue+iphone&search[mode]=words&search[fields]=title,description
@@ -175,7 +175,7 @@ Things to know:
 - **A since value is plain, not opaque, but compound.** It is the boundary column's own value plus the row's id, joined by `|` — `2024-03-01T10:00:00.000Z|41`. The id is what makes paging exactly-once even when several rows share the same boundary value; unlike a cursor's token you can still read it, or construct one by hand from a row you already have.
 - **The sort is forced, not chosen.** Every request is ordered by `[since.field, idField]` ascending regardless of any `sort` you send — sending one is a 400, not a silent override. `since.field` must be a `date`- or `string`-kind column (a plain `number`, including an auto-increment id, does not qualify), and — like a cursor sort key — it and `idField` must both be on the `filterable` and `selectable` allowlists as well as `sortable`. Unlike cursor pagination's rules, these are all checked at startup: since the sort is entirely config-known, a misconfigured `since.field` fails immediately rather than on the first request.
 - **Paging is exactly-once**, the same guarantee cursor pagination gives — no row is skipped or repeated, even when many rows share one `since.field` value.
-- **`nextSince` advances even on a partial page.** If a poll asks for 100 rows and only 12 exist, `nextSince` still moves past those 12 — unlike `nextCursor`, it does not wait for a full page, because there is no "last page" in a poll to wait for. A genuinely caught-up poll gets back `items: []` and its own `since` echoed back rather than `null` — there is no "last page" to signal the end of.
+- **`nextSince` advances even on a partial page.** If a poll asks for 100 rows and only 12 exist, `nextSince` still moves past those 12 — unlike `nextCursor`, it does not wait for a full page, because there is no "last page" in a poll to wait for. A genuinely caught-up poll gets back `items: []` and its own `since` echoed back rather than `null`.
 - **`offset` is always `0`,** the same reason a cursor page reports it. `total` is unaffected.
 - **You need a matching composite index**, covering `(since.field, id)` in that order — the same requirement cursor pagination has, for the same reason.
 - **Turn `pagination.count` off** for the same cost reason cursor pagination recommends it.
@@ -192,7 +192,7 @@ Sparse fieldset for the root resource, validated against the `selectable` allowl
 
 ## Computed fields
 
-A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total, a flag that depends on who is asking. They are declared once on the entity's config:
+A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total. They are declared once on the entity's config:
 
 ```ts
 @Kavo(Book, {
