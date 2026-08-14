@@ -131,7 +131,7 @@ export class BooksController {
         <span class="before-after-count before-after-count--after">3 lines</span>
       </div>
       <p class="before-after-subtitle before-after-subtitle--after">
-        <strong>Pagination</strong>, <strong>filtering</strong>, <strong>sorting</strong>, <strong>field selection</strong>, and more — all included.
+        <strong>Pagination</strong>, <strong>filtering</strong>, <strong>sorting</strong>, <strong>field selection</strong>, and more, all included.
       </p>
     </div>
 
@@ -163,7 +163,7 @@ npx skills add kavo-labs/kavo
 
 <div class="query-section">
   <p class="query-title">The query grammar, on the wire</p>
-  <p class="query-subtitle">Filtering, sorting, pagination, and includes — all driven by the query string, no extra code.</p>
+  <p class="query-subtitle">Filtering, sorting, pagination, and includes are all driven by the query string. No extra code to write.</p>
   <QueryGrammarTabs v-model="activeQueryGrammarTab" :tabs="queryGrammarTabs" />
 
   <div class="query-demo">
@@ -324,7 +324,7 @@ GET /books
 <div class="realtime-section">
   <p class="realtime-title">Realtime, without a second system</p>
   <p class="realtime-subtitle">
-    Every create, update, patch, and delete already flows through one engine — publishing it as an event is a config flag, not a new pipeline. SSE ships today; WebSocket, RabbitMQ, and Kafka plug into the same <code>RealtimeTransport</code> interface.
+    Every create, update, patch, and delete already flows through one engine, so publishing it as an event is a config flag, not a new pipeline. SSE ships today; WebSocket, RabbitMQ, and Kafka plug into the same <code>RealtimeTransport</code> interface.
   </p>
 
   <RealtimeSection />

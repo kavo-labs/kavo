@@ -2,14 +2,14 @@
   <div class="mcp-section">
     <p class="mcp-title">Expose your API to agents with MCP</p>
     <p class="mcp-subtitle">
-      The same engine behind REST and GraphQL exposes every entity as an MCP toolset — no second registry, no
+      The same engine behind REST and GraphQL exposes every entity as an MCP toolset, with no second registry and no
       hand-written schemas.
     </p>
 
     <McpChatDemo />
 
     <p class="mcp-note">
-      Every standard operation, for every <code>@Kavo</code> entity, unconditionally — an agent gets the same filtering,
+      Every standard operation, for every <code>@Kavo</code> entity, unconditionally: an agent gets the same filtering,
       pagination, and soft-delete semantics a REST or GraphQL client does, because it calls the same engine.
     </p>
   </div>

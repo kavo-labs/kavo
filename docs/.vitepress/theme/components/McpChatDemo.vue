@@ -4,7 +4,7 @@
       <span class="mcp-window-dot mcp-window-dot--red"></span>
       <span class="mcp-window-dot mcp-window-dot--yellow"></span>
       <span class="mcp-window-dot mcp-window-dot--green"></span>
-      <span class="mcp-window-title">MCP client — {{ tabLabels[activeConvo] }}</span>
+      <span class="mcp-window-title">MCP client: {{ tabLabels[activeConvo] }}</span>
     </div>
     <div class="mcp-window-body">
       <TransitionGroup tag="div" name="mcp-msg" class="mcp-feed">
@@ -80,13 +80,13 @@ const conversations: ChatMessage[][] = [
     { kind: "result", text: '{ "id": 42, "status": "archived" }' },
     { kind: "call", name: "book.findOne", args: '{ id: 42, include: "author" }' },
     { kind: "result", text: '{ "author": { "name": "Ursula K. Le Guin" } }' },
-    { kind: "agent", text: "Done — Book #42 is archived. It was written by Ursula K. Le Guin." },
+    { kind: "agent", text: "Done. Book #42 is archived. It was written by Ursula K. Le Guin." },
   ],
   [
     { kind: "user", text: "Add a new book: Dune by Frank Herbert." },
     { kind: "call", name: "book.createOne", args: '{ title: "Dune", author: "Frank Herbert" }' },
     { kind: "result", text: '{ "id": 43, "title": "Dune" }' },
-    { kind: "agent", text: "Created Book #43 — Dune by Frank Herbert." },
+    { kind: "agent", text: "Created Book #43: Dune by Frank Herbert." },
   ],
   [
     { kind: "user", text: "How many books are published?" },
@@ -114,26 +114,26 @@ const conversations: ChatMessage[][] = [
     },
   ],
   [
-    { kind: "user", text: "I accidentally deleted book #17 — bring it back?" },
+    { kind: "user", text: "I accidentally deleted book #17, can you bring it back?" },
     { kind: "call", name: "book.restoreOne", args: "{ id: 17 }" },
     { kind: "result", text: '{ "id": 17, "deletedAt": null }' },
     { kind: "agent", text: "Restored Book #17." },
   ],
   [
-    { kind: "user", text: "Fix the titles on books #8 and #15 — both have typos." },
+    { kind: "user", text: "Fix the titles on books #8 and #15, both have typos." },
     { kind: "call", name: "book.updateOne", args: '{ id: 8, title: "Foundation and Empire" }' },
     { kind: "result", text: '{ "id": 8, "title": "Foundation and Empire" }' },
     { kind: "call", name: "book.updateOne", args: '{ id: 15, title: "Foundation\'s Edge" }' },
     { kind: "result", text: '{ "id": 15, "title": "Foundation\'s Edge" }' },
-    { kind: "agent", text: "Updated both — Book #8 and Book #15 now have corrected titles." },
+    { kind: "agent", text: "Updated both: Book #8 and Book #15 now have corrected titles." },
   ],
   [
-    { kind: "user", text: "Delete book #12 — we're pulling it from the catalog." },
+    { kind: "user", text: "Delete book #12, we're pulling it from the catalog." },
     { kind: "call", name: "book.findOne", args: "{ id: 12 }" },
     { kind: "result", text: '{ "id": 12, "title": "The Dispossessed" }' },
     { kind: "call", name: "book.deleteOne", args: "{ id: 12 }" },
     { kind: "result", text: '{ "deleted": true }' },
-    { kind: "agent", text: "Deleted Book #12 — The Dispossessed." },
+    { kind: "agent", text: "Deleted Book #12: The Dispossessed." },
   ],
 ];
 

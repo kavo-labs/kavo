@@ -2,7 +2,7 @@
   <div class="feature-section">
     <p class="feature-title">Everything a CRUD API needs</p>
     <p class="feature-subtitle">
-      One decorator, the full surface — configurable at global, entity, operation, and per-call scope.
+      One decorator, the full surface, configurable at global, entity, operation, and per-call scope.
     </p>
     <div class="feature-grid">
       <div v-for="feature in features" :key="feature.index" class="feature-item">
@@ -19,7 +19,7 @@ const features = [
   {
     index: "01",
     name: "Filtering",
-    desc: "A full operator grammar — eq, gt, in, isNull, and more — parsed straight from the query string.",
+    desc: "A full operator grammar (eq, gt, in, isNull, and more) parsed straight from the query string.",
   },
   {
     index: "02",
@@ -39,7 +39,7 @@ const features = [
   {
     index: "05",
     name: "Per-operation DTOs",
-    desc: "Optional create, update, patch, query, item, and list shapes — derived or hand-written.",
+    desc: "Optional create, update, patch, query, item, and list shapes, derived or hand-written.",
   },
   {
     index: "06",

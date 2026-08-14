@@ -1,12 +1,12 @@
 <template>
   <div class="layer-section">
     <p class="layer-title">Not a replacement for your ORM</p>
-    <p class="layer-subtitle">Kavo doesn't own your data model — it sits on top of the entity you already defined.</p>
+    <p class="layer-subtitle">Kavo doesn't own your data model. It sits on top of the entity you already defined.</p>
     <div class="equation-frame">
       <div class="equation">
         <div class="eq-card">
           <span class="eq-label">Your ORM</span>
-          <span class="eq-desc">Entity, migrations, and relations — unchanged.</span>
+          <span class="eq-desc">Entity, migrations, and relations, unchanged.</span>
         </div>
         <span class="eq-op">+</span>
         <div class="eq-card eq-card--kavo">
@@ -21,7 +21,7 @@
       </div>
     </div>
     <p class="layer-note">
-      Swap ORMs later and the API surface doesn't move — <code>RepositoryAdapter</code> is the only seam that changes.
+      Swap ORMs later and the API surface doesn't move. <code>RepositoryAdapter</code> is the only seam that changes.
     </p>
   </div>
 </template>
