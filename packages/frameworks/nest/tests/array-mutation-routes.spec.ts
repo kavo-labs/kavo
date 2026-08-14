@@ -67,3 +67,60 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
     expect(new OverriddenController().replaceTags()).toBe("manual");
   });
 });
+
+describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029's resource amendment)", () => {
+  it("generates GET/POST/DELETE/PUT :id/<relation> for a relation opted into relations.edges.<name>.write", () => {
+    @Kavo(Post, { arrayMutation: { strategy: "resource" }, relations: { edges: { tags: { write: true } } } } as never)
+    class PostController {}
+
+    const prototype = PostController.prototype as Record<string, unknown>;
+    const cases: readonly [string, unknown][] = [
+      ["listTags", RequestMethod.GET],
+      ["addTags", RequestMethod.POST],
+      ["removeTags", RequestMethod.DELETE],
+      ["replaceTags", RequestMethod.PUT],
+    ];
+    for (const [methodName, requestMethod] of cases) {
+      const method = prototype[methodName] as (...args: unknown[]) => unknown;
+      expect(typeof method).toBe("function");
+      expect(Reflect.getMetadata(PATH_METADATA, method)).toBe(":id/tags");
+      expect(Reflect.getMetadata(METHOD_METADATA, method)).toBe(requestMethod);
+    }
+  });
+
+  it("generates no sub-collection routes when the relation never opts in", () => {
+    @Kavo(Post, { arrayMutation: { strategy: "resource" } } as never)
+    class PlainController {}
+
+    const prototype = PlainController.prototype as Record<string, unknown>;
+    expect(prototype.listTags).toBeUndefined();
+    expect(prototype.addTags).toBeUndefined();
+    expect(prototype.removeTags).toBeUndefined();
+    expect(prototype.replaceTags).toBeUndefined();
+  });
+
+  it("generates only replace<Relation> — not list/add/remove — under the default 'replace' strategy", () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
+    class ReplaceOnlyController {}
+
+    const prototype = ReplaceOnlyController.prototype as Record<string, unknown>;
+    expect(prototype.replaceTags).toBeDefined();
+    expect(prototype.listTags).toBeUndefined();
+    expect(prototype.addTags).toBeUndefined();
+    expect(prototype.removeTags).toBeUndefined();
+  });
+
+  it("a hand-written method named remove<Relation> wins over the generated DELETE route (manual-method-wins)", () => {
+    @Kavo(Post, { arrayMutation: { strategy: "resource" }, relations: { edges: { tags: { write: true } } } } as never)
+    class OverriddenController {
+      removeTags(): string {
+        return "manual";
+      }
+    }
+
+    const method = OverriddenController.prototype.removeTags;
+    expect(Reflect.getMetadata(PATH_METADATA, method)).toBeUndefined();
+    expect(Reflect.getMetadata(METHOD_METADATA, method)).toBeUndefined();
+    expect(new OverriddenController().removeTags()).toBe("manual");
+  });
+});
