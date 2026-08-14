@@ -57,7 +57,7 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 | `arrayMutation`          | `{ strategy } \| false`                  | `{ strategy: "replace" }` |
 | `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | `"replace"`               |
 
-Only `"replace"` is implemented; `"resource"`/`"jsonPatch"` are reserved and rejected at bootstrap. See [Relations#arrayMutation](/features/relations#arraymutation).
+`"replace"` and `"jsonPatch"` are both implemented; `"resource"` is reserved and rejected at bootstrap. See [Relations#arrayMutation](/features/relations#arraymutation).
 
 ## caching
 

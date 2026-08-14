@@ -193,6 +193,7 @@ const config = defineConfig({
           { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
           { text: "Error Handling", link: "/guides/error-handling" },
           { text: "Custom Adapter", link: "/guides/custom-adapter" },
+          { text: "Using the API", link: "/using-the-api" },
         ],
       },
       {
@@ -202,10 +203,6 @@ const config = defineConfig({
           { text: "Errors", link: "/reference/errors" },
           { text: "Decorators", link: "/reference/decorators" },
         ],
-      },
-      {
-        text: "Guide",
-        items: [{ text: "Using the API", link: "/using-the-api" }],
       },
       {
         text: "For contributors",
