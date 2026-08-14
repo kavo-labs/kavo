@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Scope is adopter-facing docs only: `docs/getting-started.md`, `docs/using-the-api.md`, `docs/integrations/**`. `docs/internals/**` (architecture docs, ADRs) is untouched — do not edit any file under `docs/internals/`.
+- Scope is adopter-facing docs only: `docs/getting-started/introduction.md`, `docs/using-the-api.md`, `docs/integrations/**`. `docs/internals/**` (architecture docs, ADRs) is untouched — do not edit any file under `docs/internals/`.
 - Every safety-critical or correctness-critical block must survive verbatim (content may move to a new file, but its wording must not be shortened or dropped): the `::: danger` box under `allowlists` (the "selectable alone is not a credential control" table), the ADR-0028 pre-v0.10 migration notes under `relations`, and every `[ADR-NNNN](...)` cross-reference link anywhere in the moved/edited content.
 - Every internal link that points at `/integrations/nest/configuration#<anchor>` must be updated to point at the new subpage that anchor moved to — heading text (and therefore the VitePress-generated anchor id) must not change during the split, only the file it lives in.
 - `getting-started.md` stays TypeORM-example-based; do not rewrite it per-ORM.
@@ -145,10 +145,10 @@ git commit -m "docs: add Stack Picker component"
 
 **Files:**
 
-- Modify: `docs/integrations/nest/typeorm.md`
-- Modify: `docs/integrations/nest/prisma.md`
-- Modify: `docs/integrations/nest/mongoose.md`
-- Modify: `docs/integrations/nest/mikroorm.md`
+- Modify: `docs/integrations/orms/typeorm.md`
+- Modify: `docs/integrations/orms/prisma.md`
+- Modify: `docs/integrations/orms/mongoose.md`
+- Modify: `docs/integrations/orms/mikroorm.md`
 
 **Interfaces:**
 
@@ -189,7 +189,7 @@ Expected: `format:check` passes clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/integrations/nest/typeorm.md docs/integrations/nest/prisma.md docs/integrations/nest/mongoose.md docs/integrations/nest/mikroorm.md
+git add docs/integrations/orms/typeorm.md docs/integrations/orms/prisma.md docs/integrations/orms/mongoose.md docs/integrations/orms/mikroorm.md
 git commit -m "docs: embed Stack Picker in ORM integration pages"
 ```
 
@@ -199,13 +199,13 @@ git commit -m "docs: embed Stack Picker in ORM integration pages"
 
 **Files:**
 
-- Create: `docs/integrations/nest/configuration/module-setup.md`
+- Create: `docs/guides/configuration/module-setup.md`
 
 **Interfaces:**
 
 - Produces: a page reachable at `/integrations/nest/configuration/module-setup`, headings `## Global config (KavoModule.forRoot / forRootAsync)` and `### The principal` — anchor ids `#global-config-kavomodule-forroot-forrootasync` and `#the-principal` must be preserved (heading text unchanged) since other tasks/pages will link to `#the-principal`... actually nothing links there today, but keep the text stable regardless as a rule for this whole plan.
 
-Source content: `docs/integrations/nest/configuration.md` lines 15–90 (the `## Global config` section through the end of `### The principal`, i.e. everything between `## Global config` and `## Settings fields`).
+Source content: `docs/guides/configuration/index.md` lines 15–90 (the `## Global config` section through the end of `### The principal`, i.e. everything between `## Global config` and `## Settings fields`).
 
 - [ ] **Step 1: Write the page**
 
@@ -229,7 +229,7 @@ Expected: passes clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/integrations/nest/configuration/module-setup.md
+git add docs/guides/configuration/module-setup.md
 git commit -m "docs: split module-setup out of configuration.md"
 ```
 
@@ -239,13 +239,13 @@ git commit -m "docs: split module-setup out of configuration.md"
 
 **Files:**
 
-- Create: `docs/integrations/nest/configuration/settings.md`
+- Create: `docs/guides/configuration/settings.md`
 
 **Interfaces:**
 
 - Produces: `/integrations/nest/configuration/settings`, with headings (and therefore anchors) `## pagination`, `## query`, `## errors`, `## relations`, `## arrayMutation`, `## caching`, `## softDelete`, `## realtime`, `## operations (global scope only)` — note these become `##` (page-level) headings here, not `###` as they were nested under `## Settings fields` in the old page. This changes their anchor ids from e.g. `#pagination` (was already `#pagination` as an `###`, VitePress anchors don't include parent headings, so **the anchor ids are unchanged** by the promotion from `###` to `##`.
 
-Source content: `docs/integrations/nest/configuration.md` lines 92–246 (`## Settings fields (KavoSettings)` through the end of the `### operations (global scope only)` subsection, i.e. everything before `## @Kavo(Entity, config)`).
+Source content: `docs/guides/configuration/index.md` lines 92–246 (`## Settings fields (KavoSettings)` through the end of the `### operations (global scope only)` subsection, i.e. everything before `## @Kavo(Entity, config)`).
 
 - [ ] **Step 1: Write the page**
 
@@ -278,7 +278,7 @@ Expected: passes clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/integrations/nest/configuration/settings.md
+git add docs/guides/configuration/settings.md
 git commit -m "docs: split settings out of configuration.md"
 ```
 
@@ -288,13 +288,13 @@ git commit -m "docs: split settings out of configuration.md"
 
 **Files:**
 
-- Create: `docs/integrations/nest/configuration/entity-config.md`
+- Create: `docs/guides/configuration/entity-config.md`
 
 **Interfaces:**
 
 - Produces: `/integrations/nest/configuration/entity-config` with headings `## dto`, `## allowlists`, `## computed` — anchors `#dto`, `#allowlists`, `#computed` unchanged from source (same reasoning as Task 4: `###`→`##` promotion doesn't change VitePress anchor ids).
 
-Source content: `docs/integrations/nest/configuration.md` lines 248–373 (`## @Kavo(Entity, config) — entity-scope config` through the end of `### computed`, i.e. everything before `### operations`).
+Source content: `docs/guides/configuration/index.md` lines 248–373 (`## @Kavo(Entity, config) — entity-scope config` through the end of `### computed`, i.e. everything before `### operations`).
 
 - [ ] **Step 1: Write the page**
 
@@ -325,7 +325,7 @@ Expected: passes clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/integrations/nest/configuration/entity-config.md
+git add docs/guides/configuration/entity-config.md
 git commit -m "docs: split entity-config out of configuration.md"
 ```
 
@@ -335,13 +335,13 @@ git commit -m "docs: split entity-config out of configuration.md"
 
 **Files:**
 
-- Create: `docs/integrations/nest/configuration/operations.md`
+- Create: `docs/guides/configuration/operations.md`
 
 **Interfaces:**
 
 - Produces: `/integrations/nest/configuration/operations` with headings `## operations`, `## Custom operations`, `### Reaching the database from a handler`, `## Custom list metadata` — anchors `#operations`, `#custom-operations`, `#reaching-the-database-from-a-handler`, `#custom-list-metadata` unchanged.
 
-Source content: `docs/integrations/nest/configuration.md` lines 375–569 (`### operations` per-entity section through the end of the file).
+Source content: `docs/guides/configuration/index.md` lines 375–569 (`### operations` per-entity section through the end of the file).
 
 - [ ] **Step 1: Write the page**
 
@@ -366,7 +366,7 @@ Expected: passes clean.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/integrations/nest/configuration/operations.md
+git add docs/guides/configuration/operations.md
 git commit -m "docs: split operations out of configuration.md"
 ```
 
@@ -376,7 +376,7 @@ git commit -m "docs: split operations out of configuration.md"
 
 **Files:**
 
-- Modify: `docs/integrations/nest/configuration.md` (full rewrite)
+- Modify: `docs/guides/configuration/index.md` (full rewrite)
 - Modify: `docs/.vitepress/config.mts`
 - Modify: `docs/using-the-api.md`
 
@@ -454,7 +454,7 @@ Expected: passes clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add docs/integrations/nest/configuration.md docs/.vitepress/config.mts docs/using-the-api.md
+git add docs/guides/configuration/index.md docs/.vitepress/config.mts docs/using-the-api.md
 git commit -m "docs: configuration.md becomes a landing page, fix cross-links"
 ```
 
@@ -464,7 +464,7 @@ git commit -m "docs: configuration.md becomes a landing page, fix cross-links"
 
 **Files:**
 
-- Modify: `docs/getting-started.md`
+- Modify: `docs/getting-started/introduction.md`
 
 **Interfaces:**
 
@@ -513,7 +513,7 @@ Expected: passes clean.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/getting-started.md
+git add docs/getting-started/introduction.md
 git commit -m "docs: simplify getting-started.md, add Stack Picker banner"
 ```
 
@@ -570,9 +570,9 @@ Expected: passes (this plan touches no `packages/*` or `examples/*` source, so t
 
 - [ ] **Step 3: Spot-check preserved safety content survived intact**
 
-Run: `grep -n "credential control" docs/integrations/nest/configuration/entity-config.md` — expect one match (the `::: danger` box heading survived).
-Run: `grep -n "Migrating from before v0.10" docs/integrations/nest/configuration/settings.md` — expect one match.
-Run: `grep -n "must be total, not merely pure" docs/integrations/nest/configuration/entity-config.md` — expect one match.
+Run: `grep -n "credential control" docs/guides/configuration/entity-config.md` — expect one match (the `::: danger` box heading survived).
+Run: `grep -n "Migrating from before v0.10" docs/guides/configuration/settings.md` — expect one match.
+Run: `grep -n "must be total, not merely pure" docs/guides/configuration/entity-config.md` — expect one match.
 
 If any of these three greps come back empty, the corresponding Task (5 or 4) dropped safety-critical content — go back and fix it before continuing.
 

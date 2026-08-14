@@ -1,32 +1,33 @@
-# Entity config
+# Allowlists & computed fields
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/integrations/nest/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists`, `computed`, and `operations` (its own page, see [Operations](/integrations/nest/configuration/operations#operations-1)).
+What a request may filter, sort, select, search, and include, and how to add response fields that have no backing column.
 
-## dto
+## Computed fields
 
-Registers DTO classes per slot — every slot is independently optional and falls back to an entity-derived default when omitted:
+A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total. They are declared once on the entity's config:
 
 ```ts
 @Kavo(Book, {
-  dto: {
-    create: CreateBookDto,
-    update: UpdateBookDto,
-    item: BookItemDto,
-    list: BookListDto,
+  computed: {
+    displayTitle: { resolve: (book) => (book.title === null ? null : `${book.title} (${book.year})`) },
   },
 })
 ```
 
-| Slot     | Default when omitted                                |
-| -------- | --------------------------------------------------- |
-| `create` | Entity's own shape, minus generated/relation fields |
-| `update` | Same default as `create`                            |
-| `patch`  | `Partial<update>` if set, else `Partial<Entity>`    |
-| `query`  | Generic `QueryContext<Entity>`                      |
-| `item`   | Entity, subject to field selection                  |
-| `list`   | Same as `item`'s resolved type                      |
+```
+GET /books/1     → { "id": 1, "title": "Dune", "year": 1965, "displayTitle": "Dune (1965)" }
+GET /books?fields=id,displayTitle
+```
 
-There's no `patch` DTO class to write on its own — it derives from `update`. See [DTO system](/internals/architecture/04-dto-system) for full derivation rules.
+From a client's point of view a computed field is an ordinary field: it is in the default response, it can be selected with `fields=`, and it can be narrowed away by an `item`/`list` DTO. Three things it is not:
+
+- **not filterable or sortable** — `filter[displayTitle][eq]=…` and `sort=displayTitle` are a 400, because there is no column to translate to `WHERE`/`ORDER BY`. Filter and sort on the underlying columns instead (`sort=title`);
+- **not writable** — sending one in a `POST`/`PUT`/`PATCH` body is silently ignored, like any other non-writable key (a server-side `create`/`update`/`patch` DTO that _declares_ one is a startup error rather than a silent drop);
+- **not database-side** — it is evaluated after the row is fetched, so it costs no extra query but also cannot make one cheaper.
+
+The one thing worth knowing on the server side: `resolve` must handle every value its columns can hold. It runs per served row with nothing catching it, so a single row it cannot handle turns a whole list response into a 500 — write `book.title?.toUpperCase() ?? null`, not `book.title.toUpperCase()`, against a nullable column.
+
+A computed field declared on a related entity shows up when that relation is included (`?include=author`), resolved from the related entity's own config. See [computed](#computed) below for the descriptor's options and [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated) for why the three limits are permanent rather than pending.
 
 ## allowlists
 
@@ -48,7 +49,7 @@ What a request may filter, sort, select, and include — including relation path
 - `sortable` (same shape) — fields usable in `sort=`.
 - `selectable` (same shape) — fields usable in `fields=`, **and what a response carries**.
 - `includable` (`readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }`) — relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
-- `searchable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`) — fields `search[query]`/`search[fields]` may search — relation paths permitted (unlike `filterable`/`sortable`). Default: every own **string-kind** column, not every own column. Also gated by `query.search.enabled` (off by default) — see [Search](/using-the-api#search).
+- `searchable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`) — fields `search[query]`/`search[fields]` may search — relation paths permitted (unlike `filterable`/`sortable`). Default: every own **string-kind** column, not every own column. Also gated by `query.search.enabled` (off by default) — see [Search](/querying/search).
 
 `{ exclude: [...] }` means "every own column (plus, for `selectable`, every selectable computed field; for `includable`, every own relation; for `searchable`, every own **string-kind** column) except these", resolved at bootstrap against exactly the base set that key's plain default uses.
 
@@ -102,7 +103,7 @@ A declared computed field is in the default `item`/`list` projection with no DTO
 
 **`resolve` must be total, not merely pure.** It runs once per served item and nothing catches it, so **one** row whose resolver throws turns the whole collection endpoint into a 500 — not for that row, for every caller, until the row is fixed. Write it against everything the column can actually hold, including `null`: `resolve: (todo) => todo.title?.toLowerCase() ?? null`, never `todo.title.toLowerCase()` on a nullable column. A `POST` that sets `title: null` succeeds (computed fields are stripped from the payload; `title` is an ordinary column), and `GET /todos` is dead from then on. A throwing resolver surfaces as a 500 `KAVO_PERSISTENCE_FAILED` with the cause attached and the message not leaked.
 
-A resolver reading `context.principal`, like `canEdit` above, needs the module's [`principal`](/integrations/nest/configuration/module-setup#the-principal) option set — over HTTP that option is the only thing that fills the field, and without it the caller is `null` on every request, so `canEdit` is uniformly `false` and its inverse uniformly `true`.
+A resolver reading `context.principal`, like `canEdit` above, needs the module's [`principal`](/guides/wiring-your-own-auth) option set — over HTTP that option is the only thing that fills the field, and without it the caller is `null` on every request, so `canEdit` is uniformly `false` and its inverse uniformly `true`.
 
 Keep it a pure function of the entity as well (plus `context.principal` where a field has to vary by caller). It runs per row, so a resolver that queries the database or calls out over the network reintroduces exactly the N+1 that batched includes exist to avoid. Declaring it `async` is a bootstrap error rather than a slow success: the serializer never awaits, so the promise would be emitted as-is and serialize to `{}`.
 
@@ -112,7 +113,7 @@ Keep it a pure function of the entity as well (plus `context.principal` where a 
 
 The flag and an explicit `allowlists.selectable` list say different things, deliberately. The flag is a default about _nameability_ and leaves the projection alone. An explicit list is a statement about the **response**, so a list that omits the field — or excludes it — drops it from responses too. Where both are present the explicit list wins, as it always has ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
-On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query` and `repository` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](/integrations/nest/configuration/module-setup#the-principal) option extracted for the root request, or `null` when no option is set.
+On an **included relation target**, `resolve` receives the _root_ request's `KavoContext` — serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query` and `repository` describe Post. Only `principal`, `correlationId`, `transaction` and `state` mean what they say from a relation target — `principal` being whatever the module's [`principal`](/guides/wiring-your-own-auth) option extracted for the root request, or `null` when no option is set.
 
 The generated OpenAPI response schema does not mention a computed field when no `item`/`list` DTO is registered, since the schema falls back to the entity class while the runtime response carries the computed key; registering an `item`/`list` DTO naming the field fixes both the document and the static response type.
 

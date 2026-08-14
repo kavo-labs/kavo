@@ -23,7 +23,7 @@ An `OperationConfig` object accepts:
 - **`dto`** (`{ input?, output?, query? }`) — overrides the entity's root `dto` slot for this operation only, see below.
 - **any settings key** (same shape as global `KavoSettings`) — overrides that apply to this operation only, one level above the entity's own settings.
 
-**`operations.<id>.dto`** narrows one operation's request body, response, or query contract independently of the entity's root `dto` slots (§`dto` on [Entity config](/integrations/nest/configuration/entity-config#dto)). Only the fields a given operation actually has are accepted — `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne` (void results):
+**`operations.<id>.dto`** narrows one operation's request body, response, or query contract independently of the entity's root `dto` slots (§`dto` on [Entity config](/guides/configuration/entity-config#dto)). Only the fields a given operation actually has are accepted — `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne` (void results):
 
 ```ts
 @Kavo(Book, {

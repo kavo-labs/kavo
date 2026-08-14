@@ -435,7 +435,7 @@ pass a green build and still need a human eye:
 
 `docs/` has two audiences, and it is worth keeping them separate:
 
-- **Adopter-facing** — [`docs/getting-started.md`](docs/getting-started.md),
+- **Adopter-facing** — [`docs/getting-started/`](docs/getting-started/introduction.md),
   [`docs/using-the-api.md`](docs/using-the-api.md), and
   [`docs/integrations/`](docs/integrations/). Written for someone building an app
   with Kavo.

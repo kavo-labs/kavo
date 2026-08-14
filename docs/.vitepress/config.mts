@@ -100,15 +100,14 @@ const config = defineConfig({
     logo: "/favicon.svg",
 
     nav: [
-      { text: "Getting started", link: "/getting-started" },
+      { text: "Getting started", link: "/getting-started/introduction" },
       {
         text: "Integrations",
         items: [
-          { text: "Nest + TypeORM", link: "/integrations/nest/typeorm" },
-          { text: "Nest + Prisma", link: "/integrations/nest/prisma" },
-          { text: "Nest + Mongoose", link: "/integrations/nest/mongoose" },
-          { text: "Nest + MikroORM", link: "/integrations/nest/mikroorm" },
-          { text: "Nest configuration", link: "/integrations/nest/configuration" },
+          { text: "TypeORM", link: "/integrations/orms/typeorm" },
+          { text: "Prisma", link: "/integrations/orms/prisma" },
+          { text: "Mongoose", link: "/integrations/orms/mongoose" },
+          { text: "MikroORM", link: "/integrations/orms/mikroorm" },
         ],
       },
       { text: "Using the API", link: "/using-the-api" },
@@ -118,35 +117,67 @@ const config = defineConfig({
 
     sidebar: [
       {
-        text: "Guide",
+        text: "Getting Started",
         items: [
-          { text: "Getting started", link: "/getting-started" },
-          { text: "Using the API", link: "/using-the-api" },
+          { text: "Introduction", link: "/getting-started/introduction" },
+          { text: "Requirements", link: "/getting-started/requirements" },
+          { text: "Installation", link: "/getting-started/installation" },
+          { text: "Quick Start", link: "/getting-started/quick-start" },
+        ],
+      },
+      {
+        text: "Querying",
+        items: [
+          { text: "Filtering", link: "/querying/filtering" },
+          { text: "Search", link: "/querying/search" },
+          { text: "Sorting", link: "/querying/sorting" },
+          { text: "Pagination", link: "/querying/pagination" },
+          { text: "Field Selection & Includes", link: "/querying/field-selection-and-includes" },
+        ],
+      },
+      {
+        text: "Features",
+        items: [
+          { text: "Relations", link: "/features/relations" },
+          { text: "Soft Delete", link: "/features/soft-delete" },
+          { text: "Realtime Events", link: "/features/realtime-events" },
+          { text: "Caching & ETags", link: "/features/caching-and-etags" },
+          { text: "Allowlists & Computed Fields", link: "/features/allowlists-and-computed-fields" },
         ],
       },
       {
         text: "Integrations",
         items: [
           {
-            text: "Nest",
+            text: "ORMs",
             items: [
-              { text: "TypeORM", link: "/integrations/nest/typeorm" },
-              { text: "Prisma", link: "/integrations/nest/prisma" },
-              { text: "Mongoose", link: "/integrations/nest/mongoose" },
-              { text: "MikroORM", link: "/integrations/nest/mikroorm" },
-              {
-                text: "Configuration",
-                link: "/integrations/nest/configuration",
-                items: [
-                  { text: "Module setup", link: "/integrations/nest/configuration/module-setup" },
-                  { text: "Settings", link: "/integrations/nest/configuration/settings" },
-                  { text: "Entity config", link: "/integrations/nest/configuration/entity-config" },
-                  { text: "Operations", link: "/integrations/nest/configuration/operations" },
-                ],
-              },
+              { text: "TypeORM", link: "/integrations/orms/typeorm" },
+              { text: "Prisma", link: "/integrations/orms/prisma" },
+              { text: "Mongoose", link: "/integrations/orms/mongoose" },
+              { text: "MikroORM", link: "/integrations/orms/mikroorm" },
             ],
           },
         ],
+      },
+      {
+        text: "Guides",
+        items: [
+          {
+            text: "Configuration",
+            link: "/guides/configuration/",
+            items: [
+              { text: "Module setup", link: "/guides/configuration/module-setup" },
+              { text: "Settings", link: "/guides/configuration/settings" },
+              { text: "Entity config", link: "/guides/configuration/entity-config" },
+              { text: "Operations", link: "/guides/configuration/operations" },
+            ],
+          },
+          { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
+        ],
+      },
+      {
+        text: "Guide",
+        items: [{ text: "Using the API", link: "/using-the-api" }],
       },
       {
         text: "For contributors",

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * `docs/getting-started.md` and the root README list `bun` alongside npm/pnpm
+ * `docs/getting-started/installation.md` and the root README list `bun` alongside npm/pnpm
  * as a supported way to install Kavo. Nothing in the repo actually verifies
  * that Bun can *run* the published output, though: Bun has its own module
  * resolver and its own ESM loader, and either can diverge from Node's in ways
