@@ -134,7 +134,16 @@ const config = defineConfig({
               { text: "Prisma", link: "/integrations/nest/prisma" },
               { text: "Mongoose", link: "/integrations/nest/mongoose" },
               { text: "MikroORM", link: "/integrations/nest/mikroorm" },
-              { text: "Configuration", link: "/integrations/nest/configuration" },
+              {
+                text: "Configuration",
+                link: "/integrations/nest/configuration",
+                items: [
+                  { text: "Module setup", link: "/integrations/nest/configuration/module-setup" },
+                  { text: "Settings", link: "/integrations/nest/configuration/settings" },
+                  { text: "Entity config", link: "/integrations/nest/configuration/entity-config" },
+                  { text: "Operations", link: "/integrations/nest/configuration/operations" },
+                ],
+              },
             ],
           },
         ],

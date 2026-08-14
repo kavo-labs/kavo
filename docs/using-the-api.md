@@ -30,7 +30,7 @@ GET /books?filter[pages][gte]=200&filter[pages][lt]=500
 
 Wire tokens are exact-case (`gte`, not `GTE`) — a misspelled or wrong-case operator is a 400, not silently ignored. `like`/`ilike` never auto-wrap wildcards; pass `%` yourself, and escape any literal `%`/`_` in the value with a backslash. Both apply to string columns only.
 
-`in`/`notIn` also accept the repeated-key form instead of a comma list, which is friendlier to URL-building libraries:
+`in`/`notIn` also accept the repeated-key form instead of a comma list:
 
 ```
 GET /books?filter[status][in][]=active&filter[status][in][]=pending
@@ -38,7 +38,7 @@ GET /books?filter[status][in][]=active&filter[status][in][]=pending
 
 `between` takes exactly two comma-separated bounds. `isNull`/`isNotNull` are boolean-valued — `isNull=false` means the same thing as `isNotNull=true`, so pick whichever reads better.
 
-Only fields on the entity's `filterable` allowlist can be filtered on — see [Configuration](/integrations/nest/configuration#allowlists) for how to configure that list. Anything outside it is a 400, never a silent no-op.
+Only fields on the entity's `filterable` allowlist can be filtered on — see [Configuration](/integrations/nest/configuration/entity-config#allowlists) for how to configure that list. Anything outside it is a 400, never a silent no-op.
 
 **OR / NOT / nested logic** uses the same bracket grammar and can be nested arbitrarily deep (up to `query.maxFilterDepth`, default 3):
 
@@ -47,7 +47,7 @@ GET /books?filter[or][0][author][eq]=Tolkien&filter[or][1][author][eq]=Herbert
 GET /books?filter[not][status][eq]=banned
 ```
 
-For anything the bracket grammar gets awkward at, `filter` also accepts one JSON-encoded value as a full-power escape hatch. It parses into exactly the same filter tree as the bracket form, so the two are interchangeable — and if both are present on a request, they AND together:
+For anything the bracket grammar gets awkward at, `filter` also accepts one JSON-encoded value as a full-power escape hatch — it parses into the same filter tree as the bracket form, and if both are present on a request, they AND together:
 
 ```
 GET /books?filter={"or":[{"author":{"eq":"Tolkien"}},{"not":{"status":{"eq":"banned"}}}]}
@@ -67,13 +67,13 @@ GET /books?filter[author.country][eq]=UK
 GET /books?search[query]=dune
 ```
 
-`search[query]=<term>` is free-text search across a set of fields — the
-"search box" case, as opposed to `filter[...]`'s single-field predicates.
-It composes with any `filter[...]` already on the request (`AND`-ed
-together) rather than replacing it. It's off by default per entity — a
-plain 400 if the entity hasn't turned `query.search.enabled` on — and only
-searches fields on the entity's `searchable` allowlist (default: every own
-string column) — see [Configuration](/integrations/nest/configuration#allowlists).
+`search[query]=<term>` is free-text search across a set of fields, as
+opposed to `filter[...]`'s single-field predicates. It composes with any
+`filter[...]` already on the request (`AND`-ed together) rather than
+replacing it. It's off by default per entity — a plain 400 if the entity
+hasn't turned `query.search.enabled` on — and only searches fields on the
+entity's `searchable` allowlist (default: every own string column) — see
+[Configuration](/integrations/nest/configuration/entity-config#allowlists).
 
 ```
 GET /books?search[query]=blue+iphone&search[mode]=words&search[fields]=title,description
@@ -104,7 +104,7 @@ GET /books?limit=20&offset=40
 
 The default strategy is flat `limit`/`offset` (0-based) — the same field names the response envelope reports back, so request and response mirror each other. A missing `limit` falls back to `pagination.defaultLimit`; a `limit` above `pagination.maxLimit` is clamped, not rejected.
 
-A 1-indexed page-based alternative is also built in — `page[number]`/`page[size]` — for entities configured to use it (see [Configuration](/integrations/nest/configuration)). It normalizes to the same `limit`/`offset` internally, so the response envelope always reports `limit`/`offset` either way.
+A 1-indexed page-based alternative is also built in — `page[number]`/`page[size]` — for entities configured to use it (see [Configuration](/integrations/nest/configuration/settings#pagination)). It normalizes to the same `limit`/`offset` internally, so the response envelope always reports `limit`/`offset` either way.
 
 ### Cursor (keyset) pagination
 
@@ -175,7 +175,7 @@ Things to know:
 - **A since value is plain, not opaque, but compound.** It is the boundary column's own value plus the row's id, joined by `|` — `2024-03-01T10:00:00.000Z|41`. The id is what makes paging exactly-once even when several rows share the same boundary value; unlike a cursor's token you can still read it, or construct one by hand from a row you already have.
 - **The sort is forced, not chosen.** Every request is ordered by `[since.field, idField]` ascending regardless of any `sort` you send — sending one is a 400, not a silent override. `since.field` must be a `date`- or `string`-kind column (a plain `number`, including an auto-increment id, does not qualify), and — like a cursor sort key — it and `idField` must both be on the `filterable` and `selectable` allowlists as well as `sortable`. Unlike cursor pagination's rules, these are all checked at startup: since the sort is entirely config-known, a misconfigured `since.field` fails immediately rather than on the first request.
 - **Paging is exactly-once**, the same guarantee cursor pagination gives — no row is skipped or repeated, even when many rows share one `since.field` value.
-- **`nextSince` advances even on a partial page.** If a poll asks for 100 rows and only 12 exist, `nextSince` still moves past those 12 — unlike `nextCursor`, it does not wait for a full page, because there is no "last page" in a poll to wait for. A genuinely caught-up poll gets back `items: []` and its own `since` echoed back rather than `null` — there is no "last page" to signal the end of.
+- **`nextSince` advances even on a partial page.** If a poll asks for 100 rows and only 12 exist, `nextSince` still moves past those 12 — unlike `nextCursor`, it does not wait for a full page, because there is no "last page" in a poll to wait for. A genuinely caught-up poll gets back `items: []` and its own `since` echoed back rather than `null`.
 - **`offset` is always `0`,** the same reason a cursor page reports it. `total` is unaffected.
 - **You need a matching composite index**, covering `(since.field, id)` in that order — the same requirement cursor pagination has, for the same reason.
 - **Turn `pagination.count` off** for the same cost reason cursor pagination recommends it.
@@ -188,11 +188,11 @@ GET /books?fields=id,title
 
 Sparse fieldset for the root resource, validated against the `selectable` allowlist. Narrow an included relation the same way: `fields[author]=id,name`.
 
-`selectable` also decides what a response carries when no `fields=` is sent, so it is the one place to keep a column out of every response — see [Allowlists](/integrations/nest/configuration#allowlists).
+`selectable` also decides what a response carries when no `fields=` is sent, so it is the one place to keep a column out of every response — see [Allowlists](/integrations/nest/configuration/entity-config#allowlists).
 
 ## Computed fields
 
-A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total, a flag that depends on who is asking. They are declared once on the entity's config:
+A response can carry fields that have no database column behind them — a `fullName` built from two columns, a formatted total. They are declared once on the entity's config:
 
 ```ts
 @Kavo(Book, {
@@ -215,7 +215,7 @@ From a client's point of view a computed field is an ordinary field: it is in th
 
 The one thing worth knowing on the server side: `resolve` must handle every value its columns can hold. It runs per served row with nothing catching it, so a single row it cannot handle turns a whole list response into a 500 — write `book.title?.toUpperCase() ?? null`, not `book.title.toUpperCase()`, against a nullable column.
 
-A computed field declared on a related entity shows up when that relation is included (`?include=author`), resolved from the related entity's own config. See [Configuration](/integrations/nest/configuration#computed) for the descriptor's options and [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated) for why the three limits are permanent rather than pending.
+A computed field declared on a related entity shows up when that relation is included (`?include=author`), resolved from the related entity's own config. See [Configuration](/integrations/nest/configuration/entity-config#computed) for the descriptor's options and [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated) for why the three limits are permanent rather than pending.
 
 ## Includes
 
@@ -223,7 +223,7 @@ A computed field declared on a related entity shows up when that relation is inc
 GET /books?include=author,reviews.user
 ```
 
-Comma-separated dot-paths, merged into one tree. Only relations the entity marks `includable` (see [Configuration](/integrations/nest/configuration#relations)) can appear here — an un-includable or misspelled relation is a 400.
+Comma-separated dot-paths, merged into one tree. Only relations the entity marks `includable` (see [Configuration](/integrations/nest/configuration/settings#relations)) can appear here — an un-includable or misspelled relation is a 400.
 
 ## Soft-deleted rows
 
@@ -248,7 +248,7 @@ A list response (`GET /books`) always has the same shape:
 
 `total` is `null` (and its `COUNT` query skipped) if `pagination.count` is turned off. The key is always present — a list always answers "how many matched", so configuration changes the value, never the shape.
 
-One optional fifth key can join them. `meta` is an open bag for anything the API wants to say about the list that isn't a row: a facet count, a "results are approximate" flag, the next cursor or since value. It appears when the entity's `findMany` handler puts something there — see [custom list metadata](/integrations/nest/configuration#custom-list-metadata) for how — or under [cursor pagination](#cursor-keyset-pagination) or [since pagination](#since-seek-by-timestamp-pagination), which contribute `nextCursor`/`nextSince` and are the keys Kavo writes itself. A response with nothing to report has no `meta` key at all rather than an empty `{}`, so read it as `body.meta?.facets`. Nothing in the bag is projected, filtered, or renamed on the way out: what the handler returns is what the client receives.
+One optional fifth key can join them. `meta` is an open bag for anything the API wants to say about the list that isn't a row: a facet count, a "results are approximate" flag, the next cursor or since value. It appears when the entity's `findMany` handler puts something there — see [custom list metadata](/integrations/nest/configuration/operations#custom-list-metadata) for how — or under [cursor pagination](#cursor-keyset-pagination) or [since pagination](#since-seek-by-timestamp-pagination), which contribute `nextCursor`/`nextSince` and are the keys Kavo writes itself. A response with nothing to report has no `meta` key at all rather than an empty `{}`, so read it as `body.meta?.facets`. Nothing in the bag is projected, filtered, or renamed on the way out: what the handler returns is what the client receives.
 
 ## ETags and conditional requests
 
@@ -287,14 +287,14 @@ If the book doesn't exist at all, or is in a state the route refuses, you get th
 Kavo refuses rather than quietly proceeds. A `412 KAVO_PRECONDITION_UNSUPPORTED` means the header was understood and the write did **not** happen, but the guard could not be evaluated at all — so retrying it unchanged will not help. Three ways to see it:
 
 - **On a route that doesn't target one row** — `POST /books`, and any custom operation you add. Kavo knows what row `PATCH /books/1` is about; it cannot know what a custom `POST /books/1/publish` is about.
-- **When [`caching.etag`](/integrations/nest/configuration#caching) is off** for that route, at any scope. No tags are issued, so there is nothing to compare — and answering `200` would tell you a guard was applied when none was.
+- **When [`caching.etag`](/integrations/nest/configuration/settings#caching) is off** for that route, at any scope. No tags are issued, so there is nothing to compare — and answering `200` would tell you a guard was applied when none was.
 - **When `findOne` is disabled** on the entity. The check compares against the representation `GET /books/1` would return; with no such route there is none.
 
 `If-Match` on a `GET` is the one case Kavo ignores instead of refusing: a read cannot overwrite anything, and `If-None-Match` above is the read-side conditional.
 
 **A hand-written or `@Override`'d route enforces nothing by itself.** The check runs inside Kavo's engine, so a controller method you wrote replaces it — it receives the `If-Match` tokens as its last parameter and must pass them on (`this.base.updateOne(id, data, { preconditions })`) for the guard to apply.
 
-The `ETag` is the exception: an `@Override` on a single-item operation gets it without asking, because `@Kavo` hashes whatever the method returns. A plain hand-written route (no `@Override`) is outside that and carries no Kavo tag at all. See [`caching`](/integrations/nest/configuration#caching).
+The `ETag` is the exception: an `@Override` on a single-item operation gets it without asking, because `@Kavo` hashes whatever the method returns. A plain hand-written route (no `@Override`) is outside that and carries no Kavo tag at all. See [`caching`](/integrations/nest/configuration/settings#caching).
 
 ### Two things to know
 
@@ -302,7 +302,7 @@ The `ETag` is the exception: an `@Override` on a single-item operation gets it w
 
 **An `If-Match` token has to come from an unnarrowed read.** An ETag identifies one _representation_, so `GET /books/1?fields=title` produces a different tag from `GET /books/1`. Preconditions are evaluated against the full default representation, so a tag taken from a `fields=`- or `include=`-narrowed read will 412. Use the tag from a plain `GET /books/1`. The tag on a write response works too — it is the tag of the body you just got back — but only while that body is the same representation a plain `GET` returns, which stops being true once a relation is configured `defaultInclude`: a write resolves no query, so write responses never carry relations. On such an entity, take the token from a `GET`.
 
-Both halves are one setting, [`caching.etag`](/integrations/nest/configuration#caching) (on by default). Turning it off at any scope stops the tags being generated _and_ stops the conditional headers being honored.
+Both halves are one setting, [`caching.etag`](/integrations/nest/configuration/settings#caching) (on by default). Turning it off at any scope stops the tags being generated _and_ stops the conditional headers being honored.
 
 ## Errors
 
