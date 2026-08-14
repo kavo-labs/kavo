@@ -219,7 +219,7 @@ Create the file with:
 - [ ] **Step 2: Verify links and build**
 
 Run: `pnpm docs:links && pnpm docs:build`
-Expected: `docs:links` will still fail at this point because `configuration.md` hasn't been rewritten to link to the new subpages yet and old anchors still exist there too — that's expected until Task 7. For this task, just confirm `pnpm docs:build` succeeds (the new page compiles) and there is no *new* dead link introduced by this file itself (it introduces none, since it has no outgoing links yet beyond what's inherited from the source text — none are anchor-only self-references).
+Expected: `docs:links` will still fail at this point because `configuration.md` hasn't been rewritten to link to the new subpages yet and old anchors still exist there too — that's expected until Task 7. For this task, just confirm `pnpm docs:build` succeeds (the new page compiles) and there is no _new_ dead link introduced by this file itself (it introduces none, since it has no outgoing links yet beyond what's inherited from the source text — none are anchor-only self-references).
 
 - [ ] **Step 3: Format**
 
@@ -253,7 +253,7 @@ Create the file with:
 
 1. `# Settings` as the H1.
 2. Intro: "The app-wide `KavoSettings` shape — the same schema at every scope (global `defaults`, entity, operation, per-call), just merged in precedence order. See [Configuration](/integrations/nest/configuration) for how the scopes combine."
-3. For each of the eight subsections below, promote the source `###` heading to `##` (keep the exact heading text so anchors don't move) and apply this tone rule: **convert the field table into a short paragraph or bullet list stating what each field does and its default inline** (e.g. "`defaultLimit` (default `20`) is the page size when a request supplies no `limit`.") instead of a markdown table, *except* where the source table cell contains a load-bearing cross-reference or caveat longer than one sentence — keep those as their own sentence/bullet rather than compressing them away. Preserve every `[ADR-NNNN](...)` and `[Using the API](...)`-style link exactly. Preserve every code block verbatim.
+3. For each of the eight subsections below, promote the source `###` heading to `##` (keep the exact heading text so anchors don't move) and apply this tone rule: **convert the field table into a short paragraph or bullet list stating what each field does and its default inline** (e.g. "`defaultLimit` (default `20`) is the page size when a request supplies no `limit`.") instead of a markdown table, _except_ where the source table cell contains a load-bearing cross-reference or caveat longer than one sentence — keep those as their own sentence/bullet rather than compressing them away. Preserve every `[ADR-NNNN](...)` and `[Using the API](...)`-style link exactly. Preserve every code block verbatim.
 
    - `pagination` (source lines 96–104): keep the `strategy` field's full explanation of `offset`/`page`/`cursor`/`since` — it's dense but every clause is load-bearing (index requirements, `count: false` pairing, GraphQL/MCP refusal) — you may split it into one short paragraph per strategy value instead of one table cell, but do not drop any of the constraints it states.
    - `query` (source lines 106–115).
@@ -430,14 +430,14 @@ This sits inside the existing `Nest` sidebar group alongside the `TypeORM`/`Pris
 
 Update these links (grep `integrations/nest/configuration` in the file to find them all — there are 9 occurrences across 8 lines):
 
-| Old link | New link |
-| --- | --- |
-| `/integrations/nest/configuration#allowlists` (×2, lines ~41 and ~76 and ~191 — 3 occurrences total) | `/integrations/nest/configuration/entity-config#allowlists` |
-| `/integrations/nest/configuration` (no anchor, ~line 107, about page-based pagination) | `/integrations/nest/configuration/settings#pagination` |
-| `/integrations/nest/configuration#computed` (~line 218) | `/integrations/nest/configuration/entity-config#computed` |
-| `/integrations/nest/configuration#relations` (~line 226) | `/integrations/nest/configuration/settings#relations` |
-| `/integrations/nest/configuration#custom-list-metadata` (~line 251) | `/integrations/nest/configuration/operations#custom-list-metadata` |
-| `/integrations/nest/configuration#caching` (×3, ~lines 290, 297, 305) | `/integrations/nest/configuration/settings#caching` |
+| Old link                                                                                             | New link                                                           |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `/integrations/nest/configuration#allowlists` (×2, lines ~41 and ~76 and ~191 — 3 occurrences total) | `/integrations/nest/configuration/entity-config#allowlists`        |
+| `/integrations/nest/configuration` (no anchor, ~line 107, about page-based pagination)               | `/integrations/nest/configuration/settings#pagination`             |
+| `/integrations/nest/configuration#computed` (~line 218)                                              | `/integrations/nest/configuration/entity-config#computed`          |
+| `/integrations/nest/configuration#relations` (~line 226)                                             | `/integrations/nest/configuration/settings#relations`              |
+| `/integrations/nest/configuration#custom-list-metadata` (~line 251)                                  | `/integrations/nest/configuration/operations#custom-list-metadata` |
+| `/integrations/nest/configuration#caching` (×3, ~lines 290, 297, 305)                                | `/integrations/nest/configuration/settings#caching`                |
 
 Do a literal find of every `integrations/nest/configuration` substring in the file and replace per the table above — do not do a blind global replace, since the "no anchor" case gets a different target than the anchored ones.
 
@@ -488,7 +488,7 @@ Pick your stack and jump straight to its wiring guide, or keep reading — this 
 
 - [ ] **Step 2: Trim the two densest paragraphs**
 
-Replace the `useDefineForClassFields` paragraph (source line 30) with a shorter version that keeps every load-bearing fact (the `undefined`-vs-absent hazard, that it must be `false`, and what breaks if it's `true`) but drops the restated mechanism of *why* `Object.keys` and TypeORM's diffing behave that way:
+Replace the `useDefineForClassFields` paragraph (source line 30) with a shorter version that keeps every load-bearing fact (the `undefined`-vs-absent hazard, that it must be `false`, and what breaks if it's `true`) but drops the restated mechanism of _why_ `Object.keys` and TypeORM's diffing behave that way:
 
 ```markdown
 `useDefineForClassFields: false` is load-bearing at `ES2022` and above. With it on, every declared field is emitted as a real class field set to `undefined` when not hydrated — so a partially-loaded entity looks fully populated, `undefined` values leak into responses instead of being absent, and TypeORM's persistence diffing treats them as explicit writes. With it off (what Kavo's own packages and both example apps use), only hydrated fields are set.
