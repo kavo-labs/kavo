@@ -1,12 +1,12 @@
 # Filtering
 
-```
+```http
 GET /books?filter[title][eq]=Dune
 ```
 
 `filter[<field>][<operator>]=<value>`. Multiple `filter[...]` params AND together implicitly, and multiple operators on the same field also AND:
 
-```
+```http
 GET /books?filter[pages][gte]=200&filter[pages][lt]=500
 ```
 
@@ -28,7 +28,7 @@ Wire tokens are exact-case (`gte`, not `GTE`) — a misspelled or wrong-case ope
 
 `in`/`notIn` also accept the repeated-key form instead of a comma list:
 
-```
+```http
 GET /books?filter[status][in][]=active&filter[status][in][]=pending
 ```
 
@@ -38,20 +38,20 @@ Only fields on the entity's `filterable` allowlist can be filtered on — see [A
 
 **OR / NOT / nested logic** uses the same bracket grammar and can be nested arbitrarily deep (up to `query.maxFilterDepth`, default 3):
 
-```
+```http
 GET /books?filter[or][0][author][eq]=Tolkien&filter[or][1][author][eq]=Herbert
 GET /books?filter[not][status][eq]=banned
 ```
 
 For anything the bracket grammar gets awkward at, `filter` also accepts one JSON-encoded value as a full-power escape hatch — it parses into the same filter tree as the bracket form, and if both are present on a request, they AND together:
 
-```
+```http
 GET /books?filter={"or":[{"author":{"eq":"Tolkien"}},{"not":{"status":{"eq":"banned"}}}]}
 ```
 
 **Relation-path filtering** uses dot notation and restricts root rows without loading the related collection — it never filters _what's inside_ an included relation, only which root rows come back:
 
-```
+```http
 GET /books?filter[author.country][eq]=UK
 ```
 

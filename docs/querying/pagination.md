@@ -1,6 +1,6 @@
 # Pagination
 
-```
+```http
 GET /books?limit=20&offset=40
 ```
 
@@ -10,7 +10,7 @@ A 1-indexed page-based alternative is also built in — `page[number]`/`page[siz
 
 ## Cursor (keyset) pagination
 
-```
+```http
 GET /books?limit=20
 GET /books?limit=20&cursor=WzE3MTIzNDU2Nzg5LDQyXQ
 ```
@@ -51,7 +51,7 @@ Finally, the **GraphQL and MCP bindings cannot page a cursor- or since-configure
 
 ## Since (seek-by-timestamp) pagination
 
-```
+```http
 GET /books?limit=20
 GET /books?limit=20&since=2024-03-01T10:00:00.000Z%7C41
 ```

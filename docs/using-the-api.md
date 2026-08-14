@@ -4,7 +4,7 @@
 
 ## Soft-deleted rows
 
-```
+```http
 GET /books?withDeleted=true
 ```
 

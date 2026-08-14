@@ -2,7 +2,7 @@
 
 Every single-item response — `POST /books`, `GET /books/1`, `PUT`, `PATCH`, and `PATCH /books/1/restore` — carries a strong `ETag`:
 
-```
+```http
 ETag: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 ```
 
@@ -10,7 +10,7 @@ It is a hash of the exact representation being returned, so it changes whenever 
 
 ## `If-None-Match` — skip a body you already have
 
-```
+```http
 GET /books/1
 If-None-Match: "9f86d0…"
 ```
@@ -19,7 +19,7 @@ If your copy is still current you get `304 Not Modified` with an empty body and 
 
 ## `If-Match` — don't overwrite a version you never saw
 
-```
+```http
 PATCH /books/1
 If-Match: "9f86d0…"
 ```

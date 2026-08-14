@@ -1,6 +1,6 @@
 # Search
 
-```
+```http
 GET /books?search[query]=dune
 ```
 
@@ -12,7 +12,7 @@ hasn't turned `query.search.enabled` on — and only searches fields on the
 entity's `searchable` allowlist (default: every own string column) — see
 [Allowlists & computed fields](/features/allowlists-and-computed-fields#allowlists).
 
-```
+```http
 GET /books?search[query]=blue+iphone&search[mode]=words&search[fields]=title,description
 ```
 

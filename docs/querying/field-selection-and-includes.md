@@ -2,7 +2,7 @@
 
 ## Field selection
 
-```
+```http
 GET /books?fields=id,title
 ```
 
@@ -12,7 +12,7 @@ Sparse fieldset for the root resource, validated against the `selectable` allowl
 
 ## Includes
 
-```
+```http
 GET /books?include=author,reviews.user
 ```
 

@@ -251,7 +251,7 @@ new `FilterOperator`, no adapter code — every `FilterTranslator` already
 handles an arbitrary `OR` group of `ILIKE` conditions, the exact shape a
 synthesized fragment produces.
 
-```
+```http
 GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,description
 ```
 
