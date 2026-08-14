@@ -262,7 +262,21 @@ export function Kavo<
     // registry (ADR-0013 — both builds read the same entity-level config).
     // No `handlerFactory`: like every other entry this registry builds, it
     // exists for route generation only.
-    registerArrayMutationOperations(registry, writeOptedInRelationNames(erasedConfig?.relations?.edges), entity.name);
+    //
+    // Gated on the entity's own declared `arrayMutation.strategy` — the
+    // only view decoration time has (ADR-0012), blind to global defaults
+    // exactly the way it's already blind to ORM cardinality metadata
+    // (ADR-0013's two-stage split). `"jsonPatch"` (ADR-0029's jsonPatch
+    // amendment) reuses `patchOne`'s existing `PATCH /:id` route instead of
+    // a synthesized one, so no `replace<Relation>` route belongs on an
+    // entity that declared it — an entity that omits `arrayMutation`
+    // entirely still defaults to `"replace"` here, unchanged from before
+    // this strategy existed.
+    const declaredArrayMutation = erasedConfig?.arrayMutation;
+    const declaredStrategy = declaredArrayMutation === false ? false : (declaredArrayMutation?.strategy ?? "replace");
+    if (declaredStrategy === "replace") {
+      registerArrayMutationOperations(registry, writeOptedInRelationNames(erasedConfig?.relations?.edges), entity.name);
+    }
     const overrides = collectOverrides(controller.prototype, entity.name, registry);
     const conditionalDocs: KavoConditionalDocEntry[] = [];
 

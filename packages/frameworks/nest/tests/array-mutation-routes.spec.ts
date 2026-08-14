@@ -40,6 +40,15 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
     expect((PlainController.prototype as Record<string, unknown>).replaceTags).toBeUndefined();
   });
 
+  it("generates no replace<Relation> route when the entity declares arrayMutation.strategy: 'jsonPatch'", () => {
+    @Kavo(Post, { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { tags: { write: true } } } } as never)
+    class JsonPatchController {}
+
+    // No synthesized PUT :id/tags route — jsonPatch reuses patchOne's own
+    // PATCH :id route instead (ADR-0029's jsonPatch amendment).
+    expect((JsonPatchController.prototype as Record<string, unknown>).replaceTags).toBeUndefined();
+  });
+
   it("a hand-written method named replace<Relation> wins over the generated route (manual-method-wins)", () => {
     @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
     class OverriddenController {
