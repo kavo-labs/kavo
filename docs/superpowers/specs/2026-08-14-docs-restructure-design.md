@@ -71,6 +71,7 @@ apply to `docs/internals/` (architecture docs, ADRs stay as-is — they are
 contributor-facing, not adopter-facing).
 
 Per page:
+
 - Keep short code examples for the common cases.
 - Convert field-by-field tables and prose enumeration into task-based
   sections ("to do X, set Y").
