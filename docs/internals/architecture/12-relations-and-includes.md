@@ -173,9 +173,10 @@ usual precedence chain, plus a per-relation opt-in:
 `relations.edges.<name>.write: true`. A relation not opted in keeps the
 plain associate-by-id behavior above; nothing here changes for it.
 
-Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` — but
-only **`replace`** is implemented today. Choosing `"resource"` or
-`"jsonPatch"` is a bootstrap `ConfigurationException`, not a silent no-op.
+Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` —
+and **`replace`** and **`jsonPatch`** are implemented today. Choosing
+`"resource"` is still a bootstrap `ConfigurationException`, not a silent
+no-op.
 
 `replace` is a whole-array `PUT` on the relation, still id-only per
 ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
@@ -200,8 +201,74 @@ ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
 - The response is the parent entity (its own `item` DTO slot), not the
   relation's own member list.
 
-See **ADR-0029** for the full design, including why `resource`/`jsonPatch`
-and the non-`@kavo/typeorm` adapters are deliberately out of scope for now.
+### `jsonPatch` (ADR-0029's jsonPatch amendment)
+
+`jsonPatch` does not add a route. It reuses `patchOne`'s existing
+`PATCH /<entity>/:id` and tells its two legal body shapes apart
+structurally: an **object** body is `patchOne`'s ordinary partial-update
+DTO, unchanged; a bare **array** body is parsed as an RFC 6902 patch
+document instead — the one shape an ordinary patch DTO body never is. An
+entity that never opts into `jsonPatch` sees no change at all: an array
+body there still degrades to `{}`, exactly as `DefaultDeserializer` has
+always treated a non-object body.
+
+The document's ops are validated structurally before anything is written —
+"no arbitrary path traversal" is enforced by only accepting two path
+shapes, not by a denylist:
+
+- `{ "op": "add" | "replace", "path": "/<field>", "value": … }` — a scalar,
+  non-generated column (the id field is never one). `remove` on this shape
+  is rejected: there is nothing to literally delete from a partial-update
+  payload. The resulting `{ [field]: value, … }` object is fed through the
+  same `patch` DTO deserializer an ordinary object body already goes
+  through, so field-level validation is unchanged.
+- `{ "op": "add" | "remove", "path": "/<relation>/-", "value": … }` — a
+  relation with `write: true`. `value` is a scalar id or an `{id}`
+  reference, exactly `replace`'s own member shape, resolved through the
+  same `associate()` normalization `create`/`update`/`replace` already use.
+  Addressing by **identity** (`value`) rather than by array index is a
+  deliberate, stated deviation from RFC 6902's array convention: to-many
+  relation membership has no persisted order for an index to mean anything
+  against. `replace` is rejected on this shape — whole-array replacement is
+  `arrayMutation.strategy: "replace"`'s own surface, kept distinct.
+
+Anything else — a malformed op, an unsupported `op` for its path shape, a
+path naming neither a writable field nor a write-opted relation, more than
+two path segments — raises `JsonPatchInvalidDocumentException`
+(`KAVO_JSON_PATCH_INVALID_DOCUMENT`, 400) before any write is attempted.
+
+Member existence is a request-time question the write path answers, not
+the parser: an `add` naming an id with no matching row raises the same
+`NotFoundException` `replace`'s own existence check raises; an `add`
+naming an id already a member is an idempotent no-op; a `remove` naming an
+id that is **not** currently a member raises
+`JsonPatchTargetNotFoundException` (`KAVO_JSON_PATCH_TARGET_NOT_FOUND`, 404) — RFC 6902 requires a `remove`'s target location to exist, and Kavo
+enforces that explicitly rather than silently doing nothing.
+
+A document may touch scalar fields and one or more relations together.
+Field changes commit first (through `EntityWriter.patch`), then one
+`EntityWriter.patchRelation` call per relation touched. Each
+`patchRelation` call is its own atomic unit — `@kavo/typeorm`'s
+implementation wraps the read that decides "is this remove target
+currently a member?" and the write it gates in one database transaction,
+so a concurrent writer can never make that judgment stale — but a document
+touching several relations is _not_ one cross-call transaction spanning
+all of them: an interrupted process between two `patchRelation` calls
+commits the first and not the second. This is the stated scope for now,
+one level more atomic than `replace` (whose own read-then-write is not
+transactional at all, a gap its own doc comment names), not a claim of
+whole-document atomicity.
+
+`write: true` on a relation is still checked against real cardinality at
+`createCrud`, and a write-opted relation on an adapter without
+`EntityWriter.patchRelation` fails at `createCrud` too — the same
+bootstrap posture `replace`'s `EntityWriter.replaceRelation` check has.
+`replace<Relation>` routes are **not** generated for a relation whose
+entity resolved `arrayMutation.strategy` to `"jsonPatch"` — the two
+strategies' write surfaces stay mutually exclusive per entity.
+
+See **ADR-0029** for the full design, including why `resource` and the
+non-`@kavo/typeorm` adapters are deliberately out of scope for now.
 
 ## 6. Not included
 

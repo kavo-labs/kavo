@@ -117,6 +117,8 @@ const PUBLIC_SURFACE: readonly string[] = [
   "IncludeTree",
   "IsAny",
   "IsUnknown",
+  "JsonPatchInvalidDocumentException",
+  "JsonPatchTargetNotFoundException",
   "cursorValuesOf",
   "encodeCursor",
   "evaluateFilter",

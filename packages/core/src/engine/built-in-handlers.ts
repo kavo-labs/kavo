@@ -42,6 +42,17 @@ export interface FindManyResult<Entity> {
 export interface IdentifiedWrite<Entity> {
   readonly id: EntityId;
   readonly data: Partial<Entity>;
+  /**
+   * `arrayMutation`'s `jsonPatch` strategy only (ADR-0029's jsonPatch
+   * amendment): per write-opted-in relation touched by a `patchOne` JSON
+   * Patch document, the member ids to add and remove. Absent for every
+   * ordinary `updateOne`/`patchOne` call — `KavoEngine.resolveInput` only
+   * sets it when the resolved strategy is `"jsonPatch"` and the request
+   * body was a bare array.
+   */
+  readonly relationPatch?: Readonly<
+    Record<string, { readonly add: readonly EntityId[]; readonly remove: readonly EntityId[] }>
+  >;
 }
 
 /**
@@ -126,7 +137,25 @@ export function builtInHandlers<Entity extends object>(
     },
     patchOne: {
       async execute(input: IdentifiedWrite<Entity>, context: KavoContext<Entity>) {
-        return repositoryFor(context).patch(input.id, input.data, context);
+        const repository = repositoryFor(context);
+        const relationPatch = input.relationPatch;
+        if (relationPatch === undefined) {
+          return repository.patch(input.id, input.data, context);
+        }
+        // `arrayMutation`'s `jsonPatch` strategy: field changes commit
+        // first, then one `patchRelation` call per relation the document
+        // touched — each its own atomic read-modify-write
+        // (`@kavo/typeorm`'s implementation wraps it in a database
+        // transaction) rather than one transaction spanning the whole
+        // document (ADR-0029's jsonPatch amendment).
+        let entity =
+          Object.keys(input.data).length > 0 ? await repository.patch(input.id, input.data, context) : undefined;
+        for (const [relation, changes] of Object.entries(relationPatch)) {
+          // `patchRelation` is confirmed present by `requireJsonPatchSupport`
+          // at bootstrap, once — never per request.
+          entity = await repository.patchRelation!(input.id, relation, changes, context);
+        }
+        return entity!;
       },
     },
     deleteOne: {

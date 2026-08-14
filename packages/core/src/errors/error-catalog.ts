@@ -78,6 +78,16 @@ export const ERROR_CATALOG = {
       "The body for '{relation}' on {entity} must be an array of ids or id references, or null — the 'replace' " +
       "strategy disables partial mutation (no add/remove shape, no patch ops).",
   },
+  KAVO_JSON_PATCH_INVALID_DOCUMENT: {
+    status: 400,
+    title: "Invalid JSON Patch document",
+    message: "The JSON Patch document for {entity} is invalid: {detail}",
+  },
+  KAVO_JSON_PATCH_TARGET_NOT_FOUND: {
+    status: 404,
+    title: "JSON Patch target not found",
+    message: "Cannot remove '{id}' from '{relation}' on {entity}: it is not currently a member.",
+  },
   KAVO_ALREADY_DELETED: {
     status: 409,
     title: "Already deleted",

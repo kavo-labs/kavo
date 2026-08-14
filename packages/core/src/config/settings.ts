@@ -209,15 +209,19 @@ export interface RealtimeSettings {
 
 /**
  * `arrayMutation.strategy` values (ADR-0014's named extension point for
- * write-side relations beyond associate-by-id). Only `"replace"` is
- * implemented — a whole-array `PUT` on the relation, still id-only per
- * ADR-0014, with partial mutation disabled. `"resource"` (per-relation
- * sub-collection endpoints) and `"jsonPatch"` (RFC 6902 patch documents)
- * are reserved discriminators, the same pattern `SearchDriver` uses for a
- * not-yet-built backend: naming them now means a later issue adds behavior
- * without a breaking config change. `validate-settings.ts` rejects them
- * outright today, so choosing one fails at bootstrap instead of silently
- * doing nothing.
+ * write-side relations beyond associate-by-id). `"replace"` is a whole-array
+ * `PUT :id/<relation>` on the relation, still id-only per ADR-0014, with
+ * partial mutation disabled (ADR-0029). `"jsonPatch"` reuses `PATCH
+ * /entity/:id` (`patchOne`) instead: an array body there is parsed as an
+ * RFC 6902 patch document — `add`/`replace` on `/<field>` for a scalar
+ * column, `add`/`remove` on `/<relation>/-` for a write-opted-in relation's
+ * membership — while an object body keeps `patchOne`'s ordinary contract
+ * unchanged (ADR-0029's jsonPatch amendment). `"resource"` (per-relation
+ * sub-collection endpoints) remains a reserved discriminator, the same
+ * pattern `SearchDriver` uses for a not-yet-built backend: naming it now
+ * means a later issue adds behavior without a breaking config change.
+ * `validate-settings.ts` rejects it outright today, so choosing it fails at
+ * bootstrap instead of silently doing nothing.
  */
 export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
 

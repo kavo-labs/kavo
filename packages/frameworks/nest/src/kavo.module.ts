@@ -1,11 +1,11 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, KavoInstance } from "@kavo/core";
-import { ConfigurationException, createKavo } from "@kavo/core";
+import type { ClassRef, KavoInstance, KavoSettings } from "@kavo/core";
+import { ConfigurationException, createKavo, writeOptedInRelationNames } from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
 import type { KavoConditionalDocEntry, KavoControllerMetadata } from "./kavo.decorator.js";
-import { getRegisteredKavoControllers } from "./kavo.decorator.js";
+import { declaredArrayMutationStrategy, getRegisteredKavoControllers } from "./kavo.decorator.js";
 import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
@@ -272,6 +272,58 @@ function serviceProvider(metadata: KavoControllerMetadata): Provider {
 }
 
 /**
+ * Closes the one gap `@Kavo`'s decoration-time route generation cannot see
+ * for itself (ADR-0029's jsonPatch amendment): an entity that omits
+ * `arrayMutation` entirely and relies on a *global* default other than
+ * `"replace"`. Decoration time (`declaredArrayMutationStrategy`,
+ * `kavo.decorator.ts`) then assumes `"replace"` — its own documented
+ * default — and generates a `replace<Relation>` route for every write-opted
+ * relation; but `createCrud`'s registry, built from the fully resolved
+ * settings, never registers the matching operation for any other strategy,
+ * so that route would throw `OperationNotRegisteredException` on its first
+ * request.
+ *
+ * This binder is the earliest point both facts are known at once — the
+ * decorated entity's own config (which decoration time already used to
+ * decide whether to generate the route) and the bound service's fully
+ * resolved settings (which `createCrud` only produces once real
+ * infrastructure and global defaults exist). Plain programmatic
+ * (non-`@kavo/nest`) usage has no decoration-time route to disagree with in
+ * the first place, so this check lives here rather than in `createCrud`
+ * itself.
+ *
+ * A declared strategy other than `"replace"` never disagrees with what's
+ * resolved: an entity's own explicit declaration always wins the merge
+ * (ADR-0013's "more specific wins"), so the only way to reach a mismatch is
+ * the undeclared-and-relying-on-a-non-"replace"-global-default case above.
+ */
+function requireArrayMutationStrategyAgreement(
+  metadata: KavoControllerMetadata,
+  service: {
+    readonly engine: {
+      readonly config: { readonly settings: { readonly arrayMutation: KavoSettings["arrayMutation"] } };
+    };
+  },
+): void {
+  const relationNames = writeOptedInRelationNames(metadata.config?.relations?.edges);
+  if (relationNames.length === 0) return;
+  if (declaredArrayMutationStrategy(metadata.config) !== "replace") return; // no route was generated to disagree with
+  const resolved = service.engine.config.settings.arrayMutation;
+  const resolvedStrategy = resolved === false ? false : resolved.strategy;
+  if (resolvedStrategy === "replace") return;
+  throw new ConfigurationException(
+    metadata.entity.name,
+    "arrayMutation",
+    `'@Kavo(${metadata.entity.name})' declares no 'arrayMutation.strategy', so route generation assumed the ` +
+      `default "replace" and generated a 'replace<Relation>' route for its write-opted relation(s) ` +
+      `(${relationNames.join(", ")}) — but the strategy this root actually resolves to (from a global ` +
+      `default) is ${JSON.stringify(resolvedStrategy)}, so 'createCrud' registered no matching operation and ` +
+      `that route would fail every request. Declare 'arrayMutation.strategy: ${JSON.stringify(resolvedStrategy)}' ` +
+      `directly in this entity's '@Kavo' config to match, or set the global default back to "replace"`,
+  );
+}
+
+/**
  * Runs once at `onModuleInit`, after Nest has finished instantiating every
  * controller in the app — late enough that `DiscoveryService` sees the full,
  * real module graph, and still well before the first request, which is all
@@ -302,6 +354,7 @@ class KavoBinder implements OnModuleInit {
       const metadata = Reflect.getMetadata(KAVO_CONTROLLER_METADATA, metatype) as KavoControllerMetadata | undefined;
       if (metadata === undefined) continue;
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
+      requireArrayMutationStrategyAgreement(metadata, service);
       instance[KAVO_SERVICE_PROPERTY] = service;
       instance[KAVO_PRINCIPAL_PROPERTY] = extractPrincipal;
 

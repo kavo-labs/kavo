@@ -195,6 +195,8 @@ export {
   ArrayMutationInvalidShapeException,
   ConfigurationException,
   ConflictException,
+  JsonPatchInvalidDocumentException,
+  JsonPatchTargetNotFoundException,
   KavoException,
   NotDeletedException,
   NotFoundException,

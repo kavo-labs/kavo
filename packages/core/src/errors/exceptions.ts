@@ -92,6 +92,38 @@ export class ArrayMutationInvalidShapeException extends KavoException {
   }
 }
 
+/**
+ * `arrayMutation`'s `jsonPatch` strategy: a `PATCH /entity/:id` array body
+ * that is not a well-formed RFC 6902 document within Kavo's supported
+ * subset → 400. Covers a malformed op (missing/invalid `op`, `path`, or
+ * `value`), an unsupported `op` for its path shape (only `add`/`replace`
+ * are legal on a `/<field>` path, only `add`/`remove` on a `/<relation>/-`
+ * path), and a `path` naming neither a writable field nor a write-opted-in
+ * relation of the entity. Whether a relation *member* named by `value`
+ * actually exists is a request-time question the write path answers
+ * instead — {@link NotFoundException} for `add`, {@link
+ * JsonPatchTargetNotFoundException} for `remove` — not this exception.
+ */
+export class JsonPatchInvalidDocumentException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_JSON_PATCH_INVALID_DOCUMENT", options);
+  }
+}
+
+/**
+ * `arrayMutation`'s `jsonPatch` strategy: a `remove` op targeting a
+ * relation member id that is not currently associated with the row → 404.
+ * RFC 6902 requires a `remove`'s target location to exist; Kavo enforces
+ * that explicitly rather than treating it as a silent no-op, so a client
+ * removing a member that already isn't linked finds out, rather than
+ * getting a 200 that changed nothing it asked for.
+ */
+export class JsonPatchTargetNotFoundException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_JSON_PATCH_TARGET_NOT_FOUND", options);
+  }
+}
+
 export class PersistenceException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_PERSISTENCE_FAILED", options);
