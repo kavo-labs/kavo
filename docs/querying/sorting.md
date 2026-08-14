@@ -1,6 +1,6 @@
 # Sorting
 
-```
+```http
 GET /books?sort=-publishedAt,title
 ```
 

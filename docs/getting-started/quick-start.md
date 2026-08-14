@@ -47,7 +47,7 @@ That's it — no config object, no service, no repository wiring in the controll
 
 Requests and responses are shaped straight from `Book`'s own columns — there's no DTO to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting out of the box, for example:
 
-```
+```http
 GET /books?filter[author][eq]=Tolkien&sort=-title&limit=10&offset=0
 ```
 
