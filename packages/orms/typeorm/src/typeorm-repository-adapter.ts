@@ -18,6 +18,7 @@ import {
   readFilter,
 } from "@kavo/core";
 import type { DataSource, DeepPartial, ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
+import { In } from "typeorm";
 import { FilterTranslator } from "./filter-translator.js";
 import { mapDriverError } from "./error-mapping.js";
 
@@ -429,6 +430,83 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
       const result = await this.repository.delete(id);
       if (result.affected === 0) throw this.notFound(id, context);
+    } catch (error) {
+      throw mapDriverError(error, errorContext(context));
+    }
+  }
+
+  /**
+   * `arrayMutation`'s `replace` strategy (ADR-0014): whole-array replace of
+   * a to-many relation, computed as an add/remove diff against the
+   * currently persisted membership so TypeORM's `RelationQueryBuilder`
+   * touches only the join rows that actually change — `addAndRemove` is
+   * the primitive that gets `set`-like replace semantics for a to-many
+   * edge, since TypeORM's own `.set()` only exists on the to-one side.
+   *
+   * The related entity's own id field — not this entity's `idField` — is
+   * what `memberIds` names and what the diff compares against.
+   */
+  async replaceRelation(
+    id: EntityId,
+    relation: string,
+    memberIds: readonly EntityId[] | null,
+    context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    try {
+      const existing = await this.byId(id, context, false).getOne();
+      if (existing === null) throw this.notFound(id, context);
+
+      const relationMetadata = this.dataSource
+        .getMetadata(this.entity)
+        .relations.find((candidate) => candidate.propertyName === relation);
+      if (relationMetadata === undefined) {
+        throw new ConfigurationException(
+          context.entityName,
+          `relations.edges.${relation}.write`,
+          `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
+        );
+      }
+      const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
+
+      const relationBuilder = this.dataSource.createQueryBuilder().relation(this.entity, relation).of(id);
+      const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
+      const currentIds = new Set(current.map((row) => row[relatedIdField] as EntityId));
+      const desiredIds = new Set(memberIds ?? []);
+      const toAdd = [...desiredIds].filter((memberId) => !currentIds.has(memberId));
+      const toRemove = [...currentIds].filter((memberId) => !desiredIds.has(memberId));
+      if (toAdd.length > 0) {
+        // `addAndRemove` on a to-many owned by a foreign-key column (the
+        // one-to-many case) issues `UPDATE … WHERE id IN (…)`, which simply
+        // affects zero rows for a member id that doesn't exist — no
+        // constraint violation for `mapDriverError` to translate. Checked
+        // explicitly so a nonexistent member id is a 404, not a silent
+        // no-op the caller reads back as success.
+        const targetRepository = this.dataSource.getRepository<ObjectLiteral>(
+          relationMetadata.inverseEntityMetadata.target as ClassRef<ObjectLiteral>,
+        );
+        const found = await targetRepository.find({
+          where: { [relatedIdField]: In(toAdd) } as never,
+          select: { [relatedIdField]: true } as never,
+        });
+        const foundIds = new Set(found.map((row) => row[relatedIdField] as EntityId));
+        const missing = toAdd.filter((memberId) => !foundIds.has(memberId));
+        if (missing.length > 0) {
+          throw new NotFoundException({
+            messageParams: { entity: relationMetadata.inverseEntityMetadata.name, id: missing.join(", ") },
+            context: errorContext(context),
+          });
+        }
+      }
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        await relationBuilder.addAndRemove(toAdd, toRemove);
+      }
+
+      const reloaded = await this.repository.findOne({
+        where: { [this.idField]: id } as never,
+        relations: { [relation]: true } as never,
+      });
+      if (reloaded === null) throw this.notFound(id, context);
+      return reloaded;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }

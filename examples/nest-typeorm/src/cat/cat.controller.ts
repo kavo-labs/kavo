@@ -7,11 +7,14 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
  * CRUD over the concrete `Cat` subtype: one decorator, zero methods.
  * Binding `@Kavo` to the child (never the abstract `Pet` base) lets the
  * child repository auto-write the `species` discriminator on create.
- * Routes: POST /cats, GET /cats, GET/PUT/DELETE /cats/:id (PATCH disabled).
- * `include=owner` embeds the owner; `owner` is also writable by id
- * (`{"owner": 1}` on create — ADR-0014). `include=tags` embeds the cat's
- * tags (a many-to-many, batch-loaded like any other to-many); `tags` is
- * likewise writable by an array of ids.
+ * Routes: POST /cats, GET /cats, GET/PUT/DELETE /cats/:id (PATCH disabled),
+ * PUT /cats/:id/tags. `include=owner` embeds the owner; `owner` is also
+ * writable by id (`{"owner": 1}` on create — ADR-0014). `include=tags`
+ * embeds the cat's tags (a many-to-many, batch-loaded like any other
+ * to-many); `tags` is likewise writable by an array of ids on create/update,
+ * and — since `tags.write` is on — independently via `PUT /cats/:id/tags`
+ * (`arrayMutation`'s `replace` strategy, ADR-0029): the same id-only array
+ * shape, without touching the rest of the cat.
  *
  * `GET /cats?search[query]=whiskers` free-text searches `name` (the one
  * field named in `allowlists.searchable`) — `search[mode]=words` and
@@ -43,9 +46,15 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     searchable: ["name"],
   },
   // The to-one side of the owner edge joins; `tags` is a to-many (many-to-
-  // many) and batches, both `auto`'s default — no `relations.edges` tuning
-  // needed. `fields[owner]=id,name` / `fields[tags]=id,name` narrow each
-  // embedded relation.
+  // many) and batches, both `auto`'s default — no loading tuning needed.
+  // `fields[owner]=id,name` / `fields[tags]=id,name` narrow each embedded
+  // relation. `tags.write` opts the same edge into `arrayMutation`'s
+  // `replace` strategy (ADR-0029) on top of the existing create/update
+  // association-by-id path: `PUT /cats/:id/tags` replaces the full tag set
+  // in one call, without sending the rest of the cat's body.
+  relations: {
+    edges: { tags: { write: true } },
+  },
   operations: {
     patchOne: false,
   },

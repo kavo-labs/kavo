@@ -18,6 +18,7 @@ import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 import type { KavoSettings } from "../config/settings.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
 import {
+  ArrayMutationInvalidShapeException,
   ConfigurationException,
   OperationDisabledException,
   OperationNotRegisteredException,
@@ -560,6 +561,18 @@ export class KavoEngine<Entity extends object> {
         // otherwise — everything else a read is given rides on
         // `context.query`.
         if (descriptor.kind === "read") return request.id === null ? null : this.coerceId(request.id);
+        // A `replace<Relation>` operation Kavo itself synthesized
+        // (`registerArrayMutationOperations`): its body is a bare array (or
+        // `null`), never an entity-shaped object, so it takes the
+        // array-mutation path instead of the ordinary DTO deserializer.
+        const arrayMutation = descriptor.meta.arrayMutation;
+        if (arrayMutation !== undefined) {
+          return {
+            id: this.coerceId(request.id),
+            relation: arrayMutation.relation,
+            memberIds: this.resolveArrayMutationMemberIds(arrayMutation.relation, request.body, context),
+          };
+        }
         // createOne, and every custom write: the deserialized body, plus
         // the request id when one is present. createOne never carries an
         // id, so this falls through to the body alone there.
@@ -567,6 +580,34 @@ export class KavoEngine<Entity extends object> {
         return request.id === null ? body : { id: this.coerceId(request.id), body };
       }
     }
+  }
+
+  /**
+   * A `replace`-strategy array-mutation body: an array of ids/`{id}`
+   * references, or `null` (ADR-0014, still id-only — `replace` disables
+   * partial mutation, so this is the only shape it accepts). Delegates the
+   * actual id extraction to the deserializer's existing relation-association
+   * logic — wrapping the raw body as `{ [relation]: body }` and reading the
+   * one key back out — rather than duplicating `DefaultDeserializer`'s
+   * `associate()` here, so a scalar id, an `{id}` reference, and the target
+   * entity's real id-field name are resolved exactly the way `create`/
+   * `update` already resolve them.
+   */
+  private resolveArrayMutationMemberIds(
+    relation: string,
+    body: unknown,
+    context: KavoContext<Entity>,
+  ): readonly EntityId[] | null {
+    if (body !== null && !Array.isArray(body)) {
+      throw new ArrayMutationInvalidShapeException({
+        messageParams: { entity: context.entityName, relation },
+        context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+      });
+    }
+    const wrapped = this.deps.deserializer.deserialize<Record<string, unknown>>({ [relation]: body }, null, context);
+    const refs = wrapped[relation];
+    if (refs === null || refs === undefined) return null;
+    return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
   }
 
   /**

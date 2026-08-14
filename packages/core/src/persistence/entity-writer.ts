@@ -32,4 +32,25 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
    * strategy this is just a delete — the row is gone either way.
    */
   purge(id: Id, context: KavoContext<Entity>): Promise<void>;
+  /**
+   * `arrayMutation`'s `replace` strategy (ADR-0014's named extension
+   * point): whole-array replace of a to-many relation, still id-only —
+   * `memberIds` names the complete desired membership, `null`/`[]`
+   * disassociates every member. Returns the parent row with `relation`
+   * loaded, so a handler can serve it without a second read.
+   *
+   * Optional: an adapter that doesn't implement this simply doesn't support
+   * array-mutation writes, which `createCrud` checks for at bootstrap
+   * (`ConfigurationException`) the moment a relation opts in via
+   * `relations.edges.<name>.write` — the ORM caveat ADR-0014's Consequences
+   * section already names for association by id applies here too: Kavo
+   * maps the payload, it does not synthesize a write an adapter declined
+   * to make.
+   */
+  replaceRelation?(
+    id: Id,
+    relation: string,
+    memberIds: readonly Id[] | null,
+    context: KavoContext<Entity>,
+  ): Promise<Entity>;
 }

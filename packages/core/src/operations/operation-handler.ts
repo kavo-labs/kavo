@@ -24,8 +24,22 @@ import type { KavoContext } from "../context/kavo-context.js";
  * }
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface OperationMetadata {}
+export interface OperationMetadata {
+  /**
+   * Present only on the `replace<Relation>` operations Kavo itself
+   * synthesizes from `relations.edges.<name>.write` (ADR-0014's named
+   * extension point) — never set through application config. Names the
+   * relation the operation targets, so `KavoEngine.resolveInput` can route
+   * its body through the array-mutation path instead of the ordinary DTO
+   * deserializer (a `replace` body is a bare array, not an entity-shaped
+   * object), and `@kavo/nest` can derive the sub-collection route
+   * (`PUT :id/<relation>`) without a static per-id route table.
+   */
+  readonly arrayMutation?: {
+    readonly relation: string;
+    readonly strategy: "replace";
+  };
+}
 
 /**
  * The single execution contract every operation flows through — built-in

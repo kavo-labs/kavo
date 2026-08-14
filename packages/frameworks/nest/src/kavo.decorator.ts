@@ -27,7 +27,13 @@ import type {
   RequestPreconditions,
   StandardOperationId,
 } from "@kavo/core";
-import { ConfigurationException, computeEtag, createOperationRegistry } from "@kavo/core";
+import {
+  ConfigurationException,
+  computeEtag,
+  createOperationRegistry,
+  registerArrayMutationOperations,
+  writeOptedInRelationNames,
+} from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
 import type { OverrideMetadata } from "./override.decorator.js";
 import type { KavoPrincipalExtractor, KavoPrincipalRequest } from "./principal.js";
@@ -249,6 +255,14 @@ export function Kavo<
     registeredKavoControllers.set(target, metadata);
 
     const registry = createOperationRegistry(erasedConfig, undefined, undefined, entity.name);
+    // `replace<Relation>` sub-collection operations (`arrayMutation`'s
+    // `replace` strategy, ADR-0014): synthesized from `relations.edges`
+    // rather than declared in `operations`, so they're registered here,
+    // post-hoc, the same way `createCrud` registers them onto the engine's
+    // registry (ADR-0013 — both builds read the same entity-level config).
+    // No `handlerFactory`: like every other entry this registry builds, it
+    // exists for route generation only.
+    registerArrayMutationOperations(registry, writeOptedInRelationNames(erasedConfig?.relations?.edges), entity.name);
     const overrides = collectOverrides(controller.prototype, entity.name, registry);
     const conditionalDocs: KavoConditionalDocEntry[] = [];
 
@@ -459,6 +473,19 @@ function assertNoOwnParamMetadata(
 function resolveRoute(descriptor: OperationDescriptor<object>): ResolvedRoute | null {
   const options: KavoRouteOptions = descriptor.meta.routes ?? {};
   if (options.enabled === false) return null; // service-only
+  // A `replace<Relation>` operation Kavo itself synthesized
+  // (`registerArrayMutationOperations`, ADR-0014's `replace` strategy) has
+  // no entry in `STANDARD_ROUTES` — it isn't a standard id, and there is no
+  // static table to key a *dynamic*, per-relation id against. Its shape
+  // comes from the relation name on `meta.arrayMutation` instead, the same
+  // way a standard id's shape comes from `STANDARD_ROUTES`.
+  const arrayMutation = descriptor.meta.arrayMutation;
+  if (arrayMutation !== undefined) {
+    const method = options.method ?? "PUT";
+    const path = options.path ?? `:id/${arrayMutation.relation}`;
+    const status = options.successStatus ?? 200;
+    return { method, path, status, hasIdParam: path.includes(":id") };
+  }
   // A custom id (`operations.markPaidOne`, issue #145) is absent from the
   // table by design and falls back to the defaults below — the registry's
   // own genericity (ADR-0006). Those defaults are deliberately conservative

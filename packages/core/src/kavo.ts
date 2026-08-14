@@ -18,9 +18,11 @@ import { DefaultDeserializer, DefaultSerializer } from "./serialization/default-
 import { QueryNormalizer } from "./query/query-normalizer.js";
 import { builtInHandlers } from "./engine/built-in-handlers.js";
 import { createOperationRegistry } from "./operations/default-operation-registry.js";
+import type { EntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultEntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
 import { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
+import { registerArrayMutationOperations } from "./relations/array-mutation-operations.js";
 
 /**
  * Root-factory options. `GlobalConfig.defaults` is the
@@ -141,6 +143,25 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         resolved.entityName,
       );
       requireSoftDeletable(resolved, registry);
+      const arrayMutationRelations = resolved.relations
+        .all()
+        .filter((relation) => relation.write === true)
+        .map((relation) => relation.name);
+      requireArrayMutationSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
+      requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
+      registerArrayMutationOperations<Entity>(
+        registry,
+        arrayMutationRelations,
+        resolved.entityName,
+        (relationName) => ({
+          // `replaceRelation` is confirmed present by `requireArrayMutationSupport`
+          // above, once, at bootstrap — never per request.
+          execute: (input: unknown, context) => {
+            const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
+            return context.repository.replaceRelation!(id, relationName, memberIds, context);
+          },
+        }),
+      );
 
       catalog.register(entity as ClassRef, {
         metadata: metadata as EntityMetadata<object>,
@@ -244,6 +265,59 @@ function requireSoftDeletable<Entity extends object>(
       `'${id}' needs a soft-deletable entity, but '${config.entityName}' resolves to a ` +
         `hard delete strategy — give it a delete-marker column (@DeleteDateColumn) or ` +
         `set softDelete.field to an existing column`,
+    );
+  }
+}
+
+/**
+ * Fails fast at `createCrud` when a relation opts into array-mutation
+ * writes but the repository adapter in use has no `replaceRelation` — the
+ * same ORM caveat ADR-0014's Consequences section already names for
+ * association by id: Kavo maps the payload, it does not synthesize a write
+ * an adapter declined to make. Checked once here rather than per request.
+ */
+function requireArrayMutationSupport<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  if (relationNames.length === 0 || typeof adapter.replaceRelation === "function") return;
+  throw new ConfigurationException(
+    config.entityName,
+    `relations.edges.${relationNames[0]}.write`,
+    `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
+      `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
+  );
+}
+
+/**
+ * Fails fast at `createCrud` when a write-opted relation's target entity
+ * can't be resolved through the entity catalog — the same lookup
+ * `resolveArrayMutationMemberIds` (`kavo-engine.ts`) needs at request time to
+ * narrow a wire body down to `{id}` references (`DefaultDeserializer`'s
+ * `associate()`, via `catalog.get(relation.target())?.metadata.idField`).
+ * An unresolvable target would silently return an unnarrowed body there —
+ * scalars degrading to `undefined`, and an object's first enumerable value
+ * being taken as the id — rather than the clean `ConfigurationException`
+ * this raises instead, once, before any request can reach it. Registering
+ * the target through `createCrud` (or an `infrastructure` that can derive
+ * its metadata) closes the gap.
+ */
+function requireArrayMutationTargetsResolvable<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  catalog: EntityCatalog,
+): void {
+  for (const name of relationNames) {
+    const relation = config.relations.get(name);
+    if (relation === undefined) continue; // unreachable: relationNames came from this same registry
+    if (catalog.get(relation.target()) !== undefined) continue;
+    throw new ConfigurationException(
+      config.entityName,
+      `relations.edges.${name}.write`,
+      `'${name}' opts into array-mutation writes, but its target entity has no metadata this root can ` +
+        `resolve — pass it through 'createCrud', or an 'infrastructure' that can derive its metadata, ` +
+        `on the same root as '${config.entityName}'`,
     );
   }
 }

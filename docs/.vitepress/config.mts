@@ -277,6 +277,10 @@ const config = defineConfig({
                 text: "0028 — Relation inclusion permission moves into allowlists.includable",
                 link: "/internals/adr/0028-includable-relations-move-into-allowlists",
               },
+              {
+                text: "0029 — Array relations may opt into replace writes",
+                link: "/internals/adr/0029-array-relations-may-opt-into-replace-writes",
+              },
             ],
           },
         ],

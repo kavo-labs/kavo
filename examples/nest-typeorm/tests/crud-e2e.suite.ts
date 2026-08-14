@@ -698,6 +698,125 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(afterDelete.body.tags).toEqual([]);
     });
 
+    describe("PUT /cats/:id/tags (arrayMutation's replace strategy, ADR-0029)", () => {
+      async function createTag(name: string): Promise<number> {
+        return (await request(server()).post("/tags").send({ name }).expect(201)).body.id as number;
+      }
+
+      async function createCat(tags: number[] = []): Promise<number> {
+        const cat = await request(server())
+          .post("/cats")
+          .send({ name: "Replaceable", age: 3, size: "small", indoor: true, livesLeft: 9, tags })
+          .expect(201);
+        return cat.body.id as number;
+      }
+
+      async function tagsOf(catId: number): Promise<number[]> {
+        const fetched = await request(server()).get(`/cats/${catId}?include=tags`).expect(200);
+        return (fetched.body.tags as { id: number }[]).map((tag) => tag.id).sort((a, b) => a - b);
+      }
+
+      it("replaces the full tag set in one call, without touching the rest of the cat", async () => {
+        const tagA = await createTag("indoor");
+        const tagB = await createTag("playful");
+        const catId = await createCat([tagA]);
+
+        await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send([tagB])
+          .expect(200)
+          .expect((response) => {
+            // The response is the parent Cat, not the tag list.
+            expect(response.body).toMatchObject({ id: catId, name: "Replaceable" });
+          });
+
+        expect(await tagsOf(catId)).toEqual([tagB]);
+      });
+
+      it("accepts {id} references alongside bare ids, same as create/update", async () => {
+        const tagA = await createTag("a");
+        const tagB = await createTag("b");
+        const catId = await createCat();
+
+        await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send([tagA, { id: tagB }])
+          .expect(200);
+
+        expect(await tagsOf(catId)).toEqual([tagA, tagB].sort((a, b) => a - b));
+      });
+
+      it("clears every tag when the body is null", async () => {
+        const tagA = await createTag("solo");
+        const catId = await createCat([tagA]);
+
+        await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send(null as never)
+          .expect(200);
+
+        expect(await tagsOf(catId)).toEqual([]);
+      });
+
+      it("clears every tag when the body is an empty array", async () => {
+        const tagA = await createTag("solo-2");
+        const catId = await createCat([tagA]);
+
+        await request(server()).put(`/cats/${catId}/tags`).send([]).expect(200);
+
+        expect(await tagsOf(catId)).toEqual([]);
+      });
+
+      it("is a no-op when the desired set already matches", async () => {
+        const tagA = await createTag("stable-a");
+        const tagB = await createTag("stable-b");
+        const catId = await createCat([tagA, tagB]);
+
+        await request(server()).put(`/cats/${catId}/tags`).send([tagA, tagB]).expect(200);
+
+        expect(await tagsOf(catId)).toEqual([tagA, tagB].sort((a, b) => a - b));
+      });
+
+      it("rejects a partial-mutation shape (an object body) as a 400, not a silent narrowing", async () => {
+        const catId = await createCat();
+
+        const response = await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send({ add: [1] })
+          .expect(400)
+          .expect("Content-Type", /application\/problem\+json/);
+        expect(response.body.code).toBe("KAVO_ARRAY_MUTATION_INVALID_SHAPE");
+      });
+
+      it("rejects a nonexistent tag id as 404, rather than silently dropping it", async () => {
+        const catId = await createCat();
+
+        const response = await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send([999999])
+          .expect(404)
+          .expect("Content-Type", /application\/problem\+json/);
+        expect(response.body.code).toBe("KAVO_NOT_FOUND");
+
+        // The rejected write must not have partially applied.
+        expect(await tagsOf(catId)).toEqual([]);
+      });
+
+      it("404s for a cat id that does not exist", async () => {
+        await request(server())
+          .put("/cats/999999/tags")
+          .send([])
+          .expect(404)
+          .expect("Content-Type", /application\/problem\+json/);
+      });
+
+      it("documents the route in the OpenAPI schema", () => {
+        const document = SwaggerModule.createDocument(getApp(), new DocumentBuilder().build());
+        expect(document.paths).toHaveProperty("/cats/{id}/tags");
+        expect(document.paths["/cats/{id}/tags"]).toHaveProperty("put");
+      });
+    });
+
     it("keeps include=tags an opt-in allowlist entry, not a free pass", async () => {
       // Dogs never declared `tags` includable — same allowlist rule as any
       // other relation.

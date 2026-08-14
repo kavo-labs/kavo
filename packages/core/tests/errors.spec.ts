@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CatalogedErrorCode, KavoExceptionShape, QueryIssueDto } from "@kavo/core";
 import {
   AlreadyDeletedException,
+  ArrayMutationInvalidShapeException,
   ConfigurationException,
   ConflictException,
   KavoException,
@@ -37,6 +38,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_QUERY_CONFLICTING_PARAMS: { status: 400, title: "Conflicting query parameters" },
   KAVO_NOT_FOUND: { status: 404, title: "Not found" },
   KAVO_CONFLICT: { status: 409, title: "Conflict" },
+  KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
   KAVO_ALREADY_DELETED: { status: 409, title: "Already deleted" },
   KAVO_NOT_DELETED: { status: 409, title: "Not deleted" },
   KAVO_PRECONDITION_FAILED: { status: 412, title: "Precondition failed" },
@@ -125,6 +127,7 @@ describe("exception hierarchy", () => {
   const leaves = [
     { exception: new NotFoundException(), code: "KAVO_NOT_FOUND", status: 404 },
     { exception: new ConflictException(), code: "KAVO_CONFLICT", status: 409 },
+    { exception: new ArrayMutationInvalidShapeException(), code: "KAVO_ARRAY_MUTATION_INVALID_SHAPE", status: 400 },
     { exception: new AlreadyDeletedException(), code: "KAVO_ALREADY_DELETED", status: 409 },
     { exception: new NotDeletedException(), code: "KAVO_NOT_DELETED", status: 409 },
     { exception: new OperationDisabledException(), code: "KAVO_OPERATION_DISABLED", status: 405 },
