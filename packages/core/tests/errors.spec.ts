@@ -39,6 +39,8 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_NOT_FOUND: { status: 404, title: "Not found" },
   KAVO_CONFLICT: { status: 409, title: "Conflict" },
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
+  KAVO_JSON_PATCH_INVALID_DOCUMENT: { status: 400, title: "Invalid JSON Patch document" },
+  KAVO_JSON_PATCH_TARGET_NOT_FOUND: { status: 404, title: "JSON Patch target not found" },
   KAVO_ALREADY_DELETED: { status: 409, title: "Already deleted" },
   KAVO_NOT_DELETED: { status: 409, title: "Not deleted" },
   KAVO_PRECONDITION_FAILED: { status: 412, title: "Precondition failed" },

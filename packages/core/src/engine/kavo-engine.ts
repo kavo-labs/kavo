@@ -26,6 +26,7 @@ import {
   PreconditionUnsupportedException,
   QueryValidationException,
 } from "../errors/exceptions.js";
+import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { isStandardOperationId } from "../operations/default-operation-registry.js";
@@ -168,8 +169,20 @@ export class KavoEngine<Entity extends object> {
    */
   private readonly entityFields: ReadonlyMap<string, FieldMetadata>;
 
+  /**
+   * Own, non-generated column names — `arrayMutation`'s `jsonPatch`
+   * strategy's legal `/<field>` path targets. Generated columns (the id
+   * field among them, in every fixture and adapter this codebase ships)
+   * are excluded the same way `DefaultDeserializer`'s writable projection
+   * already excludes them from an ordinary object-body `patchOne`.
+   */
+  private readonly writableFieldNames: ReadonlySet<string>;
+
   constructor(private readonly deps: KavoEngineDependencies<Entity>) {
     this.entityFields = new Map(deps.metadata.fields.map((field) => [field.name, field]));
+    this.writableFieldNames = new Set(
+      deps.metadata.fields.filter((field) => !field.generated).map((field) => field.name),
+    );
   }
 
   get registry(): OperationRegistry<Entity> {
@@ -549,11 +562,12 @@ export class KavoEngine<Entity extends object> {
       case "findMany":
         return null;
       case "updateOne":
-      case "patchOne":
         return {
           id: this.coerceId(request.id),
           data: deserializer.deserialize(request.body, dto, context),
         };
+      case "patchOne":
+        return this.resolvePatchOneInput(request, dto, context);
       default: {
         // A custom read (issue #145) follows the same rule the two standard
         // reads above do: no request body exists to deserialize, so the
@@ -580,6 +594,77 @@ export class KavoEngine<Entity extends object> {
         return request.id === null ? body : { id: this.coerceId(request.id), body };
       }
     }
+  }
+
+  /**
+   * `patchOne`'s input. An object body deserializes exactly as it always
+   * has — `patchOne`'s own contract is unchanged, `arrayMutation` strategy
+   * or not, which is the overlap ADR-0029's jsonPatch amendment resolves
+   * explicitly rather than silently: `DefaultDeserializer.deserialize`
+   * already returns `{}` for a non-object/array body, so an array reaching
+   * an entity that never opted into `jsonPatch` sees that same unchanged
+   * behavior. Only when the resolved `arrayMutation` strategy is
+   * `"jsonPatch"` *and* the body is a bare array — the one shape an
+   * ordinary patch DTO body never is — does it parse as an RFC 6902
+   * document instead.
+   */
+  private resolvePatchOneInput(
+    request: KavoRequest<Entity>,
+    dto: DtoClass<object> | null,
+    context: KavoContext<Entity>,
+  ): unknown {
+    const { deserializer } = this.deps;
+    const id = this.coerceId(request.id);
+    const arrayMutation = context.config.settings.arrayMutation;
+    if (arrayMutation === false || arrayMutation.strategy !== "jsonPatch" || !Array.isArray(request.body)) {
+      return { id, data: deserializer.deserialize(request.body, dto, context) };
+    }
+
+    const writeOptedRelations = new Set(
+      context.config.relations
+        .all()
+        .filter((relation) => relation.write === true)
+        .map((relation) => relation.name),
+    );
+    const parsed = parseJsonPatchDocument(request.body, {
+      entityName: context.entityName,
+      writableFields: this.writableFieldNames,
+      writeOptedRelations,
+      operation: context.operation,
+      correlationId: context.correlationId,
+    });
+    const data = deserializer.deserialize(parsed.fields, dto, context);
+    const relationEntries = Object.entries(parsed.relations);
+    if (relationEntries.length === 0) return { id, data };
+
+    const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = {};
+    for (const [relation, ops] of relationEntries) {
+      relationPatch[relation] = {
+        add: this.resolveJsonPatchMemberIds(relation, ops.add, context),
+        remove: this.resolveJsonPatchMemberIds(relation, ops.remove, context),
+      };
+    }
+    return { id, data, relationPatch };
+  }
+
+  /**
+   * Normalizes a list of raw `jsonPatch` op `value`s (a scalar id or an
+   * `{id}` reference) into real ids — the same `DefaultDeserializer`
+   * `associate()` logic `resolveArrayMutationMemberIds` reuses for
+   * `replace`, wrapping the values as `{ [relation]: values }` and reading
+   * the one key back out, so a scalar id, an `{id}` reference, and the
+   * target entity's real id-field name resolve exactly the way
+   * `create`/`update`/`replace` already resolve them.
+   */
+  private resolveJsonPatchMemberIds(
+    relation: string,
+    values: readonly unknown[],
+    context: KavoContext<Entity>,
+  ): readonly EntityId[] {
+    if (values.length === 0) return [];
+    const wrapped = this.deps.deserializer.deserialize<Record<string, unknown>>({ [relation]: values }, null, context);
+    const refs = (wrapped[relation] ?? []) as readonly Record<string, unknown>[];
+    return refs.map((ref) => Object.values(ref)[0] as EntityId);
   }
 
   /**

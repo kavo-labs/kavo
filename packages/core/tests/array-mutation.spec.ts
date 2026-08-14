@@ -53,13 +53,13 @@ describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", 
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects the reserved 'jsonPatch' strategy", () => {
+  it("accepts the 'jsonPatch' strategy with no write-opted relations (no adapter capability required)", () => {
     expect(() =>
       createKavo().createCrud(Author, { arrayMutation: { strategy: "jsonPatch" } } as never, {
         adapter: new SeededAdapter<Author>(),
         metadata: authorMetadata,
       }),
-    ).toThrowError(ConfigurationException);
+    ).not.toThrow();
   });
 
   it("rejects an unknown strategy value", () => {

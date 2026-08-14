@@ -147,21 +147,38 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         .all()
         .filter((relation) => relation.write === true)
         .map((relation) => relation.name);
-      requireArrayMutationSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
-      requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
-      registerArrayMutationOperations<Entity>(
-        registry,
-        arrayMutationRelations,
-        resolved.entityName,
-        (relationName) => ({
-          // `replaceRelation` is confirmed present by `requireArrayMutationSupport`
-          // above, once, at bootstrap — never per request.
-          execute: (input: unknown, context) => {
-            const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
-            return context.repository.replaceRelation!(id, relationName, memberIds, context);
-          },
-        }),
-      );
+      if (arrayMutationRelations.length > 0) {
+        requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
+        // `validateArrayMutationRelations` (resolve-entity-config.ts) already
+        // rejected `arrayMutation: false` with a write-opted relation, and
+        // `"resource"` never reaches bootstrap at all (validate-settings.ts)
+        // — so a non-empty `arrayMutationRelations` guarantees the strategy
+        // resolved to one of the two implemented ones here.
+        const strategy = (resolved.settings.arrayMutation as { readonly strategy: "replace" | "jsonPatch" }).strategy;
+        if (strategy === "replace") {
+          requireArrayMutationSupport(
+            resolved,
+            arrayMutationRelations,
+            adapter as unknown as RepositoryAdapter<Entity>,
+          );
+          registerArrayMutationOperations<Entity>(
+            registry,
+            arrayMutationRelations,
+            resolved.entityName,
+            (relationName) => ({
+              // `replaceRelation` is confirmed present by
+              // `requireArrayMutationSupport` above, once, at bootstrap —
+              // never per request.
+              execute: (input: unknown, context) => {
+                const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
+                return context.repository.replaceRelation!(id, relationName, memberIds, context);
+              },
+            }),
+          );
+        } else {
+          requireJsonPatchSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
+        }
+      }
 
       catalog.register(entity as ClassRef, {
         metadata: metadata as EntityMetadata<object>,
@@ -287,6 +304,28 @@ function requireArrayMutationSupport<Entity extends object>(
     `relations.edges.${relationNames[0]}.write`,
     `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
       `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
+  );
+}
+
+/**
+ * Fails fast at `createCrud` when a relation opts into array-mutation
+ * writes under `arrayMutation.strategy: "jsonPatch"` but the repository
+ * adapter in use has no `patchRelation` — the `jsonPatch` counterpart of
+ * `requireArrayMutationSupport` (ADR-0029's jsonPatch amendment). Checked
+ * once here rather than per request.
+ */
+function requireJsonPatchSupport<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  if (relationNames.length === 0 || typeof adapter.patchRelation === "function") return;
+  throw new ConfigurationException(
+    config.entityName,
+    `relations.edges.${relationNames[0]}.write`,
+    `'${relationNames[0]}' opts into array-mutation writes under 'arrayMutation.strategy: "jsonPatch"', but this ` +
+      `entity's repository adapter does not implement 'patchRelation' — jsonPatch array-mutation writes are not ` +
+      `supported by this adapter yet`,
   );
 }
 

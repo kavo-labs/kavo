@@ -64,11 +64,12 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     enabled: false,
     events: Object.freeze({}),
   }),
-  // `replace` is the only implemented strategy, but the key is never
-  // consulted unless a relation opts in via `relations.edges.<name>.write`
-  // — same "harmless default" reasoning `realtime`'s object default
-  // documents, so a partial `arrayMutation: {...}` override merges against
-  // a complete base instead of replacing a `false` wholesale.
+  // `replace` stays the default strategy — `jsonPatch` is opt-in — but the
+  // key is never consulted unless a relation opts in via
+  // `relations.edges.<name>.write` — same "harmless default" reasoning
+  // `realtime`'s object default documents, so a partial `arrayMutation:
+  // {...}` override merges against a complete base instead of replacing a
+  // `false` wholesale.
   arrayMutation: Object.freeze({
     strategy: "replace" as const,
   }),
