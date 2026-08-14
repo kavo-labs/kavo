@@ -435,9 +435,11 @@ pass a green build and still need a human eye:
 
 `docs/` has two audiences, and it is worth keeping them separate:
 
-- **Adopter-facing** — [`docs/getting-started.md`](docs/getting-started.md),
-  [`docs/using-the-api.md`](docs/using-the-api.md), and
-  [`docs/integrations/`](docs/integrations/). Written for someone building an app
+- **Adopter-facing** — [`docs/getting-started/`](docs/getting-started/introduction.md),
+  [`docs/core/`](docs/core/entities.md), [`docs/using-the-api.md`](docs/using-the-api.md),
+  [`docs/querying/`](docs/querying/filtering.md), [`docs/features/`](docs/features/relations.md),
+  [`docs/integrations/`](docs/integrations/), [`docs/guides/`](docs/guides/wiring-your-own-auth.md), and
+  [`docs/reference/`](docs/reference/config-keys.md). Written for someone building an app
   with Kavo.
 - **Internal** — [`docs/internals/`](docs/internals/), holding the architecture
   documents and ADRs. Written for someone changing Kavo itself.

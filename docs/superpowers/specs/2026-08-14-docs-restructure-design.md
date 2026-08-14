@@ -4,7 +4,7 @@ Date: 2026-08-14
 
 ## Problem
 
-The adopter-facing docs (`docs/getting-started.md`, `docs/using-the-api.md`,
+The adopter-facing docs (`docs/getting-started/introduction.md`, `docs/using-the-api.md`,
 `docs/integrations/`) read like an API reference: exhaustive field-by-field
 tables, edge-case enumeration, full type signatures restated in prose. There
 is no way for a visitor to pick their framework/ORM stack and see only what's
@@ -97,11 +97,11 @@ Per page:
   configuration subpages; no structural nav change otherwise.
 - `docs/.vitepress/theme/` — new Stack Picker Vue component (exact location
   per existing theme conventions).
-- `docs/getting-started.md` — tone pass, add Stack Picker banner.
+- `docs/getting-started/introduction.md` — tone pass, add Stack Picker banner.
 - `docs/using-the-api.md` — tone pass.
-- `docs/integrations/nest/typeorm.md`, `prisma.md`, `mongoose.md`,
+- `docs/integrations/orms/typeorm.md`, `prisma.md`, `mongoose.md`,
   `mikroorm.md` — tone pass, embed Stack Picker.
-- `docs/integrations/nest/configuration.md` — becomes landing page.
-- `docs/integrations/nest/configuration/module-setup.md`,
+- `docs/guides/configuration/index.md` — becomes landing page.
+- `docs/guides/configuration/module-setup.md`,
   `settings.md`, `entity-config.md`, `operations.md` — new, split from the
   old `configuration.md`, tone pass. Do NOT embed Stack Picker (see §1).

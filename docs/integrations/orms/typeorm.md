@@ -8,7 +8,7 @@ import StackPicker from "../../.vitepress/theme/components/StackPicker.vue";
 
 <StackPicker orm="typeorm" />
 
-If you haven't yet, read [Getting started](/getting-started) first — this page assumes you already know what `@Kavo()` does and just needs the app-wiring.
+If you haven't yet, read [Introduction](/getting-started/introduction) first — this page assumes you already know what `@Kavo()` does and just needs the app-wiring.
 
 ::: code-group
 
@@ -30,7 +30,7 @@ bun add @kavo/core @kavo/nest @kavo/typeorm
 
 :::
 
-`@kavo/typeorm` expects `typeorm` (`^0.3.20 || ^1.0.0`) as a peer — add it to the command above if your app doesn't already have it — and `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started#peer-dependencies) for the full list with versions, and [Requirements](/getting-started#requirements) for the Node and TypeScript prerequisites.
+`@kavo/typeorm` expects `typeorm` (`^0.3.20 || ^1.0.0`) as a peer — add it to the command above if your app doesn't already have it — and `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
 
 ## Zero-config wiring
 

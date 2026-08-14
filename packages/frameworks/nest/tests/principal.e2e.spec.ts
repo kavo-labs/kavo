@@ -69,7 +69,7 @@ const viewerOf = (context: KavoContext<Todo>): string =>
   (context.principal as { id: string } | null)?.id ?? "anonymous";
 
 describe("KavoContext.principal over HTTP — computed fields (issue #142)", () => {
-  // The exact shape docs/integrations/nest/configuration.md documents: a
+  // The exact shape docs/features/allowlists-and-computed-fields.md documents: a
   // computed field whose value varies by caller.
   @Kavo(Todo, { computed: { viewer: { resolve: (_todo: Todo, context) => viewerOf(context) } } })
   @Controller("todos")
