@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/integrations/nest/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists`, `computed`, and `operations` (its own page, see [Operations](/integrations/nest/configuration/operations#operations)).
+`@Kavo(Entity, config)` accepts every settings field from [Settings](/integrations/nest/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists`, `computed`, and `operations` (its own page, see [Operations](/integrations/nest/configuration/operations#operations-1)).
 
 ## dto
 

@@ -35,7 +35,7 @@ Pair either keyset strategy with `count: false`, and index the sort tuple; both 
 
 `maxIncludeDepth` (default `2`) is the max nesting depth for `include=` chains (`include=owner.tags` is depth 2). `maxIncludedNodes` (default `10`) is the max total number of included relation nodes per request, across every branch of the include tree.
 
-`edges` (default `{}`) is per-relation **loading tuning**, keyed by relation property name — see `relations.edges` below. Whether a relation may be included at all is `allowlists.includable`'s question, entity scope only — see `allowlists` in [Configuration](/integrations/nest/configuration/entity-config#allowlists) ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
+`edges` (default `{}`) is per-relation **loading tuning**, keyed by relation property name — see `relations.edges` below. Whether a relation may be included at all is `allowlists.includable`'s question, entity scope only — see `allowlists` in [Entity config](/integrations/nest/configuration/entity-config#allowlists) ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 
 **`relations.edges.<name>`** (`RelationEdgeSettings`):
 
@@ -49,7 +49,7 @@ open it to `include=`.
 `relations.edges.<name>.includable: true` was the opt-in — naming a relation
 here, with no `includable` key at all, opened it by default. That key is
 gone. Move each opted-in relation name to `allowlists.includable` (see
-[Configuration](/integrations/nest/configuration/entity-config#allowlists));
+[Entity config](/integrations/nest/configuration/entity-config#allowlists));
 keep any `maxDepth`/`strategy` on `relations.edges.<name>` exactly where it
 was. `allowlists.includable` is entity-scope-only config (no global
 `defaults`, no per-operation override), so a permission previously granted
@@ -142,4 +142,4 @@ defaults: {
 | `restoreOne` | No, unless soft delete is declared on the entity (ADR-0013) |
 | `purgeOne`   | No, until named explicitly                                  |
 
-An entity's own `operations.<id>` (see [Configuration](/integrations/nest/configuration/operations#operations)) always wins over this global map.
+An entity's own `operations.<id>` (see [Operations](/integrations/nest/configuration/operations#operations-1)) always wins over this global map.
