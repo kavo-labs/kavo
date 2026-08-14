@@ -126,6 +126,17 @@ const config = defineConfig({
         ],
       },
       {
+        text: "Core",
+        items: [
+          { text: "Entities", link: "/core/entities" },
+          { text: "CRUD Operations", link: "/core/crud-operations" },
+          { text: "DTOs", link: "/core/dtos" },
+          { text: "Services", link: "/core/services" },
+          { text: "Routes & Controllers", link: "/core/routes-and-controllers" },
+          { text: "Custom Operations", link: "/core/custom-operations" },
+        ],
+      },
+      {
         text: "Querying",
         items: [
           { text: "Filtering", link: "/querying/filtering" },
@@ -157,6 +168,13 @@ const config = defineConfig({
               { text: "MikroORM", link: "/integrations/orms/mikroorm" },
             ],
           },
+          {
+            text: "Protocols",
+            items: [
+              { text: "GraphQL", link: "/integrations/protocols/graphql" },
+              { text: "MCP", link: "/integrations/protocols/mcp" },
+            ],
+          },
         ],
       },
       {
@@ -173,6 +191,16 @@ const config = defineConfig({
             ],
           },
           { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
+          { text: "Error Handling", link: "/guides/error-handling" },
+          { text: "Custom Adapter", link: "/guides/custom-adapter" },
+        ],
+      },
+      {
+        text: "Reference",
+        items: [
+          { text: "Config Keys", link: "/reference/config-keys" },
+          { text: "Errors", link: "/reference/errors" },
+          { text: "Decorators", link: "/reference/decorators" },
         ],
       },
       {
