@@ -225,9 +225,17 @@ export interface RealtimeSettings {
  */
 export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
 
-/** Array-relation write policy (config half — see `RelationDescriptor.write` for the per-relation opt-in). */
+/**
+ * Array-relation write policy (config half — see `RelationDescriptor.write`
+ * for the per-relation opt-in). `strategy` has no built-in default (issue
+ * #221 amends ADR-0029): a relation opted into `write` demands one be
+ * declared explicitly somewhere in the global → entity precedence chain —
+ * `validateArrayMutationRelations` (`resolve-entity-config.ts`) rejects an
+ * unset `strategy` the same way it already rejects `arrayMutation: false`
+ * under a write-opted relation.
+ */
 export interface ArrayMutationSettings {
-  readonly strategy: ArrayMutationStrategy;
+  readonly strategy?: ArrayMutationStrategy;
 }
 
 /** The full settings tree. */

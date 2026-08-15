@@ -150,9 +150,10 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
       if (arrayMutationRelations.length > 0) {
         requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
         // `validateArrayMutationRelations` (resolve-entity-config.ts) already
-        // rejected `arrayMutation: false` with a write-opted relation, so a
-        // non-empty `arrayMutationRelations` guarantees the strategy
-        // resolved to one of the three implemented ones here.
+        // rejected both `arrayMutation: false` and an unset `strategy` under
+        // a write-opted relation (issue #221 amends ADR-0029: no built-in
+        // default), so a non-empty `arrayMutationRelations` guarantees the
+        // strategy resolved to one of the three implemented ones here.
         const strategy = (
           resolved.settings.arrayMutation as { readonly strategy: "replace" | "resource" | "jsonPatch" }
         ).strategy;

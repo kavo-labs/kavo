@@ -107,20 +107,23 @@ export function getKavoEntities(): readonly KavoControllerMetadata[] {
  * An entity's own declared `arrayMutation.strategy` — the one view
  * decoration time (`@Kavo`, this file) has, blind to global defaults the
  * same way it's already blind to ORM cardinality metadata (ADR-0012,
- * ADR-0013's two-stage split). An entity that never declares `arrayMutation`
- * defaults to `"replace"` here, matching `BUILT_IN_DEFAULTS`.
+ * ADR-0013's two-stage split). `BUILT_IN_DEFAULTS` carries no strategy
+ * (issue #221 amends ADR-0029), so an entity that never declares
+ * `arrayMutation` resolves to `undefined` here — decoration time generates
+ * no synthesized route for it, rather than assuming `"replace"`.
  *
  * Exported so `KavoModule`'s discovery binder (`kavo.module.ts`) can
  * re-derive the exact same value once the entity's fully resolved strategy
- * is also known, and catch the one disagreement decoration time cannot see
- * for itself: an entity that omits `arrayMutation` while a *global* default
- * resolves it to something other than `"replace"`.
+ * is also known, and catch the gap decoration time cannot see for itself: an
+ * entity that omits `arrayMutation` while relying on a *global* default that
+ * resolves to `"replace"`/`"resource"` gets no route generated for it at all
+ * unless it declares the strategy itself.
  */
 export function declaredArrayMutationStrategy(
   config: EntityConfig<object> | undefined,
-): "replace" | "jsonPatch" | "resource" | false {
+): "replace" | "jsonPatch" | "resource" | false | undefined {
   const declared = config?.arrayMutation;
-  return declared === false ? false : (declared?.strategy ?? "replace");
+  return declared === false ? false : declared?.strategy;
 }
 
 /**
@@ -288,16 +291,16 @@ export function Kavo<
     // exactly the way it's already blind to ORM cardinality metadata
     // (ADR-0013's two-stage split). `"jsonPatch"` (ADR-0029's jsonPatch
     // amendment) reuses `patchOne`'s existing `PATCH /:id` route instead of
-    // a synthesized one, so neither strategy's routes belong on an entity
-    // that declared it — an entity that omits `arrayMutation` entirely
-    // still defaults to `"replace"` here, unchanged from before either
-    // strategy existed. The one blind spot this leaves — an entity that
-    // omits `arrayMutation` while relying on a *global* default other than
-    // `"replace"` — is not silently wrong: `KavoModule`'s discovery binder
-    // (`kavo.module.ts`) re-derives this same value once both the decorated
-    // config and the fully resolved strategy are known, and fails bootstrap
-    // loudly on a disagreement rather than serving a route with no matching
-    // registry entry.
+    // a synthesized one, so neither strategy's routes belong there. An
+    // entity that omits `arrayMutation` entirely gets `undefined` from
+    // `declaredArrayMutationStrategy` (no built-in default — issue #221
+    // amends ADR-0029) and so no synthesized route at all, even if a write-
+    // opted relation and a *global* default together would resolve one at
+    // `createCrud`: `KavoModule`'s discovery binder (`kavo.module.ts`)
+    // re-derives this same value once both the decorated config and the
+    // fully resolved strategy are known, and fails bootstrap loudly on that
+    // gap rather than silently leaving the resolved operation unreachable
+    // over HTTP.
     const declaredStrategy = declaredArrayMutationStrategy(erasedConfig);
     if (declaredStrategy === "replace" || declaredStrategy === "resource") {
       registerArrayMutationOperations(

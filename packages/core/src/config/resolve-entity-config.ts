@@ -401,25 +401,40 @@ function validateIncludableRelations<Entity>(
 
 /**
  * Cross-checks a relation opted into `write` (`relations.edges.<name>.write`)
- * against `arrayMutation`: `arrayMutation: false` disables array-relation
- * mutation wholesale (the same convention `softDelete: false`/`realtime:
- * false` use), so a relation still claiming `write: true` under it is a
- * contradiction worth failing on at bootstrap rather than silently leaving
- * the opt-in inert.
+ * against `arrayMutation`. Two ways this can be inert or ambiguous, both
+ * bootstrap failures rather than silently-wrong runtime behavior:
+ *
+ * - `arrayMutation: false` disables array-relation mutation wholesale (the
+ *   same convention `softDelete: false`/`realtime: false` use), so a
+ *   relation still claiming `write: true` under it is a contradiction.
+ * - `arrayMutation.strategy` unset (no built-in default since issue #221's
+ *   ADR-0029 amendment) leaves no strategy for the opt-in to apply — a
+ *   write-opted relation demands one be declared explicitly somewhere in
+ *   the global → entity chain, rather than falling back to `"replace"`
+ *   silently.
+ *
+ * `kavo.ts`'s `createCrud` relies on this having already run: a non-empty
+ * write-opted relation list there is only reachable once this function has
+ * confirmed `arrayMutation` resolved to one of the three implemented
+ * strategies.
  */
 function validateArrayMutationRelations<Entity>(
   scope: string,
   settings: KavoSettings,
   relations: DefaultRelationRegistry<Entity>,
 ): void {
-  if (settings.arrayMutation !== false) return;
+  if (settings.arrayMutation !== false && settings.arrayMutation.strategy !== undefined) return;
+  const isDisabled = settings.arrayMutation === false;
   for (const relation of relations.all()) {
     if (relation.write !== true) continue;
     throw new ConfigurationException(
       scope,
       `relations.edges.${relation.name}.write`,
-      `'${relation.name}' opts into array-mutation writes, but 'arrayMutation' is false for ${scope} — ` +
-        `set 'arrayMutation.strategy' (or drop 'write: true')`,
+      isDisabled
+        ? `'${relation.name}' opts into array-mutation writes, but 'arrayMutation' is false for ${scope} — ` +
+            `set 'arrayMutation.strategy' (or drop 'write: true')`
+        : `'${relation.name}' opts into array-mutation writes, but ${scope} declares no 'arrayMutation.strategy' — ` +
+            `set 'arrayMutation.strategy' to "replace", "resource", or "jsonPatch" (or drop 'write: true')`,
     );
   }
 }

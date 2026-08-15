@@ -217,6 +217,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       );
     }
     if (
+      arrayMutation.strategy !== undefined &&
       arrayMutation.strategy !== "replace" &&
       arrayMutation.strategy !== "resource" &&
       arrayMutation.strategy !== "jsonPatch"
@@ -224,7 +225,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       throw new ConfigurationException(
         entityName,
         "arrayMutation.strategy",
-        `expected "replace", "resource", or "jsonPatch", got ${JSON.stringify(arrayMutation.strategy)}`,
+        `expected unset, "replace", "resource", or "jsonPatch", got ${JSON.stringify(arrayMutation.strategy)}`,
       );
     }
   }

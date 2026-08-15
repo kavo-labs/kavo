@@ -97,8 +97,8 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
 
   it("still requires replaceRelation under the replace strategy — jsonPatch's capability check is additive, not a substitute", () => {
     // `JsonPatchCapableAdapter` implements `patchRelation` but not
-    // `replaceRelation`, so a relation still opted into the (default)
-    // `replace` strategy must fail bootstrap exactly as it always has.
+    // `replaceRelation`, so a relation still opted into the `replace`
+    // strategy must fail bootstrap exactly as it always has.
     expect(() => makeAuthorCrud("replace")).toThrowError(ConfigurationException);
   });
 
@@ -114,10 +114,11 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
     const kavo = createKavo();
     kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
     expect(() =>
-      kavo.createCrud(Author, { relations: { edges: { posts: { write: true } } } } as never, {
-        adapter: new ReplaceCapable(),
-        metadata: authorMetadata,
-      }),
+      kavo.createCrud(
+        Author,
+        { arrayMutation: { strategy: "replace" }, relations: { edges: { posts: { write: true } } } } as never,
+        { adapter: new ReplaceCapable(), metadata: authorMetadata },
+      ),
     ).not.toThrow();
   });
 });
