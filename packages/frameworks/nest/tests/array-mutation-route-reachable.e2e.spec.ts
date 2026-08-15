@@ -39,6 +39,7 @@ class Post {
   id = 0;
   title = "";
   tags: Tag[] = [];
+  labels: Tag[] = [];
 }
 
 const postMetadata: EntityMetadata<Post> = {
@@ -49,7 +50,10 @@ const postMetadata: EntityMetadata<Post> = {
     { name: "id", kind: "number", nullable: false, generated: true },
     { name: "title", kind: "string", nullable: false, generated: false },
   ],
-  relations: [{ name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" }],
+  relations: [
+    { name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
+    { name: "labels", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
+  ],
 };
 
 const tagMetadata: EntityMetadata<Tag> = {
@@ -65,7 +69,7 @@ const tagMetadata: EntityMetadata<Tag> = {
 
 /** Bare-minimum adapter — implements every write `arrayMutation` needs so bootstrap gets past its own capability checks. */
 class FakePostAdapter implements RepositoryAdapter<Post> {
-  rows: Post[] = [{ id: 1, title: "Hello", tags: [] }];
+  rows: Post[] = [{ id: 1, title: "Hello", tags: [], labels: [] }];
 
   async findOneById(id: EntityId): Promise<Post | null> {
     return this.rows.find((row) => row.id === Number(id)) ?? null;
@@ -81,7 +85,7 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
     return this.rows.length;
   }
   async create(data: Partial<Post>): Promise<Post> {
-    const row = { id: this.rows.length + 1, title: "", tags: [], ...data } as Post;
+    const row = { id: this.rows.length + 1, title: "", tags: [], labels: [], ...data } as Post;
     this.rows.push(row);
     return row;
   }
@@ -130,8 +134,16 @@ function fakeInfrastructure(adapter: FakePostAdapter): KavoInfrastructure {
   };
 }
 
-describe("KavoModule — arrayMutation strategy agreement (issue #221 amends ADR-0029)", () => {
-  it("rejects at bootstrap when a write-opted relation has no strategy resolvable anywhere (no local declaration, no global default)", async () => {
+describe("KavoModule — arrayMutation route reachability (issue #221 amends ADR-0029)", () => {
+  // This one never reaches `requireArrayMutationRouteReachable` at all:
+  // `createCrud` (called just before it in `KavoBinder.onModuleInit`) throws
+  // first via core's own `validateArrayMutationRelations`, the same path
+  // `packages/core/tests/array-mutation.spec.ts` exercises directly. Pinned
+  // here as an integration check that the core-level guard still surfaces
+  // correctly through KavoModule's bootstrap sequence — `messageParams.path`
+  // is asserted specifically so this fails loudly (rather than passing for
+  // an unrelated reason) if that call order ever changes.
+  it("rejects at bootstrap (via createCrud, before the route-reachability check runs) when no strategy is resolvable anywhere", async () => {
     @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
     @Controller("posts")
     class PostController {}
@@ -149,6 +161,7 @@ describe("KavoModule — arrayMutation strategy agreement (issue #221 amends ADR
     const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
     expect(error.context.entityName).toBe("Post");
+    expect(error.messageParams).toMatchObject({ path: "relations.edges.tags.write" });
     expect(error.detail).toContain("arrayMutation.strategy");
   });
 
@@ -173,8 +186,32 @@ describe("KavoModule — arrayMutation strategy agreement (issue #221 amends ADR
     const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
     expect(error.context.entityName).toBe("Post");
+    expect(error.messageParams).toMatchObject({ path: "arrayMutation" });
     expect(error.detail).toContain("arrayMutation.strategy");
     expect(error.detail).toContain("replace");
+  });
+
+  it("names every write-opted relation left routeless, not just the first, when several opt in", async () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: true }, labels: { write: true } } } } as never)
+    @Controller("posts")
+    class PostController {}
+
+    const moduleRef = Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({
+            infrastructure: fakeInfrastructure(new FakePostAdapter()),
+            defaults: { arrayMutation: { strategy: "replace" } } as never,
+          }),
+        }),
+      ],
+      controllers: [PostController],
+    });
+    const app = await moduleRef.compile();
+    const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
+    expect(error).toBeInstanceOf(ConfigurationException);
+    expect(error.detail).toContain("tags");
+    expect(error.detail).toContain("labels");
   });
 
   it("boots cleanly when a global 'jsonPatch' default resolves the strategy — jsonPatch needs no synthesized route", async () => {
