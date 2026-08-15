@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { EntityId, EntityMetadata, KavoContext, KavoSettings } from "@kavo/core";
+import type { EntityId, EntityMetadata, KavoContext, KavoSettings, RelationDescriptor } from "@kavo/core";
 import {
   BUILT_IN_DEFAULTS,
   ConfigurationException,
+  DefaultRelationRegistry,
   JsonPatchInvalidDocumentException,
   createKavo,
   validateSettings,
@@ -86,7 +87,29 @@ function makeTwoRelationCrud(config: Record<string, unknown>) {
   const kavo = createKavo();
   kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
   const crud = kavo.createCrud(Author, config as never, { adapter, metadata: authorMetadataTwoRelations });
-  return { crud, adapter };
+  return { crud, adapter, kavo };
+}
+
+/** `SeededAdapter` plus *only* `replaceRelation` — no `resource`/`jsonPatch` primitives at all. */
+class ReplaceOnlyAdapter<Entity extends { id: number }> extends SeededAdapter<Entity> {
+  async replaceRelation(
+    id: EntityId,
+    relation: string,
+    memberIds: readonly EntityId[] | null,
+    _context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    const row = await this.findOneById(id, null);
+    if (row === null) throw new Error("fixture: row not found");
+    (row as unknown as Record<string, unknown>)[relation] = memberIds;
+    return row;
+  }
+}
+
+function makeTwoRelationCrudWithReplaceOnlyAdapter(config: Record<string, unknown>) {
+  const adapter = new ReplaceOnlyAdapter<Author>([{ id: 1, name: "Ada", posts: [], favorites: [] } as never]);
+  const kavo = createKavo();
+  kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
+  return kavo.createCrud(Author, config as never, { adapter, metadata: authorMetadataTwoRelations });
 }
 
 describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment, issue #223)", () => {
@@ -177,20 +200,89 @@ describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment
     expect(crud.engine.registry.has("replacePosts")).toBe(true);
   });
 
-  it("only demands the adapter capability a mixed entity's relations actually use", () => {
-    // `posts` resolves to "resource" (needs all four primitives); `favorites`
-    // resolves to "replace" (needs only replaceRelation). `FullCapableAdapter`
-    // has all of them, so this should not throw — pinned mainly so a future
-    // change can't silently start demanding every primitive for every entity
-    // regardless of which strategies are actually in play.
+  it("boots on an adapter with only replaceRelation when every write-opted relation resolves 'replace'", () => {
+    // A real regression guard for capability narrowing (unlike a
+    // full-capability adapter, which can't tell a broad check from a
+    // narrow one): this adapter has no readRelation/addRelationMember/
+    // removeRelationMember/patchRelation at all, so this only passes if
+    // `createCrud` actually skips the resource/jsonPatch capability checks
+    // for an entity with no relation using those strategies.
     expect(() =>
-      makeTwoRelationCrud({
-        arrayMutation: { strategy: "resource" },
-        relations: {
-          edges: { posts: { write: true }, favorites: { write: { strategy: "replace" } } },
-        },
+      makeTwoRelationCrudWithReplaceOnlyAdapter({
+        arrayMutation: { strategy: "replace" },
+        relations: { edges: { posts: { write: true } } },
       }),
     ).not.toThrow();
+  });
+
+  it("exposes each relation's resolved strategy through kavo.describe's debug dump", () => {
+    const { kavo } = makeTwoRelationCrud({
+      arrayMutation: { strategy: "resource" },
+      relations: {
+        edges: {
+          posts: { write: true },
+          favorites: { write: { strategy: "replace" } },
+        },
+      },
+    });
+    const dump = kavo.describe("Author") as { relations: { name: string; write?: string }[] };
+    expect(dump.relations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "posts", write: "resource" }),
+        expect.objectContaining({ name: "favorites", write: "replace" }),
+      ]),
+    );
+  });
+
+  it("throws once a sibling relation resolves 'resource', on that same replace-only adapter", () => {
+    // Same adapter as above — adding a second, resource-strategy relation
+    // must now demand the primitives that relation actually needs, even
+    // though the first relation's own 'replace' requirement is still met.
+    expect(() =>
+      makeTwoRelationCrudWithReplaceOnlyAdapter({
+        arrayMutation: { strategy: "replace" },
+        relations: {
+          edges: { posts: { write: true }, favorites: { write: { strategy: "resource" } } },
+        },
+      }),
+    ).toThrowError(ConfigurationException);
+  });
+});
+
+describe("DefaultRelationRegistry — the arrayMutationDefault constructor parameter", () => {
+  const postsRelation: readonly RelationDescriptor[] = [
+    { name: "posts", target: () => Post as never, cardinality: "many", includable: false, strategy: "auto" },
+  ];
+
+  it("names 'declares no arrayMutation.strategy', not 'is false', when the parameter is omitted", () => {
+    try {
+      new DefaultRelationRegistry(postsRelation, [], { posts: { write: true } }, "Author");
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).message).toContain("names a strategy");
+      expect((error as ConfigurationException).message).not.toContain("is false");
+    }
+  });
+
+  it("names 'is false' when the parameter is explicitly false", () => {
+    try {
+      new DefaultRelationRegistry(postsRelation, [], { posts: { write: true } }, "Author", false);
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).message).toContain("'arrayMutation' is false");
+    }
+  });
+
+  it("raises a clean ConfigurationException, not a raw TypeError, for a null write value", () => {
+    // `entityDefault: {}` (not `false`), so resolution actually reaches the
+    // `typeof write === "object"` branch — `null` is `typeof "object"` too,
+    // and without the guard `write.strategy` would throw a raw TypeError
+    // instead of the same clean error an unresolvable strategy always gets.
+    expect(
+      () => new DefaultRelationRegistry(postsRelation, [], { posts: { write: null as never } }, "Author", {}),
+    ).toThrowError(ConfigurationException);
   });
 });
 
@@ -311,6 +403,48 @@ describe("per-relation jsonPatch — engine end to end", () => {
       options: null,
     } as never);
     await expect(call).rejects.toThrowError(JsonPatchInvalidDocumentException);
+  });
+
+  it("registers no replace/list/add/remove<Relation> operation for a relation pinned to 'jsonPatch' alone (no replace/resource sibling)", () => {
+    const { crud } = makeTwoRelationCrud({
+      arrayMutation: {}, // unset — nothing inherits it, favorites pins its own
+      relations: { edges: { favorites: { write: { strategy: "jsonPatch" } } } },
+    });
+    for (const id of ["replaceFavorites", "listFavorites", "addFavorites", "removeFavorites"]) {
+      expect(crud.engine.registry.has(id)).toBe(false);
+    }
+  });
+
+  it("still parses and applies an RFC 6902 body correctly for an entity with no replace/resource relation at all", async () => {
+    const { crud, adapter } = makeTwoRelationCrud({
+      arrayMutation: {},
+      relations: { edges: { favorites: { write: { strategy: "jsonPatch" } } } },
+    });
+    const response = await crud.engine.execute({
+      operation: "patchOne",
+      id: "1",
+      body: [
+        { op: "replace", path: "/name", value: "Marie" },
+        { op: "add", path: "/favorites/-", value: 2 },
+      ] as never,
+      query: null,
+      options: null,
+    } as never);
+    expect(adapter.calls).toEqual([{ method: "patchRelation", relation: "favorites" }]);
+    expect(response.item).toMatchObject({ id: 1, name: "Marie" });
+  });
+
+  it("takes the ordinary object-body path, touching no relation primitive, when jsonPatch is opted into via a relation alone", async () => {
+    const { crud, adapter } = makeJsonPatchMixCrud();
+    const response = await crud.engine.execute({
+      operation: "patchOne",
+      id: "1",
+      body: { name: "Grace" } as never,
+      query: null,
+      options: null,
+    } as never);
+    expect(adapter.calls).toEqual([]);
+    expect(response.item).toMatchObject({ id: 1, name: "Grace" });
   });
 
   it("does not parse an array patchOne body as jsonPatch when no relation and no entity default resolve to it", async () => {

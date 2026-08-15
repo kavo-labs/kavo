@@ -17,7 +17,7 @@ function resolveArrayMutationStrategy(
   entityDefault: ArrayMutationSettings | false,
 ): RelationDescriptor["write"] {
   if (entityDefault === false) return undefined;
-  if (typeof write === "object") return write.strategy;
+  if (typeof write === "object" && write !== null) return write.strategy;
   if (write !== true) return undefined;
   return entityDefault.strategy;
 }

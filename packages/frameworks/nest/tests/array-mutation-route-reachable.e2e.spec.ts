@@ -255,7 +255,7 @@ describe("KavoModule — arrayMutation route reachability (issue #221 amends ADR
     const app = await moduleRef.compile();
     const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
     expect(error).toBeInstanceOf(ConfigurationException);
-    // `labels` pinned its own strategy locally (`write: { strategy: "resource" }`),
+    // `labels` pinned its own strategy locally (`write: { strategy: "replace" }`),
     // so decoration time already generated its route — only `tags`, which
     // relies on the undeclared global default, is unreachable.
     expect(error.detail).toContain("tags");
