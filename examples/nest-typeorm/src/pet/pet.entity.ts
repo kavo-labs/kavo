@@ -14,6 +14,7 @@ import type { Owner } from "../owner/owner.entity.js";
 // Tag carries no reference back to Pet, so there is no cycle to keep off the
 // runtime graph here — a plain, real import is fine.
 import { Tag } from "../tag/tag.entity.js";
+import { Photo } from "../photo/photo.entity.js";
 
 /**
  * The single-table inheritance base. `Pet` is never served directly — you
@@ -58,6 +59,14 @@ export abstract class Pet {
   @ManyToMany(() => Tag)
   @JoinTable()
   tags!: Tag[];
+
+  // A second to-many edge, unidirectional like `tags` — opted into the
+  // `resource` array-mutation strategy on `Cat` rather than `replace`
+  // (ADR-0029's per-relation amendment, issue #223), so the two relations
+  // demonstrate two different strategies on the same entity.
+  @ManyToMany(() => Photo)
+  @JoinTable()
+  photos!: Photo[];
 
   @CreateDateColumn()
   createdAt!: Date;

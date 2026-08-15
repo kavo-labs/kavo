@@ -8,6 +8,7 @@ import { OwnerController } from "./owner/owner.controller.js";
 import { CatController } from "./cat/cat.controller.js";
 import { DogController } from "./dog/dog.controller.js";
 import { TagController } from "./tag/tag.controller.js";
+import { PhotoController } from "./photo/photo.controller.js";
 import { AddressController } from "./address/address.controller.js";
 
 /**
@@ -52,7 +53,7 @@ export class AppModule {
           }),
         }),
       ],
-      controllers: [OwnerController, CatController, DogController, TagController, AddressController],
+      controllers: [OwnerController, CatController, DogController, TagController, PhotoController, AddressController],
     };
   }
 }

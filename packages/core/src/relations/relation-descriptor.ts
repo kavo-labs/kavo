@@ -1,4 +1,5 @@
 import type { ClassRef } from "../types/utility.js";
+import type { ArrayMutationStrategy } from "../config/settings.js";
 
 export type RelationCardinality = "one" | "many";
 
@@ -36,11 +37,15 @@ export interface RelationDescriptor {
   readonly maxDepth?: number;
   readonly strategy: RelationLoadStrategy;
   /**
-   * Whether clients may mutate this relation's array through `arrayMutation`
-   * (ADR-0014's named extension point). Defaults to `false` — like
-   * `includable`, opt-in — granted by `relations.edges.<name>.write` in
-   * config and merged in here by `DefaultRelationRegistry`, then checked
-   * against `cardinality` at bootstrap (`resolve-entity-config.ts`).
+   * The **resolved** array-mutation strategy this relation writes through,
+   * or `undefined` if it never opted in — like `includable`, opt-in,
+   * granted by `relations.edges.<name>.write` in config. Unlike the raw
+   * `boolean | { strategy }` config shape, this is always a concrete
+   * strategy by the time a descriptor reaches this field: `write: true`'s
+   * "inherit the entity default" and `write: { strategy }`'s explicit
+   * override are both resolved down to one value by `DefaultRelationRegistry`,
+   * which also rejects (at bootstrap) a relation whose opt-in has no
+   * resolvable strategy, and one declared on a to-one relation.
    */
-  readonly write?: boolean;
+  readonly write?: ArrayMutationStrategy;
 }

@@ -27,12 +27,12 @@ import type {
   RequestPreconditions,
   StandardOperationId,
 } from "@kavo/core";
+import type { ArrayMutationRelationEntry, ArrayMutationStrategy } from "@kavo/core";
 import {
   ConfigurationException,
   computeEtag,
   createOperationRegistry,
   registerArrayMutationOperations,
-  writeOptedInRelationNames,
 } from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
 import type { OverrideMetadata } from "./override.decorator.js";
@@ -124,6 +124,29 @@ export function declaredArrayMutationStrategy(
 ): "replace" | "jsonPatch" | "resource" | false | undefined {
   const declared = config?.arrayMutation;
   return declared === false ? false : declared?.strategy;
+}
+
+/**
+ * The declared strategy for **one** relation (ADR-0029's per-relation
+ * amendment, issue #223) — `write: { strategy }` names its own,
+ * unconditionally (decoration time is optimistic here, the same way it's
+ * already blind to whether that strategy actually agrees with a real
+ * `arrayMutation: false`; `DefaultRelationRegistry` rejects that
+ * contradiction at bootstrap, once real settings exist). `write: true`
+ * inherits the entity's own declared default (`declaredArrayMutationStrategy`
+ * above) — `undefined` if the entity declares none, exactly the "no route
+ * generated" caution that function already documents.
+ */
+export function declaredRelationArrayMutationStrategy(
+  // Loosely typed to match `EntityConfig`'s `DeepPartial<KavoSettings>`
+  // shape (`strategy` optional even inside the object form), not
+  // `RelationEdgeSettings["write"]`'s own resolved-settings shape.
+  write: boolean | { readonly strategy?: ArrayMutationStrategy } | undefined,
+  entityDeclared: "replace" | "jsonPatch" | "resource" | false | undefined,
+): ArrayMutationStrategy | undefined {
+  if (typeof write === "object" && write !== null) return write.strategy;
+  if (write !== true) return undefined;
+  return entityDeclared === false ? undefined : entityDeclared;
 }
 
 /**
@@ -286,29 +309,33 @@ export function Kavo<
     // entity-level config). No `handlers`: like every other entry this
     // registry builds, it exists for route generation only.
     //
-    // Gated on the entity's own declared `arrayMutation.strategy` — the
-    // only view decoration time has (ADR-0012), blind to global defaults
-    // exactly the way it's already blind to ORM cardinality metadata
-    // (ADR-0013's two-stage split). `"jsonPatch"` (ADR-0029's jsonPatch
-    // amendment) reuses `patchOne`'s existing `PATCH /:id` route instead of
-    // a synthesized one, so neither strategy's routes belong there. An
-    // entity that omits `arrayMutation` entirely gets `undefined` from
-    // `declaredArrayMutationStrategy` (no built-in default — issue #221
-    // amends ADR-0029) and so no synthesized route at all, even if a write-
-    // opted relation and a *global* default together would resolve one at
-    // `createCrud`: `KavoModule`'s discovery binder (`kavo.module.ts`)
-    // re-derives this same value once both the decorated config and the
-    // fully resolved strategy are known, and fails bootstrap loudly on that
-    // gap rather than silently leaving the resolved operation unreachable
-    // over HTTP.
-    const declaredStrategy = declaredArrayMutationStrategy(erasedConfig);
-    if (declaredStrategy === "replace" || declaredStrategy === "resource") {
-      registerArrayMutationOperations(
-        registry,
-        writeOptedInRelationNames(erasedConfig?.relations?.edges),
-        entity.name,
-        declaredStrategy,
-      );
+    // Gated per relation on its own declared strategy (ADR-0029's
+    // per-relation amendment, issue #223) — `write: true` falls back to the
+    // entity's own declared `arrayMutation.strategy`, `write: { strategy }`
+    // names one directly. Either way this is the only view decoration time
+    // has (ADR-0012), blind to global defaults exactly the way it's already
+    // blind to ORM cardinality metadata (ADR-0013's two-stage split).
+    // `"jsonPatch"` (ADR-0029's jsonPatch amendment) reuses `patchOne`'s
+    // existing `PATCH /:id` route instead of a synthesized one, so a
+    // relation declared that way generates no route here. A relation whose
+    // declared strategy comes out `undefined` — entity declares no default
+    // and this relation names none of its own — gets no synthesized route
+    // either, even if a *global* default would resolve one at `createCrud`:
+    // `KavoModule`'s discovery binder (`kavo.module.ts`) re-derives the same
+    // per-relation value once both the decorated config and the fully
+    // resolved strategy are known, and fails bootstrap loudly on that gap
+    // rather than silently leaving the resolved operation unreachable over
+    // HTTP.
+    const entityDeclaredStrategy = declaredArrayMutationStrategy(erasedConfig);
+    const routedRelations: ArrayMutationRelationEntry[] = [];
+    for (const [name, edge] of Object.entries(erasedConfig?.relations?.edges ?? {})) {
+      const declared = declaredRelationArrayMutationStrategy(edge?.write, entityDeclaredStrategy);
+      if (declared === "replace" || declared === "resource") {
+        routedRelations.push({ name, strategy: declared });
+      }
+    }
+    if (routedRelations.length > 0) {
+      registerArrayMutationOperations(registry, routedRelations, entity.name);
     }
     const overrides = collectOverrides(controller.prototype, entity.name, registry);
     const conditionalDocs: KavoConditionalDocEntry[] = [];

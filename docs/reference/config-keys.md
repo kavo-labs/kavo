@@ -46,9 +46,9 @@ See [Errors](/reference/errors).
 | `relations.edges.<name>.defaultInclude` | `boolean`                     | `false`                              |
 | `relations.edges.<name>.maxDepth`       | `number`                      | inherits `relations.maxIncludeDepth` |
 | `relations.edges.<name>.strategy`       | `"auto" \| "join" \| "batch"` | `"auto"`                             |
-| `relations.edges.<name>.write`          | `boolean`                     | `false`                              |
+| `relations.edges.<name>.write`          | `boolean \| { strategy }`     | `false`                              |
 
-Whether a relation is includable at all is `allowlists.includable` (entity scope only) — see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. See [Relations](/features/relations).
+Whether a relation is includable at all is `allowlists.includable` (entity scope only) — see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `write: true` inherits the entity's own `arrayMutation.strategy`; `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
 
 ## arrayMutation
 
@@ -57,7 +57,7 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 | `arrayMutation`          | `{ strategy } \| false`                  | `{}`                        |
 | `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | unset (no built-in default) |
 
-`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. A relation opted into `relations.edges.<name>.write: true` requires `arrayMutation.strategy` to be declared explicitly — no built-in default resolves it (issue #221). See [Relations#arrayMutation](/features/relations#arraymutation).
+`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `arrayMutation.strategy` is the entity-wide default a `relations.edges.<name>.write: true` relation inherits; a relation opted in with no strategy resolvable anywhere — no entity default and no `write: { strategy }` of its own — requires one be declared explicitly (issue #221). `arrayMutation: false` disables the feature wholesale and wins over any per-relation override (issue #223). See [Relations#arrayMutation](/features/relations#arraymutation).
 
 ## caching
 

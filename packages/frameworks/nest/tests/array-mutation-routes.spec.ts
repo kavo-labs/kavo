@@ -16,10 +16,16 @@ class Tag {
   name = "";
 }
 
+class Label {
+  id = 0;
+  name = "";
+}
+
 class Post {
   id = 0;
   title = "";
   tags: Tag[] = [];
+  labels: Label[] = [];
 }
 
 describe("@Kavo — replace<Relation> sub-collection route generation (arrayMutation's replace strategy, ADR-0014)", () => {
@@ -129,5 +135,53 @@ describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029'
     expect(Reflect.getMetadata(PATH_METADATA, method)).toBeUndefined();
     expect(Reflect.getMetadata(METHOD_METADATA, method)).toBeUndefined();
     expect(new OverriddenController().removeTags()).toBe("manual");
+  });
+});
+
+describe("@Kavo — per-relation arrayMutation.strategy (ADR-0029's per-relation amendment, issue #223)", () => {
+  it("generates the resource surface for one relation and only PUT for another, on the same entity, from a single entity default", () => {
+    @Kavo(Post, {
+      arrayMutation: { strategy: "resource" },
+      relations: {
+        edges: {
+          tags: { write: true }, // inherits the entity default: "resource"
+          labels: { write: { strategy: "replace" } }, // pinned override
+        },
+      },
+    } as never)
+    class PostController {}
+
+    const prototype = PostController.prototype as Record<string, unknown>;
+    for (const name of ["listTags", "addTags", "removeTags", "replaceTags"]) {
+      expect(typeof prototype[name]).toBe("function");
+    }
+    expect(typeof prototype.replaceLabels).toBe("function");
+    expect(prototype.listLabels).toBeUndefined();
+    expect(prototype.addLabels).toBeUndefined();
+    expect(prototype.removeLabels).toBeUndefined();
+  });
+
+  it("a relation-level override generates its own route shape even though the entity declares no default at all", () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: { strategy: "resource" } } } } } as never)
+    class PostController {}
+
+    const prototype = PostController.prototype as Record<string, unknown>;
+    for (const name of ["listTags", "addTags", "removeTags", "replaceTags"]) {
+      expect(typeof prototype[name]).toBe("function");
+    }
+  });
+
+  it("generates no route for a relation pinned to 'jsonPatch' — it reuses patchOne's own route instead", () => {
+    @Kavo(Post, {
+      arrayMutation: { strategy: "resource" },
+      relations: { edges: { tags: { write: { strategy: "jsonPatch" } } } },
+    } as never)
+    class PostController {}
+
+    const prototype = PostController.prototype as Record<string, unknown>;
+    expect(prototype.listTags).toBeUndefined();
+    expect(prototype.addTags).toBeUndefined();
+    expect(prototype.removeTags).toBeUndefined();
+    expect(prototype.replaceTags).toBeUndefined();
   });
 });

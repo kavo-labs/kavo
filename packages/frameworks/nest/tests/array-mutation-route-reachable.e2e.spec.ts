@@ -234,6 +234,53 @@ describe("KavoModule — arrayMutation route reachability (issue #221 amends ADR
     await moduleRef.close();
   });
 
+  it("names only the relation relying on an undeclared global default, not a sibling with its own pinned strategy (issue #223)", async () => {
+    @Kavo(Post, {
+      relations: { edges: { tags: { write: true }, labels: { write: { strategy: "replace" } } } },
+    } as never)
+    @Controller("posts")
+    class PostController {}
+
+    const moduleRef = Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({
+            infrastructure: fakeInfrastructure(new FakePostAdapter()),
+            defaults: { arrayMutation: { strategy: "replace" } } as never,
+          }),
+        }),
+      ],
+      controllers: [PostController],
+    });
+    const app = await moduleRef.compile();
+    const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
+    expect(error).toBeInstanceOf(ConfigurationException);
+    // `labels` pinned its own strategy locally (`write: { strategy: "replace" }`),
+    // so decoration time already generated its route — only `tags`, which
+    // relies on the undeclared global default, is unreachable.
+    expect(error.detail).toContain("tags");
+    expect(error.detail).not.toContain("labels");
+  });
+
+  it("boots cleanly when every write-opted relation pins its own strategy locally, even with no entity-level arrayMutation declared", async () => {
+    @Kavo(Post, {
+      relations: { edges: { tags: { write: { strategy: "replace" } }, labels: { write: { strategy: "replace" } } } },
+    } as never)
+    @Controller("posts")
+    class PostController {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({ infrastructure: fakeInfrastructure(new FakePostAdapter()) }),
+        }),
+      ],
+      controllers: [PostController],
+    }).compile();
+    await expect(moduleRef.init()).resolves.toBeDefined();
+    await moduleRef.close();
+  });
+
   it("boots cleanly when the entity declares arrayMutation.strategy: 'replace' itself, matching the resolved strategy", async () => {
     @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
     @Controller("posts")

@@ -1,6 +1,7 @@
 import { enumProp } from "@kavo/nest";
 import { PetSizeEnum } from "../pet/pet.entity.js";
 import { TagItemDto } from "../tag/tag.dtos.js";
+import { PhotoItemDto } from "../photo/photo.dtos.js";
 
 /**
  * DTO slots for the Cat route. Fields are initialized so the
@@ -23,6 +24,9 @@ export class CreateCatDto {
   // Same mechanism, over a to-many edge: an array of tag ids (or `{ id }`
   // refs) replaces the full set of associated tags.
   tags: number[] = [];
+  // Same mechanism again, over `photos` — independently write-opted under
+  // the `resource` strategy rather than `tags`'s `replace` (issue #223).
+  photos: number[] = [];
 }
 
 /** `update` slot — request body for PUT /cats/:id (patch derives from it). */
@@ -34,6 +38,7 @@ export class UpdateCatDto {
   livesLeft = 0;
   owner: number | null = null;
   tags: number[] = [];
+  photos: number[] = [];
 }
 
 /** `item` slot — the detail projection. */
@@ -48,6 +53,7 @@ export class CatItemDto {
   // Documented as an array of tags; the shape is documentation, the include
   // decides the load — absent from a plain GET.
   tags: TagItemDto[] = [];
+  photos: PhotoItemDto[] = [];
 }
 
 /** `list` slot — a leaner projection for list responses. */

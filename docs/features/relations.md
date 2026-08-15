@@ -6,7 +6,7 @@
 
 **`relations.edges.<name>`** (`RelationEdgeSettings`):
 
-`defaultInclude` (default `false`) includes this relation even when the client doesn't ask for it. It requires the relation to also be named in `allowlists.includable` — a bootstrap error otherwise. `maxDepth` (default inherits `relations.maxIncludeDepth`) overrides the include-depth limit for the subtree below this relation only. `strategy` (default `"auto"`, or `"join"`/`"batch"`) controls how the relation loads: `join` (single query, correct for to-one), `batch` (per-level `WHERE parentId IN (...)`, correct for to-many), or `auto` (picks per cardinality). `write` (default `false`) opts a **to-many** relation into `arrayMutation` writes (below) — see `arrayMutation` for the strategy this then applies. `true` on a to-one relation, or with no `arrayMutation.strategy` declared for the entity, is a bootstrap error — `arrayMutation.strategy` has no built-in default. It's independent of `allowlists.includable`: a relation can be write-opted without being read-includable, or the reverse.
+`defaultInclude` (default `false`) includes this relation even when the client doesn't ask for it. It requires the relation to also be named in `allowlists.includable` — a bootstrap error otherwise. `maxDepth` (default inherits `relations.maxIncludeDepth`) overrides the include-depth limit for the subtree below this relation only. `strategy` (default `"auto"`, or `"join"`/`"batch"`) controls how the relation loads: `join` (single query, correct for to-one), `batch` (per-level `WHERE parentId IN (...)`, correct for to-many), or `auto` (picks per cardinality). `write` (default `false`) opts a **to-many** relation into `arrayMutation` writes (below). Two spellings: `write: true` opts in and inherits the entity's own `arrayMutation.strategy`; `write: { strategy }` opts in _and_ pins this relation's own strategy, independent of the entity default — two relations on the same entity can this way use two different strategies. Either spelling on a to-one relation, or with no strategy resolvable (`write: true` under an entity with no `arrayMutation.strategy` declared, or `write: {...}` under `arrayMutation: false`), is a bootstrap error. It's independent of `allowlists.includable`: a relation can be write-opted without being read-includable, or the reverse.
 
 An entry here tunes loading for a relation that is already includable; it
 grants no permission by itself — naming a relation in `edges` alone does not
@@ -37,7 +37,24 @@ grant, rather than leaving it at global scope.
 
 ## arrayMutation
 
-`strategy` (`"replace"`, `"resource"`, or `"jsonPatch"` — no built-in default) picks which write shape a `relations.edges.<name>.write: true` relation gets. All three are implemented. `false` for the whole `arrayMutation` key (instead of an object) disables the feature entirely; a relation still naming `write: true` under it — or under an object with no `strategy` set — is a bootstrap error.
+`strategy` (`"replace"`, `"resource"`, or `"jsonPatch"` — no built-in default) picks which write shape a `relations.edges.<name>.write: true` relation gets, unless that relation pins its own strategy directly with `write: { strategy }` — see `relations.edges.<name>.write` above. All three are implemented. `false` for the whole `arrayMutation` key (instead of an object) disables the feature entirely and wins over any per-relation override too; a relation still naming `write: true` or `write: { strategy }` under it — or `write: true` under an object with no `strategy` set anywhere — is a bootstrap error.
+
+Two relations on the same entity may use two different strategies:
+
+```ts
+@Kavo(Book, {
+  arrayMutation: { strategy: "replace" }, // the entity default
+  relations: {
+    edges: {
+      tags: { write: true }, // inherits "replace"
+      photos: { write: { strategy: "jsonPatch" } }, // pins its own strategy
+    },
+  },
+})
+class BookController {}
+```
+
+Opting even one relation into `"jsonPatch"` this way turns on RFC 6902 body parsing for `patchOne` across the **whole entity** — the same as declaring `arrayMutation.strategy: "jsonPatch"` at entity scope does — not just for that one relation.
 
 `"replace"` gives each write-opted to-many relation `PUT /<entity>/:id/<relation>`, generated the same way every other route is (one registry entry per relation, at `@Kavo` decoration time). The body is a full replacement array — ids, `{id}` references, or `null` — still id-only per [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes), with partial mutation disabled outright: no `{ add: [...] }`/`{ remove: [...] }` shape, no patch ops. Any other top-level body shape is a `400 KAVO_ARRAY_MUTATION_INVALID_SHAPE`. The response is the parent entity's own `item` shape, not the relation's member list.
 

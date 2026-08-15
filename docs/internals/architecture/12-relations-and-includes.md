@@ -169,9 +169,16 @@ relation object is narrowed to the id rather than half-honored.
 
 ADR-0014's named extension point — an explicit per-relation write policy —
 is `KavoSettings.arrayMutation: { strategy } | false`, resolved through the
-usual precedence chain, plus a per-relation opt-in:
-`relations.edges.<name>.write: true`. A relation not opted in keeps the
-plain associate-by-id behavior above; nothing here changes for it.
+usual precedence chain as the entity's own default, plus a per-relation
+opt-in: `relations.edges.<name>.write: true`. A relation not opted in keeps
+the plain associate-by-id behavior above; nothing here changes for it.
+
+The opt-in has a second spelling since issue #223 (ADR-0029's per-relation
+amendment): `write: { strategy }` opts in **and** pins that one relation's
+own strategy, overriding the entity default — so two relations on the same
+entity can use two different strategies (one `replace`, another `resource`,
+say). `write: true` still means exactly what it always did: inherit the
+entity's own resolved `arrayMutation.strategy`.
 
 Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` —
 and all three are implemented today.
@@ -323,9 +330,27 @@ bootstrap posture `replace`'s `EntityWriter.replaceRelation` check has.
 entity resolved `arrayMutation.strategy` to `"jsonPatch"` — the two
 strategies' write surfaces stay mutually exclusive per entity.
 
-See **ADR-0029** and its resource amendment for the full design, including
-why the non-`@kavo/typeorm` adapters are deliberately out of scope for now
-for both `jsonPatch` and `resource`.
+### Per-relation strategy (issue #223, ADR-0029's per-relation amendment)
+
+Every rule above ("relation whose entity resolved `arrayMutation.strategy`
+to X") now reads as "relation whose own resolved strategy is X" — each
+relation's strategy is resolved individually (`write: true` inherits the
+entity default, `write: { strategy }` pins its own), and the three
+strategies' route surfaces stay mutually exclusive **per relation**, not
+just per entity. `createCrud` groups an entity's write-opted relations by
+their own resolved strategy and only runs the adapter capability check each
+group actually needs — a `replace`-and-`resource` entity never demands
+`resource`'s four primitives for its `replace`-strategy relation.
+
+The one cross-relation effect that survives: opting a single relation into
+`jsonPatch` still turns on RFC 6902 body parsing for `patchOne` across the
+whole entity (scalar `/<field>` ops included), the same as declaring
+`arrayMutation.strategy: "jsonPatch"` at entity scope always did — that was
+never a per-relation question, since `patchOne`'s route itself is shared.
+
+See **ADR-0029** and its resource, jsonPatch, and per-relation amendments
+for the full design, including why the non-`@kavo/typeorm` adapters are
+deliberately out of scope for now for both `jsonPatch` and `resource`.
 
 ## 6. Not included
 

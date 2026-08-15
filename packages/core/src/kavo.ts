@@ -143,47 +143,51 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         resolved.entityName,
       );
       requireSoftDeletable(resolved, registry);
-      const arrayMutationRelations = resolved.relations
-        .all()
-        .filter((relation) => relation.write === true)
-        .map((relation) => relation.name);
-      if (arrayMutationRelations.length > 0) {
-        requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
-        // `validateArrayMutationRelations` (resolve-entity-config.ts) already
-        // rejected both `arrayMutation: false` and an unset `strategy` under
-        // a write-opted relation (issue #221 amends ADR-0029: no built-in
-        // default), so a non-empty `arrayMutationRelations` guarantees the
-        // strategy resolved to one of the three implemented ones here.
-        const strategy = (
-          resolved.settings.arrayMutation as { readonly strategy: "replace" | "resource" | "jsonPatch" }
-        ).strategy;
-        if (strategy === "replace") {
-          requireArrayMutationSupport(
-            resolved,
-            arrayMutationRelations,
-            adapter as unknown as RepositoryAdapter<Entity>,
-          );
-          registerArrayMutationOperations<Entity>(registry, arrayMutationRelations, resolved.entityName, "replace", {
-            // `replaceRelation` is confirmed present by
-            // `requireArrayMutationSupport` above, once, at bootstrap —
-            // never per request.
-            replace: (relationName) => ({
-              execute: (input: unknown, context) => {
-                const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
-                return context.repository.replaceRelation!(id, relationName, memberIds, context);
-              },
-            }),
-          });
-        } else if (strategy === "resource") {
+      // Grouped by each relation's own *resolved* strategy (ADR-0029's
+      // per-relation amendment, issue #223) — `resolved.relations` already
+      // carries that resolution (`DefaultRelationRegistry`), so a mixed
+      // entity only demands the adapter primitives its relations actually
+      // use, and only registers the route shape each relation's own
+      // strategy needs.
+      const writeOptedRelations = resolved.relations.all().filter((relation) => relation.write !== undefined);
+      if (writeOptedRelations.length > 0) {
+        const names = writeOptedRelations.map((relation) => relation.name);
+        requireArrayMutationTargetsResolvable(resolved, names, catalog);
+        const byStrategy = (strategy: "replace" | "resource" | "jsonPatch"): readonly string[] =>
+          writeOptedRelations.filter((relation) => relation.write === strategy).map((relation) => relation.name);
+        const replaceRelations = byStrategy("replace");
+        const resourceRelations = byStrategy("resource");
+        const jsonPatchRelations = byStrategy("jsonPatch");
+
+        if (replaceRelations.length > 0) {
+          requireArrayMutationSupport(resolved, replaceRelations, adapter as unknown as RepositoryAdapter<Entity>);
+        }
+        if (resourceRelations.length > 0) {
           requireResourceArrayMutationSupport(
             resolved,
-            arrayMutationRelations,
+            resourceRelations,
             adapter as unknown as RepositoryAdapter<Entity>,
           );
-          registerArrayMutationOperations<Entity>(registry, arrayMutationRelations, resolved.entityName, "resource", {
-            // Every primitive below is confirmed present by
-            // `requireResourceArrayMutationSupport` above, once, at
-            // bootstrap — never per request.
+        }
+        if (jsonPatchRelations.length > 0) {
+          requireJsonPatchSupport(resolved, jsonPatchRelations, adapter as unknown as RepositoryAdapter<Entity>);
+        }
+
+        // `jsonPatch` relations synthesize no route/operation here — they
+        // reuse `patchOne`'s existing route instead (ADR-0029's jsonPatch
+        // amendment), so only `replace`/`resource` relations feed this call.
+        // One call, one full handler-factory set: a factory is keyed by
+        // *action*, not strategy, so the same four factories serve a
+        // `replace`-strategy relation (which only ever reaches `replace`)
+        // and a `resource`-strategy one (which reaches all four) alike.
+        const routedRelations = [
+          ...replaceRelations.map((name) => ({ name, strategy: "replace" as const })),
+          ...resourceRelations.map((name) => ({ name, strategy: "resource" as const })),
+        ];
+        if (routedRelations.length > 0) {
+          registerArrayMutationOperations<Entity>(registry, routedRelations, resolved.entityName, {
+            // Every primitive below is confirmed present by the capability
+            // checks above, once, at bootstrap — never per request.
             replace: (relationName) => ({
               execute: (input: unknown, context) => {
                 const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
@@ -208,8 +212,6 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
               },
             }),
           });
-        } else {
-          requireJsonPatchSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
         }
       }
 

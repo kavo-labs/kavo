@@ -95,14 +95,28 @@ export interface RelationEdgeSettings {
    * Opts this relation into `arrayMutation` writes (ADR-0014's named
    * extension point) — the per-relation half of the policy, `arrayMutation`
    * itself is the strategy half. Only meaningful on a to-many relation;
-   * `write: true` on a to-one relation is a bootstrap `ConfigurationException`
-   * (`resolve-entity-config.ts`), since association by id already covers
-   * to-one writes and there is no array to mutate. Like `defaultInclude`,
-   * this is a permission a relation must be granted explicitly — it is
-   * independent of `allowlists.includable` (a relation can be write-opted-in
-   * without being read-includable, or vice versa).
+   * `write: true`/`write: {...}` on a to-one relation is a bootstrap
+   * `ConfigurationException` (`DefaultRelationRegistry`), since association
+   * by id already covers to-one writes and there is no array to mutate.
+   * Like `defaultInclude`, this is a permission a relation must be granted
+   * explicitly — it is independent of `allowlists.includable` (a relation
+   * can be write-opted-in without being read-includable, or vice versa).
+   *
+   * Two spellings (issue #223, ADR-0029's per-relation amendment):
+   * - `true` — opt in, strategy inherited from this entity's own resolved
+   *   `arrayMutation.strategy`. The original, entity-wide-only behavior.
+   * - `{ strategy }` — opt in *and* pin this relation's own strategy,
+   *   overriding whatever the entity resolves to. Two relations on the same
+   *   entity can this way use two different strategies (e.g. one `replace`,
+   *   another `jsonPatch`) — `arrayMutation.strategy` above still supplies
+   *   the default for any relation that just says `write: true`.
+   *
+   * `arrayMutation: false` at entity scope disables the feature wholesale
+   * and wins over any per-relation override — a relation cannot re-enable
+   * array-mutation writes for itself while its entity has them off
+   * (`DefaultRelationRegistry`).
    */
-  readonly write?: boolean;
+  readonly write?: boolean | { readonly strategy: ArrayMutationStrategy };
 }
 
 /** Relation inclusion limits and per-relation loading tuning. */
