@@ -817,6 +817,86 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       });
     });
 
+    // `photos` opts into `resource` (ADR-0029's resource amendment) rather
+    // than `tags`'s `replace` (issue #223's per-relation amendment) — two
+    // different array-mutation strategies, live on the same entity.
+    describe("GET/POST/DELETE/PUT /cats/:id/photos (arrayMutation's resource strategy, issue #223)", () => {
+      async function createPhoto(url: string): Promise<number> {
+        return (await request(server()).post("/photos").send({ url }).expect(201)).body.id as number;
+      }
+
+      async function createCat(photos: number[] = []): Promise<number> {
+        const cat = await request(server())
+          .post("/cats")
+          .send({ name: "Snapshot", age: 2, size: "small", indoor: true, livesLeft: 9, photos })
+          .expect(201);
+        return cat.body.id as number;
+      }
+
+      it("GET :id/photos lists current membership, forced onto the response", async () => {
+        const photoId = await createPhoto("a.png");
+        const catId = await createCat([photoId]);
+
+        const response = await request(server()).get(`/cats/${catId}/photos`).expect(200);
+        expect(response.body).toMatchObject({ id: catId, name: "Snapshot" });
+        expect((response.body.photos as { id: number }[]).map((photo) => photo.id)).toEqual([photoId]);
+      });
+
+      it("POST :id/photos adds one member by id", async () => {
+        const photoId = await createPhoto("b.png");
+        const catId = await createCat();
+
+        await request(server()).post(`/cats/${catId}/photos`).send({ id: photoId }).expect(200);
+
+        const fetched = await request(server()).get(`/cats/${catId}/photos`).expect(200);
+        expect((fetched.body.photos as { id: number }[]).map((photo) => photo.id)).toEqual([photoId]);
+      });
+
+      it("POST :id/photos 404s for a member id with no matching row", async () => {
+        const catId = await createCat();
+        await request(server()).post(`/cats/${catId}/photos`).send({ id: 999999 }).expect(404);
+      });
+
+      it("DELETE :id/photos removes one member by id, the body naming it", async () => {
+        const photoA = await createPhoto("c.png");
+        const photoB = await createPhoto("d.png");
+        const catId = await createCat([photoA, photoB]);
+
+        await request(server()).delete(`/cats/${catId}/photos`).send({ id: photoA }).expect(200);
+
+        const fetched = await request(server()).get(`/cats/${catId}/photos`).expect(200);
+        expect((fetched.body.photos as { id: number }[]).map((photo) => photo.id)).toEqual([photoB]);
+      });
+
+      it("DELETE :id/photos 404s (KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND) for an id that is not currently a member", async () => {
+        const photoId = await createPhoto("e.png");
+        const catId = await createCat();
+
+        const response = await request(server()).delete(`/cats/${catId}/photos`).send({ id: photoId }).expect(404);
+        expect(response.body.code).toBe("KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND");
+      });
+
+      it("PUT :id/photos still replaces the whole array, the same replace semantics tags's own PUT uses", async () => {
+        const photoA = await createPhoto("f.png");
+        const photoB = await createPhoto("g.png");
+        const catId = await createCat([photoA]);
+
+        await request(server()).put(`/cats/${catId}/photos`).send([photoB]).expect(200);
+
+        const fetched = await request(server()).get(`/cats/${catId}/photos`).expect(200);
+        expect((fetched.body.photos as { id: number }[]).map((photo) => photo.id)).toEqual([photoB]);
+      });
+
+      it("documents all four routes in the OpenAPI schema", () => {
+        const document = SwaggerModule.createDocument(getApp(), new DocumentBuilder().build());
+        const path = document.paths["/cats/{id}/photos"];
+        expect(path).toHaveProperty("get");
+        expect(path).toHaveProperty("post");
+        expect(path).toHaveProperty("delete");
+        expect(path).toHaveProperty("put");
+      });
+    });
+
     it("keeps include=tags an opt-in allowlist entry, not a free pass", async () => {
       // Dogs never declared `tags` includable — same allowlist rule as any
       // other relation.
