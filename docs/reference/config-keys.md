@@ -52,12 +52,12 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 
 ## arrayMutation
 
-| Key                      | Type                                     | Default                   |
-| ------------------------ | ---------------------------------------- | ------------------------- |
-| `arrayMutation`          | `{ strategy } \| false`                  | `{ strategy: "replace" }` |
-| `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | `"replace"`               |
+| Key                      | Type                                     | Default                     |
+| ------------------------ | ---------------------------------------- | --------------------------- |
+| `arrayMutation`          | `{ strategy } \| false`                  | `{}`                        |
+| `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | unset (no built-in default) |
 
-`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. See [Relations#arrayMutation](/features/relations#arraymutation).
+`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. A relation opted into `relations.edges.<name>.write: true` requires `arrayMutation.strategy` to be declared explicitly — no built-in default resolves it (issue #221). See [Relations#arrayMutation](/features/relations#arraymutation).
 
 ## caching
 
