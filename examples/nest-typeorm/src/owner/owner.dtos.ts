@@ -21,6 +21,7 @@ export class DogItemDto {
   size = enumProp(Object.values(PetSizeEnum), { example: PetSizeEnum.Medium });
   breed = "";
   goodBoy = false;
+  attributes: Record<string, unknown> | null = null;
   createdAt: Date = new Date(0);
 }
 

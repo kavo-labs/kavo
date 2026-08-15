@@ -610,6 +610,102 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(fido).toMatchObject({ name: "Fido", breed: "Beagle" });
     });
 
+    describe("JSON column (Dog.attributes, entity-derived DTOs)", () => {
+      it("round-trips an arbitrary JSON object through POST and GET", async () => {
+        const attributes = { color: "brown", tags: ["fluffy", "loud"], nested: { weightKg: 12.5 } };
+        const created = await request(server())
+          .post("/dogs")
+          .send({ name: "Buddy", age: 3, breed: "Beagle", goodBoy: true, attributes })
+          .expect(201);
+        expect(created.body.attributes).toEqual(attributes);
+
+        const fetched = await request(server()).get(`/dogs/${created.body.id}`).expect(200);
+        expect(fetched.body.attributes).toEqual(attributes);
+      });
+
+      it("defaults to null when the JSON column is omitted on create, and round-trips an explicit null", async () => {
+        const omitted = await request(server())
+          .post("/dogs")
+          .send({ name: "Max", age: 2, breed: "Pug", goodBoy: true })
+          .expect(201);
+        expect(omitted.body.attributes).toBeNull();
+
+        const explicit = await request(server())
+          .post("/dogs")
+          .send({ name: "Zeus", age: 5, breed: "Husky", goodBoy: false, attributes: null })
+          .expect(201);
+        expect(explicit.body.attributes).toBeNull();
+      });
+
+      it("PUT replaces the whole JSON value rather than deep-merging it", async () => {
+        const created = await request(server())
+          .post("/dogs")
+          .send({ name: "Rex", age: 4, breed: "Boxer", goodBoy: true, attributes: { color: "black", size: "large" } })
+          .expect(201);
+        const id = created.body.id as number;
+
+        const updated = await request(server())
+          .put(`/dogs/${id}`)
+          .send({ name: "Rex", age: 4, breed: "Boxer", goodBoy: true, attributes: { color: "white" } })
+          .expect(200);
+        // `size` from the original value is gone, not preserved — a JSON
+        // column is one opaque value to `updateOne`, not a nested object to
+        // merge field-by-field.
+        expect(updated.body.attributes).toEqual({ color: "white" });
+
+        const cleared = await request(server())
+          .put(`/dogs/${id}`)
+          .send({ name: "Rex", age: 4, breed: "Boxer", goodBoy: true, attributes: null })
+          .expect(200);
+        expect(cleared.body.attributes).toBeNull();
+      });
+
+      it("PATCH replaces the JSON value while leaving sibling columns untouched", async () => {
+        const created = await request(server())
+          .post("/dogs")
+          .send({ name: "Duke", age: 6, breed: "Collie", goodBoy: true, attributes: { mood: "happy" } })
+          .expect(201);
+        const id = created.body.id as number;
+
+        const patched = await request(server())
+          .patch(`/dogs/${id}`)
+          .send({ attributes: { mood: "sleepy", energy: 2 } })
+          .expect(200);
+        expect(patched.body).toMatchObject({
+          name: "Duke",
+          breed: "Collie",
+          attributes: { mood: "sleepy", energy: 2 },
+        });
+
+        // Omitting the JSON field on a subsequent patch leaves it as-is —
+        // the same partial-field awareness `postalCode` gets on `Address`.
+        const untouched = await request(server()).patch(`/dogs/${id}`).send({ goodBoy: false }).expect(200);
+        expect(untouched.body).toMatchObject({ goodBoy: false, attributes: { mood: "sleepy", energy: 2 } });
+      });
+
+      it("round-trips a top-level JSON array, not just a JSON object", async () => {
+        const created = await request(server())
+          .post("/dogs")
+          .send({ name: "Milo", age: 1, breed: "Corgi", goodBoy: true, attributes: ["a", "b", "c"] })
+          .expect(201);
+        expect(created.body.attributes).toEqual(["a", "b", "c"]);
+
+        const fetched = await request(server()).get(`/dogs/${created.body.id}`).expect(200);
+        expect(fetched.body.attributes).toEqual(["a", "b", "c"]);
+      });
+
+      it("rejects filtering on the JSON column as a value-level 400, not a silent no-op (json columns cannot be compared)", async () => {
+        const response = await request(server())
+          .get("/dogs")
+          .query("filter[attributes][eq]=x")
+          .expect(400)
+          .expect("Content-Type", /application\/problem\+json/);
+        expect(response.body.errors).toEqual([
+          expect.objectContaining({ field: "attributes", code: "KAVO_QUERY_INVALID_VALUE" }),
+        ]);
+      });
+    });
+
     it("associates tags by id and embeds them via a batched many-to-many include", async () => {
       const tagA = await request(server()).post("/tags").send({ name: "playful" }).expect(201);
       const tagB = await request(server()).post("/tags").send({ name: "lazy" }).expect(201);
