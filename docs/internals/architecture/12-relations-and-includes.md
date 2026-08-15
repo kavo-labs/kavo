@@ -222,9 +222,13 @@ it, since there is no static route table for a dynamic per-relation id).
   strategy — same body shape, same `ArrayMutationInvalidShapeException` on
   a malformed one, same response.
 - `list<Relation>` takes no body (an ordinary read) and returns the parent
-  entity with the relation loaded, the same "parent, not the member list"
-  response contract every array-mutation operation has — the loaded
-  relation field _is_ the current membership.
+  entity, but — unlike `add`/`remove`/`replace<Relation>`, which keep the
+  ordinary "parent only, nothing grafted on" contract byte-for-byte — with
+  the relation itself forced onto the response through the existing
+  include-projection machinery, bypassing `allowlists.includable`: the
+  operation's entire purpose is showing that relation's current membership,
+  so a relation opted into `write` but never into `includable` must still
+  appear here even though it can never be reached with `?include=`.
 - `add<Relation>`/`remove<Relation>` each take a single scalar id or `{id}`
   reference as the body — never an array (that shape is `replace`'s own
   surface) and never absent; either violation raises

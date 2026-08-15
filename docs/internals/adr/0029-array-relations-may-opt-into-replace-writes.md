@@ -293,19 +293,26 @@ under its own code rather than a reused one: a `resource` client's
 exception's own `"JSON Patch target not found"` title at it would name the
 wrong feature in the response.
 
-**The response shape.** All four operations keep the "parent, not the
-relation's own member list" contract the original decision states for
-`replace`: `add`/`remove`/`replace<Relation>` return the parent entity with
-`relation` loaded, serialized through the entity's own `item` DTO slot.
-`list<Relation>` is not the exception it might look like — it returns the
-same parent-with-relation-loaded shape rather than a `list` envelope over
-the related entity's own DTO, which would need the cross-entity
-serialization machinery the original decision's Consequences section
-already named as deliberately out of scope. The loaded relation field on
-that response _is_ the current membership, so `list<Relation>` still
-answers the question its name promises; a later change can widen it to a
-dedicated list response without breaking the request shape, the same
-opening the original decision left for `replace`.
+**The response shape.** `add`/`remove`/`replace<Relation>` keep the exact
+"parent, not the relation's own member list" contract the original decision
+states for `replace`, byte-for-byte unchanged: the parent entity, projected
+through its own `item` DTO slot the way it always has been — an existing
+`replace`-strategy entity's response shape does not change by this
+amendment existing at all. `list<Relation>` is not held to that same
+contract, because holding it there would make the operation unable to
+answer the question its own name promises: `KavoEngine`'s response mapping
+forces exactly one include node onto `list<Relation>`'s response alone
+(`contextForArrayMutationResponse`), reusing the existing include-projection
+machinery — not new cross-entity serialization machinery — but applying it
+unconditionally rather than waiting on a client `include=` that this
+operation has no query parameter to carry, and bypassing
+`allowlists.includable` on purpose: `write` and `includable` are
+independent opt-ins, so a relation opted into `write` but never into
+`includable` must still appear on the one response whose entire purpose is
+showing that relation's membership. `add`/`remove`/`replace<Relation>` do
+not get this treatment — a later change could extend it to them without
+breaking the request shape, the same opening the original decision left for
+`replace`, but this amendment does not take it.
 
 **The adapter seam.** `EntityWriter` gains three more optional primitives
 beyond `replaceRelation` — `readRelation`, `addRelationMember`,
