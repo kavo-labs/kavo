@@ -301,7 +301,7 @@ function serviceProvider(metadata: KavoControllerMetadata): Provider {
  * specific wins"), so the only way to reach the gap above is the
  * undeclared-and-relying-on-a-global-default case.
  */
-function requireArrayMutationStrategyAgreement(
+function requireArrayMutationRouteReachable(
   metadata: KavoControllerMetadata,
   service: {
     readonly engine: {
@@ -359,7 +359,7 @@ class KavoBinder implements OnModuleInit {
       const metadata = Reflect.getMetadata(KAVO_CONTROLLER_METADATA, metatype) as KavoControllerMetadata | undefined;
       if (metadata === undefined) continue;
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
-      requireArrayMutationStrategyAgreement(metadata, service);
+      requireArrayMutationRouteReachable(metadata, service);
       instance[KAVO_SERVICE_PROPERTY] = service;
       instance[KAVO_PRINCIPAL_PROPERTY] = extractPrincipal;
 

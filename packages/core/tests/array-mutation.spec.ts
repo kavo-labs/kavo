@@ -9,7 +9,17 @@ import {
   replaceRelationOperationId,
   writeOptedInRelationNames,
 } from "@kavo/core";
+import type { EntityMetadata } from "@kavo/core";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
+
+/** `authorMetadata` plus a second to-many relation, for the "which relation gets named" tests below. */
+const authorMetadataTwoRelations: EntityMetadata<Author> = {
+  ...authorMetadata,
+  relations: [
+    ...authorMetadata.relations,
+    { name: "favorites", target: () => Post as never, cardinality: "many", includable: false, strategy: "auto" },
+  ],
+};
 
 /** `SeededAdapter` plus the one write `arrayMutation`'s `replace` strategy needs. */
 class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter<Entity> {
@@ -151,6 +161,28 @@ describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", 
         path: "relations.edges.posts.write",
       });
       expect((error as ConfigurationException).message).toContain("arrayMutation.strategy");
+    }
+  });
+
+  it("names only the first offending relation when several opt into write with no strategy resolved (first-wins, not a naming-all-of-them guarantee)", () => {
+    try {
+      createKavo().createCrud(
+        Author,
+        { relations: { edges: { posts: { write: true }, favorites: { write: true } } } } as never,
+        {
+          adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
+          metadata: authorMetadataTwoRelations,
+        },
+      );
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      // `relations.all()` iteration order is declaration order, so `posts`
+      // (declared first on `authorMetadata`) is the one named — `favorites`
+      // is not mentioned even though it is equally unresolved.
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.edges.posts.write",
+      });
     }
   });
 
