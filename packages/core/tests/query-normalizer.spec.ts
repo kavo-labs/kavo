@@ -4,6 +4,7 @@ import {
   ConfigurationException,
   DefaultEntityCatalog,
   DefaultIncludeResolver,
+  NONE_PAGINATION_LIMIT,
   QueryNormalizer,
   QueryValidationException,
   resolveEntityConfig,
@@ -122,6 +123,29 @@ describe("QueryNormalizer — wire params", () => {
   it("honors pagination.count=false", () => {
     const uncounted = resolveEntityConfig(userMetadata, { pagination: { count: false } }, undefined);
     expect(normalizer.normalizeWire({}, uncounted).count).toBe(false);
+  });
+
+  it("serves the whole match set under strategy 'none', ignoring configured defaultLimit/maxLimit", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const query = normalizer.normalizeWire({}, unpaginated);
+    expect(query.pagination).toEqual({ limit: NONE_PAGINATION_LIMIT, offset: 0 });
+  });
+
+  it("rejects an explicit limit/offset under strategy 'none' instead of silently narrowing", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const limitIssues = issuesOf(() => normalizer.normalizeWire({ limit: "5" }, unpaginated));
+    expect(limitIssues).toEqual([expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+    const offsetIssues = issuesOf(() => normalizer.normalizeWire({ offset: "5" }, unpaginated));
+    expect(offsetIssues).toEqual([expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+  });
+
+  it("collects both limit and offset into one exception under strategy 'none', not one round trip each", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const issues = issuesOf(() => normalizer.normalizeWire({ limit: "5", offset: "10" }, unpaginated));
+    expect(issues).toEqual([
+      expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+    ]);
   });
 
   it("falls back to the configured defaultSort when the client supplies no sort", () => {
@@ -585,6 +609,29 @@ describe("QueryNormalizer — programmatic input", () => {
     );
     const query = normalizer.normalizeInput({ sort: [{ field: "name", direction: "asc" }] }, defaulted);
     expect(query.sort).toEqual([{ field: "name", direction: "asc" }]);
+  });
+
+  it("serves the whole match set under strategy 'none', the same as the wire path", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const query = normalizer.normalizeInput({}, unpaginated);
+    expect(query.pagination).toEqual({ limit: NONE_PAGINATION_LIMIT, offset: 0 });
+  });
+
+  it("rejects an explicit limit/offset under strategy 'none' rather than silently clamping it", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const limitIssues = issuesOf(() => normalizer.normalizeInput({ limit: 5 }, unpaginated));
+    expect(limitIssues).toEqual([expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+    const offsetIssues = issuesOf(() => normalizer.normalizeInput({ offset: 5 }, unpaginated));
+    expect(offsetIssues).toEqual([expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+  });
+
+  it("collects both limit and offset into one exception under strategy 'none', not one round trip each", () => {
+    const unpaginated = resolveEntityConfig(userMetadata, { pagination: { strategy: "none" } }, undefined);
+    const issues = issuesOf(() => normalizer.normalizeInput({ limit: 5, offset: 10 }, unpaginated));
+    expect(issues).toEqual([
+      expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+    ]);
   });
 });
 

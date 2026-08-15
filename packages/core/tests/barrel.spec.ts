@@ -144,6 +144,8 @@ const PUBLIC_SURFACE: readonly string[] = [
   "ListResultDto",
   "LogicalOperator",
   "MetadataSource",
+  "NONE_PAGINATION_LIMIT",
+  "NonePaginationStrategy",
   "NormalizedQueryContext",
   "NotDeletedException",
   "NotFoundException",

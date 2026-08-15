@@ -14,7 +14,7 @@ import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
 import { resolvePrincipalExtractor } from "./principal.js";
-import { applyConditionalRequestDocs, applySearchQueryDocs } from "./swagger.js";
+import { applyConditionalRequestDocs, applyPaginationDocs, applySearchQueryDocs } from "./swagger.js";
 import {
   KAVO_INSTANCE,
   KAVO_MODULE_OPTIONS,
@@ -403,6 +403,10 @@ class KavoBinder implements OnModuleInit {
             settings.query.search.enabled,
             service.engine.config.allowlists.searchable as readonly string[],
           );
+          // `limit`/`offset` docs (issue #225) — deferred for the same
+          // reason as the two above (`applyPaginationDocs`'s doc comment):
+          // `pagination.strategy` needs the full precedence chain too.
+          applyPaginationDocs(prototype, methodName, descriptor, settings.pagination.strategy);
         }
       }
     }

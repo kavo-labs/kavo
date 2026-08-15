@@ -1191,4 +1191,87 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(response.body.code).toBe("KAVO_NOT_FOUND");
     });
   });
+
+  /**
+   * `TagController` sets `pagination: { strategy: "none" }` (issue #225):
+   * `/tags` is a small lookup table that should never be paginated.
+   */
+  describe("Tag: pagination.strategy 'none' (issue #225)", () => {
+    it("serves every tag in one response, unbounded by the default 20-row page", async () => {
+      // More than the built-in `defaultLimit` (20) and `maxLimit` (100) an
+      // ordinary offset-paginated entity would clamp to — proof that
+      // neither applies here.
+      const created: number[] = [];
+      for (let i = 0; i < 25; i++) {
+        const tag = await request(server())
+          .post("/tags")
+          .send({ name: `unbounded-${i}` })
+          .expect(201);
+        created.push(tag.body.id as number);
+      }
+
+      const response = await request(server()).get("/tags").expect(200);
+      // Every tag ever created in this run is still present (no reset
+      // between tests) — `items.length` equals `total`, never a clamped
+      // subset of it, which is what would happen under ordinary pagination.
+      // `total` itself is asserted past `defaultLimit` (20): otherwise this
+      // test would pass just as well against an ordinary offset-paginated
+      // entity whose `total` happens to be small.
+      expect(response.body.total).toBeGreaterThan(20);
+      expect(response.body.items.length).toBe(response.body.total);
+      const ids = response.body.items.map((tag: { id: number }) => tag.id);
+      for (const id of created) expect(ids).toContain(id);
+    });
+
+    it("rejects an explicit limit as unsupported, rather than silently paginating anyway", async () => {
+      const response = await request(server())
+        .get("/tags")
+        .query("limit=5")
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      ]);
+    });
+
+    it("rejects an explicit offset as unsupported, rather than silently paginating anyway", async () => {
+      const response = await request(server())
+        .get("/tags")
+        .query("offset=5")
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      ]);
+    });
+
+    it("collects both limit and offset into one 400 when both are sent, not one round trip each", async () => {
+      const response = await request(server())
+        .get("/tags")
+        .query("limit=5&offset=10")
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+        expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      ]);
+    });
+
+    it("still composes with filter/sort — only limit/offset are off the table", async () => {
+      await request(server()).post("/tags").send({ name: "sortable-zzz" }).expect(201);
+      await request(server()).post("/tags").send({ name: "sortable-aaa" }).expect(201);
+      const filtered = await request(server())
+        .get("/tags")
+        .query("filter[name][like]=sortable-%25&sort=name")
+        .expect(200);
+      expect(filtered.body.items.map((tag: { name: string }) => tag.name)).toEqual(["sortable-aaa", "sortable-zzz"]);
+    });
+
+    it("documents limit/offset as unsupported in the OpenAPI schema", () => {
+      const document = SwaggerModule.createDocument(getApp(), new DocumentBuilder().build());
+      const params = (document.paths["/tags"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+      expect(params.find((param) => param.name === "limit")?.description).toContain("pagination.strategy' is 'none'");
+      expect(params.find((param) => param.name === "offset")?.description).toContain("pagination.strategy' is 'none'");
+    });
+  });
 }

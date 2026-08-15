@@ -346,6 +346,10 @@ const config = defineConfig({
                 text: "0029 — Array relations may opt into replace writes",
                 link: "/internals/adr/0029-array-relations-may-opt-into-replace-writes",
               },
+              {
+                text: "0030 — 'none' pagination strategy opts a resource out entirely",
+                link: "/internals/adr/0030-none-pagination-strategy-opts-a-resource-out-entirely",
+              },
             ],
           },
         ],

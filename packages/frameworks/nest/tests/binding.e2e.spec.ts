@@ -1619,6 +1619,21 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
     expect(params.find((param) => param.name === "limit")?.description).toBeUndefined();
     expect(params.find((param) => param.name === "offset")?.description).toBeUndefined();
   });
+
+  it("documents limit/offset as unsupported when the entity's own config declares pagination.strategy: 'none'", async () => {
+    @Kavo(Todo, { pagination: { strategy: "none" } })
+    @Controller("todos")
+    class UnpaginatedController {}
+
+    await app.close();
+    await bootstrap(UnpaginatedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const expected =
+      "Not supported: this entity does not paginate ('pagination.strategy' is 'none') — every request serves the whole match set.";
+    expect(params.find((param) => param.name === "limit")?.description).toBe(expected);
+    expect(params.find((param) => param.name === "offset")?.description).toBe(expected);
+  });
 });
 
 /**

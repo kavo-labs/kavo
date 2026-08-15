@@ -15,11 +15,19 @@ import type { RealtimeTransport } from "../realtime/realtime-transport.js";
  */
 
 /** Built-in pagination strategy names; open for custom strategies. */
-export type PaginationStrategyName = "offset" | "page" | "cursor" | "since" | (string & {});
+export type PaginationStrategyName = "offset" | "page" | "cursor" | "since" | "none" | (string & {});
 
 export interface PaginationSettings {
   readonly defaultLimit: number;
   readonly maxLimit: number;
+  /**
+   * `"none"` (ADR-0030) opts the entity out of pagination altogether —
+   * `findMany` serves the whole match set every time, `defaultLimit`/
+   * `maxLimit` are unused, and a client-sent `limit`/`offset` is rejected
+   * outright rather than silently ignored (`NonePaginationStrategy`,
+   * `pagination-strategies.ts`). It composes with no other strategy: this
+   * key picks exactly one.
+   */
   readonly strategy: PaginationStrategyName;
   /** Whether list responses compute `total` (the count query). */
   readonly count: boolean;

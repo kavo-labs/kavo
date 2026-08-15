@@ -49,6 +49,22 @@ Three things cursor pagination does **not** support:
 
 Finally, the **GraphQL and MCP bindings cannot page a cursor- or since-configured entity.** Both expose `limit`/`offset` only, and a keyset page ignores `offset`, so binding one would answer every paged query with the first page (or, under `since`, everything from the beginning). They refuse at bootstrap with a configuration error instead. Page those entities over REST, or give them an entity-scope `pagination.strategy` of `"offset"`/`"page"`.
 
+## No pagination
+
+```http
+GET /countries
+```
+
+For entities configured with `pagination.strategy: "none"`, `findMany` always serves the whole match set — the escape hatch for a resource that should never be paginated, like a small lookup/reference table. There is no configured ceiling to raise: `defaultLimit`/`maxLimit` go unused entirely under this strategy.
+
+Things to know:
+
+- **`limit`/`offset` are rejected, not ignored.** Sending either is a 400 (`KAVO_QUERY_UNSUPPORTED_PARAM`) naming the param — the same "wrong strategy, told, not silently narrowed" treatment `cursor`/`since` params get under any other strategy. A client that thinks it is getting a page should be told it is not.
+- **The envelope's `limit` is not a real page size.** The response shape is fixed (`items`, `limit`, `offset`, `total`, `meta`), so `limit` still has to report _something_ — it reports `2147483647` (`2^31 - 1`, the largest value every consumer in the workspace — every SQL `LIMIT`, GraphQL's `Int`, MongoDB's int32 limit — can carry without its own ceiling). Read `items.length` for the actual count returned. `offset` is always `0`.
+- **`total` still respects `pagination.count`,** the same as every other strategy — it is not implied by `items.length` being the same number; `count: false` still turns the extra `COUNT` query off.
+- **Kavo never owns your schema.** Nothing here warns you when a table this is configured on has grown past what one response should reasonably carry — that judgment call is yours to make when you opt an entity in.
+- **Everything else composes normally.** Unlike `cursor`/`since`, this is not a keyset strategy — `filter`/`sort`/`include`/`search` all work exactly as they do under `offset`; only `limit`/`offset` are off the table.
+
 ## Since (seek-by-timestamp) pagination
 
 ```http
