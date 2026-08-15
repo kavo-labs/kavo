@@ -211,7 +211,7 @@ describe("registerArrayMutationOperations / replaceRelationOperationId / writeOp
 
   it("registers one write operation per relation, carrying meta.arrayMutation", () => {
     const registry = new DefaultOperationRegistry<Author>("Author");
-    registerArrayMutationOperations<Author>(registry, ["posts"], "Author");
+    registerArrayMutationOperations<Author>(registry, [{ name: "posts", strategy: "replace" }], "Author");
     const descriptor = registry.get("replacePosts");
     expect(descriptor?.kind).toBe("write");
     expect(descriptor?.cardinality).toBe("one");
@@ -221,7 +221,7 @@ describe("registerArrayMutationOperations / replaceRelationOperationId / writeOp
 
   it("registers an inspection-only handler when no handlerFactory is given", () => {
     const registry = new DefaultOperationRegistry<Author>("Author");
-    registerArrayMutationOperations<Author>(registry, ["posts"], "Author");
+    registerArrayMutationOperations<Author>(registry, [{ name: "posts", strategy: "replace" }], "Author");
     expect(() => registry.get("replacePosts")!.handler.execute(null, {} as never)).toThrowError(ConfigurationException);
   });
 });

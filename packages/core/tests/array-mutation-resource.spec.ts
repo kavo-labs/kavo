@@ -163,7 +163,7 @@ describe("registerArrayMutationOperations — resource strategy", () => {
 
   it("registers four operations per relation, each carrying its own meta.arrayMutation.action", () => {
     const registry = new DefaultOperationRegistry<Author>("Author");
-    registerArrayMutationOperations<Author>(registry, ["posts"], "Author", "resource");
+    registerArrayMutationOperations<Author>(registry, [{ name: "posts", strategy: "resource" }], "Author");
 
     const list = registry.get("listPosts");
     expect(list?.kind).toBe("read");
@@ -183,9 +183,9 @@ describe("registerArrayMutationOperations — resource strategy", () => {
     expect(replace?.meta.arrayMutation).toEqual({ relation: "posts", strategy: "resource", action: "replace" });
   });
 
-  it("only replace<Relation> is registered under the 'replace' strategy — the default", () => {
+  it("only replace<Relation> is registered under the 'replace' strategy", () => {
     const registry = new DefaultOperationRegistry<Author>("Author");
-    registerArrayMutationOperations<Author>(registry, ["posts"], "Author");
+    registerArrayMutationOperations<Author>(registry, [{ name: "posts", strategy: "replace" }], "Author");
     expect(registry.has("replacePosts")).toBe(true);
     expect(registry.has("listPosts")).toBe(false);
     expect(registry.has("addPosts")).toBe(false);

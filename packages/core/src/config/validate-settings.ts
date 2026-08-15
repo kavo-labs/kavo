@@ -113,7 +113,23 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected "join", "batch", or "auto", got ${JSON.stringify(edge.strategy)}`,
       );
     }
-    if (edge.write !== undefined) bool(`${path}.write`, edge.write);
+    if (edge.write !== undefined && typeof edge.write !== "boolean") {
+      if (typeof edge.write !== "object" || edge.write === null) {
+        throw new ConfigurationException(
+          entityName,
+          `${path}.write`,
+          `expected a boolean or { strategy: "replace" | "resource" | "jsonPatch" }, got ${JSON.stringify(edge.write)}`,
+        );
+      }
+      const strategy = edge.write.strategy;
+      if (strategy !== "replace" && strategy !== "resource" && strategy !== "jsonPatch") {
+        throw new ConfigurationException(
+          entityName,
+          `${path}.write.strategy`,
+          `expected "replace", "resource", or "jsonPatch", got ${JSON.stringify(strategy)}`,
+        );
+      }
+    }
     // `defaultInclude` vs. `allowlists.includable` (permission) is cross-
     // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
     // not here — this function only sees `KavoSettings`, and `allowlists`

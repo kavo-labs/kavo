@@ -70,6 +70,8 @@ export type { ProblemDetailsDto, QueryIssueDto } from "./errors/problem-details.
 // ── Configuration ─────────────────────────────────────────────────────
 export type {
   KavoSettings,
+  ArrayMutationSettings,
+  ArrayMutationStrategy,
   CachingSettings,
   ErrorSettings,
   PaginationSettings,
@@ -118,7 +120,11 @@ export { DefaultIncludeResolver } from "./relations/default-include-resolver.js"
 // resource amendment): `@kavo/nest`'s decorator needs these to generate the
 // same registry entries and sub-collection routes `createCrud` builds
 // (ADR-0013).
-export type { ArrayMutationAction, ArrayMutationHandlerFactories } from "./relations/array-mutation-operations.js";
+export type {
+  ArrayMutationAction,
+  ArrayMutationHandlerFactories,
+  ArrayMutationRelationEntry,
+} from "./relations/array-mutation-operations.js";
 export {
   addRelationOperationId,
   listRelationOperationId,

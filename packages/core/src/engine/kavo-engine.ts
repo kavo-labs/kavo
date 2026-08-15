@@ -615,9 +615,10 @@ export class KavoEngine<Entity extends object> {
    * or not, which is the overlap ADR-0029's jsonPatch amendment resolves
    * explicitly rather than silently: `DefaultDeserializer.deserialize`
    * already returns `{}` for a non-object/array body, so an array reaching
-   * an entity that never opted into `jsonPatch` sees that same unchanged
-   * behavior. Only when the resolved `arrayMutation` strategy is
-   * `"jsonPatch"` *and* the body is a bare array — the one shape an
+   * an entity that never opted into `jsonPatch` — at the entity level or on
+   * any of its relations (ADR-0029's per-relation amendment, issue #223) —
+   * sees that same unchanged behavior. Only when jsonPatch parsing is
+   * actually opted into *and* the body is a bare array — the one shape an
    * ordinary patch DTO body never is — does it parse as an RFC 6902
    * document instead.
    */
@@ -628,17 +629,29 @@ export class KavoEngine<Entity extends object> {
   ): unknown {
     const { deserializer } = this.deps;
     const id = this.coerceId(request.id);
+    // Cheapest check first: the overwhelmingly common object-body case
+    // short-circuits here without ever touching `context.config.relations`
+    // (`.all()` allocates a fresh array per call) — the relation scan below
+    // only runs for the rare array-body request.
+    if (!Array.isArray(request.body)) {
+      return { id, data: deserializer.deserialize(request.body, dto, context) };
+    }
     const arrayMutation = context.config.settings.arrayMutation;
-    if (arrayMutation === false || arrayMutation.strategy !== "jsonPatch" || !Array.isArray(request.body)) {
+    // Per-relation strategies (ADR-0029's per-relation amendment, issue
+    // #223) mean "does this entity accept a jsonPatch document?" is no
+    // longer answered by the entity-level default alone: an entity whose
+    // own `arrayMutation.strategy` is something else (or unset) still opts
+    // into jsonPatch parsing the moment *any* of its relations resolves to
+    // `"jsonPatch"`. Opting even one relation in this way changes
+    // `patchOne`'s body contract for the whole entity — an array body is now
+    // parsed as RFC 6902 for every writable field, not just that relation.
+    const jsonPatchRelations = context.config.relations.all().filter((relation) => relation.write === "jsonPatch");
+    const entityDefaultIsJsonPatch = arrayMutation !== false && arrayMutation.strategy === "jsonPatch";
+    if (!entityDefaultIsJsonPatch && jsonPatchRelations.length === 0) {
       return { id, data: deserializer.deserialize(request.body, dto, context) };
     }
 
-    const writeOptedRelations = new Set(
-      context.config.relations
-        .all()
-        .filter((relation) => relation.write === true)
-        .map((relation) => relation.name),
-    );
+    const writeOptedRelations = new Set(jsonPatchRelations.map((relation) => relation.name));
     const parsed = parseJsonPatchDocument(request.body, {
       entityName: context.entityName,
       writableFields: this.writableFieldNames,

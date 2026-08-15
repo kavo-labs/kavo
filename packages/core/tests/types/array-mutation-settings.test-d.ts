@@ -39,3 +39,31 @@ void invalid;
 // a value that's silently narrowed back to `"replace"`.
 declare const resolved: Exclude<ArrayMutation, false>;
 expectTypeOf(resolved.strategy).toEqualTypeOf<"replace" | "resource" | "jsonPatch" | undefined>();
+
+/**
+ * `RelationEdgeSettings.write`'s per-relation override (ADR-0029's
+ * per-relation amendment, issue #223): `boolean | { strategy }`, not just
+ * `boolean` — a relation can pin its own strategy instead of only ever
+ * inheriting the entity's.
+ */
+
+type RelationWrite = KavoSettings["relations"]["edges"][string]["write"];
+
+// The original boolean form is unchanged.
+const writeOn: RelationWrite = true;
+const writeOff: RelationWrite = false;
+void writeOn;
+void writeOff;
+
+// The new object form pins a strategy of its own.
+const writeReplace: RelationWrite = { strategy: "replace" };
+const writeResource: RelationWrite = { strategy: "resource" };
+const writeJsonPatch: RelationWrite = { strategy: "jsonPatch" };
+void writeReplace;
+void writeResource;
+void writeJsonPatch;
+
+// An unknown strategy inside the object form is still rejected.
+// @ts-expect-error - "bogus" is not one of the three implemented strategies
+const writeInvalid: RelationWrite = { strategy: "bogus" };
+void writeInvalid;
