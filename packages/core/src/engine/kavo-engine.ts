@@ -17,6 +17,7 @@ import type { RequestPreconditions } from "../caching/etag.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 import type { KavoSettings } from "../config/settings.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
+import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import {
   ArrayMutationInvalidShapeException,
   ConfigurationException,
@@ -39,7 +40,7 @@ import { createKavoContext, randomUuid } from "../context/default-kavo-context.j
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
 import { validateDefaultSort } from "../config/resolve-entity-config.js";
-import { resolveSoftDelete } from "../persistence/soft-delete.js";
+import { HARD_DELETE, resolveSoftDelete } from "../persistence/soft-delete.js";
 import type { FindManyResult } from "./built-in-handlers.js";
 
 /**
@@ -758,6 +759,65 @@ export class KavoEngine<Entity extends object> {
     return value;
   }
 
+  /**
+   * `list<Relation>`'s response (ADR-0029's resource amendment) is the
+   * parent entity, not the relation's own member list — but the relation it
+   * just read still has to show up *somewhere* on that parent, or
+   * `list<Relation>` cannot answer the question its name promises. The
+   * ordinary include mechanism only grafts a relation onto a response when
+   * `context.query.include` names it, and `list<Relation>` never populates
+   * one (it takes no query of its own) — so this forces exactly one include
+   * node onto a serialization-only context copy.
+   *
+   * Scoped to `action === "list"` alone, deliberately: `add`/`remove`/
+   * `replace<Relation>` keep the exact response shape `replace<Relation>`
+   * has always had — the parent alone, with no relation grafted on, per
+   * ADR-0029's original Consequences section — so an entity's existing
+   * `replace`-strategy behavior is byte-for-byte unchanged by this method
+   * existing at all.
+   *
+   * Bypasses `allowlists.includable` deliberately: `write` and
+   * `includable` are independent opt-ins (ADR-0029's own doc comment on
+   * `RelationEdgeSettings.write`), so a relation opted into `write` but
+   * never into `includable` must still appear on `list<Relation>`'s own
+   * response, whose entire purpose is showing that relation's membership.
+   */
+  private contextForArrayMutationResponse(
+    descriptor: OperationDescriptor<Entity>,
+    context: KavoContext<Entity>,
+  ): KavoContext<Entity> {
+    const arrayMutation = descriptor.meta.arrayMutation;
+    if (arrayMutation === undefined || arrayMutation.action !== "list") return context;
+    const relation = this.deps.config.relations.get(arrayMutation.relation);
+    if (relation === undefined) return context;
+    const node: IncludeNode = {
+      relation,
+      path: arrayMutation.relation,
+      fields: null,
+      strategy: relation.strategy === "auto" ? (relation.cardinality === "many" ? "batch" : "join") : relation.strategy,
+      // Never read by the serializer's projection step (only an adapter's
+      // own load decides what ends up in scope) — a neutral placeholder
+      // satisfies the type without implying a query-time decision was made.
+      softDelete: HARD_DELETE,
+      children: {},
+    };
+    const include: IncludeTree = { [arrayMutation.relation]: node };
+    // `list<Relation>` is `kind: "read"`, so `context.query` always exists
+    // by the time `mapResponse` runs — this fallback is defensive only,
+    // never actually reached on this path.
+    const query: NormalizedQueryContext<Entity> = context.query ?? {
+      filter: { root: null },
+      sort: [],
+      pagination: { limit: 0, offset: 0 },
+      fields: { root: null, relations: {} },
+      include: {},
+      withDeleted: false,
+      onlyDeleted: false,
+      count: false,
+    };
+    return { ...context, query: { ...query, include } };
+  }
+
   private async mapResponse(
     descriptor: OperationDescriptor<Entity>,
     result: unknown,
@@ -825,7 +885,8 @@ export class KavoEngine<Entity extends object> {
     }
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
-    const item = serializer.serializeItem(result as Entity, itemDto, context);
+    const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
+    const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
     validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
     // `context.config` is the per-call view, so `caching.etag` honors an
     // override at any scope down to this one request.

@@ -22,10 +22,19 @@ class ResourceCapableAdapter<Entity extends { id: number; posts?: unknown }> ext
   /** Ids that resolve to a real row on the target entity. */
   readonly realTargetIds = new Set<EntityId>([1, 2, 3, 4, 5]);
 
+  /**
+   * Hydrated stub members (`{id, title}`), not bare ids — a real adapter's
+   * `relations: { [relation]: true }` eager-load returns full related
+   * rows, and the forced-include response projection
+   * (`KavoEngine.contextForArrayMutationResponse`) walks each element as an
+   * object.
+   */
   private async loaded(id: EntityId, relation: string): Promise<Entity> {
     const row = await this.findOneById(id, null);
     if (row === null) throw new Error("fixture: row not found");
-    (row as unknown as Record<string, unknown>)[relation] = [...(this.membership.get(relation) ?? [])];
+    (row as unknown as Record<string, unknown>)[relation] = [...(this.membership.get(relation) ?? [])].map(
+      (memberId) => ({ id: memberId, title: `Post ${memberId}` }),
+    );
     return row;
   }
 
@@ -185,7 +194,7 @@ describe("registerArrayMutationOperations — resource strategy", () => {
 });
 
 describe("list<Relation> — end to end through KavoEngine", () => {
-  it("returns the parent, projected through its own item DTO — not the relation's own member list", async () => {
+  it("returns the parent, with the relation forced onto the response", async () => {
     const { crud, adapter } = makeAuthorCrud();
     adapter.membership.set("posts", new Set([2, 3]));
     const response = await crud.engine.execute({
@@ -197,6 +206,31 @@ describe("list<Relation> — end to end through KavoEngine", () => {
     } as never);
     expect(adapter.calls).toEqual([{ method: "readRelation", id: 1, relation: "posts" }]);
     expect(response.item).toMatchObject({ id: 1, name: "Ada" });
+    // The whole point of `list<Relation>`: the response must actually show
+    // the relation it just read, not just the bare parent. Client `include=`
+    // never reaches these operations, so this has to be forced on
+    // (`KavoEngine.contextForArrayMutationResponse`) rather than riding the
+    // ordinary include mechanism.
+    expect((response.item as { posts: unknown }).posts).toEqual([
+      { id: 2, title: "Post 2" },
+      { id: 3, title: "Post 3" },
+    ]);
+  });
+
+  it("still shows the relation even when it is write-opted but not read-includable", async () => {
+    // ADR-0029: `write` and `allowlists.includable` are independent
+    // opt-ins — a relation a client could never reach with `?include=`
+    // must still appear on its own dedicated `list<Relation>` response.
+    const { crud, adapter } = makeAuthorCrud(true);
+    adapter.membership.set("posts", new Set([2]));
+    const response = await crud.engine.execute({
+      operation: "listPosts",
+      id: "1",
+      body: null,
+      query: null,
+      options: null,
+    } as never);
+    expect((response.item as { posts: unknown }).posts).toEqual([{ id: 2, title: "Post 2" }]);
   });
 });
 
