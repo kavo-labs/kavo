@@ -13,23 +13,23 @@
     "@kavo/core": "workspace:*",
     "@kavo/mikroorm": "workspace:*",
     "@kavo/nest": "workspace:*",
-    "@mikro-orm/core": "^7.1.9",
-    "@mikro-orm/decorators": "^7.1.9",
-    "@mikro-orm/postgresql": "^7.1.9",
-    "@mikro-orm/sqlite": "^7.1.9",
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
-    "@nestjs/swagger": "^11.0.0",
+    "@mikro-orm/core": "^7.1.11",
+    "@mikro-orm/decorators": "^7.1.11",
+    "@mikro-orm/postgresql": "^7.1.11",
+    "@mikro-orm/sqlite": "^7.1.11",
+    "@nestjs/common": "^11.2.1",
+    "@nestjs/core": "^11.2.1",
+    "@nestjs/platform-express": "^11.2.1",
+    "@nestjs/swagger": "^11.4.6",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.4",
-    "@electric-sql/pglite-socket": "^0.2.7",
-    "@nestjs/testing": "^11.0.0",
-    "@testcontainers/postgresql": "^12.0.4",
+    "@electric-sql/pglite": "^0.5.5",
+    "@electric-sql/pglite-socket": "^0.2.8",
+    "@nestjs/testing": "^11.2.1",
+    "@testcontainers/postgresql": "^12.1.0",
     "@types/supertest": "^7.2.1",
-    "supertest": "^7.0.0"
+    "supertest": "^7.2.2"
   }
 }
