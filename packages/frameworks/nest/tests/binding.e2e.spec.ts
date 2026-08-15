@@ -1616,8 +1616,50 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
   it("carries no description at all on limit/offset — their syntax is always generic", async () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
-    expect(params.find((param) => param.name === "limit")?.description).toBeUndefined();
-    expect(params.find((param) => param.name === "offset")?.description).toBeUndefined();
+    // `applyPaginationDocs` (bind time) is what declares `limit`/`offset` at
+    // all now (issue #225) — `?.description` alone would pass identically
+    // whether the param exists undescribed or is missing outright, so the
+    // param's presence is asserted first.
+    const limit = params.find((param) => param.name === "limit");
+    const offset = params.find((param) => param.name === "offset");
+    expect(limit).toBeDefined();
+    expect(offset).toBeDefined();
+    expect(limit?.description).toBeUndefined();
+    expect(offset?.description).toBeUndefined();
+  });
+
+  it("documents limit/offset as unsupported when the entity's own config declares pagination.strategy: 'none'", async () => {
+    @Kavo(Todo, { pagination: { strategy: "none" } })
+    @Controller("todos")
+    class UnpaginatedController {}
+
+    await app.close();
+    await bootstrap(UnpaginatedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const expected =
+      "Not supported: this entity does not paginate ('pagination.strategy' is 'none') — every request serves the whole match set.";
+    expect(params.find((param) => param.name === "limit")?.description).toBe(expected);
+    expect(params.find((param) => param.name === "offset")?.description).toBe(expected);
+  });
+
+  it("documents limit/offset as unsupported when only a global default declares pagination.strategy: 'none'", async () => {
+    // The actual reason `applyPaginationDocs` is deferred to bind time
+    // (`swagger.ts`'s doc comment): `pagination.strategy` resolves through
+    // global → entity → operation, and a plain `@Kavo(Todo)` with no
+    // pagination config of its own has nothing for decoration time to see.
+    @Kavo(Todo)
+    @Controller("todos")
+    class GloballyUnpaginatedController {}
+
+    await app.close();
+    await bootstrap(GloballyUnpaginatedController, { defaults: { pagination: { strategy: "none" } } });
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const expected =
+      "Not supported: this entity does not paginate ('pagination.strategy' is 'none') — every request serves the whole match set.";
+    expect(params.find((param) => param.name === "limit")?.description).toBe(expected);
+    expect(params.find((param) => param.name === "offset")?.description).toBe(expected);
   });
 });
 

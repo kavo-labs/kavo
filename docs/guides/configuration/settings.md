@@ -6,12 +6,13 @@ The app-wide `KavoSettings` shape — the same schema at every scope (global `de
 
 `defaultLimit` (default `20`) is the page size when a request supplies no `limit`. `maxLimit` (default `100`) is a hard ceiling on `limit` — a request asking for more is clamped, not rejected.
 
-`strategy` (default `"offset"`) picks which pagination strategy computes the page — `"offset"`, `"page"`, `"cursor"`, `"since"`, or a registered name (see `paginationStrategies` in [Module setup](/guides/configuration/module-setup#global-config-kavomodule-forroot-forrootasync) for adding your own):
+`strategy` (default `"offset"`) picks which pagination strategy computes the page — `"offset"`, `"page"`, `"cursor"`, `"since"`, `"none"`, or a registered name (see `paginationStrategies` in [Module setup](/guides/configuration/module-setup#global-config-kavomodule-forroot-forrootasync) for adding your own):
 
 - `offset` is flat `limit`/`offset`.
 - `page` is `page[number]`/`page[size]`.
 - `cursor` is keyset paging over an opaque `?cursor=` token, which requires the effective sort to end in the entity's id field — with every sort key on `allowlists.filterable` and `allowlists.selectable` as well as `sortable` — and reports the next token as `meta.nextCursor`.
 - `since` is polling by a plain, compound `?since=<value>|<id>` token against `since.field`, with the sort forced to `[since.field, id]`, exactly-once delivery (the id half breaks ties on `since.field`), and the next token reported as `meta.nextSince`.
+- `none` opts the entity out of pagination altogether: `findMany` always serves the whole match set, `defaultLimit`/`maxLimit` go unused, and a client-sent `limit`/`offset` is rejected as an unsupported param rather than silently ignored. See [No pagination](/querying/pagination#no-pagination) for the caveats.
 
 Pair either keyset strategy with `count: false`, and index the sort tuple; both are refused by the GraphQL and MCP bindings, which cannot page a keyset (see [Cursor pagination](/querying/pagination#cursor-keyset-pagination), [Since pagination](/querying/pagination#since-seek-by-timestamp-pagination), [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union), and [ADR-0022](/internals/adr/0022-since-pagination-composes-a-value-id-keyset)).
 

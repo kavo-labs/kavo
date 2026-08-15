@@ -224,3 +224,64 @@ describe("cursor-paginated entities are refused at bootstrap", () => {
     expect(() => crudTools({ name: "Todo", service })).not.toThrow();
   });
 });
+
+/**
+ * `pagination.strategy: "none"` (ADR-0030) is not `"cursor"`/`"since"`, so
+ * `requireOffsetPageable` lets it through at bootstrap here too — same
+ * treatment `@kavo/graphql` gets (`graphql-schema.spec.ts`'s equivalent
+ * describe block). `<entity>.findMany`'s tool schema declares `limit`/
+ * `offset` as plain optional integers (`tools.ts`), so a model that never
+ * names either in its arguments gets `args["limit"]`/`args["offset"]` as
+ * `undefined` — the same "caller didn't ask" signal `normalizeInput`
+ * already treats as absent — proven here rather than inferred.
+ */
+describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
+  function unpaginatedTodoService(adapter: InMemoryTodoAdapter) {
+    return createKavo({ defaults: { pagination: { strategy: "none" } } } as never).createCrud(Todo, undefined, {
+      adapter,
+      metadata: todoMetadata,
+    });
+  }
+
+  it("binds without a bootstrap refusal, unlike cursor/since", () => {
+    expect(() => crudTools({ name: "Todo", service: unpaginatedTodoService(new InMemoryTodoAdapter()) })).not.toThrow();
+  });
+
+  it("serves the whole match set when the call omits limit/offset entirely", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push(
+      { id: 1, title: "a", done: false },
+      { id: 2, title: "b", done: false },
+      { id: 3, title: "c", done: false },
+      { id: 4, title: "d", done: false },
+      { id: 5, title: "e", done: false },
+    );
+    const bindings = crudTools({ name: "Todo", service: unpaginatedTodoService(adapter) });
+    const binding = bindings.find((candidate) => candidate.tool.name === "todo.findMany");
+    if (binding === undefined) throw new Error("no tool named todo.findMany");
+
+    const result = await binding.handler({});
+
+    expect(result.isError).toBeUndefined();
+    const payload = JSON.parse((result.content[0] as { text: string }).text);
+    expect(payload.items).toHaveLength(5);
+    expect(payload.total).toBe(5);
+    expect(payload.limit).toBe(2147483647);
+    expect(payload.offset).toBe(0);
+  });
+
+  it("rejects an explicit limit/offset the same way REST does, rather than truncating silently", async () => {
+    const bindings = crudTools({ name: "Todo", service: unpaginatedTodoService(new InMemoryTodoAdapter()) });
+    const binding = bindings.find((candidate) => candidate.tool.name === "todo.findMany");
+    if (binding === undefined) throw new Error("no tool named todo.findMany");
+
+    const result = await binding.handler({ limit: 5 });
+
+    // Same limitation the GraphQL binding has: `KavoException.detail` is the
+    // catalog's generic `KAVO_QUERY_INVALID` summary, not the field-level
+    // "pagination.strategy is 'none'" detail on `.issues` — provable here is
+    // that the call errors at all, not that it silently paginates anyway.
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toBe("KAVO_QUERY_INVALID: The request query is invalid.");
+  });
+});

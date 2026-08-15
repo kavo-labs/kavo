@@ -423,6 +423,33 @@ describe("MongooseRepositoryAdapter — query translation", () => {
   });
 });
 
+/**
+ * `pagination.strategy: "none"` (ADR-0030, issue #225) reports
+ * `NONE_PAGINATION_LIMIT` (`2147483647`, `2^31 - 1`) as the envelope's
+ * `limit`, and `MongooseRepositoryAdapter.findMany` passes that value
+ * straight to the query builder's `.limit(...)` — the ADR's reasoning for
+ * choosing that exact value over `Number.MAX_SAFE_INTEGER` is that it
+ * survives MongoDB's int32 wire `limit`. Proven here against a real
+ * `mongod` (`mongodb-memory-server`, not a Docker container — this suite
+ * already runs without one) rather than inferred from the driver's
+ * documented range.
+ */
+describe("MongooseRepositoryAdapter — pagination.strategy: 'none'", () => {
+  it("returns the whole match set with limit 2147483647, not truncated or errored", async () => {
+    await seed();
+    const unpaginated = kavo.createCrud(models.Author, {
+      pagination: { strategy: "none" },
+    } as never) as unknown as DefaultKavoService<Author>;
+
+    const list = await unpaginated.findMany({});
+
+    expect(list.items).toHaveLength(4);
+    expect(list.total).toBe(4);
+    expect(list.limit).toBe(2147483647);
+    expect(list.offset).toBe(0);
+  });
+});
+
 describe("MongooseRepositoryAdapter — schema constraints hold on every write", () => {
   it("enforces schema validators on update and patch, not only on create", async () => {
     // Mongoose runs validators on `create` but *not* on any update unless

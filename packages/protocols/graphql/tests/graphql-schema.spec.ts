@@ -321,3 +321,87 @@ describe("cursor-paginated entities are refused at bootstrap", () => {
     expect(() => createKavoGraphQLSchema({ name: "Todo", service, itemType: cursorTodoType() })).not.toThrow();
   });
 });
+
+/**
+ * `pagination.strategy: "none"` (ADR-0030) is not `"cursor"`/`"since"`, so
+ * `requireOffsetPageable` lets it through at bootstrap — the ADR's
+ * Consequences section claims this composes correctly by construction
+ * rather than needing a bootstrap refusal of its own. That claim rests on
+ * `NONE_PAGINATION_LIMIT` (`2^31 - 1`) surviving `GraphQLInt.serialize`,
+ * which throws on anything outside `[-2^31, 2^31 - 1]` — one off from the
+ * boundary this envelope field actually carries. Proven here rather than
+ * inferred, and the regression guard if the sentinel ever changes.
+ */
+describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
+  function unpaginatedTodoType() {
+    return new GraphQLObjectType({
+      name: "Todo",
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLInt) },
+        title: { type: new GraphQLNonNull(GraphQLString) },
+      },
+    });
+  }
+
+  function unpaginatedTodoService(adapter: InMemoryTodoAdapter) {
+    return createKavo({ defaults: { pagination: { strategy: "none" } } } as never).createCrud(Todo, undefined, {
+      adapter,
+      metadata: todoMetadata,
+    });
+  }
+
+  it("binds without a bootstrap refusal, unlike cursor/since", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service: unpaginatedTodoService(new InMemoryTodoAdapter()),
+        itemType: unpaginatedTodoType(),
+      }),
+    ).not.toThrow();
+  });
+
+  it("serves the whole match set when the query sends no limit/offset, and limit serializes as GraphQLInt", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push(
+      { id: 1, title: "a", done: false },
+      { id: 2, title: "b", done: false },
+      { id: 3, title: "c", done: false },
+      { id: 4, title: "d", done: false },
+      { id: 5, title: "e", done: false },
+    );
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service: unpaginatedTodoService(adapter),
+      itemType: unpaginatedTodoType(),
+    });
+
+    const result = await graphql({ schema, source: `query { todos { items { id } total limit offset } }` });
+
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.todos).toEqual({
+      items: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }],
+      total: 5,
+      limit: 2147483647,
+      offset: 0,
+    });
+  });
+
+  it("rejects an explicit limit/offset the same way REST does, rather than truncating silently", async () => {
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service: unpaginatedTodoService(new InMemoryTodoAdapter()),
+      itemType: unpaginatedTodoType(),
+    });
+
+    const result = await graphql({ schema, source: `query { todos(limit: 5) { total } }` });
+
+    // The binding surfaces `QueryValidationException` as-is; its `.message`
+    // is the catalog's generic `KAVO_QUERY_INVALID` summary (the field-level
+    // "pagination.strategy is 'none'" detail lives on `.issues`, which this
+    // binding does not expose through `GraphQLError`) — so what's provable
+    // here is that the field errors at all, rather than silently truncating
+    // to a page.
+    expect(result.data).toBeNull();
+    expect(result.errors?.[0]?.message).toBe("The request query is invalid.");
+  });
+});

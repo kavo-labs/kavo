@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { PaginationLimits } from "@kavo/core";
 import {
   CursorPaginationStrategy,
+  NONE_PAGINATION_LIMIT,
+  NonePaginationStrategy,
   OffsetPaginationStrategy,
   PagePaginationStrategy,
   builtInPaginationStrategies,
@@ -11,6 +13,7 @@ import { issuesOf } from "./support/query-issues.js";
 const limits: PaginationLimits = { defaultLimit: 20, maxLimit: 100 };
 const offset = new OffsetPaginationStrategy();
 const page = new PagePaginationStrategy();
+const none = new NonePaginationStrategy();
 
 describe("OffsetPaginationStrategy — flat limit/offset", () => {
   it("falls back to defaultLimit and offset 0 when nothing is sent", () => {
@@ -125,10 +128,50 @@ describe("PagePaginationStrategy — page[number]/page[size]", () => {
   });
 });
 
+describe("NonePaginationStrategy — no pagination at all", () => {
+  it("serves the whole match set when neither limit nor offset is sent", () => {
+    expect(none.normalize({}, limits)).toEqual({ limit: NONE_PAGINATION_LIMIT, offset: 0 });
+  });
+
+  it("ignores the limits it is handed — defaultLimit/maxLimit play no role", () => {
+    expect(none.normalize({}, { defaultLimit: 1, maxLimit: 1 })).toEqual({
+      limit: NONE_PAGINATION_LIMIT,
+      offset: 0,
+    });
+  });
+
+  it("rejects an explicit limit rather than silently ignoring it", () => {
+    const issues = issuesOf(() => none.normalize({ limit: "5" }, limits));
+    expect(issues).toEqual([expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+  });
+
+  it("rejects an explicit offset rather than silently ignoring it", () => {
+    const issues = issuesOf(() => none.normalize({ offset: "10" }, limits));
+    expect(issues).toEqual([expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" })]);
+  });
+
+  it("collects both limit and offset into one exception when both are sent, not one round trip each", () => {
+    const issues = issuesOf(() => none.normalize({ limit: "5", offset: "10" }, limits));
+    expect(issues).toEqual([
+      expect.objectContaining({ field: "limit", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+      expect.objectContaining({ field: "offset", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }),
+    ]);
+  });
+
+  it("treats empty string, null, and undefined as absent, not a rejection", () => {
+    for (const absent of ["", null, undefined]) {
+      expect(none.normalize({ limit: absent, offset: absent }, limits)).toEqual({
+        limit: NONE_PAGINATION_LIMIT,
+        offset: 0,
+      });
+    }
+  });
+});
+
 describe("builtInPaginationStrategies", () => {
-  it("ships exactly the four built-ins, keyed by strategy name", () => {
+  it("ships exactly the five built-ins, keyed by strategy name", () => {
     const strategies = builtInPaginationStrategies();
-    expect([...strategies.keys()].sort()).toEqual(["cursor", "offset", "page", "since"]);
+    expect([...strategies.keys()].sort()).toEqual(["cursor", "none", "offset", "page", "since"]);
   });
 
   it("keys each strategy by its own name property", () => {
@@ -137,10 +180,11 @@ describe("builtInPaginationStrategies", () => {
     }
   });
 
-  it("maps the names to the three exported classes", () => {
+  it("maps the names to the exported classes", () => {
     const strategies = builtInPaginationStrategies();
     expect(strategies.get("offset")).toBeInstanceOf(OffsetPaginationStrategy);
     expect(strategies.get("page")).toBeInstanceOf(PagePaginationStrategy);
     expect(strategies.get("cursor")).toBeInstanceOf(CursorPaginationStrategy);
+    expect(strategies.get("none")).toBeInstanceOf(NonePaginationStrategy);
   });
 });

@@ -217,6 +217,23 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   not per-request, because the forced sort is entirely config-known before
   any request arrives.
 
+  The fifth built-in, `none`, opts a resource out of pagination altogether
+  (ADR-0030, issue #225): `findMany` always serves the whole match set, and a
+  client-sent `limit`/`offset` is `KAVO_QUERY_UNSUPPORTED_PARAM` rather than
+  silently ignored — both issues collected into one exception when both are
+  sent, the same "every issue in one round trip" contract the rest of this
+  normalizer keeps. Unlike `cursor`/`since`, "none" produces a plain
+  `OffsetPagination` (`{ limit, offset }`, `limit` fixed at `2^31 - 1`, the
+  largest value every consumer in the workspace — SQL `LIMIT`, GraphQL's
+  `Int`, MongoDB's int32 limit — can carry without its own ceiling), so it
+  is structurally indistinguishable from `offset` to `paginationShape`'s
+  probe. That is why it is the one strategy `QueryNormalizer.normalizeInput`
+  has to recognize by name rather than by the shape it produces: the
+  programmatic path computes `limit`/`offset` directly (`Math.min(input.
+limit ?? defaultLimit, maxLimit)`) rather than calling the registered
+  strategy, the same as it already does for `offset`/`page`, so nothing
+  short of a name check would make it unbounded there too.
+
 - **Field selection:** `fields=id,name,email` — sparse fieldset for the
   root resource, validated against the selectable allowlist.
   `fields[<relation path>]=id,title` narrows an included node, validated

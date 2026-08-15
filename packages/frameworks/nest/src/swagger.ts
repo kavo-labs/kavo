@@ -95,8 +95,8 @@ export const KAVO_API_GUIDE = `### List query parameters
 
 - \`filter\`: filter[field][operator]=value (operators: eq, ne, gt, gte, lt, lte, in, notIn, like, ilike, between, isNull, isNotNull; or/and/not groups; JSON escape hatch via filter={...}).
 - \`sort\`: comma-separated fields; '-' prefix = descending.
-- \`limit\`: page size (clamped to the configured maximum).
-- \`offset\`: zero-based index of the first returned row.
+- \`limit\`: page size (clamped to the configured maximum). Rejected outright on an entity configured with \`pagination.strategy: "none"\`, which always returns the whole match set instead.
+- \`offset\`: zero-based index of the first returned row. Same rejection as \`limit\` under \`pagination.strategy: "none"\`.
 - \`fields\`: sparse fieldset — comma-separated field names.
 - \`search[query]\`: free-text search across the entity's searchable fields, composed (AND) with any \`filter\`. \`search[mode]\` (\`substring\`, the default, or \`words\`) and \`search[fields]\` (narrows to a subset of the entity's searchable fields) are optional modifiers, and require \`search[query]\` to be present. Only present on entities that have search enabled — see this route's own \`search[fields]\` description.
 
@@ -115,11 +115,10 @@ Each read route's own \`include\` parameter description names which relations ar
 - \`If-Match\`: apply this write only if the row's current ETag is one of these entity-tags. Take the tag from an unnarrowed read — a \`fields=\`/\`include=\`-narrowed one identifies a different representation and will not match.`;
 
 /**
- * The `filter`/`sort`/`limit`/`offset`/`fields` params on a list route.
- * `limit`/`offset` carry no per-route description at all — their syntax is
- * always generic, so it lives only in `KAVO_API_GUIDE`.
- * `filter`/`sort`/`fields` carry a description exactly when decoration
- * time can name the entity's actual allowlisted fields (issue #171):
+ * The `filter`/`sort`/`fields` params on a list route — `limit`/`offset`
+ * are deliberately not here, see {@link applyPaginationDocs}. A description
+ * exactly when decoration time can name the entity's actual allowlisted
+ * fields (issue #171):
  *
  * `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
  * (`packages/core/src/config/resolve-entity-config.ts`): it merges from
@@ -142,8 +141,6 @@ function listQueryParams(config: EntityConfig<object> | undefined): readonly { n
   return [
     { name: "filter", description: allowedFieldsDescription(allowlists?.filterable) },
     { name: "sort", description: allowedFieldsDescription(allowlists?.sortable) },
-    { name: "limit" },
-    { name: "offset" },
     { name: "fields", description: allowedFieldsDescription(allowlists?.selectable) },
   ];
 }
@@ -464,6 +461,74 @@ export function applySearchQueryDocs(
       required: false,
       type: String,
       description: searchable.length === 0 ? "No field is searchable." : `Allowed fields: ${searchable.join(", ")}.`,
+    }),
+  );
+}
+
+const UNPAGINATED_DESCRIPTION =
+  "Not supported: this entity does not paginate ('pagination.strategy' is 'none') — every request serves the whole match set.";
+
+/**
+ * The `limit`/`offset` params on a list route (`pagination.strategy: "none"`,
+ * ADR-0030) — deferred to bind time, the same reason `applySearchQueryDocs`
+ * is: whether either is actually
+ * supported depends on `pagination.strategy` resolved through the *full*
+ * precedence chain (built-in default → global → entity → operation), which
+ * only exists once `KavoBinder.onModuleInit` runs, long after `@Kavo`
+ * decoration (ADR-0012). Unlike `search[...]`, this can't be "declared at
+ * decoration time, refined here" (`applySwaggerMetadata`'s doc comment for
+ * `caching.etag` describes that shape) — `@nestjs/swagger`'s own parameter
+ * de-duplication (`unionWith` over `{ name, in }`, `api-parameters.
+ * explorer.js`) keeps the *first* match for a given `{ name, in }` pair, so
+ * a second, later `ApiQuery({ name: "limit" })` here would be silently
+ * discarded rather than override one `listQueryParams` already applied.
+ * `limit`/`offset` are therefore declared *only* here, never at decoration
+ * time — the one param pair on a list route this file applies just once.
+ *
+ * Consequence, same as `applyConditionalRequestDocs`'s own: an app with no
+ * `KavoModule.forRoot`/`forRootAsync` in its module graph never reaches
+ * `KavoBinder.onModuleInit`, so its list routes now document neither
+ * `limit` nor `offset` at all — a regression from decoration time's
+ * always-present, undescribed pair. Deliberate, not missed: the same graph
+ * shape leaves that app with no working `@Kavo` service either, so nothing
+ * about it actually works yet.
+ */
+const alreadyPaginationDocumented = new WeakSet<object>();
+
+export function applyPaginationDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  strategy: string,
+): void {
+  const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
+  if (!isList) return;
+  const swagger = loadSwagger();
+  if (swagger === null) return;
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyPaginationDocumented.has(method)) return;
+  alreadyPaginationDocumented.add(method);
+  const apply = (decorator: MethodDecorator): void => {
+    decorator(prototype, methodName, propertyDescriptor);
+  };
+
+  const description = strategy === "none" ? UNPAGINATED_DESCRIPTION : undefined;
+  apply(
+    swagger.ApiQuery({
+      name: "limit",
+      required: false,
+      type: String,
+      ...(description !== undefined && { description }),
+    }),
+  );
+  apply(
+    swagger.ApiQuery({
+      name: "offset",
+      required: false,
+      type: String,
+      ...(description !== undefined && { description }),
     }),
   );
 }

@@ -13,7 +13,7 @@ import type { AllowlistUsage } from "../errors/message-hints.js";
 import { ConfigurationException, QueryValidationException } from "../errors/exceptions.js";
 import { pushAllowlistIssue } from "../errors/message-hints.js";
 import { DefaultFilterParser } from "./default-filter-parser.js";
-import { builtInPaginationStrategies } from "./pagination-strategies.js";
+import { NONE_PAGINATION_LIMIT, builtInPaginationStrategies } from "./pagination-strategies.js";
 import { isCursorPagination, isSincePagination } from "./pagination.js";
 import { decodeCursor, keysetExpression } from "./cursor.js";
 import { coerceScalar, isIssue } from "./value-coercion.js";
@@ -172,9 +172,22 @@ export class QueryNormalizer<Entity = unknown> {
     };
     const include = this.resolveIncludes(input.include ?? [], fields, config, issues);
 
-    const { defaultLimit, maxLimit } = config.settings.pagination;
-    const limit = Math.min(input.limit ?? defaultLimit, maxLimit);
-    const offset = input.offset ?? 0;
+    const { defaultLimit, maxLimit, strategy } = config.settings.pagination;
+    // `NonePaginationStrategy` (`pagination-strategies.ts`) is never invoked
+    // here: unlike cursor/since, "none" has no wire shape of its own to
+    // decode, and the programmatic path already knows its own `limit`/
+    // `offset` field names, so there is nothing a strategy call would add.
+    // This is the one place that has to know the strategy by name rather
+    // than by the shape it produces — `paginationShape`'s probe cannot tell
+    // "none" apart from "offset" structurally, since both produce a plain
+    // `{ limit, offset }`. A deliberate, narrow exception to §4's
+    // structural-not-name-based rule, not a reversal of it (ADR-0030).
+    if (strategy === "none") {
+      if (input.limit !== undefined) issues.push(noneParamUnsupportedIssue(config, "limit"));
+      if (input.offset !== undefined) issues.push(noneParamUnsupportedIssue(config, "offset"));
+    }
+    const limit = strategy === "none" ? NONE_PAGINATION_LIMIT : Math.min(input.limit ?? defaultLimit, maxLimit);
+    const offset = strategy === "none" ? 0 : (input.offset ?? 0);
     if (limit < 1 || offset < 0 || !Number.isInteger(limit) || !Number.isInteger(offset)) {
       issues.push({
         field: limit < 1 || !Number.isInteger(limit) ? "limit" : "offset",
@@ -521,6 +534,29 @@ function keysetParamUnsupportedIssue<Entity>(
       `strategy '${config.settings.pagination.strategy}'. Set 'pagination.strategy' to '${param}' to page by ${
         param === "cursor" ? "keyset" : "seeking since a value"
       }.`,
+  };
+}
+
+/**
+ * The programmatic-path counterpart of `NonePaginationStrategy`'s own
+ * rejection (`pagination-strategies.ts`) — same field, same code, same
+ * meaning, but genuinely **not** the identical string: `PaginationStrategy.
+ * normalize(rawParams, limits)` carries no entity name for a strategy to
+ * phrase its own message with (widening that signature to add one would be
+ * a breaking change to every third-party strategy for one sentence's sake),
+ * so the wire path's wording stays entity-agnostic ("this entity") while
+ * this one, which already has `config` in scope, names the entity.
+ */
+function noneParamUnsupportedIssue<Entity>(
+  config: ResolvedEntityConfig<Entity>,
+  param: "limit" | "offset",
+): QueryIssueDto {
+  return {
+    field: param,
+    code: "KAVO_QUERY_UNSUPPORTED_PARAM",
+    detail:
+      `Query parameter '${param}' is not supported: ${config.entityName} does not paginate ` +
+      `('pagination.strategy' is 'none'), so every request serves the whole match set.`,
   };
 }
 

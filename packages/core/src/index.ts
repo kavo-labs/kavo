@@ -243,6 +243,8 @@ export {
   PagePaginationStrategy,
   CursorPaginationStrategy,
   SincePaginationStrategy,
+  NonePaginationStrategy,
+  NONE_PAGINATION_LIMIT,
   builtInPaginationStrategies,
 } from "./query/pagination-strategies.js";
 export { QueryNormalizer } from "./query/query-normalizer.js";
