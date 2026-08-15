@@ -414,6 +414,125 @@ naming the entity and relation; the fix is adding
 `arrayMutation: { strategy: "replace" }` (or `"resource"`/`"jsonPatch"`) to
 that entity's config, or to a global default all such entities share.
 
+## Amendment — the strategy becomes a per-relation choice (issue #223)
+
+Every amendment above still resolves exactly one `arrayMutation.strategy`
+per entity, through the ordinary global → entity → operation → per-call
+precedence chain, and applies it uniformly to every relation the entity
+write-opts in. That forecloses a real shape: an entity with two write-opted
+to-many relations that genuinely want different write surfaces — one a
+single whole-array `PUT` (`replace`), the other the narrower four-operation
+sub-collection (`resource`), or one relying on incremental `jsonPatch`
+membership changes while another wants `replace`'s all-or-nothing semantics.
+This amendment moves the strategy choice down to the relation itself,
+without touching the entity-level default's own meaning.
+
+**The config surface.** `RelationEdgeSettings.write` (`settings.ts`) widens
+from `boolean` to `boolean | { strategy: ArrayMutationStrategy }`. `write:
+true` keeps its exact original meaning — opt in, strategy inherited from
+this entity's own resolved `arrayMutation.strategy` — so every existing
+config that only ever used the boolean form is unaffected. `write: {
+strategy }` is new: it opts the relation in _and_ pins its own strategy,
+independent of what the entity resolves to. `arrayMutation: false` at
+entity scope still disables the feature wholesale and now explicitly wins
+over any per-relation override too — a relation cannot re-enable
+array-mutation writes for itself while its entity has them off; asking to is
+a bootstrap `ConfigurationException`, not a silent no-op.
+
+**Resolution and validation move into `DefaultRelationRegistry`.** Previously
+`resolve-entity-config.ts`'s `validateArrayMutationRelations` cross-checked
+the entity's single resolved strategy against every write-opted relation
+after the registry was already built. That split stops making sense once
+strategy resolution is itself per-relation and needs both `edges` and the
+entity's `arrayMutation` default at once — the two inputs
+`DefaultRelationRegistry`'s constructor already receives. Resolution and
+validation now happen together, in the same place the existing "`write` on a
+to-one relation" check already lived: `RelationDescriptor.write` changes
+from `boolean` to the **resolved** `ArrayMutationStrategy | undefined` — a
+concrete strategy, or `undefined` if the relation never opted in — so every
+downstream consumer (`createCrud`, the engine, `@kavo/nest`) reads a single
+source of truth instead of re-deriving the merge itself. This is the one
+piece of this amendment that is breaking rather than additive: `write` was
+`boolean | undefined`, and is now `ArrayMutationStrategy | undefined` — a
+type-level break for any external reader of the barrel-exported
+`RelationDescriptor` type (a custom adapter or a hand-built relation
+registry), not for the config surface itself. The back-compat guarantee
+above is about `RelationEdgeSettings.write`, the input shape adopters
+write — `write: true` still means exactly what it always did — not about
+`RelationDescriptor.write`, the resolved value core computes from it.
+
+**Registering routes and operations per relation.**
+`registerArrayMutationOperations` (`array-mutation-operations.ts`) no longer
+takes one `strategy` for a whole call; it takes a list of `{ name, strategy
+}` entries, one per relation, and each entry's own strategy decides its
+action set (`replace` → one operation, `resource` → four). `jsonPatch`
+relations are filtered out before this call, exactly as before — `jsonPatch`
+still synthesizes no operation of its own, since it reuses `patchOne`'s
+existing route. `createCrud` (`kavo.ts`) groups an entity's write-opted
+relations by their own resolved strategy, runs only the capability check
+each group's strategy needs (so a mixed entity never demands `resource`'s
+four adapter primitives just because one of its relations happens to use
+them), and makes one registration call carrying the full four-action handler
+factory set — a factory is keyed by _action_, not strategy, so the same
+factories serve a `replace`-only relation and a `resource` one alike.
+`@kavo/nest`'s decoration-time route generation (`kavo.decorator.ts`) mirrors
+this: `declaredRelationArrayMutationStrategy` resolves each relation's
+_declared_ strategy the same way (`write: true` inherits the entity's own
+local declaration, `write: { strategy }` names its own, unconditionally —
+decoration time stays optimistic about cross-validating against a real
+`arrayMutation: false`, the same as it already was blind to ORM cardinality),
+and generates a route per relation accordingly.
+
+**The route-reachability check becomes per-relation too.**
+`requireArrayMutationRouteReachable` (`kavo.module.ts`) — which closes the
+gap between decoration time's config-only view and `createCrud`'s fully
+resolved one — now evaluates each write-opted relation independently rather
+than the entity as a whole: a relation that pins its own strategy locally
+(`write: { strategy }`) never disagrees with what resolves and is never
+flagged, even when a sibling relation on the same entity relies on an
+undeclared global default and _is_ flagged. The thrown exception still names
+every unreachable relation in one message, now with each one's own resolved
+strategy attached, since two relations on the same entity can legitimately
+resolve to two different strategies.
+
+**The jsonPatch gate is now "any relation, or the entity default."**
+`KavoEngine.resolvePatchOneInput` decided whether a `patchOne` array body
+parses as an RFC 6902 document by checking the entity's own resolved
+`arrayMutation.strategy` alone. That is no longer sufficient: an entity whose
+own default is `"replace"` (or unset) must still accept jsonPatch bodies the
+moment _any_ of its relations resolves to `"jsonPatch"` via its own
+`write: { strategy: "jsonPatch" }`. The gate is now `entityDefault ===
+"jsonPatch" || some relation resolves to "jsonPatch"`, and the
+`writeOptedRelations` set that the `/<relation>/-` path shape validates
+against is narrowed to jsonPatch-strategy relations specifically — a
+relation opted into `replace` or `resource` is not a legal jsonPatch member
+path, keeping the strategies mutually exclusive per relation the same way
+they were always mutually exclusive per entity.
+
+**The one adopter-visible surprise this introduces, stated plainly:**
+opting a _single_ relation into `jsonPatch` changes `patchOne`'s body
+contract for the **whole entity** — an array body is now parsed as an RFC
+6902 document for every writable field, not just that one relation. This was
+already true at the entity level before this amendment; it is now also true
+when the trigger is a single relation's own override rather than the
+entity's declared default, which is easy to miss when skimming a relation's
+own `write` config in isolation.
+
+**No route collisions.** A `replace`-strategy relation's `PUT
+:id/<relation>`, a `resource`-strategy relation's `GET`/`POST`/`DELETE`/`PUT
+:id/<relation>`, and every `jsonPatch`-strategy relation sharing the
+entity's one `PATCH :id` route can all coexist on the same entity without
+colliding: the first two are keyed by relation name in their path segment,
+and the third is a body-shape distinction on a route every entity already
+has.
+
+**Example.** `examples/nest-typeorm`'s `Cat` now demonstrates this directly:
+`tags` stays on `replace` (inheriting the entity's own
+`arrayMutation.strategy: "replace"` default via `write: true`), while the
+new `photos` relation pins `write: { strategy: "resource" }`, trading the
+single `PUT /cats/:id/tags`-shaped route for
+`GET`/`POST`/`DELETE`/`PUT /cats/:id/photos` instead.
+
 ## Consequences
 
 - All three named strategies — `replace`, `jsonPatch`, `resource` — are
@@ -437,3 +556,11 @@ that entity's config, or to a global default all such entities share.
   own member list. Returning the related collection through its own DTO
   would need cross-entity serialization machinery this ADR does not build;
   a later change can add it without breaking the request shape.
+- Since the per-relation amendment (issue #223), two relations on the same
+  entity can resolve to two different strategies — the entity-level
+  `arrayMutation.strategy` is now a _default_ a relation inherits via
+  `write: true`, not a ceiling every write-opted relation must share.
+  Opting one relation into `jsonPatch` still changes `patchOne`'s body
+  contract for the whole entity, the same as it always did at the entity
+  level — that scope was never per-relation and this amendment does not
+  narrow it.
