@@ -538,10 +538,14 @@ function keysetParamUnsupportedIssue<Entity>(
 }
 
 /**
- * One wording for "this entity does not paginate", shared by the wire path
- * (via `NonePaginationStrategy`, which throws the equivalent
- * `QueryValidationException` itself rather than pushing through here — it
- * has no `issues` array to push onto) and the programmatic path above.
+ * The programmatic-path counterpart of `NonePaginationStrategy`'s own
+ * rejection (`pagination-strategies.ts`) — same field, same code, same
+ * meaning, but genuinely **not** the identical string: `PaginationStrategy.
+ * normalize(rawParams, limits)` carries no entity name for a strategy to
+ * phrase its own message with (widening that signature to add one would be
+ * a breaking change to every third-party strategy for one sentence's sake),
+ * so the wire path's wording stays entity-agnostic ("this entity") while
+ * this one, which already has `config` in scope, names the entity.
  */
 function noneParamUnsupportedIssue<Entity>(
   config: ResolvedEntityConfig<Entity>,
