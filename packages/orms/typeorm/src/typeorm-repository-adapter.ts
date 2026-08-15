@@ -608,10 +608,18 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * `arrayMutation`'s `resource` strategy (ADR-0029's resource amendment):
    * `GET :id/<relation>`'s current-membership read. A pure read, unlike the
    * three writes below — no transaction needed.
+   *
+   * The existence check goes through `byId` (soft-delete-scoped), the same
+   * as `replaceRelation`'s own — a soft-deleted parent (on a custom marker
+   * column; `@DeleteDateColumn` is excluded by TypeORM's own repository API
+   * regardless) must 404 here exactly as it does on `GET /entity/:id`, not
+   * stay reachable through the one primitive that skipped the check.
    */
   async readRelation(id: EntityId, relation: string, context: KavoContext<Entity>): Promise<Entity> {
     try {
       this.relationMetadataOf(this.dataSource, relation, context);
+      const existing = await this.byId(id, context, false).getOne();
+      if (existing === null) throw this.notFound(id, context);
       const reloaded = await this.repository.findOne({
         where: { [this.idField]: id } as never,
         relations: { [relation]: true } as never,
@@ -668,7 +676,15 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   ): Promise<Entity> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const existing = await manager.getRepository(this.entity).findOne({ where: { [this.idField]: id } as never });
+        // Soft-delete-scoped, the same as `replaceRelation`'s own existence
+        // check (`byId`) — a soft-deleted parent must 404 here too, not
+        // stay reachable through `add`/`removeRelationMember`.
+        const existingQb = manager
+          .getRepository(this.entity)
+          .createQueryBuilder(this.alias)
+          .where(`${this.alias}.${this.idField} = :id`, { id });
+        this.scopeToLive(existingQb, context, false, false);
+        const existing = await existingQb.getOne();
         if (existing === null) throw this.notFound(id, context);
 
         const relationMetadata = this.relationMetadataOf(manager, relation, context);
@@ -676,8 +692,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         const relatedEntityName = relationMetadata.inverseEntityMetadata.name;
 
         const relationBuilder = manager.createQueryBuilder().relation(this.entity, relation).of(id);
-        const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
-        const isMember = current.some((row) => row[relatedIdField] === memberId);
+        // A targeted existence check rather than `relationBuilder.loadMany()`
+        // — this only ever needs "is *this one* id currently a member?",
+        // not the full current membership `patchRelation`'s batch diff
+        // genuinely needs, so it stays O(1) against the join regardless of
+        // how large the relation is.
+        const isMember = await manager
+          .createQueryBuilder(this.entity, this.alias)
+          .innerJoin(`${this.alias}.${relation}`, "member", `member.${relatedIdField} = :memberId`, { memberId })
+          .where(`${this.alias}.${this.idField} = :id`, { id })
+          .getExists();
 
         if (action === "remove") {
           if (!isMember) {

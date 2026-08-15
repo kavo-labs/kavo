@@ -68,24 +68,71 @@ class Topic {
   name!: string;
 }
 
+/**
+ * A soft-deletable parent through a *plain* marker column, not
+ * `@DeleteDateColumn` — the case `readRelation`/`addRelationMember`/
+ * `removeRelationMember` must scope explicitly, since TypeORM's own
+ * repository API only excludes soft-deleted rows automatically for the
+ * declared `@DeleteDateColumn` (`replaceRelation`'s `byId` already handles
+ * both cases; this fixture pins the plain-column one for the three
+ * `resource`-strategy primitives).
+ */
+@Entity()
+class Studio {
+  @PrimaryGeneratedColumn()
+  id!: number;
+
+  @Column("varchar")
+  name!: string;
+
+  @Column({ type: Date, nullable: true })
+  archivedAt!: Date | null;
+
+  @OneToMany(() => Album, (album) => album.studio)
+  albums!: Album[];
+}
+
+@Entity()
+class Album {
+  @PrimaryGeneratedColumn()
+  id!: number;
+
+  @Column("varchar")
+  title!: string;
+
+  @ManyToOne(() => Studio, (studio) => studio.albums)
+  studio!: Studio;
+}
+
 let dataSource: DataSource;
 let adapter: RepositoryAdapter<Writer>;
 let articleAdapter: RepositoryAdapter<Article>;
+let studioAdapter: RepositoryAdapter<Studio>;
 
 function context(operation = "replaceNovels") {
   return { entityName: "Writer", operation, config: { softDelete: { strategy: "hard" } } } as never;
+}
+
+/** A plain-marker-column soft-deletable context, unlike `context()` above. */
+function studioContext(operation: string) {
+  return {
+    entityName: "Studio",
+    operation,
+    config: { softDelete: { strategy: "soft", field: "archivedAt" } },
+  } as never;
 }
 
 beforeAll(async () => {
   dataSource = new DataSource({
     type: "better-sqlite3",
     database: ":memory:",
-    entities: [Writer, Novel, Article, Topic],
+    entities: [Writer, Novel, Article, Topic, Studio, Album],
     synchronize: true,
   });
   await dataSource.initialize();
   adapter = createInfrastructure(dataSource).adapterFor(Writer);
   articleAdapter = createInfrastructure(dataSource).adapterFor(Article);
+  studioAdapter = createInfrastructure(dataSource).adapterFor(Studio);
 });
 
 afterAll(async () => {
@@ -97,6 +144,8 @@ beforeEach(async () => {
   await dataSource.getRepository(Writer).clear();
   await dataSource.getRepository(Article).clear();
   await dataSource.getRepository(Topic).clear();
+  await dataSource.getRepository(Album).clear();
+  await dataSource.getRepository(Studio).clear();
 });
 
 async function seed(): Promise<{ writerId: number; novelIds: number[] }> {
@@ -248,6 +297,17 @@ describe("TypeOrmRepositoryAdapter#readRelation (arrayMutation's resource strate
       NotFoundException,
     );
   });
+
+  it("raises NotFoundException for a soft-deleted parent through a plain marker column", async () => {
+    // Unlike `@DeleteDateColumn`, a plain marker column gets no automatic
+    // exclusion from TypeORM's repository API — `readRelation` must apply
+    // `scopeToLive` itself, the same as `replaceRelation`'s `byId` already
+    // does, or a soft-deleted parent stays reachable here.
+    const studio = await dataSource.getRepository(Studio).save({ name: "Ghost Studio", archivedAt: new Date() });
+    await expect(studioAdapter.readRelation!(studio.id, "albums", studioContext("listAlbums"))).rejects.toThrowError(
+      NotFoundException,
+    );
+  });
 });
 
 describe("TypeOrmRepositoryAdapter#addRelationMember (arrayMutation's resource strategy, ADR-0029's resource amendment)", () => {
@@ -288,6 +348,21 @@ describe("TypeOrmRepositoryAdapter#addRelationMember (arrayMutation's resource s
     );
     expect(updated.topics.map((t) => t.id)).toEqual([topicIds[0]]);
   });
+
+  it("raises NotFoundException for a nonexistent member id through the junction table (ManyToMany)", async () => {
+    const { articleId } = await seedArticle();
+    await expect(
+      articleAdapter.addRelationMember!(articleId, "topics", 999999, articleContext("addTopics")),
+    ).rejects.toThrowError(NotFoundException);
+  });
+
+  it("raises NotFoundException for a soft-deleted parent through a plain marker column", async () => {
+    const studio = await dataSource.getRepository(Studio).save({ name: "Ghost Studio", archivedAt: new Date() });
+    const [album] = await dataSource.getRepository(Album).save([{ title: "Solo" }]);
+    await expect(
+      studioAdapter.addRelationMember!(studio.id, "albums", album!.id, studioContext("addAlbums")),
+    ).rejects.toThrowError(NotFoundException);
+  });
 });
 
 describe("TypeOrmRepositoryAdapter#removeRelationMember (arrayMutation's resource strategy, ADR-0029's resource amendment)", () => {
@@ -314,5 +389,21 @@ describe("TypeOrmRepositoryAdapter#removeRelationMember (arrayMutation's resourc
       articleContext("removeTopics"),
     );
     expect(updated.topics.map((t) => t.id)).toEqual([topicIds[1]]);
+  });
+
+  it("raises ArrayMutationMemberNotFoundException for a nonexistent membership through the junction table (ManyToMany)", async () => {
+    const { articleId } = await seedArticle();
+    await expect(
+      articleAdapter.removeRelationMember!(articleId, "topics", 999999, articleContext("removeTopics")),
+    ).rejects.toThrowError(ArrayMutationMemberNotFoundException);
+  });
+
+  it("raises NotFoundException for a soft-deleted parent through a plain marker column", async () => {
+    const studio = await dataSource.getRepository(Studio).save({ name: "Ghost Studio" });
+    const [album] = await dataSource.getRepository(Album).save([{ title: "Solo", studio }]);
+    await dataSource.getRepository(Studio).update(studio.id, { archivedAt: new Date() });
+    await expect(
+      studioAdapter.removeRelationMember!(studio.id, "albums", album!.id, studioContext("removeAlbums")),
+    ).rejects.toThrowError(NotFoundException);
   });
 });
