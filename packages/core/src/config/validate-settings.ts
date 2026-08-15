@@ -227,14 +227,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected "replace", "resource", or "jsonPatch", got ${JSON.stringify(arrayMutation.strategy)}`,
       );
     }
-    if (arrayMutation.strategy === "resource") {
-      throw new ConfigurationException(
-        entityName,
-        "arrayMutation.strategy",
-        `"resource" is a reserved discriminator, not yet implemented — "replace" and "jsonPatch" are supported ` +
-          `today (see issue #206 and its follow-ups)`,
-      );
-    }
   }
 
   for (const [id, value] of Object.entries(settings.operations)) {

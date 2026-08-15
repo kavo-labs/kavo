@@ -150,31 +150,63 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
       if (arrayMutationRelations.length > 0) {
         requireArrayMutationTargetsResolvable(resolved, arrayMutationRelations, catalog);
         // `validateArrayMutationRelations` (resolve-entity-config.ts) already
-        // rejected `arrayMutation: false` with a write-opted relation, and
-        // `"resource"` never reaches bootstrap at all (validate-settings.ts)
-        // — so a non-empty `arrayMutationRelations` guarantees the strategy
-        // resolved to one of the two implemented ones here.
-        const strategy = (resolved.settings.arrayMutation as { readonly strategy: "replace" | "jsonPatch" }).strategy;
+        // rejected `arrayMutation: false` with a write-opted relation, so a
+        // non-empty `arrayMutationRelations` guarantees the strategy
+        // resolved to one of the three implemented ones here.
+        const strategy = (
+          resolved.settings.arrayMutation as { readonly strategy: "replace" | "resource" | "jsonPatch" }
+        ).strategy;
         if (strategy === "replace") {
           requireArrayMutationSupport(
             resolved,
             arrayMutationRelations,
             adapter as unknown as RepositoryAdapter<Entity>,
           );
-          registerArrayMutationOperations<Entity>(
-            registry,
-            arrayMutationRelations,
-            resolved.entityName,
-            (relationName) => ({
-              // `replaceRelation` is confirmed present by
-              // `requireArrayMutationSupport` above, once, at bootstrap —
-              // never per request.
+          registerArrayMutationOperations<Entity>(registry, arrayMutationRelations, resolved.entityName, "replace", {
+            // `replaceRelation` is confirmed present by
+            // `requireArrayMutationSupport` above, once, at bootstrap —
+            // never per request.
+            replace: (relationName) => ({
               execute: (input: unknown, context) => {
                 const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
                 return context.repository.replaceRelation!(id, relationName, memberIds, context);
               },
             }),
+          });
+        } else if (strategy === "resource") {
+          requireResourceArrayMutationSupport(
+            resolved,
+            arrayMutationRelations,
+            adapter as unknown as RepositoryAdapter<Entity>,
           );
+          registerArrayMutationOperations<Entity>(registry, arrayMutationRelations, resolved.entityName, "resource", {
+            // Every primitive below is confirmed present by
+            // `requireResourceArrayMutationSupport` above, once, at
+            // bootstrap — never per request.
+            replace: (relationName) => ({
+              execute: (input: unknown, context) => {
+                const { id, memberIds } = input as { id: EntityId; memberIds: readonly EntityId[] | null };
+                return context.repository.replaceRelation!(id, relationName, memberIds, context);
+              },
+            }),
+            list: (relationName) => ({
+              execute: (input: unknown, context) => {
+                return context.repository.readRelation!(input as EntityId, relationName, context);
+              },
+            }),
+            add: (relationName) => ({
+              execute: (input: unknown, context) => {
+                const { id, memberId } = input as { id: EntityId; memberId: EntityId };
+                return context.repository.addRelationMember!(id, relationName, memberId, context);
+              },
+            }),
+            remove: (relationName) => ({
+              execute: (input: unknown, context) => {
+                const { id, memberId } = input as { id: EntityId; memberId: EntityId };
+                return context.repository.removeRelationMember!(id, relationName, memberId, context);
+              },
+            }),
+          });
         } else {
           requireJsonPatchSupport(resolved, arrayMutationRelations, adapter as unknown as RepositoryAdapter<Entity>);
         }
@@ -305,6 +337,36 @@ function requireArrayMutationSupport<Entity extends object>(
     `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
       `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
   );
+}
+
+/**
+ * Fails fast at `createCrud` when a relation opts into array-mutation
+ * writes under `arrayMutation.strategy: "resource"` (ADR-0029's resource
+ * amendment) but the repository adapter in use is missing one of the four
+ * primitives the strategy's operations need — `replaceRelation`,
+ * `readRelation`, `addRelationMember`, `removeRelationMember`. Checked once
+ * here rather than per request, the same ORM caveat
+ * `requireArrayMutationSupport`/`requireJsonPatchSupport` already name:
+ * Kavo maps the payload, it does not synthesize a write an adapter declined
+ * to make.
+ */
+function requireResourceArrayMutationSupport<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  if (relationNames.length === 0) return;
+  const required = ["replaceRelation", "readRelation", "addRelationMember", "removeRelationMember"] as const;
+  for (const method of required) {
+    if (typeof adapter[method] === "function") continue;
+    throw new ConfigurationException(
+      config.entityName,
+      `relations.edges.${relationNames[0]}.write`,
+      `'${relationNames[0]}' opts into array-mutation writes under 'arrayMutation.strategy: "resource"', but this ` +
+        `entity's repository adapter does not implement '${method}' — the 'resource' strategy is not supported by ` +
+        `this adapter yet`,
+    );
+  }
 }
 
 /**

@@ -216,12 +216,12 @@ export interface RealtimeSettings {
  * RFC 6902 patch document — `add`/`replace` on `/<field>` for a scalar
  * column, `add`/`remove` on `/<relation>/-` for a write-opted-in relation's
  * membership — while an object body keeps `patchOne`'s ordinary contract
- * unchanged (ADR-0029's jsonPatch amendment). `"resource"` (per-relation
- * sub-collection endpoints) remains a reserved discriminator, the same
- * pattern `SearchDriver` uses for a not-yet-built backend: naming it now
- * means a later issue adds behavior without a breaking config change.
- * `validate-settings.ts` rejects it outright today, so choosing it fails at
- * bootstrap instead of silently doing nothing.
+ * unchanged (ADR-0029's jsonPatch amendment). `"resource"` synthesizes four
+ * per-relation sub-collection operations instead of one — `GET`/`POST`/
+ * `DELETE`/`PUT` `:id/<relation>`, adding `list`/`add`/`remove`
+ * single-member semantics alongside the same whole-array `replace` `PUT`
+ * uses — for a relation opted into `relations.edges.<name>.write`
+ * (ADR-0029's resource amendment).
  */
 export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
 

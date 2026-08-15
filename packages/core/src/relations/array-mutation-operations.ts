@@ -2,6 +2,13 @@ import type { OperationDescriptor, OperationRegistry } from "../operations/opera
 import type { OperationHandler } from "../operations/operation-handler.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
+/** The four sub-collection actions `arrayMutation`'s `resource` strategy synthesizes (ADR-0029's resource amendment). */
+export type ArrayMutationAction = "replace" | "list" | "add" | "remove";
+
+function capitalize(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 /**
  * `tags` → `replaceTags` — the one operation id shape the `replace`
  * strategy needs (ADR-0014's named extension point). Exported so
@@ -9,8 +16,30 @@ import { ConfigurationException } from "../errors/exceptions.js";
  * same id from the exact same relation name (ADR-0013).
  */
 export function replaceRelationOperationId(relationName: string): string {
-  return `replace${relationName.charAt(0).toUpperCase()}${relationName.slice(1)}`;
+  return `replace${capitalize(relationName)}`;
 }
+
+/** `tags` → `listTags` — the `resource` strategy's `GET :id/tags` operation id. */
+export function listRelationOperationId(relationName: string): string {
+  return `list${capitalize(relationName)}`;
+}
+
+/** `tags` → `addTags` — the `resource` strategy's `POST :id/tags` operation id. */
+export function addRelationOperationId(relationName: string): string {
+  return `add${capitalize(relationName)}`;
+}
+
+/** `tags` → `removeTags` — the `resource` strategy's `DELETE :id/tags` operation id. */
+export function removeRelationOperationId(relationName: string): string {
+  return `remove${capitalize(relationName)}`;
+}
+
+const OPERATION_ID_BY_ACTION: Readonly<Record<ArrayMutationAction, (relationName: string) => string>> = {
+  replace: replaceRelationOperationId,
+  list: listRelationOperationId,
+  add: addRelationOperationId,
+  remove: removeRelationOperationId,
+};
 
 /**
  * Relation names opted into array-mutation writes, read straight off
@@ -32,45 +61,72 @@ export function writeOptedInRelationNames(
     .map(([name]) => name);
 }
 
-const unboundArrayMutationHandler = (relationName: string, entityName: string): OperationHandler<unknown> => ({
+const unboundArrayMutationHandler = (
+  operationId: string,
+  relationName: string,
+  entityName: string,
+): OperationHandler<unknown> => ({
   execute(): Promise<never> {
     throw new ConfigurationException(
       entityName,
       `relations.edges.${relationName}.write`,
-      `'${replaceRelationOperationId(relationName)}' has no bound handler — this registry was built for ` +
-        `inspection (route generation) only`,
+      `'${operationId}' has no bound handler — this registry was built for inspection (route generation) only`,
     );
   },
 });
 
+/** One handler factory per action `registerArrayMutationOperations` may register — all optional (inspection-only build otherwise). */
+export interface ArrayMutationHandlerFactories<Entity extends object> {
+  readonly replace?: (relationName: string) => OperationHandler<Entity>;
+  readonly list?: (relationName: string) => OperationHandler<Entity>;
+  readonly add?: (relationName: string) => OperationHandler<Entity>;
+  readonly remove?: (relationName: string) => OperationHandler<Entity>;
+}
+
 /**
- * Registers one `replace<Relation>` operation per write-opted-in relation
- * into an already-built registry — a post-hoc step (not part of
+ * Registers the `arrayMutation` operations for one write-opted-in relation
+ * per name into an already-built registry — a post-hoc step (not part of
  * `createOperationRegistry`) because these entries aren't declared through
  * `EntityConfig.operations`, they're synthesized from `relations.edges`.
  *
- * `@kavo/nest`'s decorator calls this with no `handlerFactory` (route
+ * `strategy: "replace"` registers exactly one operation per relation —
+ * `replace<Relation>`, the whole-array `PUT` (ADR-0014). `strategy:
+ * "resource"` registers four — `replace<Relation>` plus `list<Relation>`
+ * (`GET`), `add<Relation>` (`POST`) and `remove<Relation>` (`DELETE`)
+ * (ADR-0029's resource amendment) — since a resource entity's `PUT` has the
+ * exact same whole-array-replace semantics `replace`'s own strategy uses.
+ *
+ * `@kavo/nest`'s decorator calls this with no `handlers` (route
  * generation only, same as every other registry it builds — see
  * `unboundHandler` in `default-operation-registry.ts`); `createCrud` calls
- * it with one that reaches `context.repository.replaceRelation`.
+ * it with the handlers that reach `context.repository`.
  */
 export function registerArrayMutationOperations<Entity extends object>(
   registry: OperationRegistry<Entity>,
   relationNames: readonly string[],
   entityName: string,
-  handlerFactory?: (relationName: string) => OperationHandler<Entity>,
+  strategy: "replace" | "resource" = "replace",
+  handlers?: ArrayMutationHandlerFactories<Entity>,
 ): void {
+  const actions: readonly ArrayMutationAction[] =
+    strategy === "resource" ? ["replace", "list", "add", "remove"] : ["replace"];
   for (const name of relationNames) {
-    const descriptor: OperationDescriptor<Entity> = {
-      id: replaceRelationOperationId(name),
-      kind: "write",
-      cardinality: "one",
-      enabled: true,
-      handler: handlerFactory?.(name) ?? (unboundArrayMutationHandler(name, entityName) as OperationHandler<Entity>),
-      input: null,
-      output: null,
-      meta: { arrayMutation: { relation: name, strategy: "replace" } },
-    };
-    registry.register(descriptor);
+    for (const action of actions) {
+      const operationId = OPERATION_ID_BY_ACTION[action](name);
+      const handlerFactory = handlers?.[action];
+      const descriptor: OperationDescriptor<Entity> = {
+        id: operationId,
+        kind: action === "list" ? "read" : "write",
+        cardinality: "one",
+        enabled: true,
+        handler:
+          handlerFactory?.(name) ??
+          (unboundArrayMutationHandler(operationId, name, entityName) as OperationHandler<Entity>),
+        input: null,
+        output: null,
+        meta: { arrayMutation: { relation: name, strategy, action } },
+      };
+      registry.register(descriptor);
+    }
   }
 }

@@ -80,4 +80,45 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
     changes: { readonly add: readonly Id[]; readonly remove: readonly Id[] },
     context: KavoContext<Entity>,
   ): Promise<Entity>;
+  /**
+   * `arrayMutation`'s `resource` strategy (ADR-0029's resource amendment):
+   * `GET :id/<relation>`'s current-membership read. Returns the parent row
+   * with `relation` loaded — the same "parent, not the relation's own
+   * member list" contract `replaceRelation`/`patchRelation` already have
+   * (ADR-0029's Consequences section), so a `resource` entity's four
+   * operations serve one consistent response shape.
+   *
+   * Optional, for the same reason `replaceRelation` is: an adapter that
+   * doesn't implement this doesn't support the `resource` strategy, which
+   * `createCrud` checks for at bootstrap (`ConfigurationException`) the
+   * moment a relation opts into `write` under `arrayMutation.strategy:
+   * "resource"`.
+   */
+  readRelation?(id: Id, relation: string, context: KavoContext<Entity>): Promise<Entity>;
+  /**
+   * `arrayMutation`'s `resource` strategy: `POST :id/<relation>`, adding one
+   * member by id. Idempotent — adding an id already a member changes
+   * nothing, RFC 6902 `add`-on-an-existing-member's own convention.
+   * Adding an id with no matching row raises the same `NotFoundException`
+   * `replaceRelation`'s own existence check already raises — one rule for
+   * "you named something that doesn't exist," regardless of strategy.
+   * Returns the parent row with `relation` loaded, `readRelation`'s own
+   * contract.
+   *
+   * Optional, same reasoning and same bootstrap check as `readRelation`.
+   */
+  addRelationMember?(id: Id, relation: string, memberId: Id, context: KavoContext<Entity>): Promise<Entity>;
+  /**
+   * `arrayMutation`'s `resource` strategy: `DELETE :id/<relation>`, removing
+   * one member by id. Removing an id that is not currently a member raises
+   * `ArrayMutationMemberNotFoundException` rather than a silent no-op — a
+   * client that asked for a removal that already isn't there finds out,
+   * rather than reading a 200 as confirmation that something changed (the
+   * same matching/orphan rule `patchRelation`'s `jsonPatch` `remove`
+   * already enforces, under a strategy-neutral code). Returns the parent
+   * row with `relation` loaded, `readRelation`'s own contract.
+   *
+   * Optional, same reasoning and same bootstrap check as `readRelation`.
+   */
+  removeRelationMember?(id: Id, relation: string, memberId: Id, context: KavoContext<Entity>): Promise<Entity>;
 }

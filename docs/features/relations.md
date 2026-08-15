@@ -37,7 +37,7 @@ grant, rather than leaving it at global scope.
 
 ## arrayMutation
 
-`strategy` (default `"replace"`, or `"resource"`/`"jsonPatch"`) picks which write shape a `relations.edges.<name>.write: true` relation gets. `"replace"` and `"jsonPatch"` are both implemented; `"resource"` is reserved for later and rejected at bootstrap today. `false` for the whole `arrayMutation` key (instead of an object) disables the feature entirely; a relation still naming `write: true` under it is a bootstrap error.
+`strategy` (default `"replace"`, or `"resource"`/`"jsonPatch"`) picks which write shape a `relations.edges.<name>.write: true` relation gets. All three are implemented. `false` for the whole `arrayMutation` key (instead of an object) disables the feature entirely; a relation still naming `write: true` under it is a bootstrap error.
 
 `"replace"` gives each write-opted to-many relation `PUT /<entity>/:id/<relation>`, generated the same way every other route is (one registry entry per relation, at `@Kavo` decoration time). The body is a full replacement array — ids, `{id}` references, or `null` — still id-only per [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes), with partial mutation disabled outright: no `{ add: [...] }`/`{ remove: [...] }` shape, no patch ops. Any other top-level body shape is a `400 KAVO_ARRAY_MUTATION_INVALID_SHAPE`. The response is the parent entity's own `item` shape, not the relation's member list.
 
@@ -49,6 +49,16 @@ grant, rather than leaving it at global scope.
 class BookController {}
 ```
 
-`replaceRelation` is an _optional_ adapter method — `@kavo/typeorm` implements it today; an app on an adapter that doesn't yet is told so at bootstrap (`ConfigurationException`), the moment a relation opts in, rather than failing on the first request. `jsonPatch` reuses `patchOne`'s existing `PATCH /<entity>/:id` route instead of adding a new one — an array body is parsed as an RFC 6902 patch document, while an object body keeps `patchOne`'s ordinary contract unchanged. See [ADR-0029](/internals/adr/0029-array-relations-may-opt-into-replace-writes) and [doc 12 §5](/internals/architecture/12-relations-and-includes#array-relation-mutation-arraymutation-adr-0029) for the full design and the follow-up issue tracking `"resource"` and the remaining ORM adapters.
+`"resource"` gives each write-opted relation four operations under the same `/<entity>/:id/<relation>` path instead of one: `PUT` (identical to `"replace"`'s own `replace<Relation>`), `GET` (`list<Relation>`, current membership), `POST` (`add<Relation>`, one member by id) and `DELETE` (`remove<Relation>`, one member by id — the member id travels in the body, since the path only names the parent). `add`/`remove` bodies are a single scalar id or `{id}` reference, never an array. In practice, send `{id}`: `@nestjs/platform-express`'s default JSON body parser runs in `strict` mode, which refuses a bare top-level scalar before the request reaches Nest at all — `{id}` is the one shape guaranteed to arrive over a real deployment's defaults. Matching/orphan rules: adding an id with no matching row is `404 KAVO_NOT_FOUND`; adding an id already a member is an idempotent no-op; removing an id that isn't currently a member is `404 KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND` rather than a silent no-op.
+
+```ts
+@Kavo(Book, {
+  arrayMutation: { strategy: "resource" },
+  relations: { edges: { tags: { write: true } } },
+})
+class BookController {}
+```
+
+`replaceRelation`/`readRelation`/`addRelationMember`/`removeRelationMember` are all _optional_ adapter methods — `@kavo/typeorm` implements every one of them today; an app on an adapter that doesn't yet is told so at bootstrap (`ConfigurationException`), the moment a relation opts in, rather than failing on the first request. `jsonPatch` reuses `patchOne`'s existing `PATCH /<entity>/:id` route instead of adding a new one — an array body is parsed as an RFC 6902 patch document, while an object body keeps `patchOne`'s ordinary contract unchanged. See [ADR-0029](/internals/adr/0029-array-relations-may-opt-into-replace-writes) and [doc 12 §5](/internals/architecture/12-relations-and-includes#array-relation-mutation-arraymutation-adr-0029) for the full design and the follow-up issues tracking the remaining ORM adapters.
 
 See [Settings](/guides/configuration/settings) for the rest of `KavoSettings`.

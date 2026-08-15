@@ -232,16 +232,127 @@ already have for adapter-capability gaps. Plain programmatic
 the first place, so `createCrud` itself carries no such check — only the
 framework binding, which is where the two views can actually diverge, does.
 
+## Amendment — `resource` (issue #210)
+
+`replace` and `jsonPatch` both keep one route per relation (`PUT
+:id/<relation>`, or `patchOne`'s own route). This amendment ships the third
+named strategy, which trades that for a genuine per-relation
+sub-collection: `GET`/`POST`/`DELETE`/`PUT` all at `/entity/:id/<relation>`,
+one operation per HTTP method rather than one operation overloading a
+single method's body shape.
+
+**The operations.** `registerArrayMutationOperations`
+(`array-mutation-operations.ts`) is the same seam `replace` already uses,
+extended rather than duplicated: it now takes the resolved `strategy`
+(`"replace" | "resource"`) and, under `"resource"`, registers four
+operations per write-opted relation instead of one —
+`replace<Relation>` (unchanged from `replace`'s own semantics),
+`list<Relation>` (`GET`, current membership), `add<Relation>` (`POST`, one
+member by id) and `remove<Relation>` (`DELETE`, one member by id). Each
+descriptor's `meta.arrayMutation` carries both the resolved `strategy` and
+its own `action` (`"replace" | "list" | "add" | "remove"`) — `action` is
+what `KavoEngine.resolveInput` and `@kavo/nest`'s route generator branch on
+(the field ADR-0029's original text called `strategy` before this
+amendment generalized it), since a single `strategy` value no longer
+determines a single route shape the way it did when `replace` was the only
+implemented one.
+
+**The route.** `@kavo/nest`'s `resolveRoute` keys the HTTP method off
+`action` (`replace → PUT`, `list → GET`, `add → POST`, `remove → DELETE`),
+all at the same `:id/<relation>` path `replace` already used — there is
+still no static route table to key a dynamic per-relation id against, the
+same reason `replace`'s own route is derived rather than looked up.
+`remove<Relation>` is the one route whose body an HTTP method never
+predicts on its own: `DELETE` carries no id path segment for the member it
+targets (the path only names the _parent_), so the member id travels in
+the body instead — the one `DELETE` Kavo generates that takes one, unlike
+`deleteOne`/`purgeOne`, whose path segment already names everything they
+need.
+
+**The request bodies.** `list<Relation>` takes none (an ordinary read).
+`add<Relation>`/`remove<Relation>` each take a single scalar id or `{id}`
+reference — never an array (that shape stays `replace`'s own surface) and
+never absent; either violation raises `ArrayMutationInvalidShapeException`
+(`KAVO_ARRAY_MUTATION_INVALID_SHAPE`, 400), the same code `replace`'s own
+shape violations raise, now carrying an `{expected}` param so the message
+states which shape the offending action actually wanted rather than always
+describing `replace`'s.
+
+**The matching/orphan rules, stated — deliberately the same rules
+`jsonPatch` already committed to, under strategy-neutral naming.** `add`
+naming an id with no matching row raises the same `NotFoundException`
+`replaceRelation`'s own existence check already raises — one rule for "you
+named something that doesn't exist," regardless of strategy, restated from
+the original decision above. `add` naming an id already a member is an
+idempotent no-op. `remove` naming an id that is **not** currently a member
+raises `ArrayMutationMemberNotFoundException`
+(`KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND`, 404) — the same rule
+`JsonPatchTargetNotFoundException` enforces for `jsonPatch`'s own `remove`,
+under its own code rather than a reused one: a `resource` client's
+`DELETE` never carries a JSON Patch document, so raising the `jsonPatch`
+exception's own `"JSON Patch target not found"` title at it would name the
+wrong feature in the response.
+
+**The response shape.** `add`/`remove`/`replace<Relation>` keep the exact
+"parent, not the relation's own member list" contract the original decision
+states for `replace`, byte-for-byte unchanged: the parent entity, projected
+through its own `item` DTO slot the way it always has been — an existing
+`replace`-strategy entity's response shape does not change by this
+amendment existing at all. `list<Relation>` is not held to that same
+contract, because holding it there would make the operation unable to
+answer the question its own name promises: `KavoEngine`'s response mapping
+forces exactly one include node onto `list<Relation>`'s response alone
+(`contextForArrayMutationResponse`), reusing the existing include-projection
+machinery — not new cross-entity serialization machinery — but applying it
+unconditionally rather than waiting on a client `include=` that this
+operation has no query parameter to carry, and bypassing
+`allowlists.includable` on purpose: `write` and `includable` are
+independent opt-ins, so a relation opted into `write` but never into
+`includable` must still appear on the one response whose entire purpose is
+showing that relation's membership. `add`/`remove`/`replace<Relation>` do
+not get this treatment — a later change could extend it to them without
+breaking the request shape, the same opening the original decision left for
+`replace`, but this amendment does not take it.
+
+**The adapter seam.** `EntityWriter` gains three more optional primitives
+beyond `replaceRelation` — `readRelation`, `addRelationMember`,
+`removeRelationMember` — each returning the parent row with `relation`
+loaded, `replaceRelation`'s own contract. `createCrud` checks for all four
+`resource` primitives once, at bootstrap, the moment any relation opts in
+under `arrayMutation.strategy: "resource"` (`ConfigurationException` naming
+whichever is missing) — the same ORM caveat the original decision states
+for `replaceRelation` applies to each of the three new ones. `@kavo/typeorm`
+implements all three: `readRelation` is a plain read (no transaction
+needed); `addRelationMember`/`removeRelationMember` commit their
+membership read (which decides "is this id currently a member?") and the
+write it gates in one `dataSource.transaction`, the same reason
+`patchRelation` does — a concurrent writer can never make that judgment
+stale between the check and the change.
+
+**Route generation stays mutually exclusive per strategy.** Exactly as the
+`jsonPatch` amendment already established between `replace` and
+`jsonPatch`: both call sites (`createCrud` and `@Kavo`) gate `resource`'s
+four-operation registration on the resolved/declared strategy being
+`"resource"` — an entity on `"replace"` or `"jsonPatch"` gets none of
+`resource`'s routes, and vice versa. `KavoModule`'s
+`requireArrayMutationStrategyAgreement` needed no change to cover this: its
+existing "declared assumed `'replace'`, but resolved differently" check
+already catches an entity that omits `arrayMutation` while relying on a
+_global_ `"resource"` default, and an entity that declares `"resource"`
+locally can never disagree with what resolves, for the same "entity-level
+always wins the merge" reason a local `"jsonPatch"` declaration already
+couldn't.
+
 ## Consequences
 
-- `resource` remains unimplemented; choosing it is a bootstrap error naming
-  this ADR and the tracking issue, not a silently inert config value or a
-  500 at request time. `jsonPatch` is implemented per the amendment above
-  (issue #211).
+- All three named strategies — `replace`, `jsonPatch`, `resource` — are
+  implemented today, each behind its own bootstrap capability check and its
+  own mutually-exclusive route surface.
 - `@kavo/prisma`, `@kavo/mongoose`, and `@kavo/mikroorm` do not implement
-  `replaceRelation` or `patchRelation` yet. An app on one of them that opts
-  a relation into `write` fails at bootstrap with a clear message, not a
-  runtime surprise.
+  `replaceRelation`, `patchRelation`, `readRelation`, `addRelationMember`,
+  or `removeRelationMember` yet. An app on one of them that opts a relation
+  into `write` fails at bootstrap with a clear message, not a runtime
+  surprise.
 - The two-stage validation split (decoration-time route generation blind to
   cardinality, bootstrap-time rejection once metadata exists) mirrors
   ADR-0013 exactly, so a reader who already understands `restoreOne`/

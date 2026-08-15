@@ -74,9 +74,7 @@ export const ERROR_CATALOG = {
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: {
     status: 400,
     title: "Invalid array-mutation body",
-    message:
-      "The body for '{relation}' on {entity} must be an array of ids or id references, or null — the 'replace' " +
-      "strategy disables partial mutation (no add/remove shape, no patch ops).",
+    message: "The body for '{relation}' on {entity} is not a valid array-mutation shape: {expected}.",
   },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: {
     status: 400,
@@ -86,6 +84,11 @@ export const ERROR_CATALOG = {
   KAVO_JSON_PATCH_TARGET_NOT_FOUND: {
     status: 404,
     title: "JSON Patch target not found",
+    message: "Cannot remove '{id}' from '{relation}' on {entity}: it is not currently a member.",
+  },
+  KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND: {
+    status: 404,
+    title: "Array-mutation member not found",
     message: "Cannot remove '{id}' from '{relation}' on {entity}: it is not currently a member.",
   },
   KAVO_ALREADY_DELETED: {

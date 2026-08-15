@@ -17,6 +17,7 @@ import type { RequestPreconditions } from "../caching/etag.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 import type { KavoSettings } from "../config/settings.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
+import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import {
   ArrayMutationInvalidShapeException,
   ConfigurationException,
@@ -39,7 +40,7 @@ import { createKavoContext, randomUuid } from "../context/default-kavo-context.j
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
 import { validateDefaultSort } from "../config/resolve-entity-config.js";
-import { resolveSoftDelete } from "../persistence/soft-delete.js";
+import { HARD_DELETE, resolveSoftDelete } from "../persistence/soft-delete.js";
 import type { FindManyResult } from "./built-in-handlers.js";
 
 /**
@@ -575,12 +576,24 @@ export class KavoEngine<Entity extends object> {
         // otherwise — everything else a read is given rides on
         // `context.query`.
         if (descriptor.kind === "read") return request.id === null ? null : this.coerceId(request.id);
-        // A `replace<Relation>` operation Kavo itself synthesized
-        // (`registerArrayMutationOperations`): its body is a bare array (or
-        // `null`), never an entity-shaped object, so it takes the
-        // array-mutation path instead of the ordinary DTO deserializer.
+        // A `replace`/`add`/`remove<Relation>` operation Kavo itself
+        // synthesized (`registerArrayMutationOperations`) takes the
+        // array-mutation path instead of the ordinary DTO deserializer:
+        // `replace`'s body is a bare array (or `null`, ADR-0014); `add`/
+        // `remove`'s (the `resource` strategy's single-member actions,
+        // ADR-0029's resource amendment) is a single scalar id or `{id}`
+        // reference — never an entity-shaped object either way. `list`
+        // (also `resource`) never reaches here: it is `kind: "read"`, so
+        // the branch above already returned the coerced id alone.
         const arrayMutation = descriptor.meta.arrayMutation;
         if (arrayMutation !== undefined) {
+          if (arrayMutation.action === "add" || arrayMutation.action === "remove") {
+            return {
+              id: this.coerceId(request.id),
+              relation: arrayMutation.relation,
+              memberId: this.resolveArrayMutationMemberId(arrayMutation.relation, request.body, context),
+            };
+          }
           return {
             id: this.coerceId(request.id),
             relation: arrayMutation.relation,
@@ -685,7 +698,11 @@ export class KavoEngine<Entity extends object> {
   ): readonly EntityId[] | null {
     if (body !== null && !Array.isArray(body)) {
       throw new ArrayMutationInvalidShapeException({
-        messageParams: { entity: context.entityName, relation },
+        messageParams: {
+          entity: context.entityName,
+          relation,
+          expected: "an array of ids or id references, or null — 'replace' disables partial mutation",
+        },
         context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
       });
     }
@@ -693,6 +710,33 @@ export class KavoEngine<Entity extends object> {
     const refs = wrapped[relation];
     if (refs === null || refs === undefined) return null;
     return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
+  }
+
+  /**
+   * A `resource`-strategy `add`/`remove` body (`POST`/`DELETE
+   * /entity/:id/relation`, ADR-0029's resource amendment): a single scalar
+   * id or `{id}` reference naming the one member the request targets —
+   * never an array (that shape is `replace`'s own whole-array surface) and
+   * never absent. Wraps the raw body as a one-element array and reuses
+   * `resolveArrayMutationMemberIds`'s own deserializer path, rather than
+   * duplicating `associate()` here, for the same reason that helper does.
+   */
+  private resolveArrayMutationMemberId(relation: string, body: unknown, context: KavoContext<Entity>): EntityId {
+    const invalid = (): never => {
+      throw new ArrayMutationInvalidShapeException({
+        messageParams: {
+          entity: context.entityName,
+          relation,
+          expected: "a single id or id reference naming exactly one member",
+        },
+        context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+      });
+    };
+    if (body === null || body === undefined || Array.isArray(body)) invalid();
+    const memberIds = this.resolveArrayMutationMemberIds(relation, [body], context);
+    const memberId = memberIds?.[0];
+    if (memberId === undefined) return invalid();
+    return memberId;
   }
 
   /**
@@ -713,6 +757,65 @@ export class KavoEngine<Entity extends object> {
       });
     }
     return value;
+  }
+
+  /**
+   * `list<Relation>`'s response (ADR-0029's resource amendment) is the
+   * parent entity, not the relation's own member list — but the relation it
+   * just read still has to show up *somewhere* on that parent, or
+   * `list<Relation>` cannot answer the question its name promises. The
+   * ordinary include mechanism only grafts a relation onto a response when
+   * `context.query.include` names it, and `list<Relation>` never populates
+   * one (it takes no query of its own) — so this forces exactly one include
+   * node onto a serialization-only context copy.
+   *
+   * Scoped to `action === "list"` alone, deliberately: `add`/`remove`/
+   * `replace<Relation>` keep the exact response shape `replace<Relation>`
+   * has always had — the parent alone, with no relation grafted on, per
+   * ADR-0029's original Consequences section — so an entity's existing
+   * `replace`-strategy behavior is byte-for-byte unchanged by this method
+   * existing at all.
+   *
+   * Bypasses `allowlists.includable` deliberately: `write` and
+   * `includable` are independent opt-ins (ADR-0029's own doc comment on
+   * `RelationEdgeSettings.write`), so a relation opted into `write` but
+   * never into `includable` must still appear on `list<Relation>`'s own
+   * response, whose entire purpose is showing that relation's membership.
+   */
+  private contextForArrayMutationResponse(
+    descriptor: OperationDescriptor<Entity>,
+    context: KavoContext<Entity>,
+  ): KavoContext<Entity> {
+    const arrayMutation = descriptor.meta.arrayMutation;
+    if (arrayMutation === undefined || arrayMutation.action !== "list") return context;
+    const relation = this.deps.config.relations.get(arrayMutation.relation);
+    if (relation === undefined) return context;
+    const node: IncludeNode = {
+      relation,
+      path: arrayMutation.relation,
+      fields: null,
+      strategy: relation.strategy === "auto" ? (relation.cardinality === "many" ? "batch" : "join") : relation.strategy,
+      // Never read by the serializer's projection step (only an adapter's
+      // own load decides what ends up in scope) — a neutral placeholder
+      // satisfies the type without implying a query-time decision was made.
+      softDelete: HARD_DELETE,
+      children: {},
+    };
+    const include: IncludeTree = { [arrayMutation.relation]: node };
+    // `list<Relation>` is `kind: "read"`, so `context.query` always exists
+    // by the time `mapResponse` runs — this fallback is defensive only,
+    // never actually reached on this path.
+    const query: NormalizedQueryContext<Entity> = context.query ?? {
+      filter: { root: null },
+      sort: [],
+      pagination: { limit: 0, offset: 0 },
+      fields: { root: null, relations: {} },
+      include: {},
+      withDeleted: false,
+      onlyDeleted: false,
+      count: false,
+    };
+    return { ...context, query: { ...query, include } };
   }
 
   private async mapResponse(
@@ -782,7 +885,8 @@ export class KavoEngine<Entity extends object> {
     }
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
-    const item = serializer.serializeItem(result as Entity, itemDto, context);
+    const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
+    const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
     validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
     // `context.config` is the per-call view, so `caching.etag` honors an
     // override at any scope down to this one request.

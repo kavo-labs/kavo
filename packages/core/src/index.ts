@@ -114,11 +114,16 @@ export type { RelationRegistry } from "./relations/relation-registry.js";
 export type { IncludeNode, IncludeTree } from "./relations/include-tree.js";
 export type { IncludeRequest, IncludeResolver } from "./relations/include-resolver.js";
 export { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
-// `arrayMutation`'s `replace` strategy (ADR-0014): `@kavo/nest`'s decorator
-// needs both to generate the same `replace<Relation>` registry entries and
-// sub-collection routes `createCrud` builds (ADR-0013).
+// `arrayMutation`'s `replace`/`resource` strategies (ADR-0014, ADR-0029's
+// resource amendment): `@kavo/nest`'s decorator needs these to generate the
+// same registry entries and sub-collection routes `createCrud` builds
+// (ADR-0013).
+export type { ArrayMutationAction, ArrayMutationHandlerFactories } from "./relations/array-mutation-operations.js";
 export {
+  addRelationOperationId,
+  listRelationOperationId,
   registerArrayMutationOperations,
+  removeRelationOperationId,
   replaceRelationOperationId,
   writeOptedInRelationNames,
 } from "./relations/array-mutation-operations.js";
@@ -193,6 +198,7 @@ export {
 export {
   AlreadyDeletedException,
   ArrayMutationInvalidShapeException,
+  ArrayMutationMemberNotFoundException,
   ConfigurationException,
   ConflictException,
   JsonPatchInvalidDocumentException,

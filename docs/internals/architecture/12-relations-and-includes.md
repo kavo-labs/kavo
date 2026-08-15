@@ -174,9 +174,7 @@ usual precedence chain, plus a per-relation opt-in:
 plain associate-by-id behavior above; nothing here changes for it.
 
 Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` —
-and **`replace`** and **`jsonPatch`** are implemented today. Choosing
-`"resource"` is still a bootstrap `ConfigurationException`, not a silent
-no-op.
+and all three are implemented today.
 
 `replace` is a whole-array `PUT` on the relation, still id-only per
 ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
@@ -200,6 +198,64 @@ ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
   caveat ADR-0014 already states for association by id applies here too.
 - The response is the parent entity (its own `item` DTO slot), not the
   relation's own member list.
+
+### `resource` (ADR-0029's resource amendment)
+
+`resource` synthesizes **four** operations per write-opted relation instead
+of one, all under the same `/<entity>/:id/<relation>` path, distinguished
+by HTTP method — a per-relation sub-collection, rather than one whole-array
+endpoint:
+
+| Operation           | Method   | Semantics                                          |
+| ------------------- | -------- | -------------------------------------------------- |
+| `replace<Relation>` | `PUT`    | Whole-array replace — identical to `replace`'s own |
+| `list<Relation>`    | `GET`    | Current membership                                 |
+| `add<Relation>`     | `POST`   | Add one member by id                               |
+| `remove<Relation>`  | `DELETE` | Remove one member by id                            |
+
+All four are registered by the same `registerArrayMutationOperations` seam
+`replace` uses, gated on `strategy: "resource"` (`meta.arrayMutation.action`
+distinguishes them — `@kavo/nest`'s route generator keys the HTTP method off
+it, since there is no static route table for a dynamic per-relation id).
+
+- `replace<Relation>` behaves exactly as it does under the `replace`
+  strategy — same body shape, same `ArrayMutationInvalidShapeException` on
+  a malformed one, same response.
+- `list<Relation>` takes no body (an ordinary read) and returns the parent
+  entity, but — unlike `add`/`remove`/`replace<Relation>`, which keep the
+  ordinary "parent only, nothing grafted on" contract byte-for-byte — with
+  the relation itself forced onto the response through the existing
+  include-projection machinery, bypassing `allowlists.includable`: the
+  operation's entire purpose is showing that relation's current membership,
+  so a relation opted into `write` but never into `includable` must still
+  appear here even though it can never be reached with `?include=`.
+- `add<Relation>`/`remove<Relation>` each take a single scalar id or `{id}`
+  reference as the body — never an array (that shape is `replace`'s own
+  surface) and never absent; either violation raises
+  `ArrayMutationInvalidShapeException`. `DELETE` is the one route whose
+  body an HTTP method never predicts on its own: unlike `deleteOne`/
+  `purgeOne`, `remove<Relation>` has no id path segment to carry the member
+  it targets, so the member id travels in the body instead.
+- Matching/orphan rules mirror `jsonPatch`'s own, under strategy-neutral
+  codes: `add` naming an id with no matching row raises `NotFoundException`
+  (`KAVO_NOT_FOUND`) — one rule for "you named something that doesn't
+  exist," regardless of strategy; `add` naming an id already a member is an
+  idempotent no-op; `remove` naming an id that is **not** currently a
+  member raises `ArrayMutationMemberNotFoundException`
+  (`KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND`, 404) rather than a silent no-op.
+- `EntityWriter` gains three more optional primitives beyond
+  `replaceRelation` — `readRelation`, `addRelationMember`,
+  `removeRelationMember` — each returning the parent row with the relation
+  loaded. `@kavo/typeorm` implements all three; a write-opted relation on
+  an adapter missing any of the four `resource` primitives fails at
+  `createCrud`, the same bootstrap posture `replace`/`jsonPatch` have.
+  `addRelationMember`/`removeRelationMember` commit their membership read
+  and write in one transaction, the same reason `patchRelation` does.
+- `list`/`add`/`remove<Relation>` routes are **not** generated for a
+  relation whose entity resolved `arrayMutation.strategy` to anything other
+  than `"resource"` — the three strategies' write surfaces stay mutually
+  exclusive per entity, the same rule `replace`/`jsonPatch` already have
+  between them.
 
 ### `jsonPatch` (ADR-0029's jsonPatch amendment)
 
@@ -267,8 +323,9 @@ bootstrap posture `replace`'s `EntityWriter.replaceRelation` check has.
 entity resolved `arrayMutation.strategy` to `"jsonPatch"` — the two
 strategies' write surfaces stay mutually exclusive per entity.
 
-See **ADR-0029** for the full design, including why `resource` and the
-non-`@kavo/typeorm` adapters are deliberately out of scope for now.
+See **ADR-0029** and its resource amendment for the full design, including
+why the non-`@kavo/typeorm` adapters are deliberately out of scope for now
+for both `jsonPatch` and `resource`.
 
 ## 6. Not included
 

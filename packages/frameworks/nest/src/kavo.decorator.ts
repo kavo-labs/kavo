@@ -275,23 +275,23 @@ export function Kavo<
     registeredKavoControllers.set(target, metadata);
 
     const registry = createOperationRegistry(erasedConfig, undefined, undefined, entity.name);
-    // `replace<Relation>` sub-collection operations (`arrayMutation`'s
-    // `replace` strategy, ADR-0014): synthesized from `relations.edges`
-    // rather than declared in `operations`, so they're registered here,
-    // post-hoc, the same way `createCrud` registers them onto the engine's
-    // registry (ADR-0013 — both builds read the same entity-level config).
-    // No `handlerFactory`: like every other entry this registry builds, it
-    // exists for route generation only.
+    // Sub-collection operations (`arrayMutation`'s `replace` and `resource`
+    // strategies, ADR-0014 and ADR-0029's resource amendment): synthesized
+    // from `relations.edges` rather than declared in `operations`, so
+    // they're registered here, post-hoc, the same way `createCrud` registers
+    // them onto the engine's registry (ADR-0013 — both builds read the same
+    // entity-level config). No `handlers`: like every other entry this
+    // registry builds, it exists for route generation only.
     //
     // Gated on the entity's own declared `arrayMutation.strategy` — the
     // only view decoration time has (ADR-0012), blind to global defaults
     // exactly the way it's already blind to ORM cardinality metadata
     // (ADR-0013's two-stage split). `"jsonPatch"` (ADR-0029's jsonPatch
     // amendment) reuses `patchOne`'s existing `PATCH /:id` route instead of
-    // a synthesized one, so no `replace<Relation>` route belongs on an
-    // entity that declared it — an entity that omits `arrayMutation`
-    // entirely still defaults to `"replace"` here, unchanged from before
-    // this strategy existed. The one blind spot this leaves — an entity that
+    // a synthesized one, so neither strategy's routes belong on an entity
+    // that declared it — an entity that omits `arrayMutation` entirely
+    // still defaults to `"replace"` here, unchanged from before either
+    // strategy existed. The one blind spot this leaves — an entity that
     // omits `arrayMutation` while relying on a *global* default other than
     // `"replace"` — is not silently wrong: `KavoModule`'s discovery binder
     // (`kavo.module.ts`) re-derives this same value once both the decorated
@@ -299,8 +299,13 @@ export function Kavo<
     // loudly on a disagreement rather than serving a route with no matching
     // registry entry.
     const declaredStrategy = declaredArrayMutationStrategy(erasedConfig);
-    if (declaredStrategy === "replace") {
-      registerArrayMutationOperations(registry, writeOptedInRelationNames(erasedConfig?.relations?.edges), entity.name);
+    if (declaredStrategy === "replace" || declaredStrategy === "resource") {
+      registerArrayMutationOperations(
+        registry,
+        writeOptedInRelationNames(erasedConfig?.relations?.edges),
+        entity.name,
+        declaredStrategy,
+      );
     }
     const overrides = collectOverrides(controller.prototype, entity.name, registry);
     const conditionalDocs: KavoConditionalDocEntry[] = [];
@@ -509,18 +514,27 @@ function assertNoOwnParamMetadata(
   }
 }
 
+/** `meta.arrayMutation.action` → HTTP method, ADR-0029's resource amendment's four sub-collection actions. */
+const ARRAY_MUTATION_METHODS: Readonly<Record<"replace" | "list" | "add" | "remove", KavoHttpMethod>> = {
+  replace: "PUT",
+  list: "GET",
+  add: "POST",
+  remove: "DELETE",
+};
+
 function resolveRoute(descriptor: OperationDescriptor<object>): ResolvedRoute | null {
   const options: KavoRouteOptions = descriptor.meta.routes ?? {};
   if (options.enabled === false) return null; // service-only
-  // A `replace<Relation>` operation Kavo itself synthesized
-  // (`registerArrayMutationOperations`, ADR-0014's `replace` strategy) has
-  // no entry in `STANDARD_ROUTES` — it isn't a standard id, and there is no
-  // static table to key a *dynamic*, per-relation id against. Its shape
-  // comes from the relation name on `meta.arrayMutation` instead, the same
+  // A `replace`/`list`/`add`/`remove<Relation>` operation Kavo itself
+  // synthesized (`registerArrayMutationOperations`, ADR-0014's `replace`
+  // strategy and ADR-0029's resource amendment) has no entry in
+  // `STANDARD_ROUTES` — it isn't a standard id, and there is no static
+  // table to key a *dynamic*, per-relation id against. Its shape comes from
+  // the relation name and action on `meta.arrayMutation` instead, the same
   // way a standard id's shape comes from `STANDARD_ROUTES`.
   const arrayMutation = descriptor.meta.arrayMutation;
   if (arrayMutation !== undefined) {
-    const method = options.method ?? "PUT";
+    const method = options.method ?? ARRAY_MUTATION_METHODS[arrayMutation.action];
     const path = options.path ?? `:id/${arrayMutation.relation}`;
     const status = options.successStatus ?? 200;
     return { method, path, status, hasIdParam: path.includes(":id") };
@@ -625,8 +639,18 @@ function applyParamDecorators(
   Req()(prototype, methodName, index++);
 }
 
-/** Writes that carry a request body — the mirror of `BODYLESS_WRITES`. */
+/**
+ * Writes that carry a request body — the mirror of `BODYLESS_WRITES`.
+ *
+ * `resource`'s `remove<Relation>` (`DELETE :id/<relation>`, ADR-0029's
+ * resource amendment) is the one write whose body a bare HTTP method never
+ * predicts: `DELETE` has no id path segment to carry the member it targets,
+ * so the member id travels in the body instead — unlike every other
+ * `DELETE` route Kavo generates (`deleteOne`, `purgeOne`), which are
+ * bodyless because the path segment already names everything they need.
+ */
 function takesBody(descriptor: OperationDescriptor<object>, route: ResolvedRoute): boolean {
+  if (descriptor.meta.arrayMutation?.action === "remove") return true;
   return usesBody(route.method) && !BODYLESS_WRITES.has(descriptor.id as StandardOperationId);
 }
 

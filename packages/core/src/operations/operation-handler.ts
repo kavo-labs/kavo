@@ -26,18 +26,26 @@ import type { KavoContext } from "../context/kavo-context.js";
  */
 export interface OperationMetadata {
   /**
-   * Present only on the `replace<Relation>` operations Kavo itself
-   * synthesizes from `relations.edges.<name>.write` (ADR-0014's named
-   * extension point) — never set through application config. Names the
-   * relation the operation targets, so `KavoEngine.resolveInput` can route
-   * its body through the array-mutation path instead of the ordinary DTO
-   * deserializer (a `replace` body is a bare array, not an entity-shaped
-   * object), and `@kavo/nest` can derive the sub-collection route
-   * (`PUT :id/<relation>`) without a static per-id route table.
+   * Present only on the `replace`/`list`/`add`/`remove`<Relation> operations
+   * Kavo itself synthesizes from `relations.edges.<name>.write` (ADR-0014's
+   * named extension point) — never set through application config. Names
+   * the relation the operation targets and which of the two synthesizing
+   * strategies produced it, so `KavoEngine.resolveInput` can route the
+   * request through the right array-mutation path instead of the ordinary
+   * DTO deserializer, and `@kavo/nest` can derive the sub-collection route
+   * (`:id/<relation>`, method keyed off `action`) without a static per-id
+   * route table.
+   *
+   * `strategy: "replace"` only ever produces `action: "replace"` — the
+   * whole-array `PUT` ADR-0014 defines. `strategy: "resource"` (ADR-0029's
+   * resource amendment) produces all four actions: `"replace"` (the same
+   * whole-array `PUT`), `"list"` (`GET`, current membership), `"add"`
+   * (`POST`, one member by id) and `"remove"` (`DELETE`, one member by id).
    */
   readonly arrayMutation?: {
     readonly relation: string;
-    readonly strategy: "replace";
+    readonly strategy: "replace" | "resource";
+    readonly action: "replace" | "list" | "add" | "remove";
   };
 }
 

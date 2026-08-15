@@ -124,6 +124,21 @@ export class JsonPatchTargetNotFoundException extends KavoException {
   }
 }
 
+/**
+ * `arrayMutation`'s `resource` strategy (ADR-0029's resource amendment): a
+ * `DELETE /entity/:id/relation` naming a member id that is not currently
+ * associated with the row → 404. The strategy-neutral counterpart of
+ * {@link JsonPatchTargetNotFoundException} — same rule ("a removal that
+ * changes nothing is an error, not a silent no-op"), raised under its own
+ * code because a `resource` client's `DELETE` never carries a JSON Patch
+ * document for that exception's title to describe accurately.
+ */
+export class ArrayMutationMemberNotFoundException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND", options);
+  }
+}
+
 export class PersistenceException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_PERSISTENCE_FAILED", options);
