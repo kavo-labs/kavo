@@ -272,32 +272,36 @@ function serviceProvider(metadata: KavoControllerMetadata): Provider {
 }
 
 /**
- * Closes the one gap `@Kavo`'s decoration-time route generation cannot see
- * for itself (ADR-0029's jsonPatch amendment): an entity that omits
- * `arrayMutation` entirely and relies on a *global* default other than
- * `"replace"`. Decoration time (`declaredArrayMutationStrategy`,
- * `kavo.decorator.ts`) then assumes `"replace"` — its own documented
- * default — and generates a `replace<Relation>` route for every write-opted
- * relation; but `createCrud`'s registry, built from the fully resolved
- * settings, never registers the matching operation for any other strategy,
- * so that route would throw `OperationNotRegisteredException` on its first
- * request.
+ * Closes the gap `@Kavo`'s decoration-time route generation cannot see for
+ * itself (issue #221 amends ADR-0029): an entity that omits `arrayMutation`
+ * entirely and relies on a *global* default to supply the strategy.
+ * `declaredArrayMutationStrategy` (`kavo.decorator.ts`) has no built-in
+ * default to fall back on, so decoration time generates **no** synthesized
+ * route for a write-opted relation there — correctly cautious, since it
+ * cannot see the global default. But `createCrud`'s registry, built from the
+ * fully resolved settings, registers the operation anyway once the global
+ * default resolves a `"replace"` or `"resource"` strategy — so the operation
+ * exists and is callable programmatically, yet no HTTP route ever reaches
+ * it. That silent gap is worth failing loudly on at bootstrap rather than
+ * shipping an app where a configured write surface is quietly unreachable.
+ * (`"jsonPatch"` needs no synthesized route — it reuses `patchOne`'s own
+ * route — so it never triggers this check.)
  *
  * This binder is the earliest point both facts are known at once — the
  * decorated entity's own config (which decoration time already used to
- * decide whether to generate the route) and the bound service's fully
+ * decide whether to generate a route) and the bound service's fully
  * resolved settings (which `createCrud` only produces once real
  * infrastructure and global defaults exist). Plain programmatic
  * (non-`@kavo/nest`) usage has no decoration-time route to disagree with in
  * the first place, so this check lives here rather than in `createCrud`
  * itself.
  *
- * A declared strategy other than `"replace"` never disagrees with what's
- * resolved: an entity's own explicit declaration always wins the merge
- * (ADR-0013's "more specific wins"), so the only way to reach a mismatch is
- * the undeclared-and-relying-on-a-non-"replace"-global-default case above.
+ * A locally declared strategy never disagrees with what's resolved: an
+ * entity's own explicit declaration always wins the merge (ADR-0013's "more
+ * specific wins"), so the only way to reach the gap above is the
+ * undeclared-and-relying-on-a-global-default case.
  */
-function requireArrayMutationStrategyAgreement(
+function requireArrayMutationRouteReachable(
   metadata: KavoControllerMetadata,
   service: {
     readonly engine: {
@@ -307,19 +311,20 @@ function requireArrayMutationStrategyAgreement(
 ): void {
   const relationNames = writeOptedInRelationNames(metadata.config?.relations?.edges);
   if (relationNames.length === 0) return;
-  if (declaredArrayMutationStrategy(metadata.config) !== "replace") return; // no route was generated to disagree with
+  const declared = declaredArrayMutationStrategy(metadata.config);
+  if (declared !== undefined) return; // an explicit local declaration always matches what resolves
   const resolved = service.engine.config.settings.arrayMutation;
   const resolvedStrategy = resolved === false ? false : resolved.strategy;
-  if (resolvedStrategy === "replace") return;
+  if (resolvedStrategy !== "replace" && resolvedStrategy !== "resource") return; // no route needed for this strategy
   throw new ConfigurationException(
     metadata.entity.name,
     "arrayMutation",
-    `'@Kavo(${metadata.entity.name})' declares no 'arrayMutation.strategy', so route generation assumed the ` +
-      `default "replace" and generated a 'replace<Relation>' route for its write-opted relation(s) ` +
-      `(${relationNames.join(", ")}) — but the strategy this root actually resolves to (from a global ` +
-      `default) is ${JSON.stringify(resolvedStrategy)}, so 'createCrud' registered no matching operation and ` +
-      `that route would fail every request. Declare 'arrayMutation.strategy: ${JSON.stringify(resolvedStrategy)}' ` +
-      `directly in this entity's '@Kavo' config to match, or set the global default back to "replace"`,
+    `'@Kavo(${metadata.entity.name})' declares no 'arrayMutation.strategy', so decoration time generated no ` +
+      `route for its write-opted relation(s) (${relationNames.join(", ")}) — but the strategy this root ` +
+      `actually resolves to (from a global default) is ${JSON.stringify(resolvedStrategy)}, which 'createCrud' ` +
+      `registered as a real operation with no HTTP route to reach it. Declare ` +
+      `'arrayMutation.strategy: ${JSON.stringify(resolvedStrategy)}' directly in this entity's '@Kavo' config ` +
+      `to generate the matching route`,
   );
 }
 
@@ -354,7 +359,7 @@ class KavoBinder implements OnModuleInit {
       const metadata = Reflect.getMetadata(KAVO_CONTROLLER_METADATA, metatype) as KavoControllerMetadata | undefined;
       if (metadata === undefined) continue;
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
-      requireArrayMutationStrategyAgreement(metadata, service);
+      requireArrayMutationRouteReachable(metadata, service);
       instance[KAVO_SERVICE_PROPERTY] = service;
       instance[KAVO_PRINCIPAL_PROPERTY] = extractPrincipal;
 

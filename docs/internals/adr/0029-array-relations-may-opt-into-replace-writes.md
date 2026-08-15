@@ -343,6 +343,77 @@ locally can never disagree with what resolves, for the same "entity-level
 always wins the merge" reason a local `"jsonPatch"` declaration already
 couldn't.
 
+## Amendment — the strategy is no longer defaulted (issue #221)
+
+The original decision above states plainly that `"replace"` is the intentional
+default: `BUILT_IN_DEFAULTS.arrayMutation` resolved every entity to `{
+strategy: "replace" }` unless it explicitly set `arrayMutation: false` or a
+different strategy, and `declaredArrayMutationStrategy` (`kavo.decorator.ts`)
+mirrored that at decoration time. In practice this meant a relation opted
+into `relations.edges.<name>.write: true` silently got a whole-array `PUT`
+surface the moment anyone flipped that one boolean — nobody had to choose
+`"replace"` on purpose. This amendment reverses that: `arrayMutation.strategy`
+now has no built-in default. A write-opted relation demands the strategy be
+declared explicitly somewhere in the global → entity precedence chain.
+
+**The unset state, distinct from `false`.** `ArrayMutationSettings.strategy`
+becomes optional (`strategy?: ArrayMutationStrategy`) rather than required.
+`BUILT_IN_DEFAULTS.arrayMutation` is now the empty object `{}`, not `{
+strategy: "replace" }` — still an object rather than `false`, so a partial
+`arrayMutation: {...}` override still merges against a complete base instead
+of replacing a `false` wholesale (the same reasoning `realtime`'s object
+default already documents). `arrayMutation: false` (feature off wholesale)
+and `arrayMutation: {}`/`{ strategy: undefined }` (feature on, no strategy
+chosen yet) stay two different states: only the first disables the feature;
+the second still lets an entity with no write-opted relations resolve
+`arrayMutation.strategy` to nothing and boot cleanly; a write-opted relation
+is what turns "unset" into a bootstrap failure.
+
+**The bootstrap check.** `validateArrayMutationRelations`
+(`resolve-entity-config.ts`) already rejected `arrayMutation: false` under a
+write-opted relation; it now rejects an unset `strategy` the same way, with
+its own message naming the fix (`set 'arrayMutation.strategy' to "replace",
+"resource", or "jsonPatch"`). `kavo.ts`'s `createCrud` still relies on this
+running first: a non-empty write-opted relation list there continues to
+guarantee the strategy resolved to one of the three implemented ones.
+
+**Decoration time generates no route without a local declaration.**
+`declaredArrayMutationStrategy` no longer falls back to `"replace"` when
+`config?.arrayMutation` is absent — it returns `undefined`, and `@Kavo`'s
+route generation (gated on the declared strategy being `"replace"` or
+`"resource"`) synthesizes nothing for that entity's write-opted relations.
+This is deliberately conservative: decoration time cannot see a global
+default (ADR-0012), so where it previously assumed `"replace"` and
+occasionally guessed wrong (the original jsonPatch-amendment gap this ADR's
+agreement check was built for), it now assumes nothing and generates no
+route it cannot be sure of.
+
+**The new gap that opens, and why the agreement check still exists.**
+Generating no route when nothing is declared closes the old failure mode (a
+route pointing at an operation the registry never registered) but opens a
+quieter one: an entity that omits `arrayMutation` locally while a _global_
+default resolves `"replace"` or `"resource"` gets the operation registered by
+`createCrud` — real and callable programmatically — with no HTTP route
+reaching it at all. `requireArrayMutationStrategyAgreement`
+(`kavo.module.ts`) is repurposed rather than removed to catch exactly this:
+once a write-opted relation's declared strategy is `undefined` and the fully
+resolved strategy needs a synthesized route (`"replace"` or `"resource"`),
+`KavoModule`'s discovery binder fails bootstrap with a message telling the
+adopter which `arrayMutation.strategy` to declare locally. `"jsonPatch"`
+never triggers this check — it reuses `patchOne`'s existing route rather than
+synthesizing one, so there is no route to be missing. A locally declared
+strategy still never disagrees with what resolves (entity-level always wins
+the merge, ADR-0013's "more specific wins"), so the check only ever fires on
+the undeclared-and-relying-on-a-global-default case, same as before this
+amendment — just inverted from "wrong route generated" to "no route
+generated."
+
+**Migration.** Any entity relying on the implicit `"replace"` default for a
+write-opted relation now fails at bootstrap with a `ConfigurationException`
+naming the entity and relation; the fix is adding
+`arrayMutation: { strategy: "replace" }` (or `"resource"`/`"jsonPatch"`) to
+that entity's config, or to a global default all such entities share.
+
 ## Consequences
 
 - All three named strategies — `replace`, `jsonPatch`, `resource` — are

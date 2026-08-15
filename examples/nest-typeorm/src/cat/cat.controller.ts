@@ -27,6 +27,9 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     item: CatItemDto,
     list: CatListDto,
   },
+  // No built-in default (issue #221 amends ADR-0029) — `tags.write` below
+  // demands an explicit strategy.
+  arrayMutation: { strategy: "replace" },
   pagination: { defaultLimit: 10, maxLimit: 50 },
   query: { search: { enabled: true } },
   // Explicit include-lists (the plain form, contrast Owner's `{ exclude }`
@@ -48,10 +51,11 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
   // The to-one side of the owner edge joins; `tags` is a to-many (many-to-
   // many) and batches, both `auto`'s default — no loading tuning needed.
   // `fields[owner]=id,name` / `fields[tags]=id,name` narrow each embedded
-  // relation. `tags.write` opts the same edge into `arrayMutation`'s
-  // `replace` strategy (ADR-0029) on top of the existing create/update
-  // association-by-id path: `PUT /cats/:id/tags` replaces the full tag set
-  // in one call, without sending the rest of the cat's body.
+  // relation. `tags.write` opts the same edge into array-mutation writes,
+  // applying the `arrayMutation.strategy: "replace"` declared above on top
+  // of the existing create/update association-by-id path: `PUT
+  // /cats/:id/tags` replaces the full tag set in one call, without sending
+  // the rest of the cat's body.
   relations: {
     edges: { tags: { write: true } },
   },

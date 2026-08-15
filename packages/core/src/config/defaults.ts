@@ -64,15 +64,15 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     enabled: false,
     events: Object.freeze({}),
   }),
-  // `replace` stays the default strategy — `jsonPatch` is opt-in — but the
-  // key is never consulted unless a relation opts in via
-  // `relations.edges.<name>.write` — same "harmless default" reasoning
-  // `realtime`'s object default documents, so a partial `arrayMutation:
-  // {...}` override merges against a complete base instead of replacing a
-  // `false` wholesale.
-  arrayMutation: Object.freeze({
-    strategy: "replace" as const,
-  }),
+  // No default strategy (issue #221 amends ADR-0029): the key is never
+  // consulted unless a relation opts in via `relations.edges.<name>.write`,
+  // and once one does, `validateArrayMutationRelations`
+  // (`resolve-entity-config.ts`) demands an explicit `strategy` rather than
+  // silently assuming one. The empty object — not `false` — is still the
+  // base, so a partial `arrayMutation: {...}` override merges against a
+  // complete base instead of replacing a `false` wholesale, the same
+  // "harmless default" reasoning `realtime`'s object default documents.
+  arrayMutation: Object.freeze({}),
   // Unset: today's `STANDARD_OPERATIONS` enabled-by-default behavior (and
   // ADR-0013's soft-delete-driven `restoreOne` auto-enable) is unchanged
   // for apps that don't set a global default.

@@ -15,16 +15,19 @@ import { ConfigurationException, NotFoundException, hasKeyset } from "@kavo/core
 import { Kavo, KavoModule } from "@kavo/nest";
 
 /**
- * `@Kavo`'s decoration-time route generation (`kavo.decorator.ts`) assumes
- * `arrayMutation.strategy: "replace"` for an entity that never declares the
- * key itself — the same default `BUILT_IN_DEFAULTS` uses. That assumption
- * is wrong when a *global* default resolves the strategy to `"jsonPatch"`
- * instead: decoration time still generates a `replace<Relation>` route, but
- * `createCrud`'s registry (built from the fully resolved settings) never
- * registers a matching operation, so the route would 405 every request.
- * `KavoModule`'s discovery binder is the earliest point both facts are known
- * and must reject the disagreement at bootstrap (ADR-0029's jsonPatch
- * amendment) rather than let the broken route reach traffic.
+ * `@Kavo`'s decoration-time route generation (`kavo.decorator.ts`) has no
+ * built-in default for `arrayMutation.strategy` (issue #221 amends
+ * ADR-0029): an entity that never declares the key gets no synthesized
+ * route for a write-opted relation, full stop — decoration time cannot see
+ * a *global* default, so it generates nothing rather than assuming
+ * something. That is safe on its own, but it opens a different gap:
+ * `createCrud`'s registry, built from the fully resolved settings, still
+ * registers the operation once a global default resolves `"replace"` or
+ * `"resource"` — so the operation exists and is callable programmatically,
+ * yet no HTTP route ever reaches it. `KavoModule`'s discovery binder is the
+ * earliest point both facts are known at once and must reject that silent
+ * gap at bootstrap rather than ship a configured write surface nothing can
+ * reach.
  */
 
 class Tag {
@@ -36,6 +39,7 @@ class Post {
   id = 0;
   title = "";
   tags: Tag[] = [];
+  labels: Tag[] = [];
 }
 
 const postMetadata: EntityMetadata<Post> = {
@@ -46,7 +50,10 @@ const postMetadata: EntityMetadata<Post> = {
     { name: "id", kind: "number", nullable: false, generated: true },
     { name: "title", kind: "string", nullable: false, generated: false },
   ],
-  relations: [{ name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" }],
+  relations: [
+    { name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
+    { name: "labels", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
+  ],
 };
 
 const tagMetadata: EntityMetadata<Tag> = {
@@ -62,7 +69,7 @@ const tagMetadata: EntityMetadata<Tag> = {
 
 /** Bare-minimum adapter — implements every write `arrayMutation` needs so bootstrap gets past its own capability checks. */
 class FakePostAdapter implements RepositoryAdapter<Post> {
-  rows: Post[] = [{ id: 1, title: "Hello", tags: [] }];
+  rows: Post[] = [{ id: 1, title: "Hello", tags: [], labels: [] }];
 
   async findOneById(id: EntityId): Promise<Post | null> {
     return this.rows.find((row) => row.id === Number(id)) ?? null;
@@ -78,7 +85,7 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
     return this.rows.length;
   }
   async create(data: Partial<Post>): Promise<Post> {
-    const row = { id: this.rows.length + 1, title: "", tags: [], ...data } as Post;
+    const row = { id: this.rows.length + 1, title: "", tags: [], labels: [], ...data } as Post;
     this.rows.push(row);
     return row;
   }
@@ -127,8 +134,38 @@ function fakeInfrastructure(adapter: FakePostAdapter): KavoInfrastructure {
   };
 }
 
-describe("KavoModule — arrayMutation strategy agreement (ADR-0029's jsonPatch amendment)", () => {
-  it("rejects at bootstrap when a global 'jsonPatch' default disagrees with the replace<Relation> route decoration time generated", async () => {
+describe("KavoModule — arrayMutation route reachability (issue #221 amends ADR-0029)", () => {
+  // This one never reaches `requireArrayMutationRouteReachable` at all:
+  // `createCrud` (called just before it in `KavoBinder.onModuleInit`) throws
+  // first via core's own `validateArrayMutationRelations`, the same path
+  // `packages/core/tests/array-mutation.spec.ts` exercises directly. Pinned
+  // here as an integration check that the core-level guard still surfaces
+  // correctly through KavoModule's bootstrap sequence — `messageParams.path`
+  // is asserted specifically so this fails loudly (rather than passing for
+  // an unrelated reason) if that call order ever changes.
+  it("rejects at bootstrap (via createCrud, before the route-reachability check runs) when no strategy is resolvable anywhere", async () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
+    @Controller("posts")
+    class PostController {}
+
+    const moduleRef = Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({ infrastructure: fakeInfrastructure(new FakePostAdapter()) }),
+        }),
+      ],
+      controllers: [PostController],
+    });
+    const app = await moduleRef.compile();
+    await expect(app.init()).rejects.toBeInstanceOf(ConfigurationException);
+    const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
+    expect(error.code).toBe("KAVO_CONFIG_INVALID");
+    expect(error.context.entityName).toBe("Post");
+    expect(error.messageParams).toMatchObject({ path: "relations.edges.tags.write" });
+    expect(error.detail).toContain("arrayMutation.strategy");
+  });
+
+  it("rejects at bootstrap when a global 'replace'/'resource' default resolves an operation no route was generated for", async () => {
     @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
     @Controller("posts")
     class PostController {}
@@ -138,7 +175,7 @@ describe("KavoModule — arrayMutation strategy agreement (ADR-0029's jsonPatch 
         KavoModule.forRootAsync({
           useFactory: () => ({
             infrastructure: fakeInfrastructure(new FakePostAdapter()),
-            defaults: { arrayMutation: { strategy: "jsonPatch" } } as never,
+            defaults: { arrayMutation: { strategy: "replace" } } as never,
           }),
         }),
       ],
@@ -149,12 +186,36 @@ describe("KavoModule — arrayMutation strategy agreement (ADR-0029's jsonPatch 
     const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
     expect(error.context.entityName).toBe("Post");
-    expect(error.detail).toContain("replace<Relation>");
-    expect(error.detail).toContain("jsonPatch");
+    expect(error.messageParams).toMatchObject({ path: "arrayMutation" });
+    expect(error.detail).toContain("arrayMutation.strategy");
+    expect(error.detail).toContain("replace");
   });
 
-  it("boots cleanly when the entity declares arrayMutation.strategy: 'jsonPatch' itself, matching the global default", async () => {
-    @Kavo(Post, { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { tags: { write: true } } } } as never)
+  it("names every write-opted relation left routeless, not just the first, when several opt in", async () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: true }, labels: { write: true } } } } as never)
+    @Controller("posts")
+    class PostController {}
+
+    const moduleRef = Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({
+            infrastructure: fakeInfrastructure(new FakePostAdapter()),
+            defaults: { arrayMutation: { strategy: "replace" } } as never,
+          }),
+        }),
+      ],
+      controllers: [PostController],
+    });
+    const app = await moduleRef.compile();
+    const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
+    expect(error).toBeInstanceOf(ConfigurationException);
+    expect(error.detail).toContain("tags");
+    expect(error.detail).toContain("labels");
+  });
+
+  it("boots cleanly when a global 'jsonPatch' default resolves the strategy — jsonPatch needs no synthesized route", async () => {
+    @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
     @Controller("posts")
     class PostController {}
 
@@ -173,8 +234,8 @@ describe("KavoModule — arrayMutation strategy agreement (ADR-0029's jsonPatch 
     await moduleRef.close();
   });
 
-  it("boots cleanly for the ordinary case: no global override, entity relies on the default 'replace'", async () => {
-    @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
+  it("boots cleanly when the entity declares arrayMutation.strategy: 'replace' itself, matching the resolved strategy", async () => {
+    @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
     @Controller("posts")
     class PostController {}
 
