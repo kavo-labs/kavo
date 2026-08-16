@@ -1,7 +1,15 @@
-import { Controller } from "@nestjs/common";
-import { Kavo } from "@kavo/nest";
+import { Controller, Inject } from "@nestjs/common";
+import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
+import type { DefaultKavoService, EntityId, RequestPreconditions } from "@kavo/core";
 import { Cat } from "./cat.entity.js";
-import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.js";
+import {
+  CREATE_SIZE_DEFAULT,
+  CreateCatDto,
+  UPDATE_SIZE_DEFAULT,
+  UpdateCatDto,
+  CatItemDto,
+  CatListDto,
+} from "./cat.dtos.js";
 
 /**
  * CRUD over the concrete `Cat` subtype: one decorator, zero methods.
@@ -24,6 +32,16 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
  * `GET /cats?search[query]=whiskers` free-text searches `name` (the one
  * field named in `allowlists.searchable`) — `search[mode]=words` and
  * `search[fields]` are also available, narrowed to that same allowlist.
+ *
+ * Validation: `createOne`/`updateOne` are `@Override()`'d purely to give
+ * their body parameter a concrete, `class-validator`-decorated type — see
+ * `owner.controller.ts`'s own validation note for why. No `patchOne`
+ * override: the operation is disabled below (`operations.patchOne: false`),
+ * so there is no route to give a body type to. Each override also strips
+ * `size` back off the DTO when it's still `cat.dtos.ts`'s own sentinel
+ * default — that marker object only exists for Swagger's benefit
+ * (`cat.dtos.ts`'s own comment) and is never a real `PetSizeEnum` value the
+ * engine should try to persist.
  */
 @Kavo(Cat, {
   dto: {
@@ -74,4 +92,20 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
   },
 })
 @Controller("cats")
-export class CatController {}
+export class CatController {
+  constructor(@Inject(getKavoServiceToken(Cat)) private readonly base: DefaultKavoService<Cat>) {}
+
+  @Override()
+  async createOne(dto: CreateCatDto): Promise<unknown> {
+    const { size, ...rest } = dto;
+    const payload = size === CREATE_SIZE_DEFAULT ? rest : { ...rest, size };
+    return this.base.createOne(payload as never);
+  }
+
+  @Override()
+  async updateOne(id: EntityId, dto: UpdateCatDto, preconditions: RequestPreconditions | null): Promise<unknown> {
+    const { size, ...rest } = dto;
+    const payload = size === UPDATE_SIZE_DEFAULT ? rest : { ...rest, size };
+    return this.base.updateOne(id as never, payload as never, { preconditions: preconditions ?? undefined });
+  }
+}

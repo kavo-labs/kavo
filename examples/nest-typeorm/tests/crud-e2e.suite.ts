@@ -1370,4 +1370,190 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(params.find((param) => param.name === "offset")?.description).toContain("pagination.strategy' is 'none'");
     });
   });
+
+  /**
+   * The example's `class-validator` validation layer: `createOne`/
+   * `updateOne`/`patchOne` are `@Override()`'d across every entity but
+   * `Dog` (which deliberately keeps none) purely to give their body
+   * parameter a concrete, decorated DTO type the app's global
+   * `ValidationPipe` (`app.module.ts`) can validate against — see
+   * `owner.controller.ts`'s own comment for the mechanism. Every failure
+   * here reaches the same RFC 9457 problem-details shape the rest of the
+   * app uses, via `@kavo/nest`'s existing `KavoExceptionFilter` (it already
+   * maps any `HttpException` — including a `ValidationPipe`'s
+   * `BadRequestException` — regardless of whether it came from inside the
+   * engine).
+   */
+  describe("class-validator write validation", () => {
+    it("rejects an invalid email on POST /owners as a problem-details 400, not a bare Nest error", async () => {
+      const response = await request(server())
+        .post("/owners")
+        .send({ name: "Bad Email", email: "not-an-email" })
+        .expect(400)
+        .expect("Content-Type", /application\/problem\+json/);
+      expect(response.body).toMatchObject({ status: 400, code: "KAVO_HTTP_ERROR" });
+      expect(response.body.detail).toContain("email");
+    });
+
+    it("rejects a missing required field on POST /owners", async () => {
+      const response = await request(server()).post("/owners").send({ email: "noname@x.io" }).expect(400);
+      expect(response.body.detail).toContain("name");
+    });
+
+    it("accepts a valid PUT /owners/:id and rejects an invalid one", async () => {
+      const created = await request(server()).post("/owners").send({ name: "Val", email: "val@x.io" }).expect(201);
+      const id = created.body.id as number;
+
+      await request(server()).put(`/owners/${id}`).send({ name: "Val Two", email: "val2@x.io" }).expect(200);
+
+      await request(server()).put(`/owners/${id}`).send({ name: "Val", email: "nope" }).expect(400);
+    });
+
+    it("is partial-field aware on PATCH /owners/:id, same as Address's postalCode", async () => {
+      const created = await request(server())
+        .post("/owners")
+        .send({ name: "Patchable", email: "patchable@x.io" })
+        .expect(201);
+      const id = created.body.id as number;
+
+      // Omitting `email` never triggers its validator on patch.
+      const patched = await request(server()).patch(`/owners/${id}`).send({ name: "Patched" }).expect(200);
+      expect(patched.body).toMatchObject({ name: "Patched", email: "patchable@x.io" });
+
+      // Present-but-invalid still rejects.
+      await request(server()).patch(`/owners/${id}`).send({ email: "still-nope" }).expect(400);
+    });
+
+    it("rejects a negative age or non-boolean indoor on POST /cats", async () => {
+      const badAge = await request(server())
+        .post("/cats")
+        .send({ name: "Neg", age: -1, indoor: true, livesLeft: 9 })
+        .expect(400);
+      expect(badAge.body.detail).toContain("age");
+
+      const badIndoor = await request(server())
+        .post("/cats")
+        .send({ name: "NotBool", age: 1, indoor: "yes", livesLeft: 9 })
+        .expect(400);
+      expect(badIndoor.body.detail).toContain("indoor");
+    });
+
+    it("still creates a cat with size omitted, the DB default applying (issue: size's own validator must not misfire on absence)", async () => {
+      const created = await request(server())
+        .post("/cats")
+        .send({ name: "Defaulted", age: 1, indoor: true, livesLeft: 9 })
+        .expect(201);
+      expect(created.body.size).toBe("medium");
+    });
+
+    it("rejects an invalid size enum value on POST /cats", async () => {
+      const response = await request(server())
+        .post("/cats")
+        .send({ name: "BadSize", age: 1, size: "gigantic", indoor: true, livesLeft: 9 })
+        .expect(400);
+      expect(response.body.detail).toContain("size");
+    });
+
+    it("rejects an empty name on POST /tags and POST /photos rejects an empty url", async () => {
+      await request(server()).post("/tags").send({ name: "" }).expect(400);
+      await request(server()).post("/photos").send({ url: "" }).expect(400);
+    });
+
+    it("is partial-field aware on PATCH /tags/:id", async () => {
+      const tag = await request(server()).post("/tags").send({ name: "patch-me" }).expect(201);
+      const id = tag.body.id as number;
+      await request(server()).patch(`/tags/${id}`).send({ name: "patched" }).expect(200);
+      await request(server()).patch(`/tags/${id}`).send({ name: "" }).expect(400);
+    });
+
+    it("strips a client-sent id on POST /photos rather than rejecting the request (whitelist, not forbidNonWhitelisted)", async () => {
+      const created = await request(server()).post("/photos").send({ id: 999999, url: "kept.png" }).expect(201);
+      expect(created.body.id).not.toBe(999999);
+      expect(created.body.url).toBe("kept.png");
+    });
+
+    it("rejects an empty street/city/postalCode on POST /addresses", async () => {
+      const missingStreet = await request(server())
+        .post("/addresses")
+        .send({ street: "", city: "Springfield", postalCode: "10001" })
+        .expect(400);
+      expect(missingStreet.body.detail).toContain("street");
+
+      const missingCity = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "", postalCode: "10001" })
+        .expect(400);
+      expect(missingCity.body.detail).toContain("city");
+    });
+
+    it("rejects a non-string street on PUT /addresses/:id", async () => {
+      const created = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "Springfield", postalCode: "10001" })
+        .expect(201);
+      const id = created.body.id as number;
+
+      await request(server())
+        .put(`/addresses/${id}`)
+        .send({ street: 12345, city: "Springfield", postalCode: "10001" })
+        .expect(400);
+    });
+
+    it("rejects a malformed ISO date on POST /owners' startedAt, and accepts a well-formed one", async () => {
+      const bad = await request(server())
+        .post("/owners")
+        .send({ name: "Dated", email: "dated@x.io", startedAt: "not-a-date" })
+        .expect(400);
+      expect(bad.body.detail).toContain("startedAt");
+
+      const good = await request(server())
+        .post("/owners")
+        .send({ name: "Dated Ok", email: "dated-ok@x.io", startedAt: "2021-06-01T00:00:00.000Z" })
+        .expect(201);
+      expect(good.body.startedAt).toBe("2021-06-01T00:00:00.000Z");
+    });
+
+    it("rejects a non-positive owner address id on POST /owners", async () => {
+      const response = await request(server())
+        .post("/owners")
+        .send({ name: "BadAddr", email: "badaddr@x.io", address: -1 })
+        .expect(400);
+      expect(response.body.detail).toContain("address");
+    });
+
+    it("rejects a non-integer element in POST /cats' tags array", async () => {
+      const response = await request(server())
+        .post("/cats")
+        .send({ name: "BadTags", age: 1, indoor: true, livesLeft: 9, tags: [1, "two", 3] })
+        .expect(400);
+      expect(response.body.detail).toContain("tags");
+    });
+
+    it("rejects a negative livesLeft on POST /cats", async () => {
+      const response = await request(server())
+        .post("/cats")
+        .send({ name: "NegLives", age: 1, indoor: true, livesLeft: -1 })
+        .expect(400);
+      expect(response.body.detail).toContain("livesLeft");
+    });
+
+    it("rejects an empty name on PUT /tags/:id", async () => {
+      const tag = await request(server()).post("/tags").send({ name: "renamable" }).expect(201);
+      const id = tag.body.id as number;
+      await request(server()).put(`/tags/${id}`).send({ name: "" }).expect(400);
+      await request(server()).put(`/tags/${id}`).send({ name: "renamed" }).expect(200);
+    });
+
+    it("rejects an empty url on PUT /photos/:id and is partial-field aware on PATCH", async () => {
+      const photo = await request(server()).post("/photos").send({ url: "original.png" }).expect(201);
+      const id = photo.body.id as number;
+
+      await request(server()).put(`/photos/${id}`).send({ url: "" }).expect(400);
+      await request(server()).put(`/photos/${id}`).send({ url: "replaced.png" }).expect(200);
+
+      const patched = await request(server()).patch(`/photos/${id}`).send({ url: "patched.png" }).expect(200);
+      expect(patched.body.url).toBe("patched.png");
+      await request(server()).patch(`/photos/${id}`).send({ url: "" }).expect(400);
+    });
+  });
 }

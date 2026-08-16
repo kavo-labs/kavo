@@ -12,6 +12,14 @@ The entities, DTOs, and controllers are entirely database-agnostic through
 via `.forRoot(...)`) pick a driver, so the same app runs against any of the
 databases below unchanged.
 
+Every entity but `Dog` also validates its write bodies with `class-validator`
+— Kavo's own DTOs are shapes only, with no validation subsystem of their
+own (see `docs/internals/architecture/04-dto-system.md`), so this app's own
+`ValidationPipe` (`app.module.ts`) plus each `createOne`/`updateOne`/
+`patchOne` override (see `owner.controller.ts`) is what a validation layer
+looks like bolted onto Kavo from application code, with no framework
+changes. `Dog` is left unvalidated on purpose, as the contrast.
+
 ## SQLite (default)
 
 No setup required — an in-memory database is created fresh on every run.

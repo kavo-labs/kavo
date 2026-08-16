@@ -4,7 +4,7 @@ import type { DefaultKavoService, EntityId, KavoContext, RequestPreconditions, W
 import { NotFoundException } from "@kavo/core";
 import type { DataSource } from "typeorm";
 import { Address } from "./address.entity.js";
-import { CreateAddressDto, UpdateAddressDto, AddressItemDto, AddressListDto } from "./address.dtos.js";
+import { CreateAddressDto, UpdateAddressDto, PatchAddressDto, AddressItemDto, AddressListDto } from "./address.dtos.js";
 import { DATA_SOURCE } from "../database.module.js";
 import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from "./address.runtime.js";
 
@@ -34,6 +34,17 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  * app uses is built inside `KavoModule.forRootAsync`'s factory, which has
  * not run yet. There is nothing for the handler to close over, and it needs
  * nothing.
+ *
+ * `createOne`/`updateOne`/`patchOne` below are typed with the concrete,
+ * `class-validator`-decorated DTO classes (`address.dtos.ts`) rather than
+ * `Partial<Address>` — the app's global `ValidationPipe` (`app.module.ts`)
+ * only validates a body param whose declared type it can resolve via
+ * `emitDecoratorMetadata`, which only exists for a type written directly in
+ * this class's own source (see `owner.controller.ts`'s validation note).
+ * `postalCode`'s exact-5-digit format stays a procedural check
+ * (`assertValidPostalCode`) run after that generic shape validation passes
+ * — a business rule with its own normalization step, not a `class-validator`
+ * decorator's job.
  *
  * `validatePostalCode` below is the other shape: a fully custom,
  * registry-independent route (issue #26), a plain native Nest method with
@@ -90,8 +101,8 @@ export class AddressController {
 
   /** Normalizes `postalCode` before persisting. */
   @Override()
-  async createOne(dto: Partial<Address>): Promise<unknown> {
-    const postalCode = normalizePostalCode(dto.postalCode ?? "");
+  async createOne(dto: CreateAddressDto): Promise<unknown> {
+    const postalCode = normalizePostalCode(dto.postalCode);
     assertValidPostalCode(postalCode);
     return this.base.createOne({ ...dto, postalCode } as never);
   }
@@ -106,18 +117,16 @@ export class AddressController {
    * method that drops it accepts an `If-Match` header and writes anyway.
    */
   @Override()
-  async updateOne(id: EntityId, dto: Partial<Address>, preconditions: RequestPreconditions | null): Promise<unknown> {
+  async updateOne(id: EntityId, dto: UpdateAddressDto, preconditions: RequestPreconditions | null): Promise<unknown> {
     const patch = { ...dto };
-    if (patch.postalCode !== undefined) {
-      patch.postalCode = normalizePostalCode(patch.postalCode);
-      assertValidPostalCode(patch.postalCode);
-    }
+    patch.postalCode = normalizePostalCode(patch.postalCode);
+    assertValidPostalCode(patch.postalCode);
     return this.base.updateOne(id as never, patch as never, { preconditions: preconditions ?? undefined });
   }
 
   /** Same validation as `updateOne`, but only when the field is actually present. */
   @Override()
-  async patchOne(id: EntityId, dto: Partial<Address>, preconditions: RequestPreconditions | null): Promise<unknown> {
+  async patchOne(id: EntityId, dto: PatchAddressDto, preconditions: RequestPreconditions | null): Promise<unknown> {
     const patch = { ...dto };
     if (patch.postalCode !== undefined) {
       patch.postalCode = normalizePostalCode(patch.postalCode);
