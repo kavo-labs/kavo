@@ -13,18 +13,18 @@ GET /books?filter[pages][gte]=200&filter[pages][lt]=500
 ## Operators
 
 | Operator              | Wire token   | Example                                            |
-| ---------------------- | ------------ | --------------------------------------------------- |
-| Equals                 | `eq`         | `filter[status][eq]=active`                         |
-| Not equals              | `ne`         | `filter[status][ne]=banned`                         |
-| Greater/equal          | `gt` / `gte` | `filter[age][gte]=18`                                |
-| Less/equal             | `lt` / `lte` | `filter[age][lt]=65`                                 |
-| In list                | `in`         | `filter[status][in]=active,pending`                  |
-| Not in list             | `notIn`      | `filter[role][notIn]=bot,test`                       |
-| Like                   | `like`       | `filter[name][like]=%25john%25`                      |
-| Case-insensitive like   | `ilike`      | `filter[name][ilike]=%25john%25`                     |
-| Between                | `between`    | `filter[createdAt][between]=2026-01-01,2026-06-01`   |
-| Is null                | `isNull`     | `filter[deletedAt][isNull]=true`                     |
-| Is not null             | `isNotNull`  | `filter[deletedAt][isNotNull]=true`                  |
+| --------------------- | ------------ | -------------------------------------------------- |
+| Equals                | `eq`         | `filter[status][eq]=active`                        |
+| Not equals            | `ne`         | `filter[status][ne]=banned`                        |
+| Greater/equal         | `gt` / `gte` | `filter[age][gte]=18`                              |
+| Less/equal            | `lt` / `lte` | `filter[age][lt]=65`                               |
+| In list               | `in`         | `filter[status][in]=active,pending`                |
+| Not in list           | `notIn`      | `filter[role][notIn]=bot,test`                     |
+| Like                  | `like`       | `filter[name][like]=%25john%25`                    |
+| Case-insensitive like | `ilike`      | `filter[name][ilike]=%25john%25`                   |
+| Between               | `between`    | `filter[createdAt][between]=2026-01-01,2026-06-01` |
+| Is null               | `isNull`     | `filter[deletedAt][isNull]=true`                   |
+| Is not null           | `isNotNull`  | `filter[deletedAt][isNotNull]=true`                |
 
 Wire tokens are exact case, so `gte` works but `GTE` does not. A misspelled or wrong-case operator returns a 400 instead of being silently ignored.
 

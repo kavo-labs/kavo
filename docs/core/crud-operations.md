@@ -3,15 +3,15 @@
 Every `@Kavo`-decorated entity gets eight standard operations, each with a fixed id, an HTTP route, and a status code:
 
 | Operation id | Route                | Status | Enabled by default                                                  |
-| ------------ | --------------------- | ------ | --------------------------------------------------------------------- |
-| `createOne`  | `POST /`              | 201    | Yes                                                                    |
-| `findOne`    | `GET /:id`            | 200    | Yes                                                                    |
-| `findMany`   | `GET /`               | 200    | Yes                                                                    |
-| `updateOne`  | `PUT /:id`            | 200    | Yes                                                                    |
-| `patchOne`   | `PATCH /:id`          | 200    | Yes                                                                    |
-| `deleteOne`  | `DELETE /:id`         | 204    | Yes                                                                    |
-| `restoreOne` | `PATCH /:id/restore`  | 200    | No, unless the entity declares [soft delete](/features/soft-delete)   |
-| `purgeOne`   | `DELETE /:id/purge`   | 204    | No, until named explicitly                                            |
+| ------------ | -------------------- | ------ | ------------------------------------------------------------------- |
+| `createOne`  | `POST /`             | 201    | Yes                                                                 |
+| `findOne`    | `GET /:id`           | 200    | Yes                                                                 |
+| `findMany`   | `GET /`              | 200    | Yes                                                                 |
+| `updateOne`  | `PUT /:id`           | 200    | Yes                                                                 |
+| `patchOne`   | `PATCH /:id`         | 200    | Yes                                                                 |
+| `deleteOne`  | `DELETE /:id`        | 204    | Yes                                                                 |
+| `restoreOne` | `PATCH /:id/restore` | 200    | No, unless the entity declares [soft delete](/features/soft-delete) |
+| `purgeOne`   | `DELETE /:id/purge`  | 204    | No, until named explicitly                                          |
 
 Names always spell out cardinality (`findOne`/`findMany`, never bare `find`). Every operation on every entity follows this convention, standard or custom.
 

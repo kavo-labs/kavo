@@ -14,7 +14,6 @@
 - `since` is polling by a plain, compound `?since=<value>|<id>` token against `since.field`. The sort is forced to `[since.field, id]`, delivery is exactly once (the id half breaks ties on `since.field`), and the next token is reported as `meta.nextSince`.
 - `none` opts the entity out of pagination entirely. `findMany` always serves the whole match set, `defaultLimit`/`maxLimit` go unused, and a client-sent `limit`/`offset` is rejected as an unsupported param rather than silently ignored. See [No pagination](/querying/pagination#no-pagination) for the caveats.
 
-
 Pair either keyset strategy with `count: false`, and index the sort tuple. The GraphQL and MCP bindings refuse both, since they can't page a keyset (see [Cursor and since pagination](/querying/pagination#cursor-keyset-pagination), [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union), and [ADR-0022](/internals/adr/0022-since-pagination-composes-a-value-id-keyset)).
 
 `since.field` (default `"updatedAt"`) is the column `?since=` seeks against, and is only consulted under `strategy: "since"`. It must be a `date`- or `string`-kind column on `allowlists.filterable` and `allowlists.selectable`. Kavo checks this at startup, so a missing or wrong-kind column fails immediately rather than on the first request.

@@ -57,14 +57,14 @@ export class BookController {
 
 ### What an override inherits, and what it doesn't
 
-| Behavior                         | Inherited  | Why                                                                                                                        |
-| -------------------------------- | :--------: | --------------------------------------------------------------------------------------------------------------------- |
-| Route, params, Swagger docs      |    yes     | Both paths apply the same route-decoration step.                                                                       |
+| Behavior                         | Inherited  | Why                                                                                                                                                               |
+| -------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Route, params, Swagger docs      |    yes     | Both paths apply the same route-decoration step.                                                                                                                  |
 | `ETag` on a single-item response |    yes     | `@Kavo` hashes whatever the method returns ([ADR-0027](/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition)); there's nothing to opt into. |
-| Method decorators you add        |    yes     | `@UseGuards`, `@SetMetadata`, `@Version`, and others are copied onto the wrapper.                                       |
-| `If-Match` → `412`               |   **no**   | Evaluated inside the engine. It reaches your method only if you forward `preconditions`.                               |
-| `If-None-Match` → `304`          | not Kavo's | The host framework answers it off the `ETag` header already set. Express does this automatically via `req.fresh`; another adapter may not. |
-| Row scoping, authorization       |    n/a     | Never Kavo's, in a generated route or an override. That's why you're overriding.                                       |
+| Method decorators you add        |    yes     | `@UseGuards`, `@SetMetadata`, `@Version`, and others are copied onto the wrapper.                                                                                 |
+| `If-Match` → `412`               |   **no**   | Evaluated inside the engine. It reaches your method only if you forward `preconditions`.                                                                          |
+| `If-None-Match` → `304`          | not Kavo's | The host framework answers it off the `ETag` header already set. Express does this automatically via `req.fresh`; another adapter may not.                        |
+| Row scoping, authorization       |    n/a     | Never Kavo's, in a generated route or an override. That's why you're overriding.                                                                                  |
 
 An override that only needs the tag can return the typed service's item directly and let `@Kavo` hash it. One that needs the precondition enforced must forward `preconditions`, either as `{ preconditions }` on the typed service or by calling `service.engine.execute({ ..., preconditions })` directly. That also gets you the engine's own `304` answer instead of the host framework's approximation.
 
