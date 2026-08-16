@@ -1,0 +1,67 @@
+# Kavo
+
+> A production-grade CRUD framework for TypeScript: define an entity once (via TypeORM, Prisma, Mongoose, or MikroORM) and get the full REST CRUD surface — filtering, sorting, pagination, nested includes, field selection, optional per-operation DTOs, transactions, and problem-details errors — behind generated NestJS routes, configurable at global → entity → operation → per-call scope. GraphQL and MCP bindings expose the same engine over other protocols.
+
+Source: https://github.com/kavo-labs/kavo
+
+## Getting started
+
+- [Introduction](https://kavo.js.org/getting-started/introduction): What Kavo is and when to reach for it
+- [Requirements](https://kavo.js.org/getting-started/requirements): Supported Node, TypeScript, and framework versions
+- [Installation](https://kavo.js.org/getting-started/installation): Installing core, an ORM adapter, and the Nest binding
+- [Quick Start](https://kavo.js.org/getting-started/quick-start): Wiring a first entity end to end
+
+## Core
+
+- [Entities](https://kavo.js.org/core/entities): Defining an entity and its infrastructure seam
+- [CRUD Operations](https://kavo.js.org/core/crud-operations): The standard operation registry (createOne/createMany, findOne/findMany, updateOne, patchOne, deleteOne)
+- [DTOs](https://kavo.js.org/core/dtos): create/update/patch/query/item/list DTO slots and derivation
+- [Services](https://kavo.js.org/core/services): The typed DefaultKavoService programmatic front door
+- [Routes & Controllers](https://kavo.js.org/core/routes-and-controllers): Decoration-time route generation and manual-method-wins
+- [Custom Operations](https://kavo.js.org/core/custom-operations): Adding, overriding, or disabling operations
+
+## Querying
+
+- [Filtering](https://kavo.js.org/querying/filtering): The filter operator grammar (eq, gte, isNotNull, ...)
+- [Search](https://kavo.js.org/querying/search): Free-text search across allowlisted fields
+- [Sorting](https://kavo.js.org/querying/sorting): The `sort` query parameter
+- [Pagination](https://kavo.js.org/querying/pagination): Offset, cursor, since, and none pagination strategies
+- [Field Selection & Includes](https://kavo.js.org/querying/field-selection-and-includes): `fields` and `include` on the wire
+
+## Features
+
+- [Relations](https://kavo.js.org/features/relations): Associating and writing relations by id
+- [Soft Delete](https://kavo.js.org/features/soft-delete): Config-declared soft-delete operations and `withDeleted`
+- [Realtime Events](https://kavo.js.org/features/realtime-events): Publishing CRUD events over SSE and other transports
+- [Caching & ETags](https://kavo.js.org/features/caching-and-etags): Content-hash ETags and conditional requests
+- [Allowlists & Computed Fields](https://kavo.js.org/features/allowlists-and-computed-fields): Restricting filter/sort/select and serializer-evaluated computed fields
+
+## Integrations
+
+- [TypeORM](https://kavo.js.org/integrations/orms/typeorm): The @kavo/typeorm adapter
+- [Prisma](https://kavo.js.org/integrations/orms/prisma): The @kavo/prisma adapter and marker-class entity identities
+- [Mongoose](https://kavo.js.org/integrations/orms/mongoose): The @kavo/mongoose adapter
+- [MikroORM](https://kavo.js.org/integrations/orms/mikroorm): The @kavo/mikroorm adapter
+- [GraphQL](https://kavo.js.org/integrations/protocols/graphql): The @kavo/graphql schema binding
+- [MCP](https://kavo.js.org/integrations/protocols/mcp): The @kavo/mcp tool binding
+
+## Guides
+
+- [Module setup](https://kavo.js.org/guides/configuration/module-setup): KavoModule.forRootAsync and forFeature
+- [Settings](https://kavo.js.org/guides/configuration/settings): The full KavoSettings reference
+- [Entity config](https://kavo.js.org/guides/configuration/entity-config): Per-entity configuration overrides
+- [Operations](https://kavo.js.org/guides/configuration/operations): Per-operation configuration overrides
+- [Wiring Your Own Auth](https://kavo.js.org/guides/wiring-your-own-auth): Guards, request context, and ownership checks
+- [Error Handling](https://kavo.js.org/guides/error-handling): Problem-details error shape and custom exceptions
+- [Custom Adapter](https://kavo.js.org/guides/custom-adapter): Implementing RepositoryAdapter for a new data source
+- [Using the API](https://kavo.js.org/using-the-api): Calling generated routes from a client
+
+## Reference
+
+- [Config Keys](https://kavo.js.org/reference/config-keys): Every KavoSettings key, default, and merge rule
+- [Errors](https://kavo.js.org/reference/errors): The exception hierarchy and error-code catalog
+- [Decorators](https://kavo.js.org/reference/decorators): @Kavo, @Override, and related decorators
+
+## Optional
+
+- [For contributors](https://kavo.js.org/internals/architecture/01-system-architecture): Architecture blueprint, walking-skeleton docs, and numbered ADRs for anyone changing Kavo's internals
