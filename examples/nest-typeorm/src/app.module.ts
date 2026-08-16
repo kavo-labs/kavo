@@ -1,4 +1,5 @@
-import { Module, type DynamicModule } from "@nestjs/common";
+import { Module, ValidationPipe, type DynamicModule } from "@nestjs/common";
+import { APP_PIPE } from "@nestjs/core";
 import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
 import type { RealtimeTransport } from "@kavo/core";
@@ -24,6 +25,20 @@ import { AddressController } from "./address/address.controller.js";
  * transports (`@kavo/sse`'s, in `main.ts`) — a root-scope option, so it
  * travels alongside `infrastructure` rather than through `defaults`
  * (ADR-0023: a transport is a live object, not settings-tree data).
+ *
+ * The `APP_PIPE` below is the app's validation layer: a global
+ * `class-validator`-backed `ValidationPipe`, registered here (rather than
+ * `main.ts`) so it also covers the e2e test suite, which bootstraps
+ * `AppModule.forRoot()` directly through `@nestjs/testing` and never runs
+ * `main.ts`. `whitelist: true` strips properties a DTO class doesn't
+ * declare instead of rejecting the request — generated Kavo routes already
+ * silently drop unwritable keys (e.g. a client-sent `id`) the same way, so
+ * this keeps that behavior rather than turning it into a 400. It only ever
+ * validates a body whose declared parameter type it can resolve via
+ * `emitDecoratorMetadata` — see e.g. `owner.controller.ts`'s `@Override()`'d
+ * write methods for why every generated route's own body is exempt (Kavo's
+ * DTOs are shapes, not validators — doc 04), and how each entity opts a
+ * write route into validation.
  */
 @Module({})
 export class AppModule {
@@ -54,6 +69,12 @@ export class AppModule {
         }),
       ],
       controllers: [OwnerController, CatController, DogController, TagController, PhotoController, AddressController],
+      providers: [
+        {
+          provide: APP_PIPE,
+          useValue: new ValidationPipe({ whitelist: true, transform: true }),
+        },
+      ],
     };
   }
 }

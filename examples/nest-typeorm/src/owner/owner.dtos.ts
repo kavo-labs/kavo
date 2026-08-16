@@ -1,4 +1,5 @@
 import { enumProp, oneOfArray } from "@kavo/nest";
+import { IsEmail, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsPositive, IsString } from "class-validator";
 import { CatItemDto } from "../cat/cat.dtos.js";
 import { AddressItemDto } from "../address/address.dtos.js";
 import { PetSizeEnum } from "../pet/pet.entity.js";
@@ -6,6 +7,10 @@ import { PetSizeEnum } from "../pet/pet.entity.js";
 /**
  * DTO slots for the Owner route. See `cat.dtos.ts` for the
  * rationale behind plain initialized-field classes.
+ *
+ * `Create`/`Update`/`PatchOwnerDto` additionally carry `class-validator`
+ * decorators — see `owner.controller.ts`'s `@Override()`'d write methods for
+ * why a decorated class here is not enough on its own to get validated.
  */
 
 /**
@@ -27,20 +32,69 @@ export class DogItemDto {
 
 /** `create` slot — request body for POST /owners. */
 export class CreateOwnerDto {
+  @IsString()
+  @IsNotEmpty()
   name = "";
+
+  @IsEmail()
   email = "";
+
+  @IsOptional()
+  @IsISO8601()
   startedAt: Date | null = null;
+
   // Association by id (ADR-0014): send the address's id, or an `{ id }`
   // reference. Deep nested writes are deliberately out of scope.
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
   address: number | null = null;
 }
 
 /** `update` slot — request body for PUT /owners/:id (patch derives from it). */
 export class UpdateOwnerDto {
+  @IsString()
+  @IsNotEmpty()
   name = "";
+
+  @IsEmail()
   email = "";
+
+  @IsOptional()
+  @IsISO8601()
   startedAt: Date | null = null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
   address: number | null = null;
+}
+
+/**
+ * `PATCH /owners/:id`'s own validated shape — every field optional, unlike
+ * `UpdateOwnerDto`'s full-replace requirement. Not a registered `dto.patch`
+ * slot (Kavo's own default, `Partial<update>`, already types that); this
+ * class exists solely for `OwnerController.patchOne`'s `@Override()` to
+ * declare a concrete, `class-validator`-decorated body type.
+ */
+export class PatchOwnerDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  startedAt?: Date | null;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  address?: number | null;
 }
 
 /** `item` slot — the detail projection. */

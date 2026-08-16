@@ -1,7 +1,8 @@
-import { Controller } from "@nestjs/common";
-import { Kavo } from "@kavo/nest";
+import { Controller, Inject } from "@nestjs/common";
+import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
+import type { DefaultKavoService, EntityId, RequestPreconditions } from "@kavo/core";
 import { Owner } from "./owner.entity.js";
-import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
+import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
 
 /**
  * CRUD over the relation side. The unique `email` column is what surfaces a
@@ -30,6 +31,16 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * string column — `name` and `email` — since `allowlists.searchable` is
  * left unconfigured here (contrast Cat's explicit array): the zero-config
  * default. `search[fields]=name` narrows a given request to just one.
+ *
+ * Validation: `createOne`/`updateOne`/`patchOne` are `@Override()`'d purely
+ * to give their body parameter a concrete, `class-validator`-decorated
+ * type (`CreateOwnerDto`/`UpdateOwnerDto`/`PatchOwnerDto`) rather than the
+ * generated route's untyped one — Kavo's own DTOs are shapes only (doc 04),
+ * so nothing validates a generated route's body. Nest's global
+ * `ValidationPipe` (`app.module.ts`) reads a body param's declared type off
+ * `emitDecoratorMetadata`, which only exists for a param written directly
+ * in this class's own source — a generated method has no such metadata,
+ * `@Override()` recovers it. Each override otherwise just delegates.
  */
 @Kavo(Owner, {
   dto: {
@@ -62,4 +73,21 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
   },
 })
 @Controller("owners")
-export class OwnerController {}
+export class OwnerController {
+  constructor(@Inject(getKavoServiceToken(Owner)) private readonly base: DefaultKavoService<Owner>) {}
+
+  @Override()
+  async createOne(dto: CreateOwnerDto): Promise<unknown> {
+    return this.base.createOne(dto as never);
+  }
+
+  @Override()
+  async updateOne(id: EntityId, dto: UpdateOwnerDto, preconditions: RequestPreconditions | null): Promise<unknown> {
+    return this.base.updateOne(id as never, dto as never, { preconditions: preconditions ?? undefined });
+  }
+
+  @Override()
+  async patchOne(id: EntityId, dto: PatchOwnerDto, preconditions: RequestPreconditions | null): Promise<unknown> {
+    return this.base.patchOne(id as never, dto as never, { preconditions: preconditions ?? undefined });
+  }
+}
