@@ -54,7 +54,7 @@ bun add @kavo/core @kavo/nest @kavo/typeorm
 
 `@kavo/nest` expects `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, and
 `rxjs` as peers, and `@kavo/typeorm` expects `typeorm` — a Nest app already has
-the first four. Kavo needs Node 20+, an ESM app, and `emitDecoratorMetadata`;
+the first four. Kavo needs Node 22+, an ESM app, and `emitDecoratorMetadata`;
 see [Requirements](https://kavo.js.org/getting-started#requirements) and
 [Peer dependencies](https://kavo.js.org/getting-started#peer-dependencies) for
 the exact versions.

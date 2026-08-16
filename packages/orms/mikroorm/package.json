@@ -4,7 +4,7 @@
   "description": "Kavo MikroORM adapter — implements @kavo/core's RepositoryAdapter over a MikroORM EntityManager.",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "repository": {
     "type": "git",

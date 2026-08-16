@@ -4,7 +4,7 @@
   "description": "Kavo Mongoose adapter — implements @kavo/core's RepositoryAdapter over Mongoose models.",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "repository": {
     "type": "git",
