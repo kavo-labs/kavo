@@ -36,14 +36,14 @@ export class BookController {}
 
 That's it. No config object, no service, no repository wiring in the controller. This generates:
 
-| Method   | Route        | What it does                                |
-| -------- | ------------ | ------------------------------------------- |
-| `POST`   | `/books`     | Create a book                               |
+| Method   | Route        | What it does                               |
+| -------- | ------------ | ------------------------------------------ |
+| `POST`   | `/books`     | Create a book                              |
 | `GET`    | `/books`     | List books: filtering, sorting, pagination |
-| `GET`    | `/books/:id` | Get one book                                |
-| `PUT`    | `/books/:id` | Replace a book                              |
-| `PATCH`  | `/books/:id` | Partially update a book                     |
-| `DELETE` | `/books/:id` | Delete a book                               |
+| `GET`    | `/books/:id` | Get one book                               |
+| `PUT`    | `/books/:id` | Replace a book                             |
+| `PATCH`  | `/books/:id` | Partially update a book                    |
+| `DELETE` | `/books/:id` | Delete a book                              |
 
 Requests and responses are shaped straight from `Book`'s own columns. There's no DTO to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting, for example:
 

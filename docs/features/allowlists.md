@@ -39,12 +39,12 @@ When `@nestjs/swagger` is installed, an explicit array here also names the gener
 ::: danger `selectable` alone is not a credential control
 It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
 
-| Door                      | Still open after `selectable`                                                                                                             | Close it with                                                       |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------|
-| `filter[apiKey][like]=a%` | Yes. `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                          | Name `filterable` explicitly, without the column                    |
-| `sort=apiKey`             | Yes. `sortable` defaults to every column, and ordering leaks the column across pages                                                     | Name `sortable` explicitly, without the column                      |
+| Door                      | Still open after `selectable`                                                                                                        | Close it with                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `filter[apiKey][like]=a%` | Yes. `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                      | Name `filterable` explicitly, without the column                    |
+| `sort=apiKey`             | Yes. `sortable` defaults to every column, and ordering leaks the column across pages                                                 | Name `sortable` explicitly, without the column                      |
 | `PATCH {"apiKey":"…"}`    | Yes. Writable columns are derived separately, and after this change the write is invisible, because the response no longer echoes it | Register `dto.update` (`patch` falls back to it) without the column |
-| response body             | No                                                                                                                                        | `selectable`                                                        |
+| response body             | No                                                                                                                                   | `selectable`                                                        |
 
 The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write DTO.
 :::
