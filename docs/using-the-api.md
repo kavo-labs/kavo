@@ -1,6 +1,6 @@
 # Using the generated API
 
-[Getting started](/getting-started/introduction) shows the routes `@Kavo()` generates. This page covers the response envelope and error shape; the query-string grammar itself — filtering, search, sorting, pagination, field selection, and includes — lives under [Querying](/querying/filtering).
+[Getting started](/getting-started/introduction) shows the routes `@Kavo()` generates. This page covers the response envelope and error shape. The query-string grammar itself (filtering, search, sorting, pagination, field selection, and includes) lives under [Querying](/querying/filtering).
 
 ## Soft-deleted rows
 
@@ -8,7 +8,7 @@
 GET /books?withDeleted=true
 ```
 
-Opts back into seeing soft-deleted rows on a read that would otherwise exclude them. `?onlyDeleted=true` narrows the other way — only soft-deleted rows, for a "trash" view. Both are rejected outright on an entity that isn't soft-deletable, and setting both together is rejected as a conflicting combination, rather than either being silently ignored — see [Soft delete](/features/soft-delete).
+This opts back into seeing soft-deleted rows on a read that would otherwise exclude them. `?onlyDeleted=true` narrows the other way: only soft-deleted rows, for a "trash" view. Both are rejected on an entity that isn't soft-deletable. Setting both together is also rejected, as a conflicting combination, rather than one silently winning. See [Soft delete](/features/soft-delete).
 
 ## The response envelope
 
@@ -23,9 +23,13 @@ A list response (`GET /books`) always has the same shape:
 }
 ```
 
-`total` is `null` (and its `COUNT` query skipped) if `pagination.count` is turned off. The key is always present — a list always answers "how many matched", so configuration changes the value, never the shape.
+`total` is `null` (and its `COUNT` query skipped) if `pagination.count` is turned off. The key is always present: a list always answers "how many matched." Configuration changes the value, never the shape.
 
-One optional fifth key can join them. `meta` is an open bag for anything the API wants to say about the list that isn't a row: a facet count, a "results are approximate" flag, the next cursor or since value. It appears when the entity's `findMany` handler puts something there — see [custom list metadata](/guides/configuration/operations#custom-list-metadata) for how — or under [cursor pagination](/querying/pagination#cursor-keyset-pagination) or [since pagination](/querying/pagination#since-seek-by-timestamp-pagination), which contribute `nextCursor`/`nextSince` and are the keys Kavo writes itself. A response with nothing to report has no `meta` key at all rather than an empty `{}`, so read it as `body.meta?.facets`. Nothing in the bag is projected, filtered, or renamed on the way out: what the handler returns is what the client receives.
+One optional fifth key can join them: `meta`. It's an open bag for anything the API wants to say about the list that isn't a row: a facet count, a "results are approximate" flag, the next cursor or since value.
+
+`meta` appears when the entity's `findMany` handler puts something there (see [custom list metadata](/guides/configuration/operations#custom-list-metadata)), or under [cursor or since pagination](/querying/pagination#cursor-keyset-pagination), which write `nextCursor` and `nextSince` themselves.
+
+A response with nothing to report has no `meta` key at all, not an empty `{}`. Read it as `body.meta?.facets`. Nothing in the bag is projected, filtered, or renamed on the way out: what the handler returns is what the client receives.
 
 ## Errors
 
@@ -65,4 +69,4 @@ The most common codes:
 | `KAVO_ALREADY_DELETED` | 409  | Soft-deleting a row that's already deleted              |
 | `KAVO_NOT_DELETED`     | 409  | Restoring or purging a row that isn't deleted           |
 
-Driver-level detail (raw SQL error text, stack info) never leaks into `detail` unless `errors.exposeInternals` is turned on — keep it off in production. See [Error handling](/internals/architecture/06-error-handling) for the full exception hierarchy and code catalog.
+Driver-level detail (raw SQL error text, stack info) never leaks into `detail` unless `errors.exposeInternals` is turned on. Keep it off in production. See [Error handling](/internals/architecture/06-error-handling) for the full exception hierarchy and code catalog.

@@ -1,10 +1,10 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists`, `computed` (see [Allowlists & computed fields](/features/allowlists-and-computed-fields)), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)).
+`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists)), `computed` (see [Computed fields](/features/computed-fields)), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)).
 
 ## dto
 
-Registers DTO classes per slot — every slot is independently optional and falls back to an entity-derived default when omitted:
+Registers DTO classes per slot. Every slot is independently optional and falls back to an entity-derived default when omitted:
 
 ```ts
 @Kavo(Book, {
@@ -26,8 +26,8 @@ Registers DTO classes per slot — every slot is independently optional and fall
 | `item`   | Entity, subject to field selection                  |
 | `list`   | Same as `item`'s resolved type                      |
 
-There's no `patch` DTO class to write on its own — it derives from `update`. See [DTO system](/internals/architecture/04-dto-system) for full derivation rules.
+There's no `patch` DTO class to write on its own; it derives from `update`. See [DTO system](/internals/architecture/04-dto-system) for full derivation rules.
 
 ## allowlists and computed
 
-Moved to [Allowlists & computed fields](/features/allowlists-and-computed-fields).
+Moved to [Allowlists](/features/allowlists) and [Computed fields](/features/computed-fields).

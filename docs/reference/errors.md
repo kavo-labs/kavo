@@ -13,7 +13,9 @@ Every error Kavo raises is an [RFC 9457 problem-details](https://www.rfc-editor.
 }
 ```
 
-`code` is stable API surface — renaming one is a breaking change. `type` is `https://kavo.dev/errors/<kebab-code>`; `instance` is `urn:kavo:request:<correlationId>`, so a single request's errors can be correlated in logs. This shape is uniform across REST, GraphQL, and MCP: every binding runs the same engine and the same error handler, so a `NotFoundException` looks the same regardless of which protocol raised it (over MCP it arrives as an `isError: true` tool result carrying `${code}: ${detail}` as text, rather than an HTTP response — see [MCP](/integrations/protocols/mcp)).
+`code` is stable API surface. Renaming one is a breaking change. `type` is `https://kavo.dev/errors/<kebab-code>`. `instance` is `urn:kavo:request:<correlationId>`, so you can correlate a single request's errors in your logs.
+
+This shape is the same across REST, GraphQL, and MCP, because every binding runs the same engine and the same error handler. A `NotFoundException` looks the same no matter which protocol raised it. Over MCP it arrives as an `isError: true` tool result carrying `${code}: ${detail}` as text, rather than an HTTP response. See [MCP](/integrations/protocols/mcp).
 
 A query-validation failure additionally carries an `errors[]` array, so a client can fix every problem with a request in one round trip:
 
@@ -44,22 +46,24 @@ A query-validation failure additionally carries an `errors[]` array, so a client
 | `KAVO_ALREADY_DELETED`              | 409  | Soft-deleting an already-deleted row                                                                                    |
 | `KAVO_NOT_DELETED`                  | 409  | Restoring or purging a row that isn't deleted                                                                           |
 | `KAVO_PRECONDITION_FAILED`          | 412  | `If-Match` names no tag matching the target's current `ETag`                                                            |
-| `KAVO_PRECONDITION_UNSUPPORTED`     | 412  | `If-Match` on a request the engine can't evaluate it for — untargeted operation, `caching.etag` off, `findOne` disabled |
+| `KAVO_PRECONDITION_UNSUPPORTED`     | 412  | `If-Match` on a request the engine can't evaluate it for: untargeted operation, `caching.etag` off, `findOne` disabled |
 | `KAVO_OPERATION_DISABLED`           | 405  | Programmatic call to a disabled registry entry (no route exists over HTTP)                                              |
 | `KAVO_OPERATION_NOT_REGISTERED`     | 405  | Programmatic call naming an operation id the registry has no entry for                                                  |
-| `KAVO_BULK_FAILED`                  | 422  | Reserved — bulk operations aren't implemented                                                                           |
+| `KAVO_BULK_FAILED`                  | 422  | Reserved, bulk operations aren't implemented                                                                            |
 | `KAVO_PERSISTENCE_FAILED`           | 500  | Unrecognized adapter/driver error                                                                                       |
 | `KAVO_TRANSACTION_FAILED`           | 500  | Deadlock/serialization failure (carries a `retryable` flag)                                                             |
 | `KAVO_CONFIG_INVALID`               | 500  | A bootstrap config error, **or** a request-time refusal when a handler returns a shape the response can't project       |
 | `KAVO_HTTP_ERROR`                   | *    | A framework-level `HttpException` reaching the filter without going through Kavo's engine at all                        |
 | `KAVO_UNEXPECTED_ERROR`             | 500  | Any other error reaching the filter without going through Kavo's engine                                                 |
 
-`*` — `KAVO_HTTP_ERROR` carries whatever status the underlying framework exception already had; it's the one code whose status legitimately varies.
+`*`: `KAVO_HTTP_ERROR` carries whatever status the underlying framework exception already had. It's the one code whose status legitimately varies.
 
 ## Exposing internal detail
 
-Driver-level detail — raw SQL error text, stack info — never leaks into `detail` unless `errors.exposeInternals` is turned on. Keep it off in production; see [Reference/Config keys §errors](/reference/config-keys#errors).
+Driver-level detail, like raw SQL error text and stack info, never leaks into `detail` unless `errors.exposeInternals` is turned on. Keep it off in production. See [Reference/Config keys §errors](/reference/config-keys#errors).
 
 ## Where these come from
 
-Every code above maps to exactly one exception class in one hierarchy — `KavoException` and its leaves (`NotFoundException`, `ConflictException`, `ConfigurationException`, and so on). Application code raising its own errors from a [custom operation handler](/core/custom-operations) throws these same classes; anything else that escapes to the boundary is wrapped as `KAVO_HTTP_ERROR` or `KAVO_UNEXPECTED_ERROR` rather than leaking a framework-shaped error body. See [Error handling](/internals/architecture/06-error-handling) for the full hierarchy and the adapter-level mapping tables (raw driver errors → catalog codes), and [Guides/Error handling](/guides/error-handling) for handling these as a caller.
+Every code above maps to exactly one exception class in one hierarchy: `KavoException` and its leaves (`NotFoundException`, `ConflictException`, `ConfigurationException`, and so on). Application code raising its own errors from a [custom operation handler](/core/custom-operations) throws these same classes. Anything else that escapes to the boundary is wrapped as `KAVO_HTTP_ERROR` or `KAVO_UNEXPECTED_ERROR`, so a framework-shaped error body never leaks out.
+
+See [Error handling](/internals/architecture/06-error-handling) for the full hierarchy and the adapter-level mapping tables from raw driver errors to catalog codes. See [Guides/Error handling](/guides/error-handling) for handling these as a caller.

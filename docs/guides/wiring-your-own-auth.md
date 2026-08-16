@@ -1,14 +1,14 @@
 # Wiring your own auth
 
-`KavoContext.principal` is the authenticated caller. Kavo carries it and nothing more: core never reads or judges the value. Your own code does — a [computed field](/features/allowlists-and-computed-fields#computed) that varies by viewer, or a replacement `OperationHandler`.
+`KavoContext.principal` is the authenticated caller. Kavo carries it and nothing more: core never reads or judges the value. Your own code does, whether that's a [computed field](/features/computed-fields#computed) that varies by viewer, or a replacement `OperationHandler`.
 
-Two separate jobs get it there, and only the second is Kavo's. Authenticating the caller is yours: a guard, a middleware, `@nestjs/passport`, whatever already runs ahead of the route handler and leaves the caller on the request. Kavo adds no auth dependency and mounts no guard of its own. What `principal` configures is the other half, moving that caller from the request onto the context:
+Getting `principal` in place is two separate jobs, and only the second is Kavo's. Authenticating the caller is yours: a guard, a middleware, `@nestjs/passport`, whatever already runs ahead of the route handler and leaves the caller on the request. Kavo adds no auth dependency and mounts no guard of its own. What `principal` configures is the other half: moving that caller from the request onto the context.
 
 ```ts
 KavoModule.forRootAsync({
   useFactory: () => ({
     infrastructure: createInfrastructure(dataSource),
-    // `request.user` — where Passport and most hand-rolled guards leave it.
+    // `request.user`: where Passport and most hand-rolled guards leave it.
     principal: true,
   }),
 });
@@ -23,8 +23,8 @@ KavoModule.forRoot({
 The extractor runs once per request, inside the generated route handler, and what it returns is that request's `principal`. Nothing is memoized between requests, so one caller's identity can never be served to the next. Keep it synchronous and cheap: read a property some guard already set, rather than verifying a token or querying a table. Throwing from it fails the request with a 500 problem-details document instead of quietly producing `null`.
 
 - Leave `principal` unset and it stays `null`. Nothing is populated by assumption: an ownership predicate that quietly starts answering differently is worse than one you can see is unwired.
-- It reaches standard and custom operations alike — one generated handler builds the request for every route, so a replacement handler on `POST /books/:id/claim` sees the same `context.principal` a plain `GET /books/1` does.
-- It reaches the generated **REST** routes and nothing else. The GraphQL and MCP surfaces (`graphql`/`mcp` above, and controllers extending `BaseKavoGraphQLController`/`BaseKavoMcpController`) call the service directly, so `context.principal` is `null` there whatever this option says — a computed field that varies by viewer answers for an anonymous caller over `POST /graphql`.
+- It reaches standard and custom operations alike. One generated handler builds the request for every route, so a replacement handler on `POST /books/:id/claim` sees the same `context.principal` a plain `GET /books/1` does.
+- It reaches the generated **REST** routes and nothing else. The GraphQL and MCP surfaces (`graphql`/`mcp` above, and controllers extending `BaseKavoGraphQLController`/`BaseKavoMcpController`) call the service directly, so `context.principal` is `null` there no matter what this option says. A computed field that varies by viewer answers for an anonymous caller over `POST /graphql`.
 - Programmatic callers pass their own: `crud.findOne(id, query, { principal })`. The module option is HTTP wiring, not a global; a background job has no request to extract from.
 - A method Kavo does not generate passes its own too. An `@Override`'d method or a fully custom route reaches the engine itself, so nothing fills `options` for it. `boundKavoPrincipal(this, request)` runs the extractor the module configured, so the method does not restate where the caller lives:
 

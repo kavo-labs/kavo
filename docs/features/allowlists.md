@@ -1,0 +1,52 @@
+# Allowlists
+
+What a request may filter, sort, select, and include, including relation paths. Anything outside an allowlist is rejected with a 400, never silently dropped:
+
+```ts
+@Kavo(Book, {
+  allowlists: {
+    filterable: ["id", "title", "author"],
+    sortable: ["id", "title"],
+    selectable: ["id", "title", "author"],
+    includable: ["author"],
+    searchable: ["title", "author"],
+  },
+})
+```
+
+- `filterable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`): fields usable in `filter[...]`.
+- `sortable` (same shape): fields usable in `sort=`.
+- `selectable` (same shape): fields usable in `fields=`, and what a response carries.
+- `includable` (`readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }`): relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
+- `searchable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`): fields `search[query]`/`search[fields]` may search. Relation paths are permitted here, unlike `filterable`/`sortable`. Default: every own string-kind column, not every own column. Also gated by `query.search.enabled` (off by default); see [Search](/querying/search).
+
+`{ exclude: [...] }` means "every own column except these" (plus, for `selectable`, every selectable computed field; for `includable`, every own relation; for `searchable`, every own string-kind column). It resolves at bootstrap against exactly the base set that key's plain default uses.
+
+**`includable` is the one key here that does not default to "everything".** Omit `filterable`/`sortable`/`selectable` and it derives from the `query` DTO or entity metadata, every own column. Omit `includable` and it resolves to `[]`, no relation is includable, the same opt-in posture `relations.edges` had before this key existed. Write `{ exclude: [] }` to opt every own relation in at once; that is the one spelling that crosses the fail-closed default rather than narrowing a fail-open one.
+
+When `@nestjs/swagger` is installed, an explicit array here also names the generated `filter`/`sort`/`fields`/`include` `ApiQuery` descriptions with the entity's actual allowed fields and relations. `{ exclude: [...] }` and an omitted `filterable`/`sortable`/`selectable` key carry no per-route description at all, because resolving either needs ORM metadata, which doesn't exist yet at `@Kavo` decoration time (see [ADR-0012](/internals/adr/0012-decoration-time-route-generation)). `includable`'s omitted case is different: the empty-set default needs no ORM metadata, so an omitted `includable` still gets a description ("No relation is includable on this entity"). Only its own `{ exclude: [...] }` form is undescribed, for the same decoration-time reason. The generic `filter`/`sort`/`limit`/`offset`/`fields`/`include` syntax itself isn't repeated on every route; it's exported once as `KAVO_API_GUIDE` from `@kavo/nest`, for splicing into your own `DocumentBuilder().setDescription(...)` (see the reference apps' `main.ts`).
+
+**How to keep a column out of every response.** Name `selectable` and leave the column off it, or exclude it. Both forms do the same thing:
+
+```ts
+@Kavo(User, {
+  allowlists: { selectable: { exclude: ["apiKey"] } },
+})
+```
+
+`apiKey` is then absent from `findOne`, `findMany`, `restoreOne`, any custom operation's result, and the row echoed back by `createOne`/`updateOne`/`patchOne`. Naming it in `fields=` is a 400. Writing the key at all is what turns it on: omit `selectable` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
+
+::: danger `selectable` alone is not a credential control
+It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
+
+| Door                      | Still open after `selectable`                                                                                                             | Close it with                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------|
+| `filter[apiKey][like]=a%` | Yes. `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                          | Name `filterable` explicitly, without the column                    |
+| `sort=apiKey`             | Yes. `sortable` defaults to every column, and ordering leaks the column across pages                                                     | Name `sortable` explicitly, without the column                      |
+| `PATCH {"apiKey":"…"}`    | Yes. Writable columns are derived separately, and after this change the write is invisible, because the response no longer echoes it | Register `dto.update` (`patch` falls back to it) without the column |
+| response body             | No                                                                                                                                        | `selectable`                                                        |
+
+The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write DTO.
+:::
+
+Two more edges. A registered `dto.item`/`dto.list` with a runtime shape replaces the projection rather than intersecting with it, so `selectable` does not fence a column the DTO names, even where the DTO is wider. Register the DTO as the narrowing statement when you use one. And an included relation is projected by its own target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden wherever `user` is included, provided `User` itself went through `@Kavo`/`createCrud`. A relation target that never did gets a derived config, which configures nothing and serves its full column set.

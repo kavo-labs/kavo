@@ -1,6 +1,6 @@
 # Nest + TypeORM
 
-Kavo's engine (`@kavo/core`) is ORM-agnostic — it talks to your data through a small adapter seam. `@kavo/nest` generates the routes; `@kavo/typeorm` adapts Kavo to a TypeORM `DataSource`. This is the complete, minimal wiring for that combination.
+Kavo's engine (`@kavo/core`) is ORM-agnostic. It talks to your data through a small adapter seam. `@kavo/nest` generates the routes, and `@kavo/typeorm` adapts Kavo to a TypeORM `DataSource`. Below is the complete, minimal wiring for that combination.
 
 <script setup lang="ts">
 import StackPicker from "../../.vitepress/theme/components/StackPicker.vue";
@@ -8,7 +8,7 @@ import StackPicker from "../../.vitepress/theme/components/StackPicker.vue";
 
 <StackPicker orm="typeorm" />
 
-If you haven't yet, read [Introduction](/getting-started/introduction) first — this page assumes you already know what `@Kavo()` does and just needs the app-wiring.
+If you haven't yet, read [Introduction](/getting-started/introduction) first. This page assumes you already know what `@Kavo()` does and just needs the app wiring.
 
 ::: code-group
 
@@ -30,7 +30,7 @@ bun add @kavo/core @kavo/nest @kavo/typeorm
 
 :::
 
-`@kavo/typeorm` expects `typeorm` (`^0.3.20 || ^1.0.0`) as a peer — add it to the command above if your app doesn't already have it — and `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
+`@kavo/typeorm` expects `typeorm` (`^0.3.20 || ^1.0.0`) as a peer. Add it to the command above if your app doesn't already have it. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
 
 ## Zero-config wiring
 
@@ -50,7 +50,7 @@ export class Book {
 }
 ```
 
-`@Kavo(Book)` with no config object — zero-config, the full CRUD surface for free:
+`@Kavo(Book)` needs no config object. That's zero-config: the full CRUD surface for free.
 
 ```ts
 // book.controller.ts
@@ -89,6 +89,6 @@ const dataSource = await new DataSource({
 export class AppModule {}
 ```
 
-`createInfrastructure(dataSource)` derives both Kavo's entity metadata and its repository adapter from the `DataSource`'s own TypeORM metadata — nothing to declare twice.
+`createInfrastructure(dataSource)` derives both Kavo's entity metadata and its repository adapter from the `DataSource`'s own TypeORM metadata. Nothing to declare twice.
 
 A complete, runnable app using all of the above lives in [`examples/nest-typeorm`](https://github.com/kavo-labs/kavo/tree/main/examples/nest-typeorm).

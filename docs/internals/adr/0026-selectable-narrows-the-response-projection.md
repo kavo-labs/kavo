@@ -30,7 +30,7 @@ received it by not asking for anything.
 Three things made this worse than an ordinary gap.
 
 **The documentation asserted the opposite**, in three places, and only one
-table cell in `docs/features/allowlists-and-computed-fields.md` had it right:
+table cell in the allowlists reference page had it right:
 
 - `QueryAllowlists`' own doc comment: "what a request may filter, sort, and
   **select** on".

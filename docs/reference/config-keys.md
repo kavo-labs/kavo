@@ -1,8 +1,8 @@
 # Config keys
 
-The complete `KavoSettings` field-by-field table — every key, its type, its default, and where it's consulted. [Guides/Configuration](/guides/configuration/) covers the same schema as task-based prose ("how do I configure X"); this page is the exhaustive lookup form for when you already know the key and want its type and default.
+The complete `KavoSettings` field-by-field table: every key, its type, its default, and where it's consulted. [Guides/Configuration](/guides/configuration/) covers the same schema as task-based prose ("how do I configure X"). This page is the exhaustive lookup form for when you already know the key and want its type and default.
 
-Every key below is set the same way at every scope of the [precedence chain](/guides/configuration/) — built-in defaults → global (`KavoModule`) → entity (`@Kavo` config) → operation (`operations.<id>`) → per-call — each scope overriding the one before it for the fields it sets.
+Every key below is set the same way at every scope of the [precedence chain](/guides/configuration/): built-in defaults, then global (`KavoModule`), then entity (`@Kavo` config), then operation (`operations.<id>`), then per-call. Each scope overrides the one before it for the fields it sets.
 
 ## pagination
 
@@ -48,7 +48,7 @@ See [Errors](/reference/errors).
 | `relations.edges.<name>.strategy`       | `"auto" \| "join" \| "batch"` | `"auto"`                             |
 | `relations.edges.<name>.write`          | `boolean \| { strategy }`     | `false`                              |
 
-Whether a relation is includable at all is `allowlists.includable` (entity scope only) — see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `write: true` inherits the entity's own `arrayMutation.strategy`; `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+Whether a relation is includable at all is `allowlists.includable` (entity scope only); see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
 
 ## arrayMutation
 
@@ -57,7 +57,7 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 | `arrayMutation`          | `{ strategy } \| false`                  | `{}`                        |
 | `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | unset (no built-in default) |
 
-`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `arrayMutation.strategy` is the entity-wide default a `relations.edges.<name>.write: true` relation inherits; a relation opted in with no strategy resolvable anywhere — no entity default and no `write: { strategy }` of its own — requires one be declared explicitly (issue #221). `arrayMutation: false` disables the feature wholesale and wins over any per-relation override (issue #223). See [Relations#arrayMutation](/features/relations#arraymutation).
+`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `arrayMutation.strategy` is the entity-wide default a `relations.edges.<name>.write: true` relation inherits. A relation opted in with no strategy resolvable anywhere (no entity default and no `write: { strategy }` of its own) requires one be declared explicitly (issue #221). `arrayMutation: false` disables the feature wholesale and wins over any per-relation override (issue #223). See [Relations#arrayMutation](/features/relations#arraymutation).
 
 ## caching
 
@@ -99,18 +99,18 @@ Coarser than the per-entity `EntityConfig.operations`, which also carries `handl
 
 ## allowlists (entity scope only)
 
-Not part of `KavoSettings` — declared on `EntityConfig` directly, so there's no global default and no per-operation override.
+Not part of `KavoSettings`. Declared on `EntityConfig` directly, so there's no global default and no per-operation override.
 
 | Key                     | Type                                          | Default                            |
 | ----------------------- | --------------------------------------------- | ---------------------------------- |
 | `allowlists.filterable` | `FieldPath[] \| { exclude: FieldPath[] }`     | every own column                   |
 | `allowlists.sortable`   | same shape                                    | every own column                   |
 | `allowlists.selectable` | same shape                                    | every own column + computed fields |
-| `allowlists.includable` | `IncludePath[] \| { exclude: IncludePath[] }` | `[]` — no relation includable      |
+| `allowlists.includable` | `IncludePath[] \| { exclude: IncludePath[] }` | `[]`, no relation includable       |
 | `allowlists.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`     | every own string-kind column       |
 
-See [Allowlists & computed fields](/features/allowlists-and-computed-fields#allowlists).
+See [Allowlists](/features/allowlists).
 
 ## dto / computed / operations (entity scope)
 
-`dto`, `computed`, and the per-entity form of `operations` aren't settings either — they're structural `EntityConfig` fields resolved once at `createCrud`/`@Kavo`. See [DTOs](/core/dtos), [Allowlists & computed fields](/features/allowlists-and-computed-fields#computed), and [CRUD operations](/core/crud-operations).
+`dto`, `computed`, and the per-entity form of `operations` aren't settings either. They're structural `EntityConfig` fields resolved once at `createCrud`/`@Kavo`. See [DTOs](/core/dtos), [Computed fields](/features/computed-fields#computed), and [CRUD operations](/core/crud-operations).

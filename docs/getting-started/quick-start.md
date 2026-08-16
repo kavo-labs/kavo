@@ -34,18 +34,18 @@ import { Book } from "./book.entity.js";
 export class BookController {}
 ```
 
-That's it — no config object, no service, no repository wiring in the controller. This generates:
+That's it. No config object, no service, no repository wiring in the controller. This generates:
 
 | Method   | Route        | What it does                                |
 | -------- | ------------ | ------------------------------------------- |
 | `POST`   | `/books`     | Create a book                               |
-| `GET`    | `/books`     | List books — filtering, sorting, pagination |
+| `GET`    | `/books`     | List books: filtering, sorting, pagination |
 | `GET`    | `/books/:id` | Get one book                                |
 | `PUT`    | `/books/:id` | Replace a book                              |
 | `PATCH`  | `/books/:id` | Partially update a book                     |
 | `DELETE` | `/books/:id` | Delete a book                               |
 
-Requests and responses are shaped straight from `Book`'s own columns — there's no DTO to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting out of the box, for example:
+Requests and responses are shaped straight from `Book`'s own columns. There's no DTO to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting, for example:
 
 ```http
 GET /books?filter[author][eq]=Tolkien&sort=-title&limit=10&offset=0
@@ -76,6 +76,6 @@ const dataSource = await new DataSource({/* ...your TypeORM connection options..
 export class AppModule {}
 ```
 
-`KavoModule` discovers every `@Kavo`-decorated controller registered in `controllers: [...]` and binds each one's generated service — no per-entity registration step.
+`KavoModule` discovers every `@Kavo`-decorated controller registered in `controllers: [...]` and binds each one's generated service. There's no per-entity registration step.
 
 See [Soft delete](/features/soft-delete) for how to add restore/purge to an entity, and [Configuration](/guides/configuration/) once zero-config isn't enough.

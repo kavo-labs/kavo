@@ -143,7 +143,8 @@ const config = defineConfig({
           { text: "Search", link: "/querying/search" },
           { text: "Sorting", link: "/querying/sorting" },
           { text: "Pagination", link: "/querying/pagination" },
-          { text: "Field Selection & Includes", link: "/querying/field-selection-and-includes" },
+          { text: "Field Selection", link: "/querying/field-selection" },
+          { text: "Includes", link: "/querying/includes" },
         ],
       },
       {
@@ -153,7 +154,8 @@ const config = defineConfig({
           { text: "Soft Delete", link: "/features/soft-delete" },
           { text: "Realtime Events", link: "/features/realtime-events" },
           { text: "Caching & ETags", link: "/features/caching-and-etags" },
-          { text: "Allowlists & Computed Fields", link: "/features/allowlists-and-computed-fields" },
+          { text: "Allowlists", link: "/features/allowlists" },
+          { text: "Computed Fields", link: "/features/computed-fields" },
         ],
       },
       {
@@ -186,6 +188,7 @@ const config = defineConfig({
             items: [
               { text: "Module setup", link: "/guides/configuration/module-setup" },
               { text: "Settings", link: "/guides/configuration/settings" },
+              { text: "ETag overrides and redaction", link: "/guides/configuration/etag-overrides" },
               { text: "Entity config", link: "/guides/configuration/entity-config" },
               { text: "Operations", link: "/guides/configuration/operations" },
             ],
@@ -193,6 +196,7 @@ const config = defineConfig({
           { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
           { text: "Error Handling", link: "/guides/error-handling" },
           { text: "Custom Adapter", link: "/guides/custom-adapter" },
+          { text: "Migrating Relations Config (pre-v0.10)", link: "/guides/migrating-relations-v0-10" },
           { text: "Using the API", link: "/using-the-api" },
         ],
       },
@@ -202,6 +206,7 @@ const config = defineConfig({
           { text: "Config Keys", link: "/reference/config-keys" },
           { text: "Errors", link: "/reference/errors" },
           { text: "Decorators", link: "/reference/decorators" },
+          { text: "Peer Dependencies", link: "/reference/peer-dependencies" },
         ],
       },
       {

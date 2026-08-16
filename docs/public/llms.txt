@@ -26,7 +26,8 @@ Source: https://github.com/kavo-labs/kavo
 - [Search](https://kavo.js.org/querying/search): Free-text search across allowlisted fields
 - [Sorting](https://kavo.js.org/querying/sorting): The `sort` query parameter
 - [Pagination](https://kavo.js.org/querying/pagination): Offset, cursor, since, and none pagination strategies
-- [Field Selection & Includes](https://kavo.js.org/querying/field-selection-and-includes): `fields` and `include` on the wire
+- [Field Selection](https://kavo.js.org/querying/field-selection): `fields` on the wire
+- [Includes](https://kavo.js.org/querying/includes): `include` on the wire
 
 ## Features
 
@@ -34,7 +35,8 @@ Source: https://github.com/kavo-labs/kavo
 - [Soft Delete](https://kavo.js.org/features/soft-delete): Config-declared soft-delete operations and `withDeleted`
 - [Realtime Events](https://kavo.js.org/features/realtime-events): Publishing CRUD events over SSE and other transports
 - [Caching & ETags](https://kavo.js.org/features/caching-and-etags): Content-hash ETags and conditional requests
-- [Allowlists & Computed Fields](https://kavo.js.org/features/allowlists-and-computed-fields): Restricting filter/sort/select and serializer-evaluated computed fields
+- [Allowlists](https://kavo.js.org/features/allowlists): Restricting filter/sort/select/include/search per entity
+- [Computed Fields](https://kavo.js.org/features/computed-fields): Serializer-evaluated response fields with no backing column
 
 ## Integrations
 
@@ -49,11 +51,13 @@ Source: https://github.com/kavo-labs/kavo
 
 - [Module setup](https://kavo.js.org/guides/configuration/module-setup): KavoModule.forRootAsync and forFeature
 - [Settings](https://kavo.js.org/guides/configuration/settings): The full KavoSettings reference
+- [ETag overrides and redaction](https://kavo.js.org/guides/configuration/etag-overrides): @Override's ETag inheritance and response redaction
 - [Entity config](https://kavo.js.org/guides/configuration/entity-config): Per-entity configuration overrides
 - [Operations](https://kavo.js.org/guides/configuration/operations): Per-operation configuration overrides
 - [Wiring Your Own Auth](https://kavo.js.org/guides/wiring-your-own-auth): Guards, request context, and ownership checks
 - [Error Handling](https://kavo.js.org/guides/error-handling): Problem-details error shape and custom exceptions
 - [Custom Adapter](https://kavo.js.org/guides/custom-adapter): Implementing RepositoryAdapter for a new data source
+- [Migrating Relations Config (pre-v0.10)](https://kavo.js.org/guides/migrating-relations-v0-10): Moving off the old `relations.edges` include allowlist
 - [Using the API](https://kavo.js.org/using-the-api): Calling generated routes from a client
 
 ## Reference
@@ -61,6 +65,7 @@ Source: https://github.com/kavo-labs/kavo
 - [Config Keys](https://kavo.js.org/reference/config-keys): Every KavoSettings key, default, and merge rule
 - [Errors](https://kavo.js.org/reference/errors): The exception hierarchy and error-code catalog
 - [Decorators](https://kavo.js.org/reference/decorators): @Kavo, @Override, and related decorators
+- [Peer Dependencies](https://kavo.js.org/reference/peer-dependencies): Every @kavo/* package's required and optional peers
 
 ## Optional
 

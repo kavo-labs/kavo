@@ -4,4 +4,6 @@
 GET /books?sort=-publishedAt,title
 ```
 
-Comma-separated field list, `-` prefix for descending, order = priority order. Only fields on the `sortable` allowlist are usable. If a request supplies no `sort` at all, the entity's configured `query.defaultSort` (if any) applies — a client-supplied `sort` always wins outright over that default rather than merging with it.
+`sort` takes a comma-separated field list. A `-` prefix means descending, and the order of the fields sets the priority order. Only fields on the `sortable` allowlist can be used.
+
+If a request supplies no `sort` at all, the entity's configured `query.defaultSort` applies, if it has one. A client-supplied `sort` always wins outright over that default. It doesn't merge with it.
