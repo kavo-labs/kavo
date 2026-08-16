@@ -38,14 +38,14 @@ Second person is rare; most pages describe the system ("Kavo stops actually dele
 
 ## Quick reference: phrases that don't belong in a Kavo doc
 
-| Tell | Kavo equivalent |
-|---|---|
-| "This powerful feature allows you to..." | Say what it does: "Kavo stops actually deleting rows on..." |
-| "In order to enable this functionality" | "To turn this on" |
-| "It's important to note that X supports Y" | "X supports Y" |
-| Bulleted "Key Features:" list with bold lead-ins | A sentence, or a table if it's truly enumerable data |
-| "Let's walk through how this works" | Just show the code block |
-| A closing "Summary" or "Conclusion" section | End on the last concrete fact, or a cross-reference link |
+| Tell                                             | Kavo equivalent                                             |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| "This powerful feature allows you to..."         | Say what it does: "Kavo stops actually deleting rows on..." |
+| "In order to enable this functionality"          | "To turn this on"                                           |
+| "It's important to note that X supports Y"       | "X supports Y"                                              |
+| Bulleted "Key Features:" list with bold lead-ins | A sentence, or a table if it's truly enumerable data        |
+| "Let's walk through how this works"              | Just show the code block                                    |
+| A closing "Summary" or "Conclusion" section      | End on the last concrete fact, or a cross-reference link    |
 
 ## Common mistakes
 
