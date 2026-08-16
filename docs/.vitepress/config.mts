@@ -368,23 +368,4 @@ const config = defineConfig({
   },
 });
 
-const mermaidConfig = withMermaid(config);
-
-// vitepress-plugin-mermaid asks Vite to pre-bundle these five transitive
-// dependencies of mermaid by bare name. pnpm does not hoist them to the
-// workspace root, so `vitepress dev` cannot resolve them and serves a blank
-// page. Dropping them from the list lets Vite discover them on demand from
-// inside mermaid's own package, where they do resolve. The production build
-// resolves through the real dependency graph and never needed the hint.
-const PRE_BUNDLED_BY_PLUGIN = ["@braintree/sanitize-url", "dayjs", "debug", "cytoscape-cose-bilkent", "cytoscape"];
-
-export default {
-  ...mermaidConfig,
-  vite: {
-    ...mermaidConfig.vite,
-    optimizeDeps: {
-      ...mermaidConfig.vite?.optimizeDeps,
-      include: (mermaidConfig.vite?.optimizeDeps?.include ?? []).filter((dep) => !PRE_BUNDLED_BY_PLUGIN.includes(dep)),
-    },
-  },
-};
+export default withMermaid(config);

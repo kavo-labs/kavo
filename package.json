@@ -27,9 +27,14 @@
     "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
+    "@braintree/sanitize-url": "^7.1.2",
     "@swc/core": "^1.16.0",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "cytoscape": "^3.33.3",
+    "cytoscape-cose-bilkent": "^4.1.0",
+    "dayjs": "^1.11.20",
+    "debug": "^4.4.3",
     "dependency-cruiser": "^18.2.0",
     "mermaid": "^11.16.1",
     "oxlint": "^1.78.0",
