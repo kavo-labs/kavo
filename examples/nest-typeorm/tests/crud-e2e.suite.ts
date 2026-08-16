@@ -1471,5 +1471,89 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(created.body.id).not.toBe(999999);
       expect(created.body.url).toBe("kept.png");
     });
+
+    it("rejects an empty street/city/postalCode on POST /addresses", async () => {
+      const missingStreet = await request(server())
+        .post("/addresses")
+        .send({ street: "", city: "Springfield", postalCode: "10001" })
+        .expect(400);
+      expect(missingStreet.body.detail).toContain("street");
+
+      const missingCity = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "", postalCode: "10001" })
+        .expect(400);
+      expect(missingCity.body.detail).toContain("city");
+    });
+
+    it("rejects a non-string street on PUT /addresses/:id", async () => {
+      const created = await request(server())
+        .post("/addresses")
+        .send({ street: "1 Elm St", city: "Springfield", postalCode: "10001" })
+        .expect(201);
+      const id = created.body.id as number;
+
+      await request(server())
+        .put(`/addresses/${id}`)
+        .send({ street: 12345, city: "Springfield", postalCode: "10001" })
+        .expect(400);
+    });
+
+    it("rejects a malformed ISO date on POST /owners' startedAt, and accepts a well-formed one", async () => {
+      const bad = await request(server())
+        .post("/owners")
+        .send({ name: "Dated", email: "dated@x.io", startedAt: "not-a-date" })
+        .expect(400);
+      expect(bad.body.detail).toContain("startedAt");
+
+      const good = await request(server())
+        .post("/owners")
+        .send({ name: "Dated Ok", email: "dated-ok@x.io", startedAt: "2021-06-01T00:00:00.000Z" })
+        .expect(201);
+      expect(good.body.startedAt).toBe("2021-06-01T00:00:00.000Z");
+    });
+
+    it("rejects a non-positive owner address id on POST /owners", async () => {
+      const response = await request(server())
+        .post("/owners")
+        .send({ name: "BadAddr", email: "badaddr@x.io", address: -1 })
+        .expect(400);
+      expect(response.body.detail).toContain("address");
+    });
+
+    it("rejects a non-integer element in POST /cats' tags array", async () => {
+      const response = await request(server())
+        .post("/cats")
+        .send({ name: "BadTags", age: 1, indoor: true, livesLeft: 9, tags: [1, "two", 3] })
+        .expect(400);
+      expect(response.body.detail).toContain("tags");
+    });
+
+    it("rejects a negative livesLeft on POST /cats", async () => {
+      const response = await request(server())
+        .post("/cats")
+        .send({ name: "NegLives", age: 1, indoor: true, livesLeft: -1 })
+        .expect(400);
+      expect(response.body.detail).toContain("livesLeft");
+    });
+
+    it("rejects an empty name on PUT /tags/:id", async () => {
+      const tag = await request(server()).post("/tags").send({ name: "renamable" }).expect(201);
+      const id = tag.body.id as number;
+      await request(server()).put(`/tags/${id}`).send({ name: "" }).expect(400);
+      await request(server()).put(`/tags/${id}`).send({ name: "renamed" }).expect(200);
+    });
+
+    it("rejects an empty url on PUT /photos/:id and is partial-field aware on PATCH", async () => {
+      const photo = await request(server()).post("/photos").send({ url: "original.png" }).expect(201);
+      const id = photo.body.id as number;
+
+      await request(server()).put(`/photos/${id}`).send({ url: "" }).expect(400);
+      await request(server()).put(`/photos/${id}`).send({ url: "replaced.png" }).expect(200);
+
+      const patched = await request(server()).patch(`/photos/${id}`).send({ url: "patched.png" }).expect(200);
+      expect(patched.body.url).toBe("patched.png");
+      await request(server()).patch(`/photos/${id}`).send({ url: "" }).expect(400);
+    });
   });
 }
