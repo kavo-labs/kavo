@@ -72,6 +72,7 @@ export type {
   KavoSettings,
   ArrayMutationSettings,
   ArrayMutationStrategy,
+  CacheSettings,
   CachingSettings,
   ErrorSettings,
   PaginationSettings,
@@ -104,6 +105,14 @@ export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/res
 // ── Realtime ──────────────────────────────────────────────────────────
 export type { RealtimeEventDto, RealtimeEventId } from "./realtime/realtime-event.js";
 export type { RealtimeTransport } from "./realtime/realtime-transport.js";
+
+// ── Result caching (ADR-0031) ─────────────────────────────────────────
+// `createMemoryCacheStore` is the shipped in-process default; a shared
+// backend is a caller-registered object implementing the same three
+// methods. Adapters never see it; the engine reaches it through
+// `ResolvedEntityConfig.cacheStore`.
+export type { CacheStore } from "./caching/cache-store.js";
+export { createMemoryCacheStore } from "./caching/cache-store.js";
 
 // ── Operations ────────────────────────────────────────────────────────
 export type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operations/operation.js";
