@@ -51,7 +51,7 @@ class CursorReadingController {}
 @Controller("since-readings")
 class SinceReadingController {}
 
-@Kavo(Reading, { caching: { etag: true } })
+@Kavo(Reading, { cache: { etag: true } })
 @Controller("cached-readings")
 class CachedReadingController {}
 
