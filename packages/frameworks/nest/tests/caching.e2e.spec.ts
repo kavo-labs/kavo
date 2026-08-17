@@ -543,11 +543,11 @@ describe("If-Match through a replaced controller method", () => {
     expect(written.body).toMatchObject({ title: "enveloped" });
   });
 
-  it("reads caching.etag at the operation scope, not just the entity's", async () => {
+  it("reads cache.etag at the operation scope, not just the entity's", async () => {
     // `settingsFor` falls back to entity settings, so configuring the
     // entity would pass even if per-operation resolution were bypassed.
     // One operation off and its sibling on is what actually pins it.
-    @Kavo(Todo, { operations: { updateOne: { caching: { etag: false } } } })
+    @Kavo(Todo, { operations: { updateOne: { cache: { etag: false } } } })
     @Controller("todos")
     class MixedTodoController {
       constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
@@ -576,7 +576,7 @@ describe("If-Match through a replaced controller method", () => {
     // The entity scope, which `settingsFor` falls back to. The test above
     // is the per-operation half; both matter because the fallback is what
     // makes an app-wide opt-out work at all.
-    @Kavo(Todo, { caching: { etag: false } })
+    @Kavo(Todo, { cache: { etag: false } })
     @Controller("todos")
     class UncachedTodoController {
       constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
@@ -614,9 +614,9 @@ describe("If-Match through a replaced controller method", () => {
   });
 });
 
-describe("caching.etag: false", () => {
+describe("cache.etag: false", () => {
   it("stops generating ETags when disabled globally", async () => {
-    await bootstrap(CachedTodoController, { defaults: { caching: { etag: false } } });
+    await bootstrap(CachedTodoController, { defaults: { cache: { etag: false } } });
     const created = await request(server()).post("/todos").send({ title: "a" }).expect(201);
 
     expect(created.headers["etag"]).toBeUndefined();
@@ -631,7 +631,7 @@ describe("caching.etag: false", () => {
     const wouldBe = await seed("a");
     await app.close();
 
-    await bootstrap(CachedTodoController, { defaults: { caching: { etag: false } } });
+    await bootstrap(CachedTodoController, { defaults: { cache: { etag: false } } });
     await seed("a");
 
     await request(server()).get("/todos/1").set("If-None-Match", wouldBe).expect(200);
@@ -648,7 +648,7 @@ describe("caching.etag: false", () => {
   });
 
   it("can be switched off for one entity only", async () => {
-    @Kavo(Todo, { caching: { etag: false } })
+    @Kavo(Todo, { cache: { etag: false } })
     @Controller("todos")
     class UncachedTodoController {}
     await bootstrap(UncachedTodoController);
@@ -658,7 +658,7 @@ describe("caching.etag: false", () => {
   });
 
   it("can be switched off for one operation only", async () => {
-    @Kavo(Todo, { operations: { findOne: { caching: { etag: false } } } })
+    @Kavo(Todo, { operations: { findOne: { cache: { etag: false } } } })
     @Controller("todos")
     class PartiallyCachedTodoController {}
     await bootstrap(PartiallyCachedTodoController);

@@ -2179,8 +2179,8 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(operation("/todos/{id}", "get")?.responses?.["200"]?.description).toBe("Success");
   });
 
-  it("documents nothing conditional when caching.etag is off for the entity", async () => {
-    @Kavo(Todo, { caching: { etag: false } })
+  it("documents nothing conditional when cache.etag is off for the entity", async () => {
+    @Kavo(Todo, { cache: { etag: false } })
     @Controller("todos")
     class UncachedController {}
     await app.close();
@@ -2193,12 +2193,12 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(patch?.responses?.["200"]?.headers).toBeUndefined();
   });
 
-  it("documents nothing conditional when caching.etag is off at the global scope (issue #198)", async () => {
+  it("documents nothing conditional when cache.etag is off at the global scope (issue #198)", async () => {
     @Kavo(Todo)
     @Controller("todos")
     class GlobalUncachedController {}
     await app.close();
-    await bootstrap(GlobalUncachedController, { defaults: { caching: { etag: false } } });
+    await bootstrap(GlobalUncachedController, { defaults: { cache: { etag: false } } });
     const uncached = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
     const get = (uncached.paths["/todos/{id}"] as Record<string, Operation>)["get"];
     const patch = (uncached.paths["/todos/{id}"] as Record<string, Operation>)["patch"];
@@ -2211,12 +2211,12 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(patch?.responses?.["200"]?.headers).toBeUndefined();
   });
 
-  it("an entity-scoped caching.etag still wins over a global default (issue #198)", async () => {
-    @Kavo(Todo, { caching: { etag: true } })
+  it("an entity-scoped cache.etag still wins over a global default (issue #198)", async () => {
+    @Kavo(Todo, { cache: { etag: true } })
     @Controller("todos")
     class ReenabledCachingController {}
     await app.close();
-    await bootstrap(ReenabledCachingController, { defaults: { caching: { etag: false } } });
+    await bootstrap(ReenabledCachingController, { defaults: { cache: { etag: false } } });
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
     const get = (document.paths["/todos/{id}"] as Record<string, Operation>)["get"];
 

@@ -85,7 +85,7 @@ function execute(
 }
 
 describe("cache settings resolution", () => {
-  it("'cache: { ttl: … }' at entity scope opts in without spelling enabled", async () => {
+  it("'cache: { ttl: … }' at entity scope turns the result cache on", async () => {
     const store = createMemoryCacheStore();
     const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, store);
     await execute(crud, { operation: "createOne", body: ADA });
@@ -97,9 +97,9 @@ describe("cache settings resolution", () => {
     expect(adapter.reads).toBe(readsAfterMiss);
   });
 
-  it("an override that spells 'enabled: false' stays off", async () => {
+  it("an etag-only override does not turn the result cache on", async () => {
     const store = createMemoryCacheStore();
-    const { crud, adapter } = makeCrud({ cache: { enabled: false, ttl: 60 } } as never, store);
+    const { crud, adapter } = makeCrud({ cache: { etag: false } } as never, store);
     await execute(crud, { operation: "createOne", body: ADA });
     await execute(crud, { operation: "findOne", id: 1 });
     const readsAfterMiss = adapter.reads;
@@ -164,7 +164,7 @@ describe("cache settings resolution", () => {
     expect(adapter.reads).toBe(readsAfterMiss + 1);
   });
 
-  it("per-call 'cache: false' turns an entity-enabled cache off for that one call", async () => {
+  it("per-call 'cache: false' turns an entity-scoped cache off for that one call", async () => {
     const store = createMemoryCacheStore();
     const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, store);
     const off = { settings: { cache: false } } as const;
@@ -181,9 +181,8 @@ describe("cache settings resolution", () => {
   });
 
   it("rejects a malformed 'cache' override at bootstrap, naming the key", () => {
-    expect(() => makeCrud({ cache: { enabled: "yes" } } as never)).toThrowError(ConfigurationException);
-    expect(() => makeCrud({ cache: { ttl: 0 } } as never)).toThrowError(ConfigurationException);
     expect(() => makeCrud({ cache: { ttl: -1 } } as never)).toThrowError(ConfigurationException);
+    expect(() => makeCrud({ cache: { ttl: 1.5 } } as never)).toThrowError(ConfigurationException);
     expect(() => makeCrud({ cache: true } as never)).toThrowError(ConfigurationException);
   });
 
@@ -497,18 +496,18 @@ describe("ETag and If-None-Match on a cached hit", () => {
     expect(adapter.reads).toBe(readsAfterMiss);
   });
 
-  it("recomputes the tag for the call's own caching.etag scope, not from storage", async () => {
+  it("recomputes the tag for the call's own cache.etag scope, not from storage", async () => {
     const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
     await execute(crud, { operation: "createOne", body: ADA });
     await execute(crud, { operation: "findOne", id: 1 });
     const readsAfterMiss = adapter.reads;
 
-    // The entry was stored with an ETag, but this call's caching.etag is
+    // The entry was stored with an ETag, but this call's cache.etag is
     // off — the hit must serve `etag: null`, never the stored tag.
     const off = await execute(crud, {
       operation: "findOne",
       id: 1,
-      options: { settings: { caching: { etag: false } } },
+      options: { settings: { cache: { etag: false } } },
     });
     expect(off.etag).toBeNull();
     expect(off.notModified).toBe(false);
