@@ -157,13 +157,13 @@ export interface RelationSettings {
 export type EtagSettings = boolean | { readonly enabled: boolean };
 
 /**
- * Result caching and its ETag half — one subtree replacing the former
- * `caching` key (ADR-0031). `etag` is the conditional-request machinery
- * (ADRs 0020/0027): it computes an `ETag` and answers `If-None-Match`/
- * `If-Match`. `ttl` is the engine-level shortcut that serves a repeated
- * `findOne`/`findMany` from a store without touching the adapter at all.
- * They compose: a cached hit still re-derives the current `ETag` for the
- * request at hand, so the two features never fight.
+ * Result caching and its ETag half (ADR-0031). `etag` is the
+ * conditional-request machinery (ADRs 0020/0027): it computes an `ETag`
+ * and answers `If-None-Match`/`If-Match`. `ttl` is the engine-level
+ * shortcut that serves a repeated `findOne`/`findMany` from a store
+ * without touching the adapter at all. They compose: a cached hit still
+ * re-derives the current `ETag` for the request at hand, so the two
+ * features never fight.
  *
  * `false` disables the subtree wholesale (result cache **and** etags), the
  * same convention `softDelete` uses. Otherwise the result cache is on
@@ -177,7 +177,7 @@ export type EtagSettings = boolean | { readonly enabled: boolean };
  *
  * `etag` defaults **on** (`true`) independent of `ttl`: an entity with
  * result caching off still serves ETags and honors the conditional
- * headers, exactly as `caching.etag` did before the merge.
+ * headers.
  *
  * TTL is in **seconds**; the store enforces it (the engine never reads a
  * clock). Successful writes on the entity invalidate its cached entries

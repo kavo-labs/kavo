@@ -46,8 +46,8 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // complete base instead of replacing a `false` wholesale. `ttl` is the
   // switch: `0` (the default) means off, and any positive `ttl` in an
   // override means on — there is no separate `enabled` key and no presence
-  // rule to remember. `etag` keeps `caching.etag`'s default (`true`): the
-  // conditional-request machinery serves independently of the result cache.
+  // rule to remember. `etag` defaults to `true`: the conditional-request
+  // machinery serves independently of the result cache.
   // The store itself lives outside this tree entirely
   // (`KavoOptions.cacheStore`), the same way realtime transports do (see
   // `RealtimeSettings`'s doc).

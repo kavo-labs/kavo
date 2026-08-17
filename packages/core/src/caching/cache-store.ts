@@ -22,7 +22,7 @@ import type { KavoResponse } from "../context/kavo-response.js";
  * two fields are per-request answers to the request's own
  * `If-None-Match` (ADR-0020), and a cached hit has to serve a correct,
  * current `ETag` even when the entry predates the current call's
- * `caching.etag` scope. A store that serializes its values for a shared
+ * `cache.etag` scope. A store that serializes its values for a shared
  * backend is therefore free to round-trip the envelope — including dropping
  * `etag`/`notModified` entirely, which the engine re-derives anyway.
  *
