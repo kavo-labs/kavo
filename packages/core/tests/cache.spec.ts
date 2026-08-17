@@ -180,6 +180,27 @@ describe("cache settings resolution", () => {
     expect(adapter.reads).toBe(readsAfterMiss + 1);
   });
 
+  it("keys by principal: one caller's response never serves a different principal", async () => {
+    const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
+    await execute(crud, { operation: "createOne", body: ADA });
+    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 1 } } });
+    const readsAfterMiss = adapter.reads;
+
+    // A different principal with the same query misses: no cross-caller leak.
+    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 2 } } });
+    expect(adapter.reads).toBe(readsAfterMiss + 1);
+
+    // The same principal hits.
+    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 1 } } });
+    expect(adapter.reads).toBe(readsAfterMiss + 1);
+
+    // Anonymous calls (no principal) share one bucket and miss against a
+    // principal'd entry.
+    await execute(crud, { operation: "findOne", id: 1 });
+    await execute(crud, { operation: "findOne", id: 1 });
+    expect(adapter.reads).toBe(readsAfterMiss + 2);
+  });
+
   it("rejects a malformed 'cache' override at bootstrap, naming the key", () => {
     expect(() => makeCrud({ cache: { ttl: -1 } } as never)).toThrowError(ConfigurationException);
     expect(() => makeCrud({ cache: { ttl: 1.5 } } as never)).toThrowError(ConfigurationException);
@@ -312,6 +333,18 @@ describe("findOne caching", () => {
     const third = await execute(crud, { operation: "findOne", id: 1 });
     expect(third.item).toMatchObject({ name: "Ada" });
     expect(adapter.reads).toBe(1); // one miss, then hits — never a third adapter read
+  });
+
+  it("the miss that populates the cache is itself cloned: the originating caller cannot corrupt it", async () => {
+    const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
+    await execute(crud, { operation: "createOne", body: ADA });
+    const first = await execute(crud, { operation: "findOne", id: 1 });
+
+    (first.item as Record<string, unknown>).name = "Corrupted";
+
+    const second = await execute(crud, { operation: "findOne", id: 1 });
+    expect(second.item).toMatchObject({ name: "Ada" });
+    expect(adapter.reads).toBe(1); // the corruption stayed on the caller's copy, not in the store
   });
 });
 

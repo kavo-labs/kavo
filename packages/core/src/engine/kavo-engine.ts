@@ -277,7 +277,14 @@ export class KavoEngine<Entity extends object> {
     // its 304 answered against the *cached* representation's current ETag
     // (ADR-0031). Reads only; write responses are never cached.
     if (query !== null && this.isCacheableRead(descriptor, configView)) {
-      const cached = await this.readCache(descriptor.id, request.id, query, configView, preconditions);
+      const cached = await this.readCache(
+        descriptor.id,
+        request.id,
+        request.options?.principal,
+        query,
+        configView,
+        preconditions,
+      );
       if (cached !== null) return cached;
     }
 
@@ -293,7 +300,7 @@ export class KavoEngine<Entity extends object> {
 
     const response = await this.mapResponse(descriptor, result, context, preconditions);
     if (query !== null && this.isCacheableRead(descriptor, configView)) {
-      await this.storeCache(descriptor.id, request.id, query, configView, response);
+      await this.storeCache(descriptor.id, request.id, request.options?.principal, query, configView, response);
     }
     await this.emitRealtimeEvent(descriptor, request, input, result, response, context);
     return response;
@@ -394,12 +401,16 @@ export class KavoEngine<Entity extends object> {
   private async readCache(
     operationId: OperationId,
     requestId: unknown,
+    principal: unknown,
     query: NormalizedQueryContext<Entity>,
     config: ResolvedEntityConfig<Entity>,
     preconditions: RequestPreconditions | null,
   ): Promise<KavoResponse | null> {
     try {
-      const cached = await config.cacheStore.get(config.entityName, this.cacheKey(operationId, requestId, query));
+      const cached = await config.cacheStore.get(
+        config.entityName,
+        this.cacheKey(operationId, requestId, principal, query),
+      );
       if (cached === null) return null;
       return await this.responseFromCache(cached, config, preconditions);
     } catch {
@@ -442,6 +453,7 @@ export class KavoEngine<Entity extends object> {
   private async storeCache(
     operationId: OperationId,
     requestId: unknown,
+    principal: unknown,
     query: NormalizedQueryContext<Entity>,
     config: ResolvedEntityConfig<Entity>,
     response: KavoResponse,
@@ -451,8 +463,13 @@ export class KavoEngine<Entity extends object> {
     try {
       await config.cacheStore.set(
         config.entityName,
-        this.cacheKey(operationId, requestId, query),
-        response,
+        this.cacheKey(operationId, requestId, principal, query),
+        // Clone before storing: `response` is the very object `run` hands
+        // the originating caller, and one caller mutating a returned item
+        // must not corrupt what every later caller reads. The hit path
+        // clones again on the way out (`responseFromCache`), which guards
+        // the reverse direction — a store that returns a shared reference.
+        cloneResponsePayload(response),
         settings.ttl,
       );
     } catch {
@@ -479,19 +496,29 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
-   * The cache key for one read: `operation:id:query`, where the id half
-   * names the row a `findOne` targets — `request.id` lives outside the
-   * normalized query, so it has to be in the key or `findOne(1)` and
-   * `findOne(2)` would share one entry (ADR-0031). The query half is a
-   * canonicalized plain-data fingerprint of the normalized query. The
-   * entity name is a separate parameter the store keys on, so invalidation
-   * stays a whole-entity map delete. `canonicalize` is what makes the key
+   * The cache key for one read: `operation:id:principal:query`, where the
+   * id half names the row a `findOne` targets — `request.id` lives outside
+   * the normalized query, so it has to be in the key or `findOne(1)` and
+   * `findOne(2)` would share one entry (ADR-0031). The principal half keeps
+   * one caller's values from leaking to another: computed fields and custom
+   * handlers may legitimately vary by `context.principal`, so a response
+   * baked for one principal must never be served to a different one —
+   * `undefined` and `null` both canonicalize to `"null"`, so anonymous
+   * calls share one bucket (ADR-0031). The query half is a canonicalized
+   * plain-data fingerprint of the normalized query. The entity name is a
+   * separate parameter the store keys on, so invalidation stays a
+   * whole-entity map delete. `canonicalize` is what makes the key
    * deterministic — a key built from raw objects would depend on insertion
    * order.
    */
-  private cacheKey(operationId: OperationId, requestId: unknown, query: NormalizedQueryContext<Entity>): string {
+  private cacheKey(
+    operationId: OperationId,
+    requestId: unknown,
+    principal: unknown,
+    query: NormalizedQueryContext<Entity>,
+  ): string {
     const id = requestId === null || requestId === undefined ? "" : String(requestId);
-    return `${operationId}:${id}:${canonicalize(queryFingerprint(query))}`;
+    return `${operationId}:${id}:${canonicalize(principal)}:${canonicalize(queryFingerprint(query))}`;
   }
 
   /**
