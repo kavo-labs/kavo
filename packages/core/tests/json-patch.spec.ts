@@ -90,6 +90,28 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
     ).toThrowError(ConfigurationException);
   });
 
+  it("requires patchRelation even when the write-opted relation's target is registered — the capability check, not the target, is what fires", () => {
+    // The test above fails fast at `requireArrayMutationTargetsResolvable`
+    // because `Post` is never registered; registering it clears that check
+    // so the later `requireJsonPatchSupport` (kavo.ts) is the thrower.
+    const kavo = createKavo();
+    kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
+    expect(() =>
+      kavo.createCrud(
+        Author,
+        { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { posts: { write: true } } } } as never,
+        { adapter: new SeededAdapter<Author>(), metadata: authorMetadata }, // no patchRelation
+      ),
+    ).toThrowError(ConfigurationException);
+    expect(() =>
+      kavo.createCrud(
+        Author,
+        { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { posts: { write: true } } } } as never,
+        { adapter: new SeededAdapter<Author>(), metadata: authorMetadata },
+      ),
+    ).toThrowError(/patchRelation/);
+  });
+
   it("does not register replacePosts under jsonPatch — that surface belongs to the replace strategy", () => {
     const { crud } = makeAuthorCrud("jsonPatch");
     expect(crud.engine.registry.has("replacePosts")).toBe(false);
@@ -161,6 +183,62 @@ describe("patchOne — jsonPatch overlap with the ordinary object-body contract"
       options: null,
     } as never);
     expect(response.item).toMatchObject({ id: 1, name: "Ada" });
+  });
+});
+
+describe("patchOne — jsonPatch document, document-level validation", () => {
+  it("rejects a non-object entry — a scalar, a null, or a nested array are all not ops", async () => {
+    const { crud } = makeAuthorCrud("jsonPatch");
+    for (const body of [[42], [null], [["nested"]]]) {
+      await expect(
+        crud.engine.execute({
+          operation: "patchOne",
+          id: "1",
+          body: body as never,
+          query: null,
+          options: null,
+        } as never),
+      ).rejects.toThrowError(JsonPatchInvalidDocumentException);
+    }
+  });
+
+  it("rejects an invalid path — a non-string, one with no leading '/', or the bare root", async () => {
+    const { crud } = makeAuthorCrud("jsonPatch");
+    for (const path of ["name", "", "/", 42]) {
+      await expect(
+        crud.engine.execute({
+          operation: "patchOne",
+          id: "1",
+          body: [{ op: "replace", path, value: "Grace" }] as never,
+          query: null,
+          options: null,
+        } as never),
+      ).rejects.toThrowError(JsonPatchInvalidDocumentException);
+    }
+  });
+
+  it("rejects a relation op whose value is missing, null, or undefined", async () => {
+    const { crud } = makeAuthorCrud("jsonPatch");
+    for (const value of [undefined, null]) {
+      await expect(
+        crud.engine.execute({
+          operation: "patchOne",
+          id: "1",
+          body: [{ op: "add", path: "/posts/-", value }] as never,
+          query: null,
+          options: null,
+        } as never),
+      ).rejects.toThrowError(JsonPatchInvalidDocumentException);
+    }
+    await expect(
+      crud.engine.execute({
+        operation: "patchOne",
+        id: "1",
+        body: [{ op: "add", path: "/posts/-" }] as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(JsonPatchInvalidDocumentException);
   });
 });
 

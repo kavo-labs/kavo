@@ -509,6 +509,64 @@ describe("createTransport — subscribe-time filtering (issue #160)", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("accepts a nested AND/OR group filter and still collects every condition field", async () => {
+    const transport = createTransport({
+      filterableEntities: () => bookFilterable(),
+    });
+    const { req } = fakeRequest(
+      "/realtime?channel=Book&filter[and][0][status][eq]=published&filter[and][1][or][0][price][gte]=10&filter[and][1][or][1][price][lt]=5",
+      { accept: "text/event-stream" },
+    );
+    const res = fakeResponse();
+
+    await transport.handleRequest(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(transport.connectionCount).toBe(1);
+  });
+
+  it("rejects a filter field that parses but cannot be evaluated — a relation, not an entity column", async () => {
+    // A relation (or computed field) can sit in the filterable allowlist and
+    // so parses cleanly, but realtime evaluation only knows the entity's own
+    // columns (sse-transport.ts's unevaluable guard).
+    const filterableWithRelation = (): FilterableEntity => {
+      const kavo = createKavo();
+      const metadata = {
+        ...bookMetadata,
+        relations: [
+          {
+            name: "author",
+            target: () => class {},
+            cardinality: "one" as const,
+            includable: false,
+            strategy: "auto" as const,
+          },
+        ],
+      } as unknown as EntityMetadata<Book>;
+      const crud = kavo.createCrud(Book, { allowlists: { filterable: ["title", "status", "author"] } } as never, {
+        adapter: new InMemoryBookAdapter(),
+        metadata,
+      });
+      return {
+        metadata: crud.engine.metadata as EntityMetadata,
+        config: crud.engine.config as unknown as ResolvedEntityConfig,
+      };
+    };
+    const transport = createTransport({ filterableEntities: () => filterableWithRelation() });
+    const { req } = fakeRequest("/realtime?channel=Book&filter[author][eq]=1", {
+      accept: "text/event-stream",
+    });
+    const res = fakeResponse();
+
+    await transport.handleRequest(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.jsonBody).toMatchObject({
+      error: expect.stringContaining("author"),
+    });
+    expect(transport.connectionCount).toBe(0);
+  });
+
   it("rejects a malformed filter (unknown operator) with 400 before opening the stream", async () => {
     const transport = createTransport({
       filterableEntities: () => bookFilterable(),

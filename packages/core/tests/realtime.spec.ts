@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RealtimeEventDto, RealtimeTransport } from "@kavo/core";
-import { createKavo } from "@kavo/core";
+import { ConfigurationException, createKavo } from "@kavo/core";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
 import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
 
@@ -291,5 +291,11 @@ describe("realtime — createKavo(options).realtimeTransports validation", () =>
 
   it("rejects a transport with no name", () => {
     expect(() => createKavo({ realtimeTransports: [{ publish: async () => {} }] } as never)).toThrowError(/name/);
+  });
+
+  it("rejects a transport that is not an object — a scalar or null is never a transport", () => {
+    for (const transport of [42, "hub", null]) {
+      expect(() => createKavo({ realtimeTransports: [transport] } as never)).toThrowError(ConfigurationException);
+    }
   });
 });

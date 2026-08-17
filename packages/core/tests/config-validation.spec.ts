@@ -306,6 +306,18 @@ describe("validateSettings — realtime", () => {
     }
   });
 
+  it("rejects a realtime setting that is neither an object nor false", () => {
+    for (const value of ["on", 1, true, null]) {
+      expectRejected({ realtime: value }, "realtime", value);
+    }
+  });
+
+  it("rejects a realtime.events that is not an object", () => {
+    for (const value of ["created", 1, true, null]) {
+      expectRejected({ realtime: { enabled: true, events: value } }, "realtime.events", value);
+    }
+  });
+
   it("rejects an unknown realtime event id", () => {
     const error = rejectionOf({ realtime: { enabled: true, events: { archived: true } } });
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
@@ -358,6 +370,30 @@ describe("validateSettings — realtime", () => {
         "realtime.onPublishError",
         value,
       );
+    }
+  });
+});
+
+describe("validateSettings — arrayMutation", () => {
+  it("accepts `false` — the documented way to disable the feature entirely", () => {
+    expect(() => accept({ arrayMutation: false })).not.toThrow();
+  });
+
+  it("rejects an arrayMutation setting that is neither an object nor false", () => {
+    for (const value of ["replace", 1, true, null]) {
+      expectRejected({ arrayMutation: value }, "arrayMutation", value);
+    }
+  });
+
+  it("rejects a strategy outside replace, resource, and jsonPatch", () => {
+    for (const value of ["splice", 1, null]) {
+      expectRejected({ arrayMutation: { strategy: value } }, "arrayMutation.strategy", value);
+    }
+  });
+
+  it("accepts each documented strategy", () => {
+    for (const strategy of ["replace", "resource", "jsonPatch"]) {
+      expect(() => accept({ arrayMutation: { strategy } })).not.toThrow();
     }
   });
 });

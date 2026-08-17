@@ -121,6 +121,20 @@ describe("evaluateFilter — dates", () => {
   });
 });
 
+describe("evaluateFilter — non-orderable item values", () => {
+  it("an ordered comparison against a boolean or object item value is false, never a crash", () => {
+    const expression = filterOf({ "filter[age][gt]": "5" });
+    for (const item of [{ age: true }, { age: {} }, { age: [] }]) {
+      expect(evaluateFilter(expression, item)).toBe(false);
+    }
+  });
+
+  it("an ordered comparison against a boolean filter value is false too", () => {
+    const expression = { kind: "condition", field: "age", operator: "GT", value: true } as never;
+    expect(evaluateFilter(expression, { age: 5 })).toBe(false);
+  });
+});
+
 describe("evaluateFilter — logical operators", () => {
   it("AND requires every child to match", () => {
     const expression = filterOf({ "filter[status][eq]": "active", "filter[age][gte]": "18" });

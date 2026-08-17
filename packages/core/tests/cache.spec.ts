@@ -213,6 +213,12 @@ describe("cache settings resolution", () => {
     expect(() => createKavo({ cacheStore: { get: () => null } as never })).toThrowError(ConfigurationException);
   });
 
+  it("rejects a cache store that is not an object — a scalar is never a store", () => {
+    for (const store of [42, "store"]) {
+      expect(() => createKavo({ cacheStore: store as never })).toThrowError(ConfigurationException);
+    }
+  });
+
   it("a null cache store is treated as unset, falling back to the in-memory default", () => {
     expect(() => createKavo({ cacheStore: null as never })).not.toThrow();
   });
