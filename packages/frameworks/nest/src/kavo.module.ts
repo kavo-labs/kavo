@@ -425,5 +425,8 @@ function createInstance(options: KavoModuleOptions): KavoInstance {
     ...(options.realtimeTransports !== undefined && {
       realtimeTransports: options.realtimeTransports,
     }),
+    ...(options.cacheStore !== undefined && {
+      cacheStore: options.cacheStore,
+    }),
   });
 }

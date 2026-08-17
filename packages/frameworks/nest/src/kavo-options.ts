@@ -1,4 +1,11 @@
-import type { KavoInfrastructure, KavoSettings, DeepPartial, PaginationStrategy, RealtimeTransport } from "@kavo/core";
+import type {
+  CacheStore,
+  KavoInfrastructure,
+  KavoSettings,
+  DeepPartial,
+  PaginationStrategy,
+  RealtimeTransport,
+} from "@kavo/core";
 import type { KavoPrincipalOption } from "./principal.js";
 
 /**
@@ -27,6 +34,20 @@ export interface KavoModuleOptions {
    * anything; registering a transport alone does not turn realtime on.
    */
   readonly realtimeTransports?: readonly RealtimeTransport[];
+  /**
+   * The result-cache store every entity reads/writes when `cache` is
+   * enabled — the same root-scope option `createKavo`'s own
+   * `KavoOptions.cacheStore` is, threaded through unchanged. Registered
+   * once, process-wide, not per entity (ADR-0031 applies the ADR-0023
+   * reasoning to caching: a store is a live object — a Redis client, say —
+   * and cannot live inside `defaults`/the settings tree). Unset, each root
+   * gets its own private in-memory store; hand the same instance here for
+   * one process-wide cache. An entity still needs its own `cache:
+   * { ttl: … }` — in `defaults` here or in that entity's own `@Kavo`
+   * config — before any of its reads are served from the store; registering
+   * a store alone does not turn caching on.
+   */
+  readonly cacheStore?: CacheStore;
   /**
    * Where a generated route finds the authenticated caller to put on
    * `KavoContext.principal` — `true` for `request.user`, or a function for
