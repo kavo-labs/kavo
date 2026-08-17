@@ -9,6 +9,8 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
+import type { CacheStore } from "../caching/cache-store.js";
+import { createMemoryCacheStore } from "../caching/cache-store.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
@@ -36,7 +38,7 @@ const SETTINGS_KEYS = [
   "query",
   "errors",
   "relations",
-  "caching",
+  "cache",
   "softDelete",
   "realtime",
   "arrayMutation",
@@ -67,6 +69,7 @@ export function resolveEntityConfig<Entity extends object>(
   entityConfig: EntityConfig<Entity> | undefined,
   globalDefaults: DeepPartial<KavoSettings> | undefined,
   realtimeTransports: readonly RealtimeTransport[] = [],
+  cacheStore: CacheStore = createMemoryCacheStore(),
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
   const computed = resolveComputedFields(metadata, entityConfig);
@@ -131,6 +134,7 @@ export function resolveEntityConfig<Entity extends object>(
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
     realtimeTransports: Object.freeze([...realtimeTransports]),
+    cacheStore,
   };
   return Object.freeze(resolved);
 }

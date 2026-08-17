@@ -11,6 +11,10 @@ import type { DeepPartial } from "../types/utility.js";
  * - Arrays replace wholesale (no element merging).
  *
  * The base is always a *complete* `KavoSettings`, so the result is too.
+ * `cache` merges with exactly this generic algebra — nothing special-case
+ * about it (ADR-0031 as amended): the result cache's on/off is carried by
+ * `ttl` itself, so `cache: { ttl: 60 }` against the `ttl: 0` default is on
+ * and `cache: { etag: false }` is off, with no presence rule to track.
  */
 export function mergeSettings(
   base: KavoSettings,

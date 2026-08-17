@@ -12,10 +12,10 @@ import type { NormalizedQueryContext } from "../query/query-context.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { Pagination, SincePagination } from "../query/pagination.js";
 import type { OperationDescriptor, OperationRegistry } from "../operations/operation-registry.js";
-import type { StandardOperationId } from "../operations/operation.js";
+import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RequestPreconditions } from "../caching/etag.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
-import type { KavoSettings } from "../config/settings.js";
+import type { CacheSettings, KavoSettings } from "../config/settings.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import {
@@ -35,7 +35,7 @@ import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
 import { cursorValuesOf, encodeCursor } from "../query/cursor.js";
 import { sinceValueOf } from "../query/since.js";
-import { WILDCARD, computeEtag, strongMatch, weakMatch } from "../caching/etag.js";
+import { WILDCARD, canonicalize, computeEtag, isEtagEnabled, strongMatch, weakMatch } from "../caching/etag.js";
 import { createKavoContext, randomUuid } from "../context/default-kavo-context.js";
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
@@ -111,7 +111,7 @@ const PRECONDITION_TARGETS: ReadonlySet<StandardOperationId> = new Set<StandardO
  */
 const UNEVALUABLE = {
   notTargeted: "the operation does not target one identified row, so there is no representation to compare against",
-  cachingOff: "caching.etag is disabled for it, so no ETag is computed for this entity's representations",
+  cachingOff: "cache.etag is disabled for it, so no ETag is computed for this entity's representations",
   noCanonicalRead: "findOne is not an enabled operation, so this entity exposes no canonical representation to read",
 } as const;
 
@@ -271,11 +271,37 @@ export class KavoEngine<Entity extends object> {
     // and still ahead of the write.
     await this.checkIfMatch(request, descriptor, configView, preconditions, correlationId);
 
+    // A cache hit serves the whole response without the adapter — but only
+    // after preconditions, so a failed `If-Match` on a write never becomes
+    // a stale cache read, and a read that sends `If-None-Match` still gets
+    // its 304 answered against the *cached* representation's current ETag
+    // (ADR-0031). Reads only; write responses are never cached.
+    if (query !== null && this.isCacheableRead(descriptor, configView)) {
+      const cached = await this.readCache(
+        descriptor.id,
+        request.id,
+        request.options?.principal,
+        query,
+        configView,
+        preconditions,
+      );
+      if (cached !== null) return cached;
+    }
+
     const input = this.resolveInput(request, descriptor, context);
 
     const result = await descriptor.handler.execute(input, context);
 
+    // The one write-driven thing the cache needs, and the whole
+    // invalidation strategy: every entry for the entity is dropped after a
+    // successful write, because nothing about the write's payload tells the
+    // engine which cached queries it could have changed (ADR-0031).
+    if (descriptor.kind === "write") await this.invalidateCache(configView);
+
     const response = await this.mapResponse(descriptor, result, context, preconditions);
+    if (query !== null && this.isCacheableRead(descriptor, configView)) {
+      await this.storeCache(descriptor.id, request.id, request.options?.principal, query, configView, response);
+    }
     await this.emitRealtimeEvent(descriptor, request, input, result, response, context);
     return response;
   }
@@ -348,6 +374,154 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
+   * Whether this call's settings cache reads at all — `cache` resolved for
+   * the call's config view, and the operation one of the two standard reads
+   * the cache serves. Custom-operation reads are deliberately not cached
+   * (ADR-0031); the operation-id check keeps that true even for one whose
+   * handler would be cheap to cache.
+   */
+  private isCacheableRead(descriptor: OperationDescriptor<Entity>, config: ResolvedEntityConfig<Entity>): boolean {
+    if (descriptor.id !== "findOne" && descriptor.id !== "findMany") return false;
+    return this.cacheSettings(config) !== null;
+  }
+
+  /** The `cache` settings in force for a config view, or `null` when off. */
+  private cacheSettings(config: ResolvedEntityConfig<Entity>): CacheSettings | null {
+    const cache = config.settings.cache;
+    return cache === false || cache.ttl <= 0 ? null : cache;
+  }
+
+  /**
+   * The cache lookup half of a read. A hit returns the full response; a
+   * miss returns `null` and the caller runs the pipeline. Everything the
+   * store can throw — or fail to serve correctly — falls back to that same
+   * `null`, so a broken cache backend costs a read its hit, never the read
+   * itself (ADR-0031: cache failures degrade, never fail).
+   */
+  private async readCache(
+    operationId: OperationId,
+    requestId: unknown,
+    principal: unknown,
+    query: NormalizedQueryContext<Entity>,
+    config: ResolvedEntityConfig<Entity>,
+    preconditions: RequestPreconditions | null,
+  ): Promise<KavoResponse | null> {
+    try {
+      const cached = await config.cacheStore.get(
+        config.entityName,
+        this.cacheKey(operationId, requestId, principal, query),
+      );
+      if (cached === null) return null;
+      return await this.responseFromCache(cached, config, preconditions);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The response a hit serves. The envelope is fresh — `etag` and
+   * `notModified` are re-derived for *this* request, never trusted from
+   * storage, because they are per-request answers to the request's own
+   * `If-None-Match` (ADR-0020), and a hit has to serve a correct, current
+   * `ETag` even when the entry predates the current call's `cache.etag`
+   * scope (ADR-0031) — the tag is recomputed off the cached `item`, which
+   * is the same representation `mapResponse` would have hashed.
+   *
+   * The payload is cloned, not shared: an entry is shared storage, so one
+   * caller mutating a returned item must not corrupt what every later
+   * caller reads. The serialized payload is plain DTO data (possibly with
+   * `Date` values, which `structuredClone` preserves), so nothing is lost
+   * and no prototype needs keeping.
+   */
+  private async responseFromCache(
+    cached: KavoResponse,
+    config: ResolvedEntityConfig<Entity>,
+    preconditions: RequestPreconditions | null,
+  ): Promise<KavoResponse> {
+    const etag =
+      isEtagEnabled(config.settings.cache) && cached.item !== null && cached.item !== undefined
+        ? await computeEtag(cached.item)
+        : null;
+    return {
+      ...cloneResponsePayload(cached),
+      etag,
+      notModified: etag !== null && weakMatch(preconditions?.ifNoneMatch ?? [], etag),
+    };
+  }
+
+  /** The store half of a read: the response the pipeline just produced. */
+  private async storeCache(
+    operationId: OperationId,
+    requestId: unknown,
+    principal: unknown,
+    query: NormalizedQueryContext<Entity>,
+    config: ResolvedEntityConfig<Entity>,
+    response: KavoResponse,
+  ): Promise<void> {
+    const settings = this.cacheSettings(config);
+    if (settings === null) return;
+    try {
+      await config.cacheStore.set(
+        config.entityName,
+        this.cacheKey(operationId, requestId, principal, query),
+        // Clone before storing: `response` is the very object `run` hands
+        // the originating caller, and one caller mutating a returned item
+        // must not corrupt what every later caller reads. The hit path
+        // clones again on the way out (`responseFromCache`), which guards
+        // the reverse direction — a store that returns a shared reference.
+        cloneResponsePayload(response),
+        settings.ttl,
+      );
+    } catch {
+      // A store that refuses to hold a value never fails the read that
+      // produced it — a cache write is a fire-and-forget optimization.
+    }
+  }
+
+  /**
+   * The write half: drop every entry for the entity. Called after any
+   * successful write — standard or custom — because a write that changed
+   * the row can invalidate an unknown subset of the entity's cached
+   * queries, and erring on the safe side is the only correct answer
+   * (ADR-0031). A store that fails to evict never fails the write that
+   * asked for it.
+   */
+  private async invalidateCache(config: ResolvedEntityConfig<Entity>): Promise<void> {
+    try {
+      await config.cacheStore.invalidate(config.entityName);
+    } catch {
+      // Nothing to do with a store that cannot evict; the write already
+      // succeeded.
+    }
+  }
+
+  /**
+   * The cache key for one read: `operation:id:principal:query`, where the
+   * id half names the row a `findOne` targets — `request.id` lives outside
+   * the normalized query, so it has to be in the key or `findOne(1)` and
+   * `findOne(2)` would share one entry (ADR-0031). The principal half keeps
+   * one caller's values from leaking to another: computed fields and custom
+   * handlers may legitimately vary by `context.principal`, so a response
+   * baked for one principal must never be served to a different one —
+   * `undefined` and `null` both canonicalize to `"null"`, so anonymous
+   * calls share one bucket (ADR-0031). The query half is a canonicalized
+   * plain-data fingerprint of the normalized query. The entity name is a
+   * separate parameter the store keys on, so invalidation stays a
+   * whole-entity map delete. `canonicalize` is what makes the key
+   * deterministic — a key built from raw objects would depend on insertion
+   * order.
+   */
+  private cacheKey(
+    operationId: OperationId,
+    requestId: unknown,
+    principal: unknown,
+    query: NormalizedQueryContext<Entity>,
+  ): string {
+    const id = requestId === null || requestId === undefined ? "" : String(requestId);
+    return `${operationId}:${id}:${canonicalize(principal)}:${canonicalize(queryFingerprint(query))}`;
+  }
+
+  /**
    * `createOne` has no request id — its id comes off the created row via
    * the entity's own id field. Every other write op targets an id the
    * request already carries, already coerced to the id column's kind by
@@ -416,7 +590,7 @@ export class KavoEngine<Entity extends object> {
       });
     };
     if (!PRECONDITION_TARGETS.has(descriptor.id as StandardOperationId)) refuse(UNEVALUABLE.notTargeted);
-    if (!config.settings.caching.etag) refuse(UNEVALUABLE.cachingOff);
+    if (!isEtagEnabled(config.settings.cache)) refuse(UNEVALUABLE.cachingOff);
     // The 412 below names the current tag, which is only safe to disclose
     // when the client could have read it for itself. No enabled `findOne`
     // means no canonical representation to read — and an unconditional
@@ -528,6 +702,9 @@ export class KavoEngine<Entity extends object> {
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.
       realtimeTransports: config.realtimeTransports,
+      // Same reasoning, applied to the cache store (ADR-0031): a store is a
+      // live object registered once per root, never per call.
+      cacheStore: config.cacheStore,
     };
   }
 
@@ -901,9 +1078,9 @@ export class KavoEngine<Entity extends object> {
     const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
     const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
     validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
-    // `context.config` is the per-call view, so `caching.etag` honors an
+    // `context.config` is the per-call view, so `cache.etag` honors an
     // override at any scope down to this one request.
-    const etag = context.config.settings.caching.etag ? await computeEtag(item) : null;
+    const etag = isEtagEnabled(context.config.settings.cache) ? await computeEtag(item) : null;
     return {
       operation: descriptor.id,
       item,
@@ -1088,6 +1265,68 @@ function compactMeta(meta: ListMetaDto | undefined): ListMetaDto | undefined {
  */
 function registeredIds<Entity extends object>(registry: OperationRegistry<Entity>): string {
   return nameList(registry.all().map((descriptor) => descriptor.id));
+}
+
+/**
+ * The cache key's query half: a plain-data projection of the normalized
+ * query, because the include tree carries live `RelationDescriptor` objects
+ * (`IncludeNode.relation`) that `canonicalize` must not serialize — the
+ * fingerprint folds each node down to its query-decided parts, `fields`
+ * and `children` (the paths are the keys). Everything that changes a
+ * `findOne`/`findMany` response is included. Per-call *settings* are
+ * deliberately not (ADR-0031): the key is entity + operation + target id +
+ * query (the id is a separate key part, `cacheKey`), and a per-call
+ * settings override that reshapes a response without changing the query —
+ * the one known case is `softDelete.strategy` — is outside the key's
+ * contract.
+ */
+function queryFingerprint<Entity>(query: NormalizedQueryContext<Entity>): unknown {
+  return {
+    filter: query.filter,
+    sort: query.sort,
+    pagination: query.pagination,
+    fields: query.fields,
+    include: includeFingerprint(query.include),
+    withDeleted: query.withDeleted,
+    onlyDeleted: query.onlyDeleted,
+    count: query.count,
+  };
+}
+
+function includeFingerprint(
+  tree: IncludeTree,
+): Record<string, { readonly fields: readonly string[] | null; readonly children: unknown }> {
+  const out: Record<string, { readonly fields: readonly string[] | null; readonly children: unknown }> = {};
+  for (const [name, node] of Object.entries(tree)) {
+    out[name] = { fields: node.fields ?? null, children: includeFingerprint(node.children) };
+  }
+  return out;
+}
+
+/**
+ * `structuredClone` is a runtime global on every supported platform (Node
+ * ≥ 20, browsers, workers) but not in the pure ES lib types `@kavo/core`
+ * compiles against (ADR-0005) — so it is reached through a typed accessor,
+ * the same way `etag.ts` reaches Web Crypto and `default-kavo-context.ts`
+ * reaches `crypto.randomUUID`.
+ */
+interface WebGlobals {
+  readonly structuredClone: <T>(value: T) => T;
+}
+
+const webGlobals = globalThis as unknown as WebGlobals;
+
+/**
+ * A cached hit serves a fresh envelope with a cloned payload — see
+ * `responseFromCache`. Only the mutable halves are cloned; the envelope's
+ * scalars are already a fresh spread.
+ */
+function cloneResponsePayload(response: KavoResponse): KavoResponse {
+  return {
+    ...response,
+    item: response.item === null ? null : webGlobals.structuredClone(response.item),
+    list: response.list === null ? null : webGlobals.structuredClone(response.list),
+  };
 }
 
 /**

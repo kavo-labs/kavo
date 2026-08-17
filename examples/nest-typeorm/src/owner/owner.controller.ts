@@ -49,7 +49,7 @@ import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListD
     item: OwnerItemDto,
     list: OwnerListDto,
   },
-  caching: { etag: false },
+  cache: { etag: false },
   realtime: { enabled: true, events: {} },
   softDelete: { strategy: "soft" },
   query: { search: { enabled: true } },

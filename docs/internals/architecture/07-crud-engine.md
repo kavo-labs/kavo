@@ -250,7 +250,7 @@ reaches a response body.
 
 ## 3a. Conditional requests (ADR-0020)
 
-`caching.etag` (doc 08, default on) makes every single-item response
+`cache.etag` (doc 08, default on) makes every single-item response
 carry a strong `ETag` — a SHA-256 of the **canonicalized serialized
 representation**, keys sorted so a DTO field reorder is not a spurious
 cache miss. Collection responses carry none. The tag and a
@@ -271,7 +271,7 @@ targets one identified row — `updateOne`, `patchOne`, `deleteOne`,
 Everything outside that set is **refused, never dropped**:
 `PreconditionUnsupportedException` (412
 `KAVO_PRECONDITION_UNSUPPORTED`) for an operation that targets no
-single row (`createOne`, any custom operation), for `caching.etag`
+single row (`createOne`, any custom operation), for `cache.etag`
 being off, and for `findOne` not being enabled — the three ways the
 check cannot run on a request that changes state. Reads are the one
 exception and ignore `If-Match` outright, since a safe method cannot
@@ -282,6 +282,39 @@ before the pre-read: the comparison answers it without a tag.
 
 This is application-level check-then-write, **not** an atomic
 compare-and-swap; the race window is real and stated in the ADR.
+
+## 3b. Result cache (ADR-0031)
+
+`cache` (doc 08, default off) short-circuits `findOne`/`findMany` before
+the handler: a hit serves the response without the adapter, the serializer,
+or a DTO. The lookup sits **after** `checkIfMatch` — a failed `If-Match` on
+a write never becomes a stale cache read — and **before** the handler.
+Only the two standard reads are cached; a custom read is never cached
+however cheap its handler, and write responses are never stored. The store
+is `ResolvedEntityConfig.cacheStore`, a live object registered on
+`KavoOptions` (ADR-0023, ADR-0031) — never a settings key.
+
+The key is `operation:targetId:canonicalize(queryFingerprint(query))`, and
+the entity name is a separate parameter the store keys on. The target id
+rides on `request.id`, outside the normalized query, so it must be a key
+part or `findOne(1)` and `findOne(2)` would share one entry.
+`queryFingerprint` is a plain-data projection (`filter`, `sort`,
+`pagination`, `fields`, `include`, `withDeleted`, `onlyDeleted`, `count`)
+folding each include node to its query-decided parts, because the include
+tree carries live `RelationDescriptor`s `canonicalize` must not serialize.
+Per-call settings are deliberately not in the key; the one known
+response-reshaping case without a query change is `softDelete.strategy`,
+stated as a limitation rather than silently answered wrong.
+
+After any successful write — standard or custom — the entity's every entry
+is dropped (`invalidateCache`): nothing about a write's payload tells the
+engine which cached queries it changed, so whole-entity is the only correct
+granularity. A hit still recomputes the current `etag` off the cached
+`item` and answers `If-None-Match` (ADR-0020), and clones the payload
+(`structuredClone` through the same typed `WebGlobals` accessor `etag.ts`
+uses), so shared storage is never corrupted by one caller mutating a
+returned item. Every store call is wrapped: a store that throws costs a hit
+or an invalidation, never the read or the write (ADR-0031).
 
 ## 4. Patterns
 

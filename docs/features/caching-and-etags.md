@@ -37,14 +37,14 @@ If the book doesn't exist at all, or is in a state the route refuses, you get th
 Kavo refuses rather than quietly proceeds. A `412 KAVO_PRECONDITION_UNSUPPORTED` means the header was understood and the write did **not** happen, but the guard could not be evaluated at all, so retrying it unchanged will not help. Three ways to see it:
 
 - **On a route that doesn't target one row.** `POST /books`, and any custom operation you add. Kavo knows what row `PATCH /books/1` is about; it cannot know what a custom `POST /books/1/publish` is about.
-- **When [`caching.etag`](/guides/configuration/settings#caching) is off** for that route, at any scope. No tags are issued, so there is nothing to compare, and answering `200` would tell you a guard was applied when none was.
+- **When [`cache.etag`](/guides/configuration/settings#cache) is off** for that route, at any scope. No tags are issued, so there is nothing to compare, and answering `200` would tell you a guard was applied when none was.
 - **When `findOne` is disabled** on the entity. The check compares against the representation `GET /books/1` would return; with no such route there is none.
 
 `If-Match` on a `GET` is the one case Kavo ignores instead of refusing: a read cannot overwrite anything, and `If-None-Match` above is the read-side conditional.
 
 **A hand-written or `@Override`'d route enforces nothing by itself.** The check runs inside Kavo's engine, so a controller method you wrote replaces it. It receives the `If-Match` tokens as its last parameter and must pass them on (`this.base.updateOne(id, data, { preconditions })`) for the guard to apply.
 
-The `ETag` is the exception: an `@Override` on a single-item operation gets it without asking, because `@Kavo` hashes whatever the method returns. A plain hand-written route (no `@Override`) is outside that and carries no Kavo tag at all. See [`caching`](/guides/configuration/settings#caching).
+The `ETag` is the exception: an `@Override` on a single-item operation gets it without asking, because `@Kavo` hashes whatever the method returns. A plain hand-written route (no `@Override`) is outside that and carries no Kavo tag at all. See [`cache.etag`](/guides/configuration/settings#cache).
 
 ## Two things to know
 
@@ -54,4 +54,4 @@ The `ETag` is the exception: an `@Override` on a single-item operation gets it w
 
 The tag on a write response works too; it is the tag of the body you just got back. But that's only true while that body is the same representation a plain `GET` returns, which stops being true once a relation is configured `defaultInclude`: a write resolves no query, so write responses never carry relations. On such an entity, take the token from a `GET`.
 
-Both halves are one setting, [`caching.etag`](/guides/configuration/settings#caching) (on by default). Turning it off at any scope stops the tags being generated and stops the conditional headers being honored.
+Both halves are one setting, [`cache.etag`](/guides/configuration/settings#cache) (on by default). Turning it off at any scope stops the tags being generated and stops the conditional headers being honored.

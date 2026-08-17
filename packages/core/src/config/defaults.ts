@@ -41,10 +41,21 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // nothing to reach.
     edges: Object.freeze({}),
   }),
-  // On by default: an `ETag` on every single-item response costs one hash
-  // of a representation that was going to be serialized anyway, and a
-  // client that sends no conditional header pays nothing beyond it.
-  caching: Object.freeze({
+  // Off by default. A full object rather than `false` — like `softDelete`'s
+  // default — so a partial `cache: { ttl: 60 }` override merges against a
+  // complete base instead of replacing a `false` wholesale. `ttl` is the
+  // switch: `0` (the default) means off, and any positive `ttl` in an
+  // override means on — there is no separate `enabled` key and no presence
+  // rule to remember. `etag` defaults to `true`: the conditional-request
+  // machinery serves independently of the result cache.
+  // The store itself lives outside this tree entirely
+  // (`KavoOptions.cacheStore`), the same way realtime transports do (see
+  // `RealtimeSettings`'s doc).
+  cache: Object.freeze({
+    ttl: 0,
+    // On by default: an `ETag` on every single-item response costs one hash
+    // of a representation that was going to be serialized anyway, and a
+    // client that sends no conditional header pays nothing beyond it.
     etag: true,
   }),
   // `auto`: soft for entities carrying the marker field, hard for the rest

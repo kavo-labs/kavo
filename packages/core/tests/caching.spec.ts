@@ -647,20 +647,20 @@ describe("If-Match the engine cannot evaluate is refused, never dropped", () => 
   });
 });
 
-describe("caching.etag: false disables both halves", () => {
+describe("cache.etag: false disables both halves", () => {
   type Scope = readonly [string, () => ReturnType<typeof makeCrud>, KavoRequest<User>["options"]];
   const scopes: readonly Scope[] = [
-    ["global", () => makeCrud(undefined, { defaults: { caching: { etag: false } } }), null],
-    ["entity", () => makeCrud({ caching: { etag: false } } as never), null],
+    ["global", () => makeCrud(undefined, { defaults: { cache: { etag: false } } }), null],
+    ["entity", () => makeCrud({ cache: { etag: false } } as never), null],
     [
       "operation",
       () =>
         makeCrud({
-          operations: { findOne: { caching: { etag: false } }, patchOne: { caching: { etag: false } } },
+          operations: { findOne: { cache: { etag: false } }, patchOne: { cache: { etag: false } } },
         } as never),
       null,
     ],
-    ["per-call", () => makeCrud(), { settings: { caching: { etag: false } } }],
+    ["per-call", () => makeCrud(), { settings: { cache: { etag: false } } }],
   ];
 
   for (const [scope, build, options] of scopes) {
@@ -675,7 +675,7 @@ describe("caching.etag: false disables both halves", () => {
       // Refused, not ignored: a client that asked for a guard and got a
       // 2xx would have no way to learn nothing checked it. The operation
       // scope is the one that makes this reachable by accident — `findOne`
-      // can serve tags while `patchOne` has caching off.
+      // can serve tags while `patchOne` has etag off.
       const { crud, adapter } = build();
       await execute(crud, { operation: "createOne", body: ADA as never });
 
@@ -699,7 +699,7 @@ describe("caching.etag: false disables both halves", () => {
     const off = await execute(crud, {
       operation: "findOne",
       id: 1,
-      options: { settings: { caching: { etag: false } } },
+      options: { settings: { cache: { etag: false } } },
     });
     expect(off.etag).toBeNull();
 
@@ -715,7 +715,7 @@ describe("caching.etag: false disables both halves", () => {
       operation: "findOne",
       id: 1,
       preconditions: { ifNoneMatch: [etag as string] },
-      options: { settings: { caching: { etag: false } } },
+      options: { settings: { cache: { etag: false } } },
     });
     expect(off.notModified).toBe(false);
   });

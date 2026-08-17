@@ -6,6 +6,7 @@ import {
   OperationDisabledException,
   OperationNotRegisteredException,
   createKavo,
+  isEtagEnabled,
   toProblemDetails,
 } from "@kavo/core";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
@@ -658,10 +659,10 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
     const { crud } = makeCrud({
       operations: {
         promoteOne: {
-          caching: { etag: false },
+          cache: { etag: false },
           handler: {
             async execute(_input: unknown, context: KavoContext<User>) {
-              observed = context.config.settings.caching.etag;
+              observed = isEtagEnabled(context.config.settings.cache);
               return null;
             },
           },

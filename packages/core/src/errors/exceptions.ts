@@ -195,7 +195,7 @@ export class PreconditionFailedException extends KavoException {
  * An `If-Match` the engine cannot evaluate at all → 412. Three ways to get
  * here, all of them configuration or operation shape rather than a race:
  * the operation does not target one identified row (`createOne`, any
- * custom operation), `caching.etag` is off for the operation in force, or
+ * custom operation), `cache.etag` is off for the operation in force, or
  * `findOne` is not an enabled operation so there is no canonical
  * representation to compare against (ADR-0020 §4).
  *

@@ -123,7 +123,7 @@ Each read route's own \`include\` parameter description names which relations ar
  * `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
  * (`packages/core/src/config/resolve-entity-config.ts`): it merges from
  * nowhere but the entity's own `EntityConfig` — no global default, no
- * per-operation override — so, unlike `caching.etag` (see
+ * per-operation override — so, unlike `cache.etag` (see
  * `applyConditionalRequestDocs`), there is no later-arriving scope this can
  * miss. Only its **shape** limits what can be
  * read here: an explicit array selector is used verbatim by
@@ -267,7 +267,7 @@ export function applySwaggerMetadata(
   // The success response's ETag header and the conditional-request
   // headers/304/412 responses (ADR-0020) are applied later, by
   // `applyConditionalRequestDocs` — see its doc comment for why: whether
-  // they belong on this route depends on `caching.etag` resolved through
+  // they belong on this route depends on `cache.etag` resolved through
   // the *full* precedence chain, which decoration time cannot see
   // (ADR-0012).
   apply(
@@ -309,7 +309,7 @@ export function applySwaggerMetadata(
  * response header, and — on single-row routes — the `If-None-Match`/
  * `If-Match` request header plus its `304`/`412` response. Applied
  * separately from `applySwaggerMetadata`, and later, because whether any of
- * this belongs on the route depends on `caching.etag` resolved through the
+ * this belongs on the route depends on `cache.etag` resolved through the
  * *full* precedence chain (built-in default → global → entity →
  * operation), and the global scope only arrives with
  * `KavoModule.forRoot`/`forRootAsync` — long after `@Kavo` decoration runs
@@ -416,7 +416,7 @@ export function applyConditionalRequestDocs(
  *
  * Omitted entirely when search isn't enabled, the same treatment
  * `applyConditionalRequestDocs` gives the conditional-request surface when
- * `caching.etag` resolves `false` — advertising a parameter that would
+ * `cache.etag` resolves `false` — advertising a parameter that would
  * always 400 is worse than not documenting it at all.
  */
 const alreadySearchDocumented = new WeakSet<object>();
@@ -477,7 +477,7 @@ const UNPAGINATED_DESCRIPTION =
  * only exists once `KavoBinder.onModuleInit` runs, long after `@Kavo`
  * decoration (ADR-0012). Unlike `search[...]`, this can't be "declared at
  * decoration time, refined here" (`applySwaggerMetadata`'s doc comment for
- * `caching.etag` describes that shape) — `@nestjs/swagger`'s own parameter
+ * `cache.etag` describes that shape) — `@nestjs/swagger`'s own parameter
  * de-duplication (`unionWith` over `{ name, in }`, `api-parameters.
  * explorer.js`) keeps the *first* match for a given `{ name, in }` pair, so
  * a second, later `ApiQuery({ name: "limit" })` here would be silently

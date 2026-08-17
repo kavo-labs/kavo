@@ -160,24 +160,43 @@ describe("validateSettings — errors", () => {
   });
 });
 
-describe("validateSettings — caching", () => {
-  it("rejects a non-boolean caching.etag", () => {
+describe("validateSettings — cache", () => {
+  it("rejects a cache.etag that is neither a boolean nor an object", () => {
     for (const value of ["false", 0, null]) {
-      expectRejected({ caching: { etag: value } }, "caching.etag", value);
+      expectRejected({ cache: { etag: value } }, "cache.etag", value);
     }
   });
 
-  it("accepts both booleans", () => {
-    expect(() => accept({ caching: { etag: true } })).not.toThrow();
-    expect(() => accept({ caching: { etag: false } })).not.toThrow();
+  it("rejects a cache.etag object without a boolean enabled", () => {
+    for (const value of [{}, { enabled: "yes" }]) {
+      const error = rejectionOf({ cache: { etag: value } });
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.etag.enabled" });
+    }
   });
 
-  it("rejects `caching: false`, pointing at the key that does disable it", () => {
-    // `softDelete: false` is the schema's one wholesale disable, and the
-    // resemblance is exactly what makes this mistake worth naming.
-    const error = rejectionOf({ caching: false });
-    expect(error.messageParams).toMatchObject({ entity: "User", path: "caching" });
-    expect(String(error.messageParams["problem"])).toContain("caching.etag");
+  it("accepts the boolean shorthand and the object form", () => {
+    expect(() => accept({ cache: { etag: true } })).not.toThrow();
+    expect(() => accept({ cache: { etag: false } })).not.toThrow();
+    expect(() => accept({ cache: { etag: { enabled: true } } })).not.toThrow();
+    expect(() => accept({ cache: { etag: { enabled: false } } })).not.toThrow();
+    expect(() => accept({ cache: false })).not.toThrow();
+  });
+
+  it("rejects a cache.ttl that is not a non-negative integer", () => {
+    for (const value of [-1, 1.5, "60", null]) {
+      const error = rejectionOf({ cache: { ttl: value } });
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.ttl" });
+    }
+    for (const value of [0, 60]) {
+      expect(() => accept({ cache: { ttl: value } })).not.toThrow();
+    }
+  });
+
+  it("rejects a cache that is neither the object nor false", () => {
+    for (const value of [true, "yes", 0]) {
+      const error = rejectionOf({ cache: value });
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "cache" });
+    }
   });
 });
 

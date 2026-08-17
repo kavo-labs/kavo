@@ -10,6 +10,8 @@ import type { IncludeResolver } from "./relations/include-resolver.js";
 import type { OperationRegistry } from "./operations/operation-registry.js";
 import type { ResolvedEntityConfig } from "./config/resolved-entity-config.js";
 import type { RealtimeTransport } from "./realtime/realtime-transport.js";
+import type { CacheStore } from "./caching/cache-store.js";
+import { createMemoryCacheStore } from "./caching/cache-store.js";
 import { KavoEngine } from "./engine/kavo-engine.js";
 import { ConfigurationException } from "./errors/exceptions.js";
 import { DefaultKavoService } from "./service/default-kavo-service.js";
@@ -41,6 +43,17 @@ export interface KavoOptions extends GlobalConfig {
    * cannot live inside the deep-frozen settings tree).
    */
   readonly realtimeTransports?: readonly RealtimeTransport[];
+  /**
+   * The result-cache store every entity reads/writes when `cache` is
+   * enabled (ADR-0031) — a live object like a realtime transport, so it is
+   * registered here, once per root, not through `defaults` (the ADR-0023
+   * relationship, applied to caching). Unset, each root gets its own
+   * private in-memory store; a shared backend (Redis, …) is a
+   * caller-registered implementation of the same three methods, and an app
+   * that wants one process-wide cache hands the same instance to every
+   * root (`KavoModule.forRoot({ cacheStore })`).
+   */
+  readonly cacheStore?: CacheStore;
 }
 
 /** Per-entity overrides of what the root `infrastructure` would supply. */
@@ -91,6 +104,8 @@ export interface KavoInstance {
  */
 export function createKavo(options: KavoOptions = {}): KavoInstance {
   validateRealtimeTransports(options.realtimeTransports);
+  const cacheStore = options.cacheStore ?? createMemoryCacheStore();
+  validateCacheStore(cacheStore);
   const registered = new Map<string, Record<string, unknown>>();
   // The cross-entity view nested includes resolve against.
   // Entities that never go through `createCrud` are derived from
@@ -131,6 +146,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         config as EntityConfig<Entity> | undefined,
         options.defaults,
         options.realtimeTransports,
+        cacheStore,
       );
       // `builtInHandlers()` takes no adapter: the built-ins read the
       // request's `context.repository`, which the engine below fills from
@@ -294,6 +310,27 @@ function validateRealtimeTransports(transports: readonly RealtimeTransport[] | u
         `expected a function, got ${JSON.stringify(candidate.publish)}`,
       );
     }
+  }
+}
+
+/**
+ * Fails fast at `createKavo`, once, rather than per entity — a store is
+ * shared process-wide, so a malformed one should never surface as N
+ * bootstrap errors, one per `createCrud` call that happens to run first
+ * (the same reasoning `validateRealtimeTransports` documents).
+ */
+function validateCacheStore(store: CacheStore): void {
+  const candidate = store as { get?: unknown; set?: unknown; invalidate?: unknown } | null;
+  if (typeof candidate !== "object" || candidate === null) {
+    throw new ConfigurationException("createKavo", "cacheStore", `expected a CacheStore, got ${JSON.stringify(store)}`);
+  }
+  for (const method of ["get", "set", "invalidate"] as const) {
+    if (typeof candidate[method] === "function") continue;
+    throw new ConfigurationException(
+      "createKavo",
+      `cacheStore.${method}`,
+      `expected a function, got ${JSON.stringify(candidate[method])}`,
+    );
   }
 }
 

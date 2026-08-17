@@ -72,7 +72,8 @@ export type {
   KavoSettings,
   ArrayMutationSettings,
   ArrayMutationStrategy,
-  CachingSettings,
+  CacheSettings,
+  EtagSettings,
   ErrorSettings,
   PaginationSettings,
   QuerySettings,
@@ -104,6 +105,14 @@ export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/res
 // ── Realtime ──────────────────────────────────────────────────────────
 export type { RealtimeEventDto, RealtimeEventId } from "./realtime/realtime-event.js";
 export type { RealtimeTransport } from "./realtime/realtime-transport.js";
+
+// ── Result caching (ADR-0031) ─────────────────────────────────────────
+// `createMemoryCacheStore` is the shipped in-process default; a shared
+// backend is a caller-registered object implementing the same three
+// methods. Adapters never see it; the engine reaches it through
+// `ResolvedEntityConfig.cacheStore`.
+export type { CacheStore } from "./caching/cache-store.js";
+export { createMemoryCacheStore } from "./caching/cache-store.js";
 
 // ── Operations ────────────────────────────────────────────────────────
 export type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operations/operation.js";
@@ -150,7 +159,7 @@ export type { KavoResponse } from "./context/kavo-response.js";
 // What the export promises is "the tag Kavo would set for this
 // representation", not the algorithm behind it — so ADR-0020's option to
 // supersede the content hash with a version column stays open.
-export { computeEtag } from "./caching/etag.js";
+export { computeEtag, isEtagEnabled } from "./caching/etag.js";
 export type { RequestPreconditions } from "./caching/etag.js";
 
 // ── Serialization ─────────────────────────────────────────────────────

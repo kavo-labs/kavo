@@ -136,17 +136,36 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     // is entity-typed config outside that schema (ADR-0028).
   }
 
-  // `softDelete` is the one key in this schema that `false` disables
-  // wholesale, and the resemblance invites `caching: false` — which would
-  // otherwise blow up as a TypeError instead of naming the key.
-  if (typeof settings.caching !== "object" || settings.caching === null) {
-    throw new ConfigurationException(
-      entityName,
-      "caching",
-      `expected { etag: boolean }, got ${JSON.stringify(settings.caching)} — to turn ETags off, set 'caching.etag' to false`,
-    );
+  if (settings.cache !== false) {
+    const cache = settings.cache;
+    if (typeof cache !== "object" || cache === null) {
+      throw new ConfigurationException(
+        entityName,
+        "cache",
+        `expected { ttl: number, etag: boolean | { enabled: boolean } } or false, got ${JSON.stringify(cache)} — ` +
+          `to turn result caching and ETags off together, set 'cache' to false`,
+      );
+    }
+    if (!Number.isInteger(cache.ttl) || (cache.ttl as number) < 0) {
+      throw new ConfigurationException(
+        entityName,
+        "cache.ttl",
+        `expected a non-negative integer (0 disables the result cache), got ${JSON.stringify(cache.ttl)}`,
+      );
+    }
+    const etag = cache.etag;
+    if (etag === true || etag === false) {
+      // boolean shorthand; nothing more to check
+    } else if (typeof etag === "object" && etag !== null) {
+      bool("cache.etag.enabled", etag.enabled);
+    } else {
+      throw new ConfigurationException(
+        entityName,
+        "cache.etag",
+        `expected true, false, or { enabled: boolean }, got ${JSON.stringify(etag)}`,
+      );
+    }
   }
-  bool("caching.etag", settings.caching.etag);
 
   if (settings.softDelete !== false) {
     if (
