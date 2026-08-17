@@ -7,6 +7,7 @@ import type { OperationId } from "../operations/operation.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
+import type { CacheStore } from "../caching/cache-store.js";
 
 /**
  * Allowlists after bootstrap resolution — complete, never optional.
@@ -80,4 +81,13 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * array container is frozen, never its elements (ADR-0023).
    */
   readonly realtimeTransports: readonly RealtimeTransport[];
+  /**
+   * The entity's result-cache store — resolved once per `createKavo` root
+   * (`KavoOptions.cacheStore`, defaulting to `createMemoryCacheStore`), not
+   * per entity and not through the settings precedence chain, for the same
+   * ADR-0023 reason `realtimeTransports` documents: a store is a live
+   * object (a Redis client, say) that must not be deep-frozen. The engine
+   * reads and writes it when `settings.cache` is enabled (ADR-0031).
+   */
+  readonly cacheStore: CacheStore;
 }
