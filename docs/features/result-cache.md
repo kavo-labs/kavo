@@ -16,7 +16,7 @@ Enable it by setting a TTL. A **positive** `ttl` turns it on — `ttl` _is_ the 
 
 A hit answers `findOne`/`findMany` without the adapter, but it still recomputes the current `ETag` off the cached item, so conditional clients keep working: `If-None-Match` on a hit still gets its `304` against a fresh, correct tag. `cache.etag` and the rest of the `cache` key compose; neither disables the other.
 
-Entries are keyed by entity, operation, target row, and query: `fields`, `include`, `filter`, `sort`, `pagination`, `withDeleted`, `onlyDeleted`. `GET /users/1` and `GET /users/2` are different entries, as are `GET /users/1?fields=name` and the plain read. Per-call settings are deliberately not part of the key: a per-call `softDelete.strategy` override that reshapes a response without changing the query is outside the cache's contract (ADR-0031).
+Entries are keyed by entity, operation, target row, principal, and query: `fields`, `include`, `filter`, `sort`, `pagination`, `withDeleted`, `onlyDeleted`. `GET /users/1` and `GET /users/2` are different entries, as are `GET /users/1?fields=name` and the plain read. The principal is in the key so one caller's values never leak to another — a computed field that varies by `context.principal`, or a custom handler that filters on it, is safe by construction; anonymous calls (no principal) share one bucket. Per-call settings are deliberately not part of the key: a per-call `softDelete.strategy` override that reshapes a response without changing the query is outside the cache's contract (ADR-0031).
 
 ## Invalidation
 
@@ -51,5 +51,7 @@ Every `createKavo` root that doesn't register one gets a private instance. For a
 **A hit is as stale as the TTL.** The store never asks the adapter, so a row changed by a write on a _different_ entity, or by an out-of-band change nothing invalidated, shows up at the old value until the entry expires. That is what the TTL is for.
 
 **A broken store costs a hit, never a read.** Every store call is wrapped: `get` that throws is a miss, `set` that throws is ignored, `invalidate` that throws is ignored. A backend that goes down degrades to uncached behavior, not errors.
+
+**Two stated limits on the shipped store.** The in-process store checks expiry only on `get` and never sweeps, so on a pure-read workload with a high-cardinality query space, expired entries whose keys are never revisited accumulate — a caller with a long-lived read-mostly process should register a store that evicts. And transactional reads are cached like any other: a `findOne` inside a programmatic transaction stores its response, so a later call outside the transaction (or after a rollback) is served it — account for it, or keep transactional reads off the cache path.
 
 See [Settings](/guides/configuration/settings#cache) for the schema, [Config keys](/reference/config-keys#cache), and [ADR-0031](/internals/adr/0031-result-cache-is-a-live-store-invalidated-wholesale) for the full decision.

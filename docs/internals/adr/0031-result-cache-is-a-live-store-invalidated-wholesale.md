@@ -46,8 +46,8 @@ for. The only correct granularity is the entity: drop them all.
 ## Decision
 
 **1. `cache` is a new `KavoSettings` key; the store is not.**
-`cache: { ttl, etag }` (TTL in seconds; `etag` is the merged former
-`caching.etag`, defaults `true`) merges through the normal precedence chain
+`cache: { ttl, etag }` (TTL in seconds; `etag` defaults `true`) merges
+through the normal precedence chain
 and is `false`-disables-the-subtree like `softDelete` (`settings.ts`,
 `defaults.ts` — built-in default `{ ttl: 0, etag: true }`). The backing
 store is a `CacheStore` interface (`get(entityName,
@@ -59,19 +59,25 @@ default, validated once in `createKavo`, and reached at runtime through
 in-process store; a Redis or other shared backend is a caller-registered
 object, keeping core at zero runtime dependencies (ADR-0005).
 
-**2. The key is entity + operation + target id + canonicalized query
-fingerprint.** The entity name is a separate parameter the store keys on,
-so invalidation stays a whole-entity map delete. The in-key parts are
-`${operationId}:${requestId}:${canonicalize(queryFingerprint(query))}`
+**2. The key is entity + operation + target id + principal + canonicalized
+query fingerprint.** The entity name is a separate parameter the store keys
+on, so invalidation stays a whole-entity map delete. The in-key parts are
+`${operationId}:${requestId}:${canonicalize(principal)}:${canonicalize(queryFingerprint(query))}`
 (`kavo-engine.ts` `cacheKey`). `requestId` is empty on a `findMany`, where
-there is no target row. `queryFingerprint` is a plain-data projection of the
-normalized query — `filter`, `sort`, `pagination`, `fields`, `include`,
-`withDeleted`, `onlyDeleted`, `count` — folding each include node down to
-its query-decided parts, `fields` and `children` (the relation paths are the
-keys), because `canonicalize` must never serialize a live
-`RelationDescriptor`. Per-call _settings_ are deliberately not in the key:
-a per-call override that reshapes a response without changing the query —
-the one known case is `softDelete.strategy` — is outside the key's
+there is no target row. The principal half is the review fix for
+cross-caller leakage: computed fields and custom handlers may legitimately
+vary by `context.principal`, so a response baked for one principal must
+never be served to a different one — `canonicalize(undefined)` and
+`canonicalize(null)` both yield `"null"`, so anonymous calls share one
+bucket while each authenticated principal gets its own entries (whole-entity
+invalidation still covers them all). `queryFingerprint` is a plain-data
+projection of the normalized query — `filter`, `sort`, `pagination`,
+`fields`, `include`, `withDeleted`, `onlyDeleted`, `count` — folding each
+include node down to its query-decided parts, `fields` and `children` (the
+relation paths are the keys), because `canonicalize` must never serialize a
+live `RelationDescriptor`. Per-call _settings_ are deliberately not in the
+key: a per-call override that reshapes a response without changing the query
+— the one known case is `softDelete.strategy` — is outside the key's
 contract, stated as a documented limitation rather than silently answered
 wrong.
 
@@ -141,3 +147,15 @@ write itself. Core has no ambient logger to report through (ADR-0005).
   `softDelete.strategy` override that changes what the response would be
   without changing the query is outside the key. It is a stated limitation,
   not a silent wrong answer.
+- **The shipped in-process store never sweeps.** Expiry is checked on
+  `get` only, and nothing reclaims an expired entry whose key is never read
+  again — a write invalidates wholesale, but a pure-read workload with a
+  high-cardinality query space grows without bound. That is a memory
+  trade-off for zero bookkeeping (no timers, no sweeps); a caller with a
+  long-lived read-mostly workload should register a store that evicts.
+- **Transactional reads are cached like any other.** A programmatic
+  `findOne`/`findMany` inside a transaction stores its response; a later
+  call outside the transaction — or after a rollback — is served it. Reads
+  are cacheable regardless of `request.options.transaction`; callers that
+  read inside transactions and then roll back should account for it, or
+  keep transactional reads off the cache path.
