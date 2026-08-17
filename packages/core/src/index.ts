@@ -73,7 +73,7 @@ export type {
   ArrayMutationSettings,
   ArrayMutationStrategy,
   CacheSettings,
-  CachingSettings,
+  EtagSettings,
   ErrorSettings,
   PaginationSettings,
   QuerySettings,
@@ -159,7 +159,7 @@ export type { KavoResponse } from "./context/kavo-response.js";
 // What the export promises is "the tag Kavo would set for this
 // representation", not the algorithm behind it — so ADR-0020's option to
 // supersede the content hash with a version column stays open.
-export { computeEtag } from "./caching/etag.js";
+export { computeEtag, isEtagEnabled } from "./caching/etag.js";
 export type { RequestPreconditions } from "./caching/etag.js";
 
 // ── Serialization ─────────────────────────────────────────────────────

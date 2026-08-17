@@ -38,7 +38,6 @@ const SETTINGS_KEYS = [
   "query",
   "errors",
   "relations",
-  "caching",
   "cache",
   "softDelete",
   "realtime",

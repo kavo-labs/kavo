@@ -11,15 +11,10 @@ import type { DeepPartial } from "../types/utility.js";
  * - Arrays replace wholesale (no element merging).
  *
  * The base is always a *complete* `KavoSettings`, so the result is too.
- *
- * One key breaks the otherwise uniform algebra on purpose (ADR-0031):
- * **`cache`**. Its *presence* in an override implies `enabled: true` —
- * `cache: { ttl: 60 }` opts the scope in without spelling `enabled` — so
- * the generic object merge is followed by a presence check that flips
- * `enabled` when the override never said it. An override that did say
- * `enabled: false` (or `cache: false`, the wholesale disable) is honored
- * as written. This applies at every scope, because `mergeLevel` is the one
- * function the whole precedence chain runs through.
+ * `cache` merges with exactly this generic algebra — nothing special-case
+ * about it (ADR-0031 as amended): the result cache's on/off is carried by
+ * `ttl` itself, so `cache: { ttl: 60 }` against the `ttl: 0` default is on
+ * and `cache: { etag: false }` is off, with no presence rule to track.
  */
 export function mergeSettings(
   base: KavoSettings,
@@ -38,16 +33,6 @@ function mergeLevel(base: Record<string, unknown>, override: Record<string, unkn
   for (const [key, value] of Object.entries(override)) {
     if (value === undefined) continue;
     const current = result[key];
-    if (key === "cache" && value !== false && isPlainObject(value)) {
-      // ADR-0031's presence rule, and only when the override merged: a
-      // plain-object `cache` override against a plain-object base. `false`
-      // (wholesale disable) and object-over-non-object fall through to the
-      // ordinary replace below.
-      const merged = isPlainObject(current) ? mergeLevel(current, value) : { ...value };
-      if (!("enabled" in value)) merged.enabled = true;
-      result[key] = merged;
-      continue;
-    }
     if (isPlainObject(value) && isPlainObject(current)) {
       result[key] = mergeLevel(current, value);
     } else {

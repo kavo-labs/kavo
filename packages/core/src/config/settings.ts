@@ -143,39 +143,41 @@ export interface RelationSettings {
 }
 
 /**
- * HTTP response caching. One key covers both halves of the feature,
- * because they are two ends of the same value: the `ETag` computed for a
- * single-item response, and the `If-None-Match`/`If-Match` preconditions
- * evaluated against it (ADR-0020). `etag: false` at any scope turns both
- * off: no tag is computed, `If-None-Match` is ignored, and an `If-Match`
- * — the one header whose whole purpose is to prevent a write — is
- * **refused** with 412 `KAVO_PRECONDITION_UNSUPPORTED` rather than
- * ignored. Ignoring it would answer 2xx for a guard that was never
- * applied, which the per-operation scope makes easy to arrive at by
- * accident: `findOne` serving tags while `updateOne` has caching off is a
- * client holding a tag nothing will ever check.
+ * The `etag` half of `cache` (ADR-0020) — the conditional-request
+ * machinery. The boolean shorthand and the object form agree: `false` (and
+ * `{ enabled: false }`) turns both halves of the feature off — no tag is
+ * computed, `If-None-Match` is ignored, and an `If-Match` — the one header
+ * whose whole purpose is to prevent a write — is **refused** with 412
+ * `KAVO_PRECONDITION_UNSUPPORTED` rather than ignored. Ignoring it would
+ * answer 2xx for a guard that was never applied, which the per-operation
+ * scope makes easy to arrive at by accident: `findOne` serving tags while
+ * `updateOne` has `etag` off is a client holding a tag nothing will ever
+ * check.
  */
-export interface CachingSettings {
-  readonly etag: boolean;
-}
+export type EtagSettings = boolean | { readonly enabled: boolean };
 
 /**
- * Read-result caching (ADR-0031) — a TTL cache of `findOne`/`findMany`
- * responses, distinct from {@link CachingSettings}: `caching` is the
- * conditional-request machinery (ADRs 0020/0027), which computes an `ETag`
- * and answers `If-None-Match`/`If-Match`; `cache` is the engine-level
- * shortcut that serves a repeated read from a store without touching the
- * adapter at all. They compose: a cached hit still re-derives the current
- * `ETag` for the request at hand, so the two features never fight.
+ * Result caching and its ETag half — one subtree replacing the former
+ * `caching` key (ADR-0031). `etag` is the conditional-request machinery
+ * (ADRs 0020/0027): it computes an `ETag` and answers `If-None-Match`/
+ * `If-Match`. `ttl` is the engine-level shortcut that serves a repeated
+ * `findOne`/`findMany` from a store without touching the adapter at all.
+ * They compose: a cached hit still re-derives the current `ETag` for the
+ * request at hand, so the two features never fight.
  *
- * `false` disables the subtree wholesale, the same convention `softDelete`
- * uses. Otherwise **enabled only when it says so** — with one deliberate
- * exception, ADR-0031's presence rule: the *presence* of a `cache` override
- * that does not spell `enabled` opts that scope in, so `@Kavo(Entity,
- * { cache: { ttl: 60 } })` enables without a redundant `enabled: true`.
- * An override that *does* say `enabled: false` is honored as written —
- * that is the escape hatch for "set a ttl everywhere, enable only where
- * told."
+ * `false` disables the subtree wholesale (result cache **and** etags), the
+ * same convention `softDelete` uses. Otherwise the result cache is on
+ * exactly when `ttl` is positive: `ttl` **is** the switch — there is no
+ * separate `enabled` key, and no presence rule to remember. `ttl: 0` (the
+ * default) and an omitted `ttl` both mean "off"; `@Kavo(Entity,
+ * { cache: { ttl: 60 } })` means "on, 60 seconds". Touching only `etag` on
+ * an otherwise-off entity is then the natural spelling —
+ * `cache: { etag: { enabled: false } }` — and never flips the result cache
+ * on.
+ *
+ * `etag` defaults **on** (`true`) independent of `ttl`: an entity with
+ * result caching off still serves ETags and honors the conditional
+ * headers, exactly as `caching.etag` did before the merge.
  *
  * TTL is in **seconds**; the store enforces it (the engine never reads a
  * clock). Successful writes on the entity invalidate its cached entries
@@ -190,8 +192,8 @@ export interface CachingSettings {
  * caching (ADR-0031).
  */
 export interface CacheSettings {
-  readonly enabled: boolean;
   readonly ttl: number;
+  readonly etag: EtagSettings;
 }
 
 /**
@@ -301,8 +303,7 @@ export interface KavoSettings {
   readonly query: QuerySettings;
   readonly errors: ErrorSettings;
   readonly relations: RelationSettings;
-  readonly caching: CachingSettings;
-  /** Read-result caching, distinct from `caching`'s ETag machinery (ADR-0031). */
+  /** Result caching + the conditional-request subtree (ADRs 0020/0031). */
   readonly cache: CacheSettings | false;
   readonly softDelete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;

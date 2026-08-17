@@ -35,7 +35,7 @@ import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
 import { cursorValuesOf, encodeCursor } from "../query/cursor.js";
 import { sinceValueOf } from "../query/since.js";
-import { WILDCARD, canonicalize, computeEtag, strongMatch, weakMatch } from "../caching/etag.js";
+import { WILDCARD, canonicalize, computeEtag, isEtagEnabled, strongMatch, weakMatch } from "../caching/etag.js";
 import { createKavoContext, randomUuid } from "../context/default-kavo-context.js";
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
@@ -111,7 +111,7 @@ const PRECONDITION_TARGETS: ReadonlySet<StandardOperationId> = new Set<StandardO
  */
 const UNEVALUABLE = {
   notTargeted: "the operation does not target one identified row, so there is no representation to compare against",
-  cachingOff: "caching.etag is disabled for it, so no ETag is computed for this entity's representations",
+  cachingOff: "cache.etag is disabled for it, so no ETag is computed for this entity's representations",
   noCanonicalRead: "findOne is not an enabled operation, so this entity exposes no canonical representation to read",
 } as const;
 
@@ -381,7 +381,7 @@ export class KavoEngine<Entity extends object> {
   /** The `cache` settings in force for a config view, or `null` when off. */
   private cacheSettings(config: ResolvedEntityConfig<Entity>): CacheSettings | null {
     const cache = config.settings.cache;
-    return cache === false || !cache.enabled ? null : cache;
+    return cache === false || cache.ttl <= 0 ? null : cache;
   }
 
   /**
@@ -412,7 +412,7 @@ export class KavoEngine<Entity extends object> {
    * `notModified` are re-derived for *this* request, never trusted from
    * storage, because they are per-request answers to the request's own
    * `If-None-Match` (ADR-0020), and a hit has to serve a correct, current
-   * `ETag` even when the entry predates the current call's `caching.etag`
+   * `ETag` even when the entry predates the current call's `cache.etag`
    * scope (ADR-0031) — the tag is recomputed off the cached `item`, which
    * is the same representation `mapResponse` would have hashed.
    *
@@ -428,7 +428,7 @@ export class KavoEngine<Entity extends object> {
     preconditions: RequestPreconditions | null,
   ): Promise<KavoResponse> {
     const etag =
-      config.settings.caching.etag && cached.item !== null && cached.item !== undefined
+      isEtagEnabled(config.settings.cache) && cached.item !== null && cached.item !== undefined
         ? await computeEtag(cached.item)
         : null;
     return {
@@ -563,7 +563,7 @@ export class KavoEngine<Entity extends object> {
       });
     };
     if (!PRECONDITION_TARGETS.has(descriptor.id as StandardOperationId)) refuse(UNEVALUABLE.notTargeted);
-    if (!config.settings.caching.etag) refuse(UNEVALUABLE.cachingOff);
+    if (!isEtagEnabled(config.settings.cache)) refuse(UNEVALUABLE.cachingOff);
     // The 412 below names the current tag, which is only safe to disclose
     // when the client could have read it for itself. No enabled `findOne`
     // means no canonical representation to read — and an unconditional
@@ -1051,9 +1051,9 @@ export class KavoEngine<Entity extends object> {
     const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
     const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
     validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
-    // `context.config` is the per-call view, so `caching.etag` honors an
+    // `context.config` is the per-call view, so `cache.etag` honors an
     // override at any scope down to this one request.
-    const etag = context.config.settings.caching.etag ? await computeEtag(item) : null;
+    const etag = isEtagEnabled(context.config.settings.cache) ? await computeEtag(item) : null;
     return {
       operation: descriptor.id,
       item,

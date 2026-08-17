@@ -14,7 +14,7 @@ export interface KavoResponse<ItemDto = unknown, ListDto = ItemDto> {
   /**
    * The strong entity-tag of `item`, quoted and ready to be an `ETag`
    * header (ADR-0020) — `null` when there is no item, or when
-   * `caching.etag` is off for this call. Collection responses never carry
+   * `cache.etag` is off for this call. Collection responses never carry
    * one.
    */
   readonly etag: string | null;
