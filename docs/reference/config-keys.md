@@ -67,6 +67,16 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 
 See [Caching & ETags](/features/caching-and-etags).
 
+## cache
+
+| Key             | Type                        | Default |
+| --------------- | --------------------------- | ------- |
+| `cache`         | `{ enabled, ttl } \| false` | `false` |
+| `cache.enabled` | `boolean`                   | `false` |
+| `cache.ttl`     | `number` (seconds)          | `60`    |
+
+Distinct from `caching` (the conditional-request machinery above): `cache` is the engine-level shortcut that serves a repeated read from a store without touching the adapter. Presence of a `cache` object that doesn't spell `enabled` implies `enabled: true`. The backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Result cache](/features/result-cache).
+
 ## softDelete
 
 | Key                   | Type                           | Default                      |

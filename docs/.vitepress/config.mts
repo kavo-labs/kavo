@@ -154,6 +154,7 @@ const config = defineConfig({
           { text: "Soft Delete", link: "/features/soft-delete" },
           { text: "Realtime Events", link: "/features/realtime-events" },
           { text: "Caching & ETags", link: "/features/caching-and-etags" },
+          { text: "Result Cache", link: "/features/result-cache" },
           { text: "Allowlists", link: "/features/allowlists" },
           { text: "Computed Fields", link: "/features/computed-fields" },
         ],
@@ -354,6 +355,10 @@ const config = defineConfig({
               {
                 text: "0030 — 'none' pagination strategy opts a resource out entirely",
                 link: "/internals/adr/0030-none-pagination-strategy-opts-a-resource-out-entirely",
+              },
+              {
+                text: "0031 — Result cache is a live per-entity store",
+                link: "/internals/adr/0031-result-cache-is-a-live-store-invalidated-wholesale",
               },
             ],
           },

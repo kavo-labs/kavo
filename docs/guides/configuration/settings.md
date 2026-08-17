@@ -48,6 +48,14 @@ Setting `etag` to `false` at any scope turns both halves off together: no tag is
 
 See [ETags and conditional requests](/features/caching-and-etags#etags-and-conditional-requests) for the wire behavior, including its limits: the `If-Match` check is check-then-write rather than an atomic compare-and-swap, and a token has to come from an unnarrowed read. For redaction and `@Override` details, see [ETag overrides and redaction](/guides/configuration/etag-overrides).
 
+## cache
+
+`ttl` (default `60`, in seconds) is how long a cached `findOne`/`findMany` response is served without touching the adapter. `enabled` (default `false`) switches the feature on, with one exception that makes it less fussy than it looks: the **presence** of a `cache` object that doesn't spell `enabled` opts that scope in, so `@Kavo(User, { cache: { ttl: 60 } })` and `defaults: { cache: { ttl: 60 } }` enable without a redundant `enabled: true`. An override that does say `enabled: false` is honored as written (that's the escape hatch for "set a ttl everywhere, enable only where told"), and `false` for the whole `cache` key disables the feature wholesale.
+
+A hit is keyed by entity, operation, target row, and query, and any successful write on the entity drops its every entry. The backing store is not configured here: it's a live object registered on `KavoOptions.cacheStore` (see [Module setup's global config](/guides/configuration/module-setup#global-config-kavomodule-forroot-forrootasync)), with an in-process default that needs nothing.
+
+See [Result cache](/features/result-cache) for the walkthrough.
+
 ## softDelete
 
 `field` (default `"deletedAt"`) is the name of the delete-marker column. `strategy` (default `"auto"`, or `"soft"`/`"hard"`) picks how deletion behaves: `auto` resolves per entity (soft if the marker field exists, hard otherwise), while `soft`/`hard` state it outright. Setting `false` for the whole `softDelete` key (instead of an object) disables soft delete entirely, even if a marker field exists.
