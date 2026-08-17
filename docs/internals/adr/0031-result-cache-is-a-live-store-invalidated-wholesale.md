@@ -7,7 +7,7 @@
 `findOne`/`findMany` had no result caching (issue #232): every repeated read
 ran the full pipeline — normalize, resolve DTOs, call the adapter, serialize
 — even when the same row and the same query had already produced an
-identical response moments earlier. The existing `caching.etag` key
+identical response moments earlier. The existing `cache.etag` key
 (ADR-0020) is conditional-request machinery: it computes a tag and answers
 `If-None-Match`/`If-Match`, but a client that does not send the header still
 pays for the adapter read every time. A TTL cache is a different feature
@@ -46,10 +46,11 @@ for. The only correct granularity is the entity: drop them all.
 ## Decision
 
 **1. `cache` is a new `KavoSettings` key; the store is not.**
-`cache: { enabled, ttl }` (TTL in seconds) merges through the normal
-precedence chain and is `false`-disables-the-subtree like `softDelete`
-(`settings.ts`, `defaults.ts` — built-in default `{ enabled: false,
-ttl: 60 }`). The backing store is a `CacheStore` interface (`get(entityName,
+`cache: { ttl, etag }` (TTL in seconds; `etag` is the merged former
+`caching.etag`, defaults `true`) merges through the normal precedence chain
+and is `false`-disables-the-subtree like `softDelete` (`settings.ts`,
+`defaults.ts` — built-in default `{ ttl: 0, etag: true }`). The backing
+store is a `CacheStore` interface (`get(entityName,
 key)`, `set(entityName, key, value, ttlSeconds)`, `invalidate(entityName)`),
 registered on `KavoOptions.cacheStore` with `createMemoryCacheStore()` as the
 default, validated once in `createKavo`, and reached at runtime through
@@ -74,16 +75,14 @@ the one known case is `softDelete.strategy` — is outside the key's
 contract, stated as a documented limitation rather than silently answered
 wrong.
 
-**3. Presence of a `cache` override implies `enabled: true`.** `mergeSettings`
-treats `cache` specially: a plain-object override that does not spell
-`enabled` forces it on, so `@Kavo(Entity, { cache: { ttl: 60 } })` and a
-global `defaults: { cache: { ttl: 60 } }` enable without a redundant
-`enabled: true`. An override that does say `enabled: false` — or the
-wholesale `cache: false` — is honored as written, the escape hatch for "set
-a ttl everywhere, enable only where told." Without the rule, every
-enablement would require spelling two keys at every scope, and a partial
-override (`{ ttl: 60 }`) would silently merge `enabled: false` from the
-built-in default and appear to do nothing.
+**3. `ttl` is the switch; there is no `enabled` key.** The result cache is
+on exactly when the resolved `ttl` is positive, so `@Kavo(Entity,
+{ cache: { ttl: 60 } })` and a global `defaults: { cache: { ttl: 60 } }`
+enable against the `ttl: 0` built-in default with one key, and `ttl: 0`
+means off — no presence rule to remember. An etag-only override
+(`cache: { etag: false }`) therefore leaves the result cache off too,
+rather than accidentally flipping it on. `cache: false` remains the
+wholesale disable for the whole subtree (result cache and etags).
 
 **4. Only the two standard reads are cached; every successful write
 invalidates the entity wholesale.** `isCacheableRead` accepts `findOne` and
@@ -101,7 +100,7 @@ queries it could have changed.
 `If-None-Match` (ADR-0020), so `responseFromCache` recomputes the tag off
 the cached `item` — the same representation `mapResponse` would have hashed
 — and never trusts the stored copy; a hit therefore serves a correct,
-current `ETag` even when `caching.etag` was off at the scope that produced
+current `ETag` even when `cache.etag` was off at the scope that produced
 the entry. The payload is `structuredClone`d (through the same typed
 `WebGlobals` accessor `etag.ts` uses for Web Crypto): an entry is shared
 storage, so one caller mutating a returned item must not corrupt what every
@@ -134,7 +133,7 @@ write itself. Core has no ambient logger to report through (ADR-0005).
   call is scoped by `entityName`. Two `createKavo` roots each get a private
   default store; an app that wants one process-wide cache hands the same
   instance to every root (`KavoModule.forRoot({ cacheStore })`).
-- **`caching` and `cache` compose instead of fighting**: the ETag machinery
+- **`cache.etag` and the result cache compose instead of fighting**: the ETag machinery
   still runs on a hit (cheaply, off the cached item), so conditional
   clients and cached clients see consistent answers; ADR-0027's
   override-inherits-the-etag rule is untouched.

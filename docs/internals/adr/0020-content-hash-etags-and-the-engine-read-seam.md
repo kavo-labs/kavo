@@ -87,7 +87,7 @@ other cases:
   `KAVO_PRECONDITION_UNSUPPORTED`, not performed. Three ways to get
   there: the operation targets no identified row (`createOne`, and every
   custom operation — nothing in the schema says what one acts on);
-  `caching.etag` is off for the operation in force (see point 6); or
+  `cache.etag` is off for the operation in force (see point 6); or
   `findOne` is not an enabled operation, so the entity exposes no
   canonical representation to compare against. RFC 9110 §13.1.1 forbids
   performing the method when the condition evaluates false, and a
@@ -116,12 +116,12 @@ with no body. On a write, RFC 9110 gives `If-None-Match` "only if absent"
 semantics, which is a conditional-create feature this decision
 deliberately leaves out rather than half-implements.
 
-**6. `caching.etag` gates both halves at once, and gates them loudly.**
+**6. `cache.etag` gates both halves at once, and gates them loudly.**
 One key, resolved through the ordinary precedence chain (doc 08): `false`
 at any scope computes no tag and ignores `If-None-Match`. `If-Match` is
 **refused** rather than ignored, per point 4 — the per-operation scope
 makes the asymmetric configuration easy to reach by accident
-(`operations: { findOne: { caching: { etag: true } }, updateOne: { caching: { etag: false } } }`
+(`operations: { findOne: { cache: { etag: true } }, updateOne: { cache: { etag: false } } }`
 serves tags on `GET` and would otherwise drop the header on `PUT`), and
 the client cannot tell the difference from a 2xx.
 

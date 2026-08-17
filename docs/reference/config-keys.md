@@ -59,23 +59,16 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 
 `"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `arrayMutation.strategy` is the entity-wide default a `relations.edges.<name>.write: true` relation inherits. A relation opted in with no strategy resolvable anywhere (no entity default and no `write: { strategy }` of its own) requires one be declared explicitly (issue #221). `arrayMutation: false` disables the feature wholesale and wins over any per-relation override (issue #223). See [Relations#arrayMutation](/features/relations#arraymutation).
 
-## caching
-
-| Key            | Type      | Default |
-| -------------- | --------- | ------- |
-| `caching.etag` | `boolean` | `true`  |
-
-See [Caching & ETags](/features/caching-and-etags).
-
 ## cache
 
-| Key             | Type                        | Default |
-| --------------- | --------------------------- | ------- |
-| `cache`         | `{ enabled, ttl } \| false` | `false` |
-| `cache.enabled` | `boolean`                   | `false` |
-| `cache.ttl`     | `number` (seconds)          | `60`    |
+| Key                  | Type                     | Default |
+| -------------------- | ------------------------ | ------- |
+| `cache`              | `{ ttl, etag } \| false` | `false` |
+| `cache.ttl`          | `number` (seconds)       | `0`     |
+| `cache.etag`         | `boolean \| { enabled }` | `true`  |
+| `cache.etag.enabled` | `boolean`                | `true`  |
 
-Distinct from `caching` (the conditional-request machinery above): `cache` is the engine-level shortcut that serves a repeated read from a store without touching the adapter. Presence of a `cache` object that doesn't spell `enabled` implies `enabled: true`. The backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Result cache](/features/result-cache).
+One subtree covers both halves of HTTP response caching. `cache.ttl` is the engine-level result cache that serves a repeated `findOne`/`findMany` read from a store without touching the adapter — a positive `ttl` turns it on, `0` (the default) means off, and there is no separate `enabled` key. `cache.etag` is the conditional-request machinery — the ETag on single-item responses plus `If-None-Match`/`If-Match`. `cache: false` turns both halves off together. The result cache's backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Caching & ETags](/features/caching-and-etags) and [Result cache](/features/result-cache).
 
 ## softDelete
 

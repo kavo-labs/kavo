@@ -1,6 +1,6 @@
 # ETag overrides and redaction
 
-Details on how `caching.etag` (see [Settings](/guides/configuration/settings#caching)) interacts with `@Override`'d routes and redacted responses. Read [Caching & ETags](/features/caching-and-etags) first for the wire-level behavior; this page covers the configuration edge cases.
+Details on how `cache.etag` (see [Settings](/guides/configuration/settings#cache)) interacts with `@Override`'d routes and redacted responses. Read [Caching & ETags](/features/caching-and-etags) first for the wire-level behavior; this page covers the configuration edge cases.
 
 ## Redact in the DTO, not in an interceptor
 
@@ -19,4 +19,4 @@ Before v0.9, the tag was not automatic either, and the host framework filled in 
 
 ## The one limit that survives
 
-The engine compares `If-Match` against what `findOne` would serve for that id. An override that serves a reshaped representation hands out a tag the check can never match, so every conditional write on it answers `412`. Serve the canonical shape, or set `caching: { etag: false }` for that operation and own the concurrency control yourself.
+The engine compares `If-Match` against what `findOne` would serve for that id. An override that serves a reshaped representation hands out a tag the check can never match, so every conditional write on it answers `412`. Serve the canonical shape, or set `cache: { etag: false }` for that operation and own the concurrency control yourself.

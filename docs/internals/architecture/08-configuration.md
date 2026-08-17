@@ -26,8 +26,7 @@ built-in defaults → global (createKavo) → entity (createCrud)
 | `relations.edges.<name>`                                                | `{}`                                           | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowlists.includable`, entity scope only (ADR-0028)                                                                                                                                                                                   |
 | `relations.edges.<name>.write`                                          | unset (`false`)                                | `boolean \| { strategy }` — opts a to-many relation into `arrayMutation` writes, inheriting the entity default (`true`) or pinning its own strategy (`{ strategy }`, issue #223); rejected on a to-one relation                                                                                                                 |
 | `arrayMutation.strategy`                                                | unset — no built-in default (issue #221)       | `"replace"` \| `"resource"` \| `"jsonPatch"` — all three are implemented; the entity-wide default a `write: true` relation inherits; a write-opted relation with no strategy resolvable anywhere demands one be declared; `false` disables the feature wholesale and wins over any per-relation override (ADR-0029, issue #223) |
-| `caching.etag`                                                          | `true`                                         | ETag on single-item responses + `If-None-Match`/`If-Match` (ADR-0020)                                                                                                                                                                                                                                                           |
-| `cache.enabled` / `ttl`                                                 | `false` / `60`                                 | TTL result cache for `findOne`/`findMany`; the backing store is **not** here (ADR-0031)                                                                                                                                                                                                                                         |
+| `cache.ttl` / `etag`                                                    | `0` / `true`                                   | TTL result cache for `findOne`/`findMany` (a positive `ttl` turns it on, `0` = off — no separate `enabled` key) + ETag on single-item responses with `If-None-Match`/`If-Match`; the result cache's backing store is **not** here (ADR-0020, ADR-0031)                                                                          |
 | `softDelete.field` / `strategy`                                         | `"deletedAt"` / `"auto"`                       | `auto` = soft when the entity has the marker field, `false` disables                                                                                                                                                                                                                                                            |
 | `realtime.enabled` / `events` / `subscribableFields` / `onPublishError` | `false` (unset) / `{}` (unset) / unset / unset | per-operation event toggles + field allowlist; registered transports are **not** here (ADR-0023)                                                                                                                                                                                                                                |
 | `operations.<id>`                                                       | `{}` (unset)                                   | global operation-enablement default (issue #38); see below                                                                                                                                                                                                                                                                      |
@@ -48,13 +47,12 @@ Implemented in `mergeSettings` (`merge-settings.ts`):
   re-enables.
 - Arrays replace wholesale. `undefined` scopes are skipped.
 
-**`cache` is a special case (ADR-0031):** its _presence_ in a plain-object
-override implies `enabled: true`. `cache: { ttl: 60 }` at any scope enables
-without a redundant `enabled: true`, because a partial override would
-otherwise merge `enabled: false` from the built-in default and silently do
-nothing. An override that spells `enabled: false`, or `cache: false`
-wholesale, is honored as written — the escape hatch for "set a ttl
-everywhere, enable only where told."
+`cache` is not a special case (ADR-0031): it merges with exactly the
+generic algebra above. The result cache's on/off is carried by `ttl`
+itself — a positive `ttl` in an override is on, `0` is off — so `cache:
+{ ttl: 60 }` at any scope enables against the `ttl: 0` built-in default,
+and an etag-only override (`cache: { etag: false }`) leaves the result
+cache off rather than accidentally flipping it on.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
 `allowlists`, `computed`, `operations`); only the settings subset

@@ -40,21 +40,17 @@ Moved to [Relations](/features/relations), which also covers `arrayMutation`.
 
 See [Relations](/features/relations#arraymutation).
 
-## caching
-
-`etag` (default `true`) controls whether single-item responses carry an `ETag`, and whether `If-None-Match` (→ `304`) and `If-Match` (→ `412`) are honored. It's one key for both halves.
-
-Setting `etag` to `false` at any scope turns both halves off together: no tag is computed, and `If-None-Match` is ignored. `If-Match` is the exception. It is refused with `412 KAVO_PRECONDITION_UNSUPPORTED` rather than ignored, because answering `2xx` would tell a client its write was guarded when nothing checked it. The per-operation scope makes that easy to hit by accident, for example `operations: { findOne: { caching: { etag: true } }, updateOne: { caching: { etag: false } } }` would serve tags on `GET` and drop the header on `PUT`.
-
-See [ETags and conditional requests](/features/caching-and-etags#etags-and-conditional-requests) for the wire behavior, including its limits: the `If-Match` check is check-then-write rather than an atomic compare-and-swap, and a token has to come from an unnarrowed read. For redaction and `@Override` details, see [ETag overrides and redaction](/guides/configuration/etag-overrides).
-
 ## cache
 
-`ttl` (default `60`, in seconds) is how long a cached `findOne`/`findMany` response is served without touching the adapter. `enabled` (default `false`) switches the feature on, with one exception that makes it less fussy than it looks: the **presence** of a `cache` object that doesn't spell `enabled` opts that scope in, so `@Kavo(User, { cache: { ttl: 60 } })` and `defaults: { cache: { ttl: 60 } }` enable without a redundant `enabled: true`. An override that does say `enabled: false` is honored as written (that's the escape hatch for "set a ttl everywhere, enable only where told"), and `false` for the whole `cache` key disables the feature wholesale.
+One subtree covers both halves of HTTP response caching: the result cache and the conditional-request machinery. `etag` (default `true`) controls whether single-item responses carry an `ETag`, and whether `If-None-Match` (→ `304`) and `If-Match` (→ `412`) are honored — one key for both halves, accepting `true`/`false` or `{ enabled }`. `ttl` (default `0`, in seconds) is the result cache: a **positive** `ttl` turns it on (how long a cached `findOne`/`findMany` response is served without touching the adapter), while `0` (the default) means off. There is no separate `enabled` key — `ttl` **is** the switch, so `@Kavo(User, { cache: { ttl: 60 } })` and `defaults: { cache: { ttl: 60 } }` enable without any redundant flag, and `false` for the whole `cache` key turns both halves off together.
 
-A hit is keyed by entity, operation, target row, and query, and any successful write on the entity drops its every entry. The backing store is not configured here: it's a live object registered on `KavoOptions.cacheStore` (see [Module setup's global config](/guides/configuration/module-setup#global-config-kavomodule-forroot-forrootasync)), with an in-process default that needs nothing.
+The two halves are independent by default: `etag` stays on even when the result cache is off, exactly as `caching.etag` behaved before the merge. That also makes the natural spelling for etag-only changes safe — `cache: { etag: false }` turns the conditional machinery off and leaves the result cache off too (its `ttl` is still `0`), with no presence rule to accidentally flip it on.
 
-See [Result cache](/features/result-cache) for the walkthrough.
+Setting `etag` to `false` at any scope turns both conditional halves off together: no tag is computed, and `If-None-Match` is ignored. `If-Match` is the exception. It is refused with `412 KAVO_PRECONDITION_UNSUPPORTED` rather than ignored, because answering `2xx` would tell a client its write was guarded when nothing checked it. The per-operation scope makes that easy to hit by accident, for example `operations: { findOne: { cache: { etag: true } }, updateOne: { cache: { etag: false } } }` would serve tags on `GET` and drop the header on `PUT`.
+
+A result-cache hit is keyed by entity, operation, target row, and query, and any successful write on the entity drops its every entry. The backing store is not configured here: it's a live object registered on `KavoOptions.cacheStore` (see [Module setup's global config](/guides/configuration/module-setup#global-config-kavomodule-forroot-forrootasync)), with an in-process default that needs nothing.
+
+See [ETags and conditional requests](/features/caching-and-etags#etags-and-conditional-requests) for the wire behavior, including its limits: the `If-Match` check is check-then-write rather than an atomic compare-and-swap, and a token has to come from an unnarrowed read. For redaction and `@Override` details, see [ETag overrides and redaction](/guides/configuration/etag-overrides). For the result-cache walkthrough, see [Result cache](/features/result-cache).
 
 ## softDelete
 

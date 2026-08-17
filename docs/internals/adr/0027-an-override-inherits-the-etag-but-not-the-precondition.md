@@ -58,7 +58,7 @@ value actually being served. It is a no-op when the override already returns
 an engine envelope, when the operation's cardinality is `many` (a collection
 has no tag, ADR-0020), when the result is `null`/`undefined` (a void
 operation), when the controller is unbound, and when
-`caching.etag` is off for that operation.
+`cache.etag` is off for that operation.
 
 `computeEtag` is exported from `@kavo/core` for it. The barrel note held it
 back while nothing in the workspace needed it; this is the consumer ADR-0010
@@ -122,8 +122,8 @@ dead end #186 hit was a consequence of decision 1 being missing, not an
 independent defect.
 
 **3. A bootstrap refusal was considered and rejected.** #186 offered it as
-the cheap option, and it is: refuse when `caching.etag` is on for an
-operation whose route is overridden. But `caching.etag` defaults to `true`
+the cheap option, and it is: refuse when `cache.etag` is on for an
+operation whose route is overridden. But `cache.etag` defaults to `true`
 and overriding is the documented workaround for #138, so the check would
 fire on essentially every multi-tenant application and force a config change
 to keep starting — including on overrides that already return the envelope
@@ -147,7 +147,7 @@ what `findOne` would serve. If those differ, every conditional write is a
 `412`. That is the honest outcome — a precondition on a representation the
 engine cannot reconstruct is not a precondition — and it is documented on
 `@Override` with the two ways out: serve the canonical shape, or turn
-`caching.etag` off for the operation and own the concurrency control.
+`cache.etag` off for the operation and own the concurrency control.
 
 **One existing test changed.** `caching.e2e.spec.ts` asserted that an
 override dropping its `preconditions` parameter served no `ETag`. That was

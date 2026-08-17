@@ -250,7 +250,7 @@ reaches a response body.
 
 ## 3a. Conditional requests (ADR-0020)
 
-`caching.etag` (doc 08, default on) makes every single-item response
+`cache.etag` (doc 08, default on) makes every single-item response
 carry a strong `ETag` — a SHA-256 of the **canonicalized serialized
 representation**, keys sorted so a DTO field reorder is not a spurious
 cache miss. Collection responses carry none. The tag and a
@@ -271,7 +271,7 @@ targets one identified row — `updateOne`, `patchOne`, `deleteOne`,
 Everything outside that set is **refused, never dropped**:
 `PreconditionUnsupportedException` (412
 `KAVO_PRECONDITION_UNSUPPORTED`) for an operation that targets no
-single row (`createOne`, any custom operation), for `caching.etag`
+single row (`createOne`, any custom operation), for `cache.etag`
 being off, and for `findOne` not being enabled — the three ways the
 check cannot run on a request that changes state. Reads are the one
 exception and ignore `If-Match` outright, since a safe method cannot

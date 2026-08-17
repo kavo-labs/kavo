@@ -328,7 +328,7 @@ Two pieces, both applied programmatically at decoration time:
   `@Override` path and only for `cardinality: "one"`. It replaces the
   method with one that awaits the original and, unless the result is
   already an envelope, is `null`/`undefined`, is an `Observable` or a
-  `StreamableFile`, or the operation has `caching.etag` off, returns a
+  `StreamableFile`, or the operation has `cache.etag` off, returns a
   `KavoResponse` carrying `computeEtag(result)`. It **copies every
   `Reflect` metadata key from the original onto the replacement** —
   Nest keys method metadata on the function object, so without that an
@@ -377,10 +377,10 @@ routes (doc 5), registered DTO classes as body schemas (`ApiBody`),
 problem-details response schemas for 400/404, and the conditional-request
 surface (ADR-0020) — the `ETag` response header, `If-None-Match` + `304`
 on single-item reads, `If-Match` + `412` on single-row writes, gated on
-`caching.etag`.
+`cache.etag`.
 
 Unlike the rest of this list, that gate can't be applied at decoration
-time (ADR-0012): whether it's on depends on `caching.etag` resolved
+time (ADR-0012): whether it's on depends on `cache.etag` resolved
 through the _full_ precedence chain, and the global scope only arrives
 later, with `KavoModule.forRoot`/`forRootAsync` (issue #198). So
 `applySwaggerMetadata` documents everything else immediately but stashes
@@ -389,7 +389,7 @@ the route (`prototype`, `methodName`, `descriptor`, `route`) under
 (`KavoBinder`, the same `onModuleInit` pass that binds each entity's
 service) reads it back once `service.engine.config.settingsFor(id)`
 carries the entity's fully resolved settings, and calls
-`applyConditionalRequestDocs` with the true `caching.etag`. A module
+`applyConditionalRequestDocs` with the true `cache.etag`. A module
 graph with no `KavoModule.forRoot`/`forRootAsync` — and so no working
 `@Kavo` service either — never reaches this pass, so no route is left
 half-documented.

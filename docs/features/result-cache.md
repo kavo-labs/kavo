@@ -2,7 +2,7 @@
 
 `cache` is a TTL cache of `findOne` and `findMany` responses: a repeated read with the same query is served from a store without touching the adapter, the serializer, or a DTO. The pipeline short-circuits after preconditions. Reads only: write responses are never cached.
 
-Enable it by setting a TTL. The presence of a `cache` object implies `enabled: true`, so one key is enough:
+Enable it by setting a TTL. A **positive** `ttl` turns it on — `ttl` _is_ the switch, with no separate `enabled` key to spell, so one key is enough:
 
 ```ts
 @Kavo(User, {
@@ -10,11 +10,11 @@ Enable it by setting a TTL. The presence of a `cache` object implies `enabled: t
 })
 ```
 
-`ttl` is in seconds (default `60`). `{ enabled: false }` and `cache: false` both turn it off; `cache: false` disables the whole subtree, the same convention `softDelete` uses. Setting `defaults: { cache: { ttl: 60 } }` on `KavoModule` opts every entity in, and `operations: { findMany: { cache: { ttl: 5 } } }` tunes one operation. The key resolves through the same global → entity → operation → per-call precedence chain as everything else (per-call via `KavoCallOptions.settings`).
+`ttl` is in seconds (default `0`, which is off). `cache: false` disables the whole subtree, the same convention `softDelete` uses. Setting `defaults: { cache: { ttl: 60 } }` on `KavoModule` opts every entity in, and `operations: { findMany: { cache: { ttl: 5 } } }` tunes one operation. The key resolves through the same global → entity → operation → per-call precedence chain as everything else (per-call via `KavoCallOptions.settings`).
 
 ## What a hit skips, what it doesn't
 
-A hit answers `findOne`/`findMany` without the adapter, but it still recomputes the current `ETag` off the cached item, so conditional clients keep working: `If-None-Match` on a hit still gets its `304` against a fresh, correct tag. `caching.etag` and `cache` compose; neither disables the other.
+A hit answers `findOne`/`findMany` without the adapter, but it still recomputes the current `ETag` off the cached item, so conditional clients keep working: `If-None-Match` on a hit still gets its `304` against a fresh, correct tag. `cache.etag` and the rest of the `cache` key compose; neither disables the other.
 
 Entries are keyed by entity, operation, target row, and query: `fields`, `include`, `filter`, `sort`, `pagination`, `withDeleted`, `onlyDeleted`. `GET /users/1` and `GET /users/2` are different entries, as are `GET /users/1?fields=name` and the plain read. Per-call settings are deliberately not part of the key: a per-call `softDelete.strategy` override that reshapes a response without changing the query is outside the cache's contract (ADR-0031).
 
