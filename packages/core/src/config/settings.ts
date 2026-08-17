@@ -160,6 +160,41 @@ export interface CachingSettings {
 }
 
 /**
+ * Read-result caching (ADR-0031) — a TTL cache of `findOne`/`findMany`
+ * responses, distinct from {@link CachingSettings}: `caching` is the
+ * conditional-request machinery (ADRs 0020/0027), which computes an `ETag`
+ * and answers `If-None-Match`/`If-Match`; `cache` is the engine-level
+ * shortcut that serves a repeated read from a store without touching the
+ * adapter at all. They compose: a cached hit still re-derives the current
+ * `ETag` for the request at hand, so the two features never fight.
+ *
+ * `false` disables the subtree wholesale, the same convention `softDelete`
+ * uses. Otherwise **enabled only when it says so** — with one deliberate
+ * exception, ADR-0031's presence rule: the *presence* of a `cache` override
+ * that does not spell `enabled` opts that scope in, so `@Kavo(Entity,
+ * { cache: { ttl: 60 } })` enables without a redundant `enabled: true`.
+ * An override that *does* say `enabled: false` is honored as written —
+ * that is the escape hatch for "set a ttl everywhere, enable only where
+ * told."
+ *
+ * TTL is in **seconds**; the store enforces it (the engine never reads a
+ * clock). Successful writes on the entity invalidate its cached entries
+ * wholesale — there is no per-key staleness analysis (ADR-0031).
+ *
+ * The backing store is **not** a key here, exactly like `realtime`'s
+ * transports: a store is a live object (a Redis client, say), not
+ * configuration data, so it cannot live inside this deep-frozen tree.
+ * `KavoOptions.cacheStore` (kavo.ts) is where it is registered instead,
+ * once per `createKavo` root, and reached at runtime through
+ * `ResolvedEntityConfig.cacheStore` — the ADR-0023 relationship applied to
+ * caching (ADR-0031).
+ */
+export interface CacheSettings {
+  readonly enabled: boolean;
+  readonly ttl: number;
+}
+
+/**
  * How the delete strategy is chosen. `auto` — the default —
  * resolves per entity: soft when it carries the delete-marker field, hard
  * otherwise, so entities that aren't soft-deletable cost nothing. `soft`
@@ -267,6 +302,8 @@ export interface KavoSettings {
   readonly errors: ErrorSettings;
   readonly relations: RelationSettings;
   readonly caching: CachingSettings;
+  /** Read-result caching, distinct from `caching`'s ETag machinery (ADR-0031). */
+  readonly cache: CacheSettings | false;
   readonly softDelete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;
   /**

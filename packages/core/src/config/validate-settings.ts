@@ -148,6 +148,20 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
   }
   bool("caching.etag", settings.caching.etag);
 
+  if (settings.cache !== false) {
+    const cache = settings.cache;
+    if (typeof cache !== "object" || cache === null) {
+      throw new ConfigurationException(
+        entityName,
+        "cache",
+        `expected { enabled: boolean, ttl: number } or false, got ${JSON.stringify(cache)} — ` +
+          `to turn result caching off, set 'cache' to false`,
+      );
+    }
+    bool("cache.enabled", cache.enabled);
+    positiveInt("cache.ttl", cache.ttl);
+  }
+
   if (settings.softDelete !== false) {
     if (
       typeof settings.softDelete !== "object" ||

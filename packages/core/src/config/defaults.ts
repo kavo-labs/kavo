@@ -47,6 +47,17 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   caching: Object.freeze({
     etag: true,
   }),
+  // Off by default. A full object rather than `false` — like `softDelete`'s
+  // default — so a partial `cache: { ttl: 60 }` override merges against a
+  // complete base instead of replacing a `false` wholesale. The presence
+  // rule (ADR-0031) then flips `enabled` for whatever scope wrote the
+  // override; `enabled: false` spelled explicitly stays off. The store
+  // itself lives outside this tree entirely (`KavoOptions.cacheStore`),
+  // the same way realtime transports do (see `RealtimeSettings`'s doc).
+  cache: Object.freeze({
+    enabled: false,
+    ttl: 60,
+  }),
   // `auto`: soft for entities carrying the marker field, hard for the rest
   // nothing to configure for entities that aren't
   // soft-deletable.
