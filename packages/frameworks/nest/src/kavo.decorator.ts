@@ -32,6 +32,7 @@ import {
   ConfigurationException,
   computeEtag,
   createOperationRegistry,
+  isEtagEnabled,
   registerArrayMutationOperations,
 } from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
@@ -473,7 +474,7 @@ function applyOverrideEtag(
     // is no config to consult, and guessing `etag: true` would add a header
     // the app may have turned off. Leave it exactly as the override wrote it.
     if (service === undefined) return result;
-    if (!service.engine.config.settingsFor(descriptor.id).caching.etag) return result;
+    if (!isEtagEnabled(service.engine.config.settingsFor(descriptor.id).cache)) return result;
     return {
       operation: descriptor.id,
       item: result,

@@ -94,7 +94,7 @@ export interface OverrideMetadata {
  * would serve for that id — so an override that serves a *reshaped*
  * representation hands the client a tag the check can never match, and
  * every conditional write answers `412`. Serve the canonical shape, or set
- * `caching: { etag: false }` for that operation and own the concurrency
+ * `cache: { etag: false }` for that operation and own the concurrency
  * control yourself.
  *
  * Distinct from plain manual-method-wins: an undecorated method whose name

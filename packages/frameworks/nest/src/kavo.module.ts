@@ -2,7 +2,7 @@ import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
 import type { ClassRef, KavoInstance } from "@kavo/core";
-import { ConfigurationException, createKavo, writeOptedInRelationNames } from "@kavo/core";
+import { ConfigurationException, createKavo, isEtagEnabled, writeOptedInRelationNames } from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
 import type { KavoConditionalDocEntry, KavoControllerMetadata } from "./kavo.decorator.js";
 import {
@@ -389,7 +389,7 @@ class KavoBinder implements OnModuleInit {
         const prototype = metatype.prototype as Record<string, unknown>;
         for (const { methodName, descriptor, route } of conditionalDocs) {
           const settings = service.engine.config.settingsFor(descriptor.id);
-          applyConditionalRequestDocs(prototype, methodName, descriptor, route, settings.caching.etag);
+          applyConditionalRequestDocs(prototype, methodName, descriptor, route, isEtagEnabled(settings.cache));
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
           // doc comment in swagger.ts): `query.search.enabled` needs the
