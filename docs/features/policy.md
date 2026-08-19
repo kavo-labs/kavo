@@ -76,3 +76,31 @@ The policy stage runs after the context is built and before preconditions and th
 A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.principal` directly.
 
 `policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches: `filtered()` refuses a caller who omits a scoping filter, it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0032](/internals/adr/0032-policy-authorization-dsl), which also argues the enforcement choices above); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
+
+## Route identity from a Nest guard
+
+`getResource(context)` and `getOperation(context)` (`@kavo/nest`) tell a Nest `Guard`, or any other `ExecutionContext` holder (an `Interceptor`, a `Reflector`-based decorator), which entity and which CRUD operation a pending request targets, without re-deriving either from the URL and HTTP method. Both are read-only identity accessors: a non-Kavo route answers `undefined`, and neither decides anything on its own.
+
+`getResource` returns the entity name behind `@Kavo(Entity)` (the `"Post"` of `@Kavo(Post)`), read from the class-level metadata the decorator writes. `getOperation` returns the route's `OperationId`, written per method by the same wiring that generates the route, so a generated, an `@Override`'d, and a synthesized `replace<Relation>`/`list<Relation>` sub-collection route all carry one. The two are `KavoContext.entityName`/`KavoContext.operation` made readable before the engine runs: a guard fires ahead of the controller method, the point where Kavo builds its context. A service-only operation (`meta.routes.enabled: false`) generates no route, so there is nothing to intercept, and a manual-method-wins method likewise carries no metadata.
+
+A guard built on them bolts Kavo onto an app-wide authorization layer without moving anything into `policy`:
+
+```ts
+import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { getOperation, getResource } from "@kavo/nest";
+
+@Injectable()
+export class CaslGuard implements CanActivate {
+  constructor(private readonly abilities: AbilityFactory) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const resource = getResource(context);
+    const operation = getOperation(context);
+    if (resource === undefined || operation === undefined) return true;
+    const { user } = context.switchToHttp().getRequest();
+    return this.abilities.forUser(user).can(operation, resource);
+  }
+}
+```
+
+Registered with `APP_GUARD`, that is an app-wide CASL/Casbin/audit seam that knows the resource and the action for every request, the Kavo routes' *operation id* (`updateOne`, a custom operation's id, `replaceTags`) rather than just an HTTP method. This complements the `policy` config above rather than replacing it: `policy` and ADR-0032's `PolicyNode` engine run inside Kavo's request pipeline and deny a request before its handler, while the guard runs earlier, still before the controller method, in the host framework's own chain. Kavo makes no authorization decision of its own either way; the guard's `.can()` call is application code just like a `policy` rule. The `user` the guard reads is the same property [Wiring your own auth](/guides/wiring-your-own-auth) moves onto `KavoContext.principal`.
