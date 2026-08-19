@@ -11,7 +11,7 @@ export type StandardOperationId =
 /**
  * The standard ids as a runtime array, in the same order declared above —
  * the single source of truth for anything that must iterate every standard
- * operation (policy resolution's bare-verb mapping, ADR-0032).
+ * operation (policy resolution, `resolve-entity-config.ts`).
  */
 export const STANDARD_OPERATION_IDS: readonly StandardOperationId[] = [
   "createOne",
@@ -23,6 +23,31 @@ export const STANDARD_OPERATION_IDS: readonly StandardOperationId[] = [
   "restoreOne",
   "purgeOne",
 ] as const;
+
+/**
+ * The bare-verb name each standard operation folds into for a **class-based
+ * policy** (ADR-0032's deferred Level 3 — `policy: PostPolicy`, not built
+ * yet): the DTO-slot convention's own verbs (`CLAUDE.md` Conventions —
+ * `create`, `update`, `patch`, `query`, `item`, `list`) plus `delete`,
+ * `restore`, and `purge`, which have no DTO slot of their own but need a
+ * method name regardless. `findOne`/`findMany` map to `item`/`list`
+ * respectively — the response shape each one serves — not to a shared
+ * `find`, since unlike `createOne`/`createMany` they share no DTO slot.
+ *
+ * Unused today: nothing reads this until Level 3 lands. Reserved here,
+ * next to the ids it's keyed by, so the mapping is decided once rather
+ * than re-derived (and possibly re-litigated) when that issue starts.
+ */
+export const STANDARD_OPERATION_VERB: Readonly<Record<StandardOperationId, string>> = {
+  createOne: "create",
+  findOne: "item",
+  findMany: "list",
+  updateOne: "update",
+  patchOne: "patch",
+  deleteOne: "delete",
+  restoreOne: "restore",
+  purgeOne: "purge",
+};
 
 /**
  * Any operation id — standard or custom. The `string & {}`

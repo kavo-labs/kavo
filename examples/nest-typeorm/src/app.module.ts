@@ -56,6 +56,12 @@ export class AppModule {
           provideServices: true,
           useFactory: (dataSource: DataSource) => ({
             infrastructure: createInfrastructure(dataSource),
+            // `request.user`: where `OwnerPrincipalGuard`
+            // (owner/owner-principal.guard.ts) leaves it, for
+            // OwnerController's `policy.deleteOne` — inert everywhere else,
+            // since no other controller's guard populates `request.user`
+            // (docs/guides/wiring-your-own-auth).
+            principal: true,
             ...(realtimeTransports !== undefined && { realtimeTransports }),
             defaults: {
               pagination: { defaultLimit: 20, maxLimit: 100 },
