@@ -8,6 +8,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { ComputedFieldDescriptor } from "./computed-field.js";
+import type { PolicyShorthand } from "../policy/kavo-policy.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths
@@ -152,6 +153,15 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
    * entity-derived default (doc 04 §8).
    */
   readonly dto?: DtoOverride;
+  /**
+   * Overrides the entity's root `policy.<id>` entry for this operation only
+   * (ADR-0032) — the same fallback shape `dto` uses, one level narrower.
+   * `owner`/`when` nodes are only meaningful here on a single-row operation
+   * (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`);
+   * on `createOne`/`findMany` they are a bootstrap `ConfigurationException`
+   * (`resolveEntityConfig`), since no single entity exists yet to check.
+   */
+  readonly policy?: PolicyShorthand<Entity>;
 }
 
 /**
@@ -362,6 +372,16 @@ export interface EntityConfig<
    */
   readonly computed?: Readonly<Record<Computed, ComputedFieldDescriptor<Entity>>>;
   readonly allowlists?: QueryAllowlists<Entity, NoInfer<Computed>>;
+  /**
+   * Authorization, keyed by standard operation id (ADR-0032) — structural
+   * entity-scope config like `computed`, deliberately outside the settings
+   * precedence chain because a `when()` node carries a closure. An id
+   * absent here runs unrestricted, the same opt-in posture every other
+   * Kavo default takes: adding a `policy` entry is how an entity opts in,
+   * not a global switch to flip. `operations.<id>.policy` overrides this
+   * per operation, the same fallback `dto` uses.
+   */
+  readonly policy?: Readonly<Partial<Record<StandardOperationId, PolicyShorthand<Entity>>>>;
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an

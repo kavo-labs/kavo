@@ -108,7 +108,7 @@ const STANDARD_IDS: ReadonlySet<string> = new Set(Object.keys(STANDARD_OPERATION
  * to scope a guard to custom operations, and nothing outside the package
  * has asked.
  */
-export function isStandardOperationId(id: string): boolean {
+export function isStandardOperationId(id: string): id is StandardOperationId {
   return STANDARD_IDS.has(id);
 }
 

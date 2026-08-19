@@ -72,6 +72,19 @@ export class NotFoundException extends KavoException {
   }
 }
 
+/**
+ * A `policy` node (ADR-0032) evaluated to `false` for the current
+ * `context.principal` on this entity/operation. Raised by the engine's
+ * policy stage, never by application code directly — a custom operation's
+ * handler that wants the same status throws this itself, the same way it
+ * already throws `NotFoundException` for a domain-level 404 (issue #182).
+ */
+export class ForbiddenException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_FORBIDDEN", options);
+  }
+}
+
 export class ConflictException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_CONFLICT", options);

@@ -21,12 +21,16 @@ import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import {
   ArrayMutationInvalidShapeException,
   ConfigurationException,
+  ForbiddenException,
+  NotFoundException,
   OperationDisabledException,
   OperationNotRegisteredException,
   PreconditionFailedException,
   PreconditionUnsupportedException,
   QueryValidationException,
 } from "../errors/exceptions.js";
+import type { PolicyNode } from "../policy/kavo-policy.js";
+import { evaluatePolicy, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
@@ -147,9 +151,9 @@ const REALTIME_EVENT_BY_OPERATION: Readonly<Partial<Record<StandardOperationId, 
  * The request pipeline (Template Method over one lifecycle):
  *
  * operation resolution → config resolution → query resolution (reads) →
- * context assembly → precondition evaluation (`If-Match` writes) → DTO
- * resolution → deserialization → handler execution → response mapping →
- * serialization → ETag / `If-None-Match`.
+ * context assembly → policy (ADR-0032) → precondition evaluation (`If-Match`
+ * writes) → DTO resolution → deserialization → handler execution → response
+ * mapping → serialization → ETag / `If-None-Match`.
  *
  * Query resolution runs ahead of the spec's stage order (which lists it
  * after deserialization) because the context carries the normalized query
@@ -264,6 +268,12 @@ export class KavoEngine<Entity extends object> {
       correlationId,
     });
 
+    // Before preconditions and the cache: a denied request should never
+    // learn whether its `If-Match` would have succeeded, and a cache hit
+    // must not skip authorization just because some earlier request for
+    // the same principal already paid for it (ADR-0032).
+    await this.checkPolicy(descriptor, request, configView, context);
+
     const preconditions = request.preconditions ?? request.options?.preconditions ?? null;
     // Before the handler, so a failed precondition never reaches the
     // adapter — the check is check-then-write, not compare-and-swap
@@ -291,6 +301,7 @@ export class KavoEngine<Entity extends object> {
     const input = this.resolveInput(request, descriptor, context);
 
     const result = await descriptor.handler.execute(input, context);
+    if (descriptor.id === "findOne") await this.checkFindOnePolicy(configView, context, result as Entity);
 
     // The one write-driven thing the cache needs, and the whole
     // invalidation strategy: every entry for the entity is dropped after a
@@ -304,6 +315,117 @@ export class KavoEngine<Entity extends object> {
     }
     await this.emitRealtimeEvent(descriptor, request, input, result, response, context);
     return response;
+  }
+
+  /**
+   * The policy stage (ADR-0032): looks up `configView.policy[operation]`
+   * and, when the entity configured one, evaluates it before anything else
+   * runs. An id with no entry is unrestricted — this is a no-op for every
+   * entity that never configured `policy`.
+   *
+   * `owner`/`when` nodes need the loaded row, which no built-in handler
+   * fetches ahead of a write (`updateOne`/`patchOne`/`deleteOne`/
+   * `restoreOne`/`purgeOne` mutate by id alone). `policyNeedsEntity` decides
+   * once, from the node shape, whether this stage must pay for that extra
+   * read — a context-only policy (`permission`/`role`/`authenticated`)
+   * costs nothing beyond the lookup and the boolean evaluation. The
+   * pre-fetch asks for soft-deleted rows too (`withDeleted: true`) —
+   * `restoreOne`/`purgeOne` target a row that *is* soft-deleted by
+   * definition, and a `withDeleted: false` fetch would never find it.
+   *
+   * `findOne` is the one operation that already loads the row as its own
+   * result. A **context-only** policy on `findOne` is still evaluated right
+   * here, before the cache read below it in `run` — the same as every other
+   * operation, and cheap, since it needs no fetch. An **entity-aware**
+   * policy on `findOne` is deferred to `checkFindOnePolicy`, evaluated
+   * against the row the handler already fetched rather than fetched twice;
+   * `isCacheableRead` refuses to cache that case, so a stale cache entry can
+   * never stand in for the deferred check. Every other single-row operation
+   * fetches here, and `resolveEntityConfig` already rejects an entity-aware
+   * node on `createOne`/`findMany`, so `entity` is never needed for those.
+   */
+  private async checkPolicy(
+    descriptor: OperationDescriptor<Entity>,
+    request: KavoRequest<Entity>,
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+  ): Promise<void> {
+    const node = isStandardOperationId(descriptor.id) ? configView.policy[descriptor.id] : undefined;
+    if (node === undefined) return;
+
+    if (descriptor.id === "findOne") {
+      if (policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
+      await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined);
+      return;
+    }
+
+    let entity: Entity | undefined;
+    if (policyNeedsEntity(node)) {
+      const id = request.id === null ? null : this.coerceId(request.id);
+      const found =
+        id === null ? null : await context.repository.findOneById(id as EntityId, this.policyPrefetchQuery(), context);
+      if (found === null) {
+        throw new NotFoundException({
+          messageParams: { entity: configView.entityName, id: String(request.id) },
+          context: {
+            entityName: configView.entityName,
+            operation: descriptor.id,
+            correlationId: context.correlationId,
+          },
+        });
+      }
+      entity = found;
+    }
+
+    await this.assertPolicyAllows(node, descriptor.id, configView, context, entity);
+  }
+
+  /** `findOne`'s deferred half of the policy stage — only reached for an entity-aware node; see `checkPolicy`'s doc comment. */
+  private async checkFindOnePolicy(
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+    entity: Entity,
+  ): Promise<void> {
+    const node = configView.policy.findOne;
+    if (node === undefined || !policyNeedsEntity(node)) return;
+    await this.assertPolicyAllows(node, "findOne", configView, context, entity);
+  }
+
+  private async assertPolicyAllows(
+    node: PolicyNode<Entity>,
+    operation: OperationId,
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+    entity: Entity | undefined,
+  ): Promise<void> {
+    const allowed = await evaluatePolicy(node, context, entity);
+    if (!allowed) {
+      throw new ForbiddenException({
+        messageParams: { entity: configView.entityName, operation },
+        context: { entityName: configView.entityName, operation, correlationId: context.correlationId },
+      });
+    }
+  }
+
+  /**
+   * The minimal, valid `NormalizedQueryContext` `checkPolicy`'s pre-fetch
+   * hands the adapter — `withDeleted: true`, no includes, no filter/sort.
+   * `withDeleted: true` is load-bearing: `restoreOne`/`purgeOne` target a
+   * row that is soft-deleted by definition, and `resolveEntityConfig`'s
+   * `owner`-field validation (ADR-0032) already rejects a dotted path that
+   * crosses a relation, so no `include` is ever needed here either.
+   */
+  private policyPrefetchQuery(): NormalizedQueryContext<Entity> {
+    return {
+      filter: { root: null },
+      sort: [],
+      pagination: { limit: 1, offset: 0 },
+      fields: { root: null, relations: {} },
+      include: {},
+      withDeleted: true,
+      onlyDeleted: false,
+      count: false,
+    };
   }
 
   /**
@@ -379,9 +501,21 @@ export class KavoEngine<Entity extends object> {
    * the cache serves. Custom-operation reads are deliberately not cached
    * (ADR-0031); the operation-id check keeps that true even for one whose
    * handler would be cheap to cache.
+   *
+   * An entity-aware `findOne` policy (ADR-0032) refuses to cache at all: a
+   * cache hit answers straight out of `readCache`, before `checkFindOnePolicy`
+   * ever runs (see `run`), so caching that response would let a stale
+   * verdict outlive the request it was computed for. A context-only
+   * `findOne` policy needs no such carve-out — it is evaluated in
+   * `checkPolicy`, ahead of the cache read, on every call regardless of hit
+   * or miss.
    */
   private isCacheableRead(descriptor: OperationDescriptor<Entity>, config: ResolvedEntityConfig<Entity>): boolean {
     if (descriptor.id !== "findOne" && descriptor.id !== "findMany") return false;
+    if (descriptor.id === "findOne") {
+      const node = config.policy.findOne;
+      if (node !== undefined && policyNeedsEntity(node)) return false;
+    }
     return this.cacheSettings(config) !== null;
   }
 
@@ -705,6 +839,10 @@ export class KavoEngine<Entity extends object> {
       // Same reasoning, applied to the cache store (ADR-0031): a store is a
       // live object registered once per root, never per call.
       cacheStore: config.cacheStore,
+      // Structural, like `computed`/`relations` above (ADR-0032): resolved
+      // once at bootstrap, outside the settings precedence chain, so a
+      // per-call override cannot loosen what an entity's `policy` demands.
+      policy: config.policy,
     };
   }
 
