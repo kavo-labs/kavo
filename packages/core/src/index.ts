@@ -102,6 +102,23 @@ export type {
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
 export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/resolved-entity-config.js";
 
+// ── Policy (ADR-0032) ─────────────────────────────────────────────────
+export {
+  and,
+  authenticated,
+  evaluatePolicy,
+  not,
+  or,
+  owner,
+  permission,
+  policyNeedsEntity,
+  role,
+  when,
+  type KavoPrincipal,
+  type PolicyNode,
+  type PolicyShorthand,
+} from "./policy/kavo-policy.js";
+
 // ── Realtime ──────────────────────────────────────────────────────────
 export type { RealtimeEventDto, RealtimeEventId } from "./realtime/realtime-event.js";
 export type { RealtimeTransport } from "./realtime/realtime-transport.js";
@@ -216,6 +233,7 @@ export {
   ArrayMutationMemberNotFoundException,
   ConfigurationException,
   ConflictException,
+  ForbiddenException,
   JsonPatchInvalidDocumentException,
   JsonPatchTargetNotFoundException,
   KavoException,

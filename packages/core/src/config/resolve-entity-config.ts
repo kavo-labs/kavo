@@ -10,7 +10,10 @@ import type { IncludePath } from "../types/include-path.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
+import type { PolicyNode } from "../policy/kavo-policy.js";
 import { createMemoryCacheStore } from "../caching/cache-store.js";
+import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
+import { collectOwnerFields, normalizePolicyShorthand, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
@@ -74,6 +77,7 @@ export function resolveEntityConfig<Entity extends object>(
   const entityName = metadata.name;
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
+  const policy = resolvePolicy(entityName, entityConfig, metadata);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
   const entitySettings = mergeSettings(
@@ -135,7 +139,93 @@ export function resolveEntityConfig<Entity extends object>(
     // own internal state is left alone (ADR-0023).
     realtimeTransports: Object.freeze([...realtimeTransports]),
     cacheStore,
+    policy,
   };
+  return Object.freeze(resolved);
+}
+
+/**
+ * Operations with no single row to check an `owner`/`when` node against:
+ * `createOne` has no entity yet, `findMany` has a set of rows rather than
+ * one. Configuring an entity-aware node on either is a bootstrap error
+ * (ADR-0032), not a runtime one — the same "catch it before it's baked in"
+ * treatment every other bootstrap validation in this file gets.
+ */
+const ENTITY_AWARE_POLICY_FORBIDDEN: ReadonlySet<StandardOperationId> = new Set(["createOne", "findMany"]);
+
+/**
+ * Resolve `policy`: entity-scope `policy.<id>` with `operations.<id>.policy`
+ * merged in where present (the latter wins, the same fallback `dto` uses),
+ * normalized from the array shorthand, and validated against
+ * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032). Also rejects, at
+ * bootstrap: an empty-array shorthand (`policy: { updateOne: [] }` reads
+ * like "lock this down" but an empty `and()` is vacuously `true` — always
+ * allow, the opposite of what it looks like); an `owner(field)` whose first
+ * dotted segment names a relation (the pre-fetch loads no relations, so it
+ * would silently deny every caller instead of ever passing); and a
+ * `policy.<key>` naming something other than a standard operation id (a
+ * typo that would otherwise protect nothing, silently).
+ */
+function resolvePolicy<Entity extends object>(
+  entityName: string,
+  entityConfig: EntityConfig<Entity> | undefined,
+  metadata: EntityMetadata<Entity>,
+): Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>> {
+  const entityLevel = entityConfig?.policy ?? {};
+  const relationNames = new Set(metadata.relations.map((relation) => relation.name));
+
+  for (const key of Object.keys(entityLevel)) {
+    if (!STANDARD_OPERATION_IDS.includes(key as StandardOperationId)) {
+      throw new ConfigurationException(
+        entityName,
+        `policy.${key}`,
+        `'${key}' is not a standard operation id (${STANDARD_OPERATION_IDS.join(", ")}) — ` +
+          `a misspelled key here protects nothing`,
+      );
+    }
+  }
+
+  const resolved: Partial<Record<StandardOperationId, PolicyNode<Entity>>> = {};
+  for (const id of STANDARD_OPERATION_IDS) {
+    const operationConfig = entityConfig?.operations?.[id];
+    const operationShorthand =
+      typeof operationConfig === "object" && operationConfig !== null
+        ? (operationConfig as OperationConfig<Entity>).policy
+        : undefined;
+    const shorthand = operationShorthand ?? entityLevel[id];
+    if (shorthand === undefined) continue;
+    if (Array.isArray(shorthand) && shorthand.length === 0) {
+      throw new ConfigurationException(
+        entityName,
+        `policy.${id}`,
+        `an empty permission array allows every caller — vacuously true, the opposite of what it reads as. ` +
+          `Name at least one permission, or omit '${id}' from 'policy' to leave it genuinely unrestricted`,
+      );
+    }
+    const node = normalizePolicyShorthand(shorthand);
+    if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
+      throw new ConfigurationException(
+        entityName,
+        `policy.${id}`,
+        `'${id}' has no single entity to check an 'owner'/'when' node against — ` +
+          `${id === "createOne" ? "the row doesn't exist yet" : "it resolves a set of rows, not one"}. ` +
+          `Use 'permission'/'role'/'authenticated' here instead.`,
+      );
+    }
+    for (const field of collectOwnerFields(node)) {
+      const [first] = field.split(".");
+      if (first !== undefined && relationNames.has(first)) {
+        throw new ConfigurationException(
+          entityName,
+          `policy.${id}`,
+          `owner('${field}') crosses the '${first}' relation — the policy stage's pre-fetch loads no relations, ` +
+            `so this would silently deny every caller. Address a column on the entity itself, or check the ` +
+            `relation from inside a 'when()' predicate, which can load it through 'context.repository' itself`,
+        );
+      }
+    }
+    resolved[id] = node;
+  }
   return Object.freeze(resolved);
 }
 

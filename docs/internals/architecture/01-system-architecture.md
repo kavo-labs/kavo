@@ -10,7 +10,9 @@ DTOs, serialization, transactions, and error handling, configurable at
 global, entity, operation, and per-call scope.
 
 v6 scope is deliberately narrow: no validation subsystem, no
-hooks/events, no policy layer, no audit trail. The package set has grown
+hooks/events, no audit trail, and no policy-evaluation _engine_ — `policy`
+(ADR-0032) enforces a declared rule; it does not model roles or maintain a
+policy store. The package set has grown
 past the original three (`@kavo/core`, `@kavo/typeorm`, `@kavo/nest`) by
 adding _edges_, never widening the hub: three further ORM adapters
 (`@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm`) and one wire
@@ -114,21 +116,25 @@ TypeORM's model as the seam has been asked to stretch (ADR-0018).
 Request
  → Operation Resolution     OperationRegistry lookup
  → Config Resolution        frozen ResolvedEntityConfig (bootstrap-merged)
+ → Query Resolution         GET only: query → filter AST (+ IncludeTree, doc 12)
+ → Policy                   configured `policy.<id>` node, if any (ADR-0032)
  → DTO Resolution           explicit DTO, else entity-derived default
  → Deserialization
- → Query Resolution         GET only: query → filter AST (+ IncludeTree, doc 12)
  → Repository Adapter call  transactional via the adapter-level hook ⟨reserved⟩
  → Response Mapping         result → item or ListResultDto envelope
  → Field Selection + Serialization
  → Response
 ```
 
-Deliberately lean: no validation stage, no hook/event stages, no policy
-stage. Cross-cutting behavior lives in the consumer's own controller/
-service code around Kavo — the v6 tradeoff, chosen for simplicity. Every
-stage boundary is a seam with a plain default in it until the feature
-behind it lands — seams, not TODOs — which is what makes the walking
-skeleton shippable without stubbing later features as hacks.
+Deliberately lean: no validation stage, no hook/event stages. Cross-cutting
+behavior otherwise lives in the consumer's own controller/service code
+around Kavo — the v6 tradeoff, chosen for simplicity, that a policy stage
+alone crossed (ADR-0032): unlike an ad hoc hook, `policy` is one config
+key resolved once at bootstrap and enforced by the registry-driven engine
+for every operation, not a mechanism a consumer wires by hand per route.
+Every other stage boundary is a seam with a plain default in it until the
+feature behind it lands — seams, not TODOs — which is what makes the
+walking skeleton shippable without stubbing later features as hacks.
 
 ## 5. Module responsibilities (inside `@kavo/core`)
 
@@ -255,7 +261,10 @@ Kavo is **not**:
 - a GraphQL layer;
 - a validation subsystem — DTOs are shapes; teams wire NestJS's own
   `ValidationPipe` if they want validation;
-- a policy/authorization layer — `principal` is carried, never judged;
+- a role/permission modeling or policy-evaluation _engine_ — `policy`
+  (ADR-0032) enforces a rule an application already declared, it does not
+  decide what a role means, mint permissions, or maintain a Casbin/OpenFGA-
+  style policy store;
 - an event/hook system or audit trail.
 
 ## 9. ADR index
@@ -280,12 +289,13 @@ Kavo is **not**:
 
 ## 10. Tradeoff analysis
 
-| Choice                                    | Won                                                                                   | Cost accepted                                                                                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| No hooks/validation/policy stages (v6)    | A lean, comprehensible pipeline; fewer mechanisms to learn                            | Cross-cutting behavior lives in consumer code; teams wanting interception must wrap the service                                           |
-| Contracts complete up front               | Later work never mutates core types; adapters/bindings build against a stable surface | Some contracts (relations, bulk) ship before their implementations; risk of design-before-feedback, mitigated by shipping vertical slices |
-| Registry as the single dispatch mechanism | Disable/override/custom and route generation all fall out of one table                | Even built-ins pay the indirection; slightly more machinery in the minimal path                                                           |
-| AST-based filtering with allowlists       | ORM independence, injection-safe by construction, 400s instead of silent drops        | A parser/translator pair to maintain; wire grammar is a public contract                                                                   |
-| Bootstrap-frozen config                   | Zero per-request merge cost; config errors fail fast with entity + key path           | No runtime reconfiguration; anything dynamic must be a per-call parameter                                                                 |
-| `limit`/`offset` flat in the envelope     | Request/response symmetry; every consumer needs them                                  | Envelope is less "pure" than an all-meta design; committed — it's normative                                                               |
-| Explicit `{ ctx }` transaction passing    | Visible, typed, testable data flow                                                    | More verbose than ALS ambience; ALS ships later as opt-in convenience only                                                                |
+| Choice                                          | Won                                                                                                           | Cost accepted                                                                                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| No hooks/validation stages (v6)                 | A lean, comprehensible pipeline; fewer mechanisms to learn                                                    | Cross-cutting behavior lives in consumer code; teams wanting interception must wrap the service                                           |
+| A policy stage, but no policy engine (ADR-0032) | Authorization rules live in `@Kavo` config next to the operation they gate, uniformly across REST/GraphQL/MCP | Kavo still models no roles/permissions of its own; `owner`/`when` cost an extra read on a single-row write                                |
+| Contracts complete up front                     | Later work never mutates core types; adapters/bindings build against a stable surface                         | Some contracts (relations, bulk) ship before their implementations; risk of design-before-feedback, mitigated by shipping vertical slices |
+| Registry as the single dispatch mechanism       | Disable/override/custom and route generation all fall out of one table                                        | Even built-ins pay the indirection; slightly more machinery in the minimal path                                                           |
+| AST-based filtering with allowlists             | ORM independence, injection-safe by construction, 400s instead of silent drops                                | A parser/translator pair to maintain; wire grammar is a public contract                                                                   |
+| Bootstrap-frozen config                         | Zero per-request merge cost; config errors fail fast with entity + key path                                   | No runtime reconfiguration; anything dynamic must be a per-call parameter                                                                 |
+| `limit`/`offset` flat in the envelope           | Request/response symmetry; every consumer needs them                                                          | Envelope is less "pure" than an all-meta design; committed — it's normative                                                               |
+| Explicit `{ ctx }` transaction passing          | Visible, typed, testable data flow                                                                            | More verbose than ALS ambience; ALS ships later as opt-in convenience only                                                                |

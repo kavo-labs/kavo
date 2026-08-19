@@ -3,7 +3,8 @@ import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver } from "../dto/dto.js";
-import type { OperationId } from "../operations/operation.js";
+import type { OperationId, StandardOperationId } from "../operations/operation.js";
+import type { PolicyNode } from "../policy/kavo-policy.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
@@ -90,4 +91,13 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * reads and writes it when `settings.cache.ttl` is positive (ADR-0031).
    */
   readonly cacheStore: CacheStore;
+  /**
+   * Resolved authorization, keyed by standard operation id (ADR-0032):
+   * entity-scope `policy.<id>` with `operations.<id>.policy` merged in
+   * where present, normalized from the array shorthand. An id absent here
+   * runs unrestricted — the engine's policy stage looks up
+   * `policy[operation]` and skips straight to the handler when it finds
+   * nothing.
+   */
+  readonly policy: Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>>;
 }

@@ -9,6 +9,22 @@ export type StandardOperationId =
   "createOne" | "findOne" | "findMany" | "updateOne" | "patchOne" | "deleteOne" | "restoreOne" | "purgeOne";
 
 /**
+ * The standard ids as a runtime array, in the same order declared above —
+ * the single source of truth for anything that must iterate every standard
+ * operation (policy resolution's bare-verb mapping, ADR-0032).
+ */
+export const STANDARD_OPERATION_IDS: readonly StandardOperationId[] = [
+  "createOne",
+  "findOne",
+  "findMany",
+  "updateOne",
+  "patchOne",
+  "deleteOne",
+  "restoreOne",
+  "purgeOne",
+] as const;
+
+/**
  * Any operation id — standard or custom. The `string & {}`
  * branch keeps literal-union completions for the standard ids while
  * admitting arbitrary custom names.

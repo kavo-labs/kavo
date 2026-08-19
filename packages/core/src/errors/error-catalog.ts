@@ -66,6 +66,11 @@ export const ERROR_CATALOG = {
     title: "Not found",
     message: "{entity} with id '{id}' was not found.",
   },
+  KAVO_FORBIDDEN: {
+    status: 403,
+    title: "Forbidden",
+    message: "The current principal is not permitted to {operation} {entity}.",
+  },
   KAVO_CONFLICT: {
     status: 409,
     title: "Conflict",
