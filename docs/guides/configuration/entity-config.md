@@ -47,4 +47,4 @@ import { and, owner, permission } from "@kavo/core";
 })
 ```
 
-`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. See [Wiring your own auth](/guides/wiring-your-own-auth) for the full `permission`/`role`/`owner`/`authenticated`/`when`/`and`/`or`/`not` reference.
+`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. See [Policy](/features/policy) for the node reference and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.

@@ -157,6 +157,7 @@ const config = defineConfig({
           { text: "Result Cache", link: "/features/result-cache" },
           { text: "Allowlists", link: "/features/allowlists" },
           { text: "Computed Fields", link: "/features/computed-fields" },
+          { text: "Policy", link: "/features/policy" },
         ],
       },
       {
