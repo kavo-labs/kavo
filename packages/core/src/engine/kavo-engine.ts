@@ -286,15 +286,16 @@ export class KavoEngine<Entity extends object> {
     // a stale cache read, and a read that sends `If-None-Match` still gets
     // its 304 answered against the *cached* representation's current ETag
     // (ADR-0031). Reads only; write responses are never cached.
-    if (query !== null && this.isCacheableRead(descriptor, configView)) {
-      const cached = await this.readCache(
-        descriptor.id,
-        request.id,
-        request.options?.principal,
-        query,
-        configView,
-        preconditions,
-      );
+    //
+    // Computed once: neither `descriptor` nor `configView` changes for the
+    // rest of `run`, so the cacheability check and the key itself are good
+    // for both the read below and the store after the handler runs.
+    const cacheKey =
+      query !== null && this.isCacheableRead(descriptor, configView)
+        ? this.cacheKey(descriptor.id, request.id, request.options?.principal, query)
+        : null;
+    if (cacheKey !== null) {
+      const cached = await this.readCache(cacheKey, configView, preconditions);
       if (cached !== null) return cached;
     }
 
@@ -310,8 +311,8 @@ export class KavoEngine<Entity extends object> {
     if (descriptor.kind === "write") await this.invalidateCache(configView);
 
     const response = await this.mapResponse(descriptor, result, context, preconditions);
-    if (query !== null && this.isCacheableRead(descriptor, configView)) {
-      await this.storeCache(descriptor.id, request.id, request.options?.principal, query, configView, response);
+    if (cacheKey !== null) {
+      await this.storeCache(cacheKey, configView, response);
     }
     await this.emitRealtimeEvent(descriptor, request, input, result, response, context);
     return response;
@@ -526,25 +527,20 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
-   * The cache lookup half of a read. A hit returns the full response; a
-   * miss returns `null` and the caller runs the pipeline. Everything the
-   * store can throw — or fail to serve correctly — falls back to that same
-   * `null`, so a broken cache backend costs a read its hit, never the read
-   * itself (ADR-0031: cache failures degrade, never fail).
+   * The cache lookup half of a read, keyed by `cacheKey`'s result. A hit
+   * returns the full response; a miss returns `null` and the caller runs
+   * the pipeline. Everything the store can throw — or fail to serve
+   * correctly — falls back to that same `null`, so a broken cache backend
+   * costs a read its hit, never the read itself (ADR-0031: cache failures
+   * degrade, never fail).
    */
   private async readCache(
-    operationId: OperationId,
-    requestId: unknown,
-    principal: unknown,
-    query: NormalizedQueryContext<Entity>,
+    key: string,
     config: ResolvedEntityConfig<Entity>,
     preconditions: RequestPreconditions | null,
   ): Promise<KavoResponse | null> {
     try {
-      const cached = await config.cacheStore.get(
-        config.entityName,
-        this.cacheKey(operationId, requestId, principal, query),
-      );
+      const cached = await config.cacheStore.get(config.entityName, key);
       if (cached === null) return null;
       return await this.responseFromCache(cached, config, preconditions);
     } catch {
@@ -583,21 +579,14 @@ export class KavoEngine<Entity extends object> {
     };
   }
 
-  /** The store half of a read: the response the pipeline just produced. */
-  private async storeCache(
-    operationId: OperationId,
-    requestId: unknown,
-    principal: unknown,
-    query: NormalizedQueryContext<Entity>,
-    config: ResolvedEntityConfig<Entity>,
-    response: KavoResponse,
-  ): Promise<void> {
+  /** The store half of a read, keyed by `cacheKey`'s result: the response the pipeline just produced. */
+  private async storeCache(key: string, config: ResolvedEntityConfig<Entity>, response: KavoResponse): Promise<void> {
     const settings = this.cacheSettings(config);
     if (settings === null) return;
     try {
       await config.cacheStore.set(
         config.entityName,
-        this.cacheKey(operationId, requestId, principal, query),
+        key,
         // Clone before storing: `response` is the very object `run` hands
         // the originating caller, and one caller mutating a returned item
         // must not corrupt what every later caller reads. The hit path
