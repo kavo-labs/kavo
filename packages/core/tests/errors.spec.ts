@@ -7,6 +7,7 @@ import {
   ArrayMutationMemberNotFoundException,
   ConfigurationException,
   ConflictException,
+  ForbiddenException,
   KavoException,
   DefaultErrorHandler,
   ERROR_CATALOG,
@@ -38,6 +39,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_QUERY_UNSUPPORTED_PARAM: { status: 400, title: "Unsupported query parameter" },
   KAVO_QUERY_CONFLICTING_PARAMS: { status: 400, title: "Conflicting query parameters" },
   KAVO_NOT_FOUND: { status: 404, title: "Not found" },
+  KAVO_FORBIDDEN: { status: 403, title: "Forbidden" },
   KAVO_CONFLICT: { status: 409, title: "Conflict" },
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: { status: 400, title: "Invalid JSON Patch document" },
@@ -130,6 +132,7 @@ describe("renderMessage — message key + params", () => {
 describe("exception hierarchy", () => {
   const leaves = [
     { exception: new NotFoundException(), code: "KAVO_NOT_FOUND", status: 404 },
+    { exception: new ForbiddenException(), code: "KAVO_FORBIDDEN", status: 403 },
     { exception: new ConflictException(), code: "KAVO_CONFLICT", status: 409 },
     { exception: new ArrayMutationInvalidShapeException(), code: "KAVO_ARRAY_MUTATION_INVALID_SHAPE", status: 400 },
     {
