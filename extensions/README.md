@@ -8,15 +8,16 @@ routes, and grammar memorized instead of guessing from source.
 
 Core surface — these apply whatever ORM you are on:
 
-| Skill            | Covers                                                                              |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `quick-start`    | New project from scratch — install, minimal entity, zero-config `@Kavo` (TypeORM)   |
-| `kavo-decorator` | `@Kavo(Entity, config?)` — routes, `EntityConfig`, allowlists, relations, overrides |
-| `global-config`  | `KavoSettings` precedence chain, `KavoModule.forRoot`/`createKavo` wiring           |
-| `query-grammar`  | The `filter`/`sort`/`fields`/pagination/`include` wire grammar                      |
-| `dto-slots`      | The six optional DTO slots and entity-derived defaults                              |
-| `error-handling` | Exception hierarchy, `KAVO_*` codes, the problem-details wire shape                 |
-| `soft-delete`    | Soft delete / restore / purge strategy and semantics                                |
+| Skill            | Covers                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| `quick-start`    | New project from scratch — install, minimal entity, zero-config `@Kavo` (TypeORM)        |
+| `kavo-decorator` | `@Kavo(Entity, config?)` — routes, `EntityConfig`, allowlists, relations, overrides      |
+| `global-config`  | `KavoSettings` precedence chain, `KavoModule.forRoot`/`createKavo` wiring                |
+| `query-grammar`  | The `filter`/`sort`/`fields`/pagination/`include` wire grammar                           |
+| `dto-slots`      | The six optional DTO slots and entity-derived defaults                                   |
+| `error-handling` | Exception hierarchy, `KAVO_*` codes, the problem-details wire shape                      |
+| `soft-delete`    | Soft delete / restore / purge strategy and semantics                                     |
+| `policy`         | Policy authorization DSL — `permission`/`role`/`owner`/`authenticated`/`filtered`/`when` |
 
 Per-ORM wiring — read the one matching your project. Only the entity
 declaration and the `createInfrastructure` call differ between them:

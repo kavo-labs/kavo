@@ -10,7 +10,7 @@
       "name": "kavo-skills",
       "description": "Reference skills for building apps with Kavo — every published package, including per-ORM wiring for TypeORM, Prisma, Mongoose, and MikroORM, and the GraphQL and MCP bindings.",
       "source": "./extensions",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "Kavo Labs"
       }
