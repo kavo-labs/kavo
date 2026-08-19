@@ -6,7 +6,7 @@ import {
   createKavo,
   policyNeedsEntity,
 } from "@kavo/core";
-import { and, authenticated, not, or, owner, permission, role, when } from "@kavo/core";
+import { and, authenticated, filtered, not, or, owner, permission, role, when } from "@kavo/core";
 import { Post, SeededAdapter, postMetadata } from "./support/blog-fixture.js";
 import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
 
@@ -364,6 +364,43 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
     // reuse this response instead of re-checking ownership.
     await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
     await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe("policy — filtered() requires a query filter on a given field", () => {
+  it("denies findMany when the required filter is absent", async () => {
+    const { crud } = makeCrud({ policy: { findMany: filtered("authorId") } } as never);
+    await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("allows findMany when the filter is present, anywhere in the AST", async () => {
+    const { crud } = makeCrud({ policy: { findMany: filtered("authorId") } } as never);
+    await expect(
+      crud.findMany({ filter: { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" } } as never),
+    ).resolves.toMatchObject({ items: [] });
+
+    await expect(
+      crud.findMany({
+        filter: {
+          kind: "group",
+          operator: "AND",
+          children: [
+            { kind: "condition", field: "title", operator: "EQ", value: "a" },
+            { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" },
+          ],
+        },
+      } as never),
+    ).resolves.toMatchObject({ items: [] });
+  });
+
+  it("denies unconditionally on writes, where context.query is null", async () => {
+    const { crud, adapter } = makeCrud({ policy: { updateOne: filtered("authorId") } } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("is not entity-aware — policyNeedsEntity reports false", () => {
+    expect(policyNeedsEntity(filtered("authorId"))).toBe(false);
   });
 });
 

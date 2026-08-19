@@ -244,6 +244,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "describeResolvedConfig",
   "dtoShapeKeys",
   "evaluatePolicy",
+  "filtered",
   "mergeSettings",
   "not",
   "or",

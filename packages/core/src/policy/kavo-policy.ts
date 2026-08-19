@@ -1,4 +1,5 @@
 import type { KavoContext } from "../context/kavo-context.js";
+import type { FilterExpression } from "../query/filter.js";
 
 /**
  * The optional-field shape the built-in policy nodes (`permission`, `role`,
@@ -33,6 +34,7 @@ export type PolicyNode<Entity = unknown> =
   | { readonly type: "role"; readonly name: string }
   | { readonly type: "owner"; readonly field: string }
   | { readonly type: "authenticated" }
+  | { readonly type: "filtered"; readonly field: string }
   | {
       readonly type: "when";
       readonly predicate: (context: KavoContext<Entity>, entity?: Entity) => boolean | Promise<boolean>;
@@ -67,6 +69,28 @@ export function owner<Entity = unknown>(field = "userId"): PolicyNode<Entity> {
 /** `principal.userId != null`. */
 export function authenticated<Entity = unknown>(): PolicyNode<Entity> {
   return { type: "authenticated" };
+}
+
+/**
+ * `context.query.filter` carries a condition on `field` — 403s a read whose
+ * caller omitted a required filter, e.g. `filtered("userId")` on `findMany`
+ * to force every list request to scope itself by `userId`.
+ *
+ * Reads `context.query`, which is only populated on read operations;
+ * `context.query` is `null` on writes, so `filtered` denies unconditionally
+ * there rather than throwing. It does not need the loaded row — it is its
+ * own node type rather than a `when()` wrapper precisely so it stays
+ * context-only: `policyNeedsEntity` returns `false` for it, so (unlike
+ * `owner`/`when`) it is legal on `createOne`/`findMany` too.
+ */
+export function filtered<Entity = unknown>(field: string): PolicyNode<Entity> {
+  return { type: "filtered", field };
+}
+
+function filterHasField(expression: FilterExpression<unknown> | null, field: string): boolean {
+  if (expression === null) return false;
+  if (expression.kind === "condition") return expression.field === field;
+  return expression.children.some((child) => filterHasField(child, field));
 }
 
 /** Escape hatch for a check the other nodes can't express. Not inspectable — see `policyNeedsEntity`'s doc comment. */
@@ -167,6 +191,8 @@ export async function evaluatePolicy<Entity>(
       if (principal.userId == null || entity === undefined) return false;
       return getAtPath(entity, node.field) === principal.userId;
     }
+    case "filtered":
+      return filterHasField(context.query?.filter.root ?? null, node.field);
     case "when":
       return node.predicate(context, entity);
     case "and": {

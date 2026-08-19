@@ -107,6 +107,7 @@ export {
   and,
   authenticated,
   evaluatePolicy,
+  filtered,
   not,
   or,
   owner,
