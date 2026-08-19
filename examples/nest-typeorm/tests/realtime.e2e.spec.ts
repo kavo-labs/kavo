@@ -135,7 +135,11 @@ async function putOwner(id: number, body: Record<string, unknown>): Promise<numb
 }
 
 async function deleteOwner(id: number): Promise<number> {
-  return (await fetch(`${baseUrl}/owners/${id}`, { method: "DELETE" })).status;
+  // Owner's deleteOne requires the owner:delete permission (ADR-0032) —
+  // see owner.controller.ts's `policy` and `OwnerPrincipalGuard`.
+  return (
+    await fetch(`${baseUrl}/owners/${id}`, { method: "DELETE", headers: { "x-permissions": "owner:delete" } })
+  ).status;
 }
 
 async function restoreOwner(id: number): Promise<number> {
@@ -218,7 +222,10 @@ describe("GET /realtime — Owner writes stream over SSE", () => {
       body: JSON.stringify({ name: "Lifecycle Renamed" }),
     });
     expect(patchResponse.status).toBe(200);
-    const deleteResponse = await fetch(`${baseUrl}/owners/${created.id}`, { method: "DELETE" });
+    const deleteResponse = await fetch(`${baseUrl}/owners/${created.id}`, {
+      method: "DELETE",
+      headers: { "x-permissions": "owner:delete" },
+    });
     expect(deleteResponse.status).toBe(204);
     const restoreResponse = await fetch(`${baseUrl}/owners/${created.id}/restore`, { method: "PATCH" });
     expect(restoreResponse.status).toBe(200);

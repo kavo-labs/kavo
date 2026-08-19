@@ -280,7 +280,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const created = await request(server()).post("/owners").send({ name: "Rose", email: "rose@x.io" }).expect(201);
       const id = created.body.id as number;
 
-      await request(server()).delete(`/owners/${id}`).expect(204);
+      await request(server()).delete(`/owners/${id}`).set("x-permissions", "owner:delete").expect(204);
       await request(server()).get(`/owners/${id}`).expect(404);
       const withDeleted = await request(server())
         .get("/owners")
@@ -291,6 +291,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       // A second delete is a state conflict, not a 404.
       await request(server())
         .delete(`/owners/${id}`)
+        .set("x-permissions", "owner:delete")
         .expect(409)
         .expect("Content-Type", /application\/problem\+json/);
 
@@ -300,9 +301,27 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       // Purge takes a soft-deleted row only.
       await request(server()).delete(`/owners/${id}/purge`).expect(409);
-      await request(server()).delete(`/owners/${id}`).expect(204);
+      await request(server()).delete(`/owners/${id}`).set("x-permissions", "owner:delete").expect(204);
       await request(server()).delete(`/owners/${id}/purge`).expect(204);
       await request(server()).patch(`/owners/${id}/restore`).expect(404);
+    });
+
+    it("policy: DELETE /owners/:id requires the owner:delete permission (ADR-0032)", async () => {
+      const created = await request(server()).post("/owners").send({ name: "Zoe", email: "zoe@x.io" }).expect(201);
+      const id = created.body.id as number;
+
+      // No `x-permissions` header at all: `context.principal` is `null`,
+      // same as every other route in this app — permission() denies it.
+      const anonymous = await request(server()).delete(`/owners/${id}`).expect(403);
+      expect(anonymous.body).toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
+
+      // The wrong permission is just as denied as none at all.
+      await request(server()).delete(`/owners/${id}`).set("x-permissions", "owner:read").expect(403);
+
+      // The row is untouched by either denied attempt.
+      await request(server()).get(`/owners/${id}`).expect(200);
+
+      await request(server()).delete(`/owners/${id}`).set("x-permissions", "owner:delete").expect(204);
     });
 
     it("keeps deletedAt out of the filterable, sortable, and selectable allowlists (issue #45)", async () => {
