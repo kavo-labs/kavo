@@ -14,6 +14,7 @@ KavoRequest
  → Query Resolution       reads only: WireQuery → normalizeWire, QueryContext → normalizeInput
  → Context Assembly       KavoContext: identity, config view, principal, transaction ⟨reserved⟩,
                           normalized query, correlationId, typed state bag
+ → Policy                 configured policy.<id> node, if any → 403 (ADR-0032)
  → Precondition Check     If-Match writes only: pre-read + hash → 412 / 404 (ADR-0020)
  → DTO Resolution         descriptor.input/output else the doc-4 slot default
  → Deserialization        writes only: body → allowed-key projection
@@ -24,9 +25,11 @@ KavoRequest
 KavoResponse
 ```
 
-Deliberately lean: no validation stage, no hooks, no policy stage — the
-v6 tradeoff. Cross-cutting behavior lives in the consumer's own code
-around Kavo.
+Deliberately lean: no validation stage, no hooks. Cross-cutting behavior
+otherwise lives in the consumer's own code around Kavo — the v6 tradeoff
+a policy stage alone crossed (ADR-0032): it is one config key resolved
+once at bootstrap and enforced for every operation by the engine itself,
+not a mechanism a consumer wires by hand.
 
 `createOne` and custom **write** operations share one input-resolution
 branch: the deserialized body alone when the request carries no id, or

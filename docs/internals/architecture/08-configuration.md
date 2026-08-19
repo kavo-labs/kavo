@@ -55,10 +55,16 @@ and an etag-only override (`cache: { etag: false }`) leaves the result
 cache off rather than accidentally flipping it on.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`allowlists`, `computed`, `operations`); only the settings subset
+`allowlists`, `computed`, `policy`, `operations`); only the settings subset
 participates in the merge. `computed` carries functions, so like `dto` it
 is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
+`policy` is the same shape of exception, for the same reason (a `when()`
+node carries a closure): it is entity-scope with one narrower override,
+`operations.<id>.policy`, but — unlike every ordinary settings key — takes
+**no** per-call override at all, since a per-call parameter that could
+loosen a policy would let a caller weaken its own authorization. See
+[ADR-0032](/internals/adr/0032-policy-authorization-dsl).
 
 **`operations` is a special case, at two different scopes.** At _global_
 scope, `KavoSettings.operations` is a plain boolean map
@@ -96,8 +102,8 @@ per-operation views behind `settingsFor(operation)`, resolved allowlists
 fields), the default response `projection` (`null` unless
 `allowlists.selectable` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
-the cached `DtoResolver`, the validated `computed` map, and the
-relation registry. There is no runtime mutation API — per-call
+the cached `DtoResolver`, the validated `computed` map, the resolved
+`policy` map (ADR-0032), and the relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the
 request.
@@ -142,6 +148,24 @@ bootstrap rather than as a surprising response later
   class — the value could only ever be discarded, and the DTO's runtime
   shape is what `@kavo/nest` builds `@ApiBody` from, so OpenAPI would
   advertise a property the engine unconditionally drops.
+
+### `policy`
+
+An `owner`/`when` node — the two whose result depends on the loaded row,
+not only on `context` — configured on `createOne` or `findMany` fails at
+bootstrap ([ADR-0032](/internals/adr/0032-policy-authorization-dsl)): the
+former has no row yet, the latter resolves a set rather than one. The
+error names the entity and the `policy.<id>` path, the same bar every
+other entry in this section holds to. `permission`/`role`/`authenticated`
+are context-only and legal everywhere.
+
+Three more `policy` shapes fail the same way rather than silently
+misbehaving at request time: an `owner(field)` whose first dotted segment
+names a relation (the pre-fetch loads no relations, so it could never
+pass); an empty-array shorthand (`policy: { updateOne: [] }` is a vacuous
+`and()` — always allow, not the lockdown it reads as); and a `policy.<key>`
+that isn't one of the eight standard operation ids (a typo that would
+otherwise protect nothing).
 
 ### `query.defaultSort`
 
