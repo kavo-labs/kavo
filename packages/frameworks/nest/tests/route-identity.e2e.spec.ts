@@ -1,7 +1,17 @@
 import "reflect-metadata";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import { Controller, Get, UseGuards, UseInterceptors, type CallHandler, type CanActivate, type ExecutionContext, type INestApplication, type NestInterceptor } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  UseGuards,
+  UseInterceptors,
+  type CallHandler,
+  type CanActivate,
+  type ExecutionContext,
+  type INestApplication,
+  type NestInterceptor,
+} from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { Observable } from "rxjs";
 import type { OperationId, WireQuery } from "@kavo/core";
@@ -165,7 +175,9 @@ describe("getResource/getOperation — a synthesized arrayMutation sub-collectio
     @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
     class PostController {}
 
-    const handler = (PostController.prototype as Record<string, unknown>).replaceTags as (...args: unknown[]) => unknown;
+    const handler = (PostController.prototype as Record<string, unknown>).replaceTags as (
+      ...args: unknown[]
+    ) => unknown;
     const context = contextFor(handler, PostController);
     expect(getResource(context)).toBe("Post");
     expect(getOperation(context)).toBe("replaceTags");
