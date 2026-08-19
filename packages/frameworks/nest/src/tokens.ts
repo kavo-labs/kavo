@@ -15,6 +15,14 @@ export const KAVO_CONTROLLER_METADATA = "kavo:controller";
 export const KAVO_OVERRIDE_METADATA = "kavo:override";
 
 /**
+ * Reflect metadata key `applyRouteDecorators` writes on every route method,
+ * generated or `@Override`'d: the `OperationId` the route serves, for
+ * `getOperation`/`getResource` to read off an `ExecutionContext` before the
+ * engine's own `KavoContext` exists (issue #238).
+ */
+export const KAVO_OPERATION_METADATA = "kavo:operation";
+
+/**
  * Reflect metadata key the `@Kavo` decorator writes on controllers: the
  * routes whose conditional-request Swagger docs (ADR-0020) couldn't be
  * decided at decoration time, for `KavoModule`'s discovery binder to finish
