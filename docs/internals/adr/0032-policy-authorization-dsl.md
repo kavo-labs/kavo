@@ -171,9 +171,11 @@ Both are **out of v1**:
   **plus `item` and `list`** for the two read operations — not a unified
   `find` — because `item`/`list` are the actual DTO slot names
   (`CLAUDE.md` Conventions) and `findOne`/`findMany` do not share a slot
-  the way `createOne`/`createMany` share `create`. Getting this mapping
-  right needs its own issue once the AST/config groundwork here is used in
-  practice.
+  the way `createOne`/`createMany` share `create`. The mapping itself is
+  decided and codified now, in `STANDARD_OPERATION_VERB`
+  (`operation.ts`) — internal, unread by anything until Level 3 lands —
+  so the follow-up issue implements against a settled name, not a fresh
+  design question.
 - `filter()`'s operation-level denial (no scoping filter configured at all)
   is a different failure shape from `owner`/`when`'s row-level denial
   (a specific row exists but this caller isn't its owner) — this ADR's own
