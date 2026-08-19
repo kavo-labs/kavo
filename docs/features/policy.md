@@ -27,6 +27,7 @@ The array shorthand is `and(...names.map(permission))`: `["post:read"]` is a bar
 | `role(name)`                        | `principal.roles` contains `name`                                                      |
 | `authenticated()`                   | `principal.userId` is set                                                              |
 | `owner(field = "userId")`           | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
+| `filtered(field)`                   | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
 | `when((context, entity?) => ...)`   | the predicate returns `true`                                                           |
 | `and(...)` / `or(...)` / `not(...)` | short-circuit composition; `not` negates its single child                              |
 
@@ -35,6 +36,8 @@ Every built-in node reads `context.principal` cast to a `KavoPrincipal` shape: o
 ## Config placement
 
 `policy` is entity-scope config on `@Kavo(Entity, config)`, keyed by standard operation id. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. There is no global `policy` and no per-call override: like `computed`, a `when()` predicate carries a closure, so the key lives outside the settings precedence chain, and a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) lists the field among `@Kavo`'s own keys.
+
+`filtered(field)` reads `context.query.filter` rather than the loaded row, so — unlike `owner`/`when` — it is not entity-aware and carries no restriction on which operations may use it. It is only meaningful on read operations: `context.query` is `null` on a write, so `filtered` denies unconditionally there rather than throwing. Use it to force a list request to scope itself, e.g. `policy: { findMany: filtered("userId") }` 403s a `GET /posts` whose query omits a `userId` filter. Like `policy` generally, `filtered` gates whether the operation runs at all — it is not row-scoping: a caller who supplies `userId` still sees whatever rows that filter matches, not only their own, so pair it with `owner`/`when` (or an application-level default filter) if the requirement is "only your own rows," not just "some `userId` filter is present."
 
 ## Entity-aware nodes
 
