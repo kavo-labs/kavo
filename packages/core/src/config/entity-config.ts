@@ -154,9 +154,11 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
    */
   readonly dto?: DtoOverride;
   /**
-   * Overrides the entity's root `policy.<id>` entry for this operation only
-   * (ADR-0032) — the same fallback shape `dto` uses, one level narrower.
-   * `owner`/`when` nodes are only meaningful here on a single-row operation
+   * Authorization for this operation (ADR-0032, amended by ADR-0033) — the
+   * only surface `policy` is configured on; there is no entity-scope
+   * `policy` map to fall back to. Absent, the operation runs unrestricted:
+   * the same opt-in posture every other Kavo default takes. `owner`/`when`
+   * nodes are only meaningful on a single-row operation
    * (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`);
    * on `createOne`/`findMany` they are a bootstrap `ConfigurationException`
    * (`resolveEntityConfig`), since no single entity exists yet to check.
@@ -372,16 +374,6 @@ export interface EntityConfig<
    */
   readonly computed?: Readonly<Record<Computed, ComputedFieldDescriptor<Entity>>>;
   readonly allowlists?: QueryAllowlists<Entity, NoInfer<Computed>>;
-  /**
-   * Authorization, keyed by standard operation id (ADR-0032) — structural
-   * entity-scope config like `computed`, deliberately outside the settings
-   * precedence chain because a `when()` node carries a closure. An id
-   * absent here runs unrestricted, the same opt-in posture every other
-   * Kavo default takes: adding a `policy` entry is how an entity opts in,
-   * not a global switch to flip. `operations.<id>.policy` overrides this
-   * per operation, the same fallback `dto` uses.
-   */
-  readonly policy?: Readonly<Partial<Record<StandardOperationId, PolicyShorthand<Entity>>>>;
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an

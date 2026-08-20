@@ -81,9 +81,7 @@ import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
   operations: {
     purgeOne: true,
     restoreOne: true,
-  },
-  policy: {
-    deleteOne: ["owner:delete"],
+    deleteOne: { policy: ["owner:delete"] },
   },
 })
 @Controller("owners")

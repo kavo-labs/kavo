@@ -25,9 +25,8 @@ export interface KavoPrincipal {
  * `authenticated`/`when` and composed with `and`/`or`/`not` — every node is
  * plain, inspectable data except `when`, which necessarily holds a closure
  * (there is no way to make an arbitrary predicate inspectable). A resolved
- * `EntityConfig.policy`/`OperationConfig.policy` entry is one of these,
- * evaluated by the engine's policy stage before a request reaches its
- * handler.
+ * `OperationConfig.policy` entry is one of these, evaluated by the engine's
+ * policy stage before a request reaches its handler.
  */
 export type PolicyNode<Entity = unknown> =
   | { readonly type: "permission"; readonly name: string }
