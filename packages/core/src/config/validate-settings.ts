@@ -142,7 +142,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       throw new ConfigurationException(
         entityName,
         "cache",
-        `expected { ttl: number, etag: boolean | { enabled: boolean } } or false, got ${JSON.stringify(cache)} — ` +
+        `expected { ttl: number, etag: boolean } or false, got ${JSON.stringify(cache)} — ` +
           `to turn result caching and ETags off together, set 'cache' to false`,
       );
     }
@@ -153,18 +153,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected a non-negative integer (0 disables the result cache), got ${JSON.stringify(cache.ttl)}`,
       );
     }
-    const etag = cache.etag;
-    if (etag === true || etag === false) {
-      // boolean shorthand; nothing more to check
-    } else if (typeof etag === "object" && etag !== null) {
-      bool("cache.etag.enabled", etag.enabled);
-    } else {
-      throw new ConfigurationException(
-        entityName,
-        "cache.etag",
-        `expected true, false, or { enabled: boolean }, got ${JSON.stringify(etag)}`,
-      );
-    }
+    bool("cache.etag", cache.etag);
   }
 
   if (settings.softDelete !== false) {

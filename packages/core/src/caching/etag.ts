@@ -14,16 +14,14 @@ import type { CacheSettings } from "../config/settings.js";
 /**
  * Whether the conditional-request machinery is on for a resolved `cache`
  * subtree (ADR-0031). `cache: false` turns etags off with the whole
- * subtree; otherwise `etag` answers — boolean shorthand or the object
- * form — independent of `cache.ttl`, so an entity with result caching
- * off still serves ETags. The engine and the framework layer both need
- * this resolved answer, which is why it lives here rather than in either.
+ * subtree; otherwise `etag` answers directly, independent of `cache.ttl`,
+ * so an entity with result caching off still serves ETags. The engine and
+ * the framework layer both need this resolved answer, which is why it
+ * lives here rather than in either.
  */
 export function isEtagEnabled(cache: CacheSettings | false): boolean {
   if (cache === false) return false;
-  if (cache.etag === true) return true;
-  if (cache.etag === false) return false;
-  return cache.etag.enabled;
+  return cache.etag;
 }
 
 /**
