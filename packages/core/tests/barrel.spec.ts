@@ -133,7 +133,6 @@ const PUBLIC_SURFACE: readonly string[] = [
   "JsonPatchTargetNotFoundException",
   "KavoPrincipal",
   "PolicyNode",
-  "PolicyShorthand",
   "cursorValuesOf",
   "encodeCursor",
   "evaluateFilter",

@@ -13,7 +13,7 @@ import type { CacheStore } from "../caching/cache-store.js";
 import type { PolicyNode } from "../policy/kavo-policy.js";
 import { createMemoryCacheStore } from "../caching/cache-store.js";
 import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
-import { collectOwnerFields, normalizePolicyShorthand, policyNeedsEntity } from "../policy/kavo-policy.js";
+import { collectOwnerFields, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
@@ -171,13 +171,10 @@ function rejectLegacyEntityLevelPolicy(entityName: string, entityConfig: EntityC
 
 /**
  * Resolve `policy`: `operations.<id>.policy` alone (ADR-0033 — there is no
- * entity-scope 'policy' map to fall back to), normalized from the array
- * shorthand, and validated against {@link ENTITY_AWARE_POLICY_FORBIDDEN}
- * (ADR-0032). Also rejects, at bootstrap: an empty-array shorthand
- * (`policy: []` reads like "lock this down" but an empty `and()` is
- * vacuously `true` — always allow, the opposite of what it looks like); and
- * an `owner(field)` whose first dotted segment names a relation (the
- * pre-fetch loads no relations, so it would silently deny every caller
+ * entity-scope 'policy' map to fall back to), validated against
+ * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032). Also rejects, at
+ * bootstrap: an `owner(field)` whose first dotted segment names a relation
+ * (the pre-fetch loads no relations, so it would silently deny every caller
  * instead of ever passing).
  */
 function resolvePolicy<Entity extends object>(
@@ -191,20 +188,11 @@ function resolvePolicy<Entity extends object>(
   const resolved: Partial<Record<StandardOperationId, PolicyNode<Entity>>> = {};
   for (const id of STANDARD_OPERATION_IDS) {
     const operationConfig = entityConfig?.operations?.[id];
-    const shorthand =
+    const node =
       typeof operationConfig === "object" && operationConfig !== null
         ? (operationConfig as OperationConfig<Entity>).policy
         : undefined;
-    if (shorthand === undefined) continue;
-    if (Array.isArray(shorthand) && shorthand.length === 0) {
-      throw new ConfigurationException(
-        entityName,
-        `operations.${id}.policy`,
-        `an empty permission array allows every caller — vacuously true, the opposite of what it reads as. ` +
-          `Name at least one permission, or omit 'policy' from '${id}' to leave it genuinely unrestricted`,
-      );
-    }
-    const node = normalizePolicyShorthand(shorthand);
+    if (node === undefined) continue;
     if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
       throw new ConfigurationException(
         entityName,
