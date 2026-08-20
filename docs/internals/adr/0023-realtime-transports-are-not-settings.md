@@ -54,12 +54,17 @@ from `SETTINGS_KEYS` — the subset `pickSettings` merges from `EntityConfig`
 `softDelete`/`relations`/every other key already is: enablement and rules,
 never behavior.
 
-`RealtimeSettings` keeps `enabled`, `events`, `subscribableFields`, and
+`RealtimeSettings` keeps `events`, `subscribableFields`, and
 `onPublishError` (a function — already safe, since `deepFreeze`'s
 `typeof value === "object"` guard never touches functions in the first
 place) — the actual configuration, still merged through the normal
 precedence chain and still `false`-disables-the-subtree like `softDelete`.
 Only the live objects moved out.
+
+(Issue #247 later removed the `enabled` key this ADR originally listed
+alongside `events`: `realtime: false` was already the one way to disable the
+subtree, so a separate `enabled: boolean` inside it was redundant state.
+`realtime: { ... }` — any object — is now the sole way to turn it on.)
 
 ## Consequences
 

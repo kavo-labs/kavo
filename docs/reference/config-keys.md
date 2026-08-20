@@ -81,13 +81,12 @@ See [Soft delete](/features/soft-delete).
 
 ## realtime
 
-| Key                           | Type                                        | Default              |
-| ----------------------------- | ------------------------------------------- | -------------------- |
-| `realtime`                    | `{ enabled, events?, ... } \| false`        | `{ enabled: false }` |
-| `realtime.enabled`            | `boolean`                                   | `false`              |
-| `realtime.events`             | `Partial<Record<RealtimeEventId, boolean>>` | `{}`                 |
-| `realtime.subscribableFields` | `string[] \| { exclude: string[] }`         | unset                |
-| `realtime.onPublishError`     | `(error, transport, event) => void`         | unset                |
+| Key                           | Type                                        | Default |
+| ----------------------------- | ------------------------------------------- | ------- |
+| `realtime`                    | `{ events?, ... } \| false`                 | `false` |
+| `realtime.events`             | `Partial<Record<RealtimeEventId, boolean>>` | unset   |
+| `realtime.subscribableFields` | `string[] \| { exclude: string[] }`         | unset   |
+| `realtime.onPublishError`     | `(error, transport, event) => void`         | unset   |
 
 See [Realtime events](/features/realtime-events).
 

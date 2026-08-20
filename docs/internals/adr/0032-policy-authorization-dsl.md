@@ -101,7 +101,7 @@ point.
   entity-scope surface this precedence rule was between).
 - An operation id absent from the resolved map runs **unrestricted** — the
   same opt-in posture every other Kavo default takes (`exposeInternals`,
-  `realtime.enabled`, …). Adding a `policy` entry is how an entity opts in;
+  `realtime`, …). Adding a `policy` entry is how an entity opts in;
   there is no global switch.
 
 Custom operations (issue #145) are **out of scope for this ADR** — their

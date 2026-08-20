@@ -361,8 +361,10 @@ becomes optional (`strategy?: ArrayMutationStrategy`) rather than required.
 `BUILT_IN_DEFAULTS.arrayMutation` is now the empty object `{}`, not `{
 strategy: "replace" }` — still an object rather than `false`, so a partial
 `arrayMutation: {...}` override still merges against a complete base instead
-of replacing a `false` wholesale (the same reasoning `realtime`'s object
-default already documents). `arrayMutation: false` (feature off wholesale)
+of replacing a `false` wholesale (the same reasoning `cache`'s `ttl: 0`
+object default documents; `realtime`'s own default became `false` itself in
+issue #247, since it had no other key left once the redundant `enabled`
+switch was removed). `arrayMutation: false` (feature off wholesale)
 and `arrayMutation: {}`/`{ strategy: undefined }` (feature on, no strategy
 chosen yet) stay two different states: only the first disables the feature;
 the second still lets an entity with no write-opted relations resolve

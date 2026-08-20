@@ -8,7 +8,7 @@ transport of its own (ADR-0005). `@kavo/sse` is the first one.
 const kavo = createKavo({
   infrastructure,
   realtimeTransports: [sse],
-  defaults: { realtime: { enabled: true, events: { created: true, updated: true } } },
+  defaults: { realtime: { events: { created: true, updated: true } } },
 });
 ```
 

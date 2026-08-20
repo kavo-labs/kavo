@@ -62,7 +62,7 @@ import { hasPermission } from "./owner.policy.js";
     list: OwnerListDto,
   },
   cache: { etag: false },
-  realtime: { enabled: true, events: {} },
+  realtime: { events: {} },
   softDelete: { strategy: "soft" },
   query: { search: { enabled: true } },
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a

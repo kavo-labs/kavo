@@ -352,7 +352,7 @@ describe("KavoModule.forRoot({ realtimeTransports }) — a registered transport 
     }
   }
 
-  @Kavo(Todo, { realtime: { enabled: true, events: {} } })
+  @Kavo(Todo, { realtime: { events: {} } })
   @Controller("todos")
   class RealtimeController {}
 
@@ -397,7 +397,7 @@ describe("KavoModule.forRoot({ realtimeTransports }) — a registered transport 
     expect(first.events[0]?.id).toBe(second.events[0]?.id);
   });
 
-  it("does not publish for an entity whose own realtime.enabled is false, even with a transport registered", async () => {
+  it("does not publish for an entity whose own realtime is false, even with a transport registered", async () => {
     // `RealtimeController` above turns realtime on; this one, over the same
     // Todo entity, deliberately doesn't — proving the transport registration
     // alone never turns realtime on for an entity that didn't ask for it.

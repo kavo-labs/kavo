@@ -492,10 +492,10 @@ export class KavoEngine<Entity extends object> {
     if (eventId === undefined) return;
 
     const realtime = context.config.settings.realtime;
-    if (realtime === false || !realtime.enabled) return;
+    if (realtime === false) return;
     const transports = context.config.realtimeTransports;
     if (transports.length === 0) return;
-    if (realtime.events[eventId] === false) return;
+    if (realtime.events?.[eventId] === false) return;
 
     const id = this.realtimeEntityId(descriptor.id as StandardOperationId, request, result);
     if (id === undefined) return;

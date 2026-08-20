@@ -41,22 +41,32 @@ describe("realtime — engine emit hook", () => {
     expect(created).toMatchObject({ name: "Ada" });
   });
 
-  it("does not throw when enabled but no transports are registered", async () => {
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, []);
+  it("does not throw when realtime is on but no transports are registered", async () => {
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, []);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(created).toMatchObject({ name: "Ada" });
   });
 
+  it("publishes when realtime is turned on with `events` entirely omitted (issue #247)", async () => {
+    // Regression: `BUILT_IN_DEFAULTS.realtime` is `false`, so `{ realtime: {} }`
+    // has no complete base to merge `events` in from — the engine must not
+    // require `events` to be present to consider realtime on.
+    const transport = new FakeTransport();
+    const { crud } = makeCrud({ realtime: {} } as never, [transport]);
+    await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
+    expect(transport.events).toHaveLength(1);
+  });
+
   it("does not publish when realtime is disabled even with a transport registered", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: false, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: false } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(transport.events).toHaveLength(0);
   });
 
   it("does not publish for read operations", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     transport.events.splice(0, transport.events.length);
     await crud.findOne(1);
@@ -66,7 +76,7 @@ describe("realtime — engine emit hook", () => {
 
   it("publishes a 'created' event with the full serialized item after createOne", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     const before = Date.now();
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
 
@@ -83,7 +93,7 @@ describe("realtime — engine emit hook", () => {
 
   it("publishes an 'updated' event naming the changed fields after updateOne", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     transport.events.splice(0, transport.events.length);
 
@@ -100,7 +110,7 @@ describe("realtime — engine emit hook", () => {
 
   it("publishes a 'patched' event naming only the patched fields after patchOne", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     transport.events.splice(0, transport.events.length);
 
@@ -115,7 +125,7 @@ describe("realtime — engine emit hook", () => {
 
   it("publishes a 'deleted' event with item: null after deleteOne", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     transport.events.splice(0, transport.events.length);
 
@@ -137,7 +147,7 @@ describe("realtime — engine emit hook", () => {
       Account,
       {
         operations: { restoreOne: true, purgeOne: true },
-        realtime: { enabled: true, events: {} },
+        realtime: { events: {} },
       } as never,
       { adapter, metadata: accountMetadata },
     );
@@ -156,7 +166,7 @@ describe("realtime — engine emit hook", () => {
 
   it("suppresses one event id via events: { <id>: false } while others still emit", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: { patched: false } } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: { patched: false } } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     await crud.patchOne(1, { age: 37 } as never);
     await crud.updateOne(1, { name: "Ada L.", email: "a@x.io", age: 37, status: "active" } as never);
@@ -168,7 +178,7 @@ describe("realtime — engine emit hook", () => {
   it("publishes to every registered transport", async () => {
     const first = new FakeTransport();
     const second = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [first, second]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [first, second]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
 
     expect(first.events).toHaveLength(1);
@@ -177,7 +187,7 @@ describe("realtime — engine emit hook", () => {
   });
 
   it("never fails the mutation when a transport's publish rejects", async () => {
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [new FailingTransport()]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [new FailingTransport()]);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(created).toMatchObject({ name: "Ada" });
   });
@@ -187,7 +197,6 @@ describe("realtime — engine emit hook", () => {
     const { crud } = makeCrud(
       {
         realtime: {
-          enabled: true,
           events: {},
           onPublishError: (error: unknown, transport: RealtimeTransport, event: RealtimeEventDto) => {
             failures.push({ error, transportName: transport.name, event: event.event });
@@ -209,7 +218,6 @@ describe("realtime — engine emit hook", () => {
     const { crud } = makeCrud(
       {
         realtime: {
-          enabled: true,
           events: {},
           onPublishError: () => {
             throw new Error("logging itself failed");
@@ -226,7 +234,7 @@ describe("realtime — engine emit hook", () => {
     const globalTransport = new FakeTransport();
     const adapter = new InMemoryUserAdapter();
     const kavo = createKavo({
-      defaults: { realtime: { enabled: true, events: {} } },
+      defaults: { realtime: { events: {} } },
       realtimeTransports: [globalTransport],
     } as never);
     const crud = kavo.createCrud(User, { realtime: { events: { created: false } } } as never, {
@@ -236,9 +244,10 @@ describe("realtime — engine emit hook", () => {
 
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
 
-    // The entity scope only overrode `events`, so `enabled: true` from the
-    // global default is still in force — proving `realtime` participates
-    // in the same merge chain every other settings key does (SETTINGS_KEYS).
+    // The entity scope only overrode `events`, so the global default's
+    // realtime object (as opposed to `false`) is still in force — proving
+    // `realtime` participates in the same merge chain every other settings
+    // key does (SETTINGS_KEYS).
     expect(globalTransport.events).toHaveLength(0);
     await crud.patchOne(1, { age: 37 } as never);
     expect(globalTransport.events).toHaveLength(1);
@@ -247,7 +256,7 @@ describe("realtime — engine emit hook", () => {
 
   it("does not freeze a registered transport's own state (deepFreeze stays shallow on live objects)", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     await crud.createOne({ name: "Eve", email: "e@x.io", age: 21 } as never);
     // Two pushes onto the same transport's own array — this only stays
@@ -272,7 +281,7 @@ describe("realtime — collection-channel support (issue #160)", () => {
 
   it("publishes an event whose 'entity' a transport can use as the collection-channel name, unchanged by any per-item channel", async () => {
     const transport = new FakeTransport();
-    const { crud } = makeCrud({ realtime: { enabled: true, events: {} } } as never, [transport]);
+    const { crud } = makeCrud({ realtime: { events: {} } } as never, [transport]);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     await crud.createOne({ name: "Grace", email: "g@x.io", age: 40 } as never);
 

@@ -29,7 +29,8 @@ export interface KavoModuleOptions {
    * is, threaded through unchanged. Registered once, process-wide, not
    * per entity (ADR-0023: a transport is a live object and cannot live
    * inside `defaults`/the settings tree). An entity still needs its own
-   * `realtime: { enabled: true, events: {...} }` — in `defaults` here or
+   * `realtime: { events: {...} }` (any object; only `false` turns it off) —
+   * in `defaults` here or
    * in that entity's own `@Kavo` config — before any of its writes publish
    * anything; registering a transport alone does not turn realtime on.
    */

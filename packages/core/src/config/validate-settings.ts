@@ -185,27 +185,28 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       throw new ConfigurationException(
         entityName,
         "realtime",
-        `expected false or { enabled: boolean, events: {...} }, got ${JSON.stringify(realtime)}`,
+        `expected false or { events: {...} }, got ${JSON.stringify(realtime)}`,
       );
     }
-    bool("realtime.enabled", realtime.enabled);
-    if (typeof realtime.events !== "object" || realtime.events === null) {
-      throw new ConfigurationException(
-        entityName,
-        "realtime.events",
-        `expected an object, got ${JSON.stringify(realtime.events)}`,
-      );
-    }
-    for (const [id, value] of Object.entries(realtime.events)) {
-      const path = `realtime.events.${id}`;
-      if (!REALTIME_EVENT_IDS.has(id)) {
+    if (realtime.events !== undefined) {
+      if (typeof realtime.events !== "object" || realtime.events === null) {
         throw new ConfigurationException(
           entityName,
-          path,
-          `unknown realtime event id ${JSON.stringify(id)} — expected one of ${[...REALTIME_EVENT_IDS].join(", ")}`,
+          "realtime.events",
+          `expected an object, got ${JSON.stringify(realtime.events)}`,
         );
       }
-      bool(path, value);
+      for (const [id, value] of Object.entries(realtime.events)) {
+        const path = `realtime.events.${id}`;
+        if (!REALTIME_EVENT_IDS.has(id)) {
+          throw new ConfigurationException(
+            entityName,
+            path,
+            `unknown realtime event id ${JSON.stringify(id)} — expected one of ${[...REALTIME_EVENT_IDS].join(", ")}`,
+          );
+        }
+        bool(path, value);
+      }
     }
     if (realtime.subscribableFields !== undefined) {
       const selector = realtime.subscribableFields;
