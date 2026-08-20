@@ -1,6 +1,11 @@
 # ADR-0034 — `when()`'s predicate takes a single object argument
 
-**Status:** accepted — amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "The node types" section
+**Status:** superseded by [ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate) —
+`when()` and `PolicyNode` are gone, but the single-object-argument shape this
+ADR settled on (`{ context, entity, resource, operation, params }`) is
+exactly `PolicyArgs`, the argument a policy function is now called with
+directly. Kept for history. (While it stood, this amended
+[ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "The node types" section.)
 
 ## Context
 

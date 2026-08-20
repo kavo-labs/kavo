@@ -381,6 +381,10 @@ const config = defineConfig({
                 text: "0036 — policy gains entity- and global-scope defaults",
                 link: "/internals/adr/0036-policy-gains-entity-and-global-defaults",
               },
+              {
+                text: "0037 — policy collapses to a single predicate function, at three scopes",
+                link: "/internals/adr/0037-policy-collapses-to-a-single-predicate",
+              },
             ],
           },
         ],
