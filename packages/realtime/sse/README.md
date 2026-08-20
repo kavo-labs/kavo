@@ -32,7 +32,7 @@ const kavo = createKavo({
   infrastructure,
   realtimeTransports: [sse],
   defaults: {
-    realtime: { enabled: true, events: { created: true, updated: true, patched: true, deleted: true } },
+    realtime: { events: { created: true, updated: true, patched: true, deleted: true } },
   },
 });
 
