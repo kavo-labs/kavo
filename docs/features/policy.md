@@ -33,7 +33,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## permission
 
-`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. The array shorthand is this node: `["post:delete", "admin"]` is `and(permission("post:delete"), permission("admin"))`, and a single-name array stays a bare `permission` node. An empty array is a bootstrap error rather than a vacuous `and()`: an empty conjunction is `true` by definition, so `{ policy: [] }` would read as lockdown and behave as "allow everyone".
+`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. Require more than one permission with `and(permission("post:delete"), permission("admin"))`.
 
 ## role
 

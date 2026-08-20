@@ -21,7 +21,7 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 @Kavo(Post, {
   operations: {
     createOne: { policy: authenticated() },
-    findMany: { policy: ["post:read"] },
+    findMany: { policy: permission("post:read") },
     findOne: { policy: or(role("admin"), owner("authorId")) },
     updateOne: { policy: and(permission("post:update"), owner("authorId")) },
   },
@@ -32,9 +32,10 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 entity-scope `policy` map (ADR-0033; a leftover root-level `policy` map
 fails at bootstrap, naming this path as the replacement). An operation with
 no `policy` entry is **unrestricted** — opt-in per operation, not a global
-switch. The array shorthand `["post:read"]` is `permission("post:read")`;
-`["a", "b"]` is `and(permission("a"), permission("b"))`. An empty array is a
-bootstrap `ConfigurationException`, not a vacuous allow-everyone.
+switch. `policy` takes a `PolicyNode` only — build multi-permission checks
+with `and(permission("a"), permission("b"))` (ADR-0032, amended by #242: the
+array shorthand was removed since the DSL already covers everything it
+could express).
 
 ## Node types
 

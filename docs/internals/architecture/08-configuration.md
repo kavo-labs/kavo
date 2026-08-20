@@ -161,13 +161,11 @@ error names the entity and the `operations.<id>.policy` path, the same bar
 every other entry in this section holds to. `permission`/`role`/
 `authenticated` are context-only and legal everywhere.
 
-Two more `policy` shapes fail the same way rather than silently
-misbehaving at request time: an `owner(field)` whose first dotted segment
-names a relation (the pre-fetch loads no relations, so it could never
-pass); and an empty-array shorthand (`policy: []` is a vacuous `and()` —
-always allow, not the lockdown it reads as). A root-level `policy` map —
-the pre-ADR-0033 entity-scope shape — is rejected outright, naming
-`operations.<id>.policy` as the replacement.
+One more `policy` shape fails the same way rather than silently misbehaving
+at request time: an `owner(field)` whose first dotted segment names a
+relation (the pre-fetch loads no relations, so it could never pass). A
+root-level `policy` map — the pre-ADR-0033 entity-scope shape — is rejected
+outright, naming `operations.<id>.policy` as the replacement.
 
 ### `query.defaultSort`
 
