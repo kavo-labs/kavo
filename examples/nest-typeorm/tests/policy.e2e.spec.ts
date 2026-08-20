@@ -4,13 +4,14 @@ import request from "supertest";
 import { Column, DataSource, DeleteDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
 import { Controller, UseGuards, type CanActivate, type ExecutionContext, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { and, authenticated, or, owner, permission, role } from "@kavo/core";
+import type { PolicyArgs } from "@kavo/core";
 import { Kavo, KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
+import { hasPermission, hasRole, isAuthenticated, isOwner } from "./support/policy.js";
 
 /**
- * `policy` (ADR-0032) driven over real HTTP against a real SQLite database
+ * `policy` (ADR-0037) driven over real HTTP against a real SQLite database
  * — closing the gap `packages/core/tests/policy.spec.ts` leaves open, since
  * that file only ever exercises the engine against fake in-memory adapters.
  * Two things specifically only a real `@kavo/typeorm` adapter can confirm:
@@ -47,10 +48,10 @@ class Post {
 /**
  * Stands in for whatever an app's real auth guard does — reads
  * comma-separated `x-roles`/`x-permissions` and a bare `x-user` header into
- * the shape `permission()`/`role()`/`owner()`/`authenticated()` read off
- * `context.principal` (`KavoPrincipal`). Absent `x-user`, `request.user` is
- * left unset, so `KavoModule`'s `principal: true` reports `null` — the
- * "nobody is signed in" case every policy test needs to deny.
+ * the shape `./support/policy.js`'s `hasPermission`/`hasRole`/`isOwner`/
+ * `isAuthenticated` read off `context.principal`. Absent `x-user`,
+ * `request.user` is left unset, so `KavoModule`'s `principal: true` reports
+ * `null` — the "nobody is signed in" case every policy test needs to deny.
  */
 class HeaderPrincipalGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
@@ -72,12 +73,15 @@ class HeaderPrincipalGuard implements CanActivate {
 @Kavo(Post, {
   softDelete: { strategy: "soft" },
   operations: {
-    createOne: { policy: authenticated() },
-    updateOne: { policy: or(role("admin"), and(permission("post:update"), owner("authorId"))) },
-    deleteOne: { policy: permission("post:delete") },
-    findOne: { policy: owner("authorId") },
-    restoreOne: { policy: owner("authorId") },
-    purgeOne: { enabled: true, policy: owner("authorId") },
+    createOne: { policy: isAuthenticated<Post>() },
+    updateOne: {
+      policy: (args: PolicyArgs<Post>) =>
+        hasRole<Post>("admin")(args) || (hasPermission<Post>("post:update")(args) && isOwner<Post>("authorId")(args)),
+    },
+    deleteOne: { policy: hasPermission<Post>("post:delete") },
+    findOne: { policy: isOwner<Post>("authorId") },
+    restoreOne: { policy: isOwner<Post>("authorId") },
+    purgeOne: { enabled: true, policy: isOwner<Post>("authorId") },
   },
 } as never)
 @Controller("posts")
@@ -132,8 +136,8 @@ const asUser = (userId: string, extra: { roles?: string; permissions?: string } 
   ...(extra.permissions !== undefined && { "x-permissions": extra.permissions }),
 });
 
-describe("policy over real HTTP + SQLite (ADR-0032)", () => {
-  it("denies createOne for an anonymous caller (authenticated())", async () => {
+describe("policy over real HTTP + SQLite (ADR-0037)", () => {
+  it("denies createOne for an anonymous caller (isAuthenticated())", async () => {
     const response = await request(server()).post("/posts").send({ title: "x", authorId: "u-1" }).expect(403);
     expect(response.body).toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
   });
@@ -142,7 +146,7 @@ describe("policy over real HTTP + SQLite (ADR-0032)", () => {
     await request(server()).post("/posts").set(asUser("u-1")).send({ title: "x", authorId: "u-1" }).expect(201);
   });
 
-  it("permission(): deleteOne requires the named permission", async () => {
+  it("hasPermission(): deleteOne requires the named permission", async () => {
     const id = await seed("u-1");
     await request(server()).delete(`/posts/${id}`).set(asUser("u-1")).expect(403);
     await request(server())
@@ -151,7 +155,7 @@ describe("policy over real HTTP + SQLite (ADR-0032)", () => {
       .expect(204);
   });
 
-  it("or(role('admin'), and(permission, owner)): the owner with the permission may update", async () => {
+  it("admin-or-owning-updater: the owner with the permission may update", async () => {
     const id = await seed("u-1");
     const response = await request(server())
       .put(`/posts/${id}`)
@@ -161,7 +165,7 @@ describe("policy over real HTTP + SQLite (ADR-0032)", () => {
     expect(response.body).toMatchObject({ title: "mine now" });
   });
 
-  it("or(role('admin'), ...): a non-owner with the permission is still denied", async () => {
+  it("admin-or-owning-updater: a non-owner with the permission is still denied", async () => {
     const id = await seed("u-1");
     await request(server())
       .put(`/posts/${id}`)
@@ -170,7 +174,7 @@ describe("policy over real HTTP + SQLite (ADR-0032)", () => {
       .expect(403);
   });
 
-  it("or(role('admin'), ...): an admin bypasses ownership entirely", async () => {
+  it("admin-or-owning-updater: an admin bypasses ownership entirely", async () => {
     const id = await seed("u-1");
     await request(server())
       .put(`/posts/${id}`)

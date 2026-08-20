@@ -1,6 +1,6 @@
 # ADR-0033 — `policy` moves to operation scope only
 
-**Status:** superseded by [ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults), which reintroduces an entity-scope `policy` (a single default node, not the per-operation map this ADR removed) and adds a global scope — amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "Config surface" section
+**Status:** superseded by [ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults), which reintroduces an entity-scope `policy` (a single default node, not the per-operation map this ADR removed) and adds a global scope — amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "Config surface" section. ADR-0036 is itself superseded by [ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate), which keeps this ADR's operation-scope-as-override rule but replaces `PolicyNode` with a plain function everywhere.
 
 ## Context
 

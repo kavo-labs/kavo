@@ -4,7 +4,7 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver } from "../dto/dto.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
-import type { PolicyNode } from "../policy/kavo-policy.js";
+import type { Policy } from "../policy/kavo-policy.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
@@ -92,11 +92,12 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly cacheStore: CacheStore;
   /**
-   * Resolved authorization, keyed by standard operation id (ADR-0032,
-   * amended by ADR-0033): `operations.<id>.policy` alone. An id absent here
-   * runs unrestricted — the engine's policy stage looks up
-   * `policy[operation]` and skips straight to the handler when it finds
-   * nothing.
+   * Resolved authorization, keyed by standard operation id (ADR-0037):
+   * `operations.<id>.policy`, else `EntityConfig.policy`, else
+   * `GlobalConfig.policy`, nearest scope wins, already collapsed to one
+   * function per id. An id absent here runs unrestricted — the engine's
+   * policy stage looks up `policy[operation]` and skips straight to the
+   * handler when it finds nothing.
    */
-  readonly policy: Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>>;
+  readonly policy: Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>>;
 }

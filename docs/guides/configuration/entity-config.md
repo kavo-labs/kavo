@@ -34,19 +34,28 @@ Moved to [Allowlists](/features/allowlists) and [Computed fields](/features/comp
 
 ## policy
 
-Authorization (ADR-0032, amended by ADR-0033 and ADR-0036), resolved nearest-scope-wins across `operations.<id>.policy`, the entity's own `policy` (one default node, applied to every operation that configures none of its own), and a root-level `createKavo({ policy })` default. An operation with no policy at any of the three scopes runs unrestricted:
+Authorization (ADR-0037), resolved nearest-scope-wins across `operations.<id>.policy`, the entity's own `policy` (one default function, applied to every operation that configures none of its own), and a root-level `createKavo({ policy })` default. An operation with no policy at any of the three scopes runs unrestricted:
 
 ```ts
-import { and, authenticated, owner, permission } from "@kavo/core";
+import type { Policy } from "@kavo/core";
+
+function hasPermission(name: string): Policy<Post> {
+  return ({ context }) => ((context.principal as { permissions?: readonly string[] } | null)?.permissions ?? []).includes(name);
+}
+
+const isOwner: Policy<Post> = ({ context, entity }) => {
+  const userId = (context.principal as { userId?: string } | null)?.userId;
+  return userId != null && entity?.authorId === userId;
+};
 
 @Kavo(Post, {
-  policy: authenticated(), // default for every operation on this entity
+  policy: hasPermission("post:read"), // default for every operation on this entity
   operations: {
-    updateOne: { policy: and(permission("post:update"), owner("authorId")) }, // overrides the default
-    deleteOne: { policy: and(permission("post:delete"), permission("admin")) }, // every name required
+    updateOne: { policy: (args) => hasPermission("post:update")(args) && isOwner(args) }, // overrides the default
+    deleteOne: { policy: (args) => hasPermission("post:delete")(args) && hasPermission("admin")(args) }, // every name required
     findMany: { policy: false }, // explicitly public, opts out of the entity-level default
   },
 })
 ```
 
-`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error, whether declared on the operation directly or inherited from an entity/global default. See [Policy](/features/policy) for the node reference, the full scope-resolution rules, and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.
+A single-row operation (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) with a resolved policy always gets the loaded row as `entity`, whether the policy is declared on the operation directly or inherited from an entity/global default; `createOne`/`findMany` always call the policy with `entity: undefined`, since neither has a single row to load. See [Policy](/features/policy) for the full shape, the scope-resolution rules, and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.

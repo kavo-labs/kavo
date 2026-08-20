@@ -1,6 +1,14 @@
 # ADR-0036 — `policy` gains entity- and global-scope defaults
 
-**Status:** accepted — supersedes [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only), amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "Config surface" section and [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch)'s closing Consequence
+**Status:** superseded by [ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate) —
+the three-scope resolution this ADR added (`operations.<id>.policy` →
+`EntityConfig.policy` → `GlobalConfig.policy`, nearest wins, `false` to opt
+out) is unchanged, but `PolicyNode` is gone: every scope now takes a plain
+`Policy<Entity>` function. Kept for history. (While it stood, this
+supersedes [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only)
+and amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "Config
+surface" section and [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch)'s
+closing Consequence.)
 
 ## Context
 

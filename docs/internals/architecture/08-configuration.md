@@ -59,22 +59,19 @@ An `EntityConfig` mixes settings keys with structural keys (`dto`,
 participates in the merge. `computed` carries functions, so like `dto` it
 is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
-`policy` is the same shape of exception, for the same reason (a `when()`
-node carries a closure, and `PolicyNode` is a discriminated union a
-field-by-field merge would corrupt): it resolves through its own
-nearest-scope-wins walk in `resolveEntityConfig` — `operations.<id>.policy`,
-then `EntityConfig.policy` (one default node for the whole entity), then a
-`GlobalConfig.policy` set once at `createKavo`
-([ADR-0032](/internals/adr/0032-policy-authorization-dsl), amended by
-[ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) and
-[ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults)) —
-never `mergeSettings`, and, unlike every ordinary settings key, it takes
-**no** per-call override at any of its three scopes, since a per-call
-parameter that could loosen a policy would let a caller weaken its own
-authorization. `GlobalConfig.policy` is deliberately not a `KavoSettings`
-field even though it is `policy`'s global-scope home — `DeepPartial`
-(what `GlobalConfig.defaults` is typed as) would partialize each branch of
-the `PolicyNode` union independently, erasing its discriminant.
+`policy` is the same shape of exception, for the same reason (it is itself
+a closure): it resolves through its own nearest-scope-wins walk in
+`resolveEntityConfig` — `operations.<id>.policy`, then `EntityConfig.policy`
+(one default function for the whole entity), then a `GlobalConfig.policy`
+set once at `createKavo` (ADR-0037) — never `mergeSettings`, and, unlike
+every ordinary settings key, it takes **no** per-call override at any of its
+three scopes, since a per-call parameter that could loosen a policy would
+let a caller weaken its own authorization. `GlobalConfig.policy` is
+deliberately not a `KavoSettings` field even though it is `policy`'s
+global-scope home — `DeepPartial` (what `GlobalConfig.defaults` is typed as)
+recurses into any property type that extends `object`, which a function type
+does, so it would produce an object type keyed by `Function.prototype`'s own
+properties instead of a callable function.
 
 `authorization` (governing `authorization.required`, the `policy`
 default-deny switch) is, by contrast, an **ordinary** `KavoSettings` key —
@@ -122,7 +119,7 @@ fields), the default response `projection` (`null` unless
 `allowlists.selectable` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
 the cached `DtoResolver`, the validated `computed` map, the resolved
-`policy` map (ADR-0032), and the relation registry. There is no runtime mutation API — per-call
+`policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the
 request.
@@ -170,27 +167,17 @@ bootstrap rather than as a surprising response later
 
 ### `policy`
 
-An `owner`/`when` node — the two whose result depends on the loaded row,
-not only on `context` — configured on `createOne` or `findMany` fails at
-bootstrap ([ADR-0032](/internals/adr/0032-policy-authorization-dsl)): the
-former has no row yet, the latter resolves a set rather than one. This is
-checked against the **effective** (resolved) node for every operation, not
-only one declared directly on it — an entity- or global-scope default that
-inherits onto `createOne`/`findMany` fails exactly the same way
-([ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults)).
-The error names the entity and the `operations.<id>.policy` path, the same
-bar every other entry in this section holds to. `permission`/`role`/
-`authenticated` are context-only and legal everywhere.
-
-Two more `policy` shapes fail the same way rather than silently misbehaving
-at request time: an `owner(field)` whose first dotted segment names a
-relation (the pre-fetch loads no relations, so it could never pass), checked
-the same way whether declared or inherited; and a value with no recognized
-`PolicyNode` `type` discriminant, which catches the pre-ADR-0033
-per-operation entity-scope map shape (`{ updateOne: permission(...) }`) if a
-caller still passes one — it has no `type` field, so it fails as "not a
-PolicyNode" rather than being silently ignored, at whichever of the three
-scopes it landed on.
+`policy` is a plain function at every scope (ADR-0037), so there is no
+shape left to statically validate against `createOne`/`findMany`'s lack of a
+single row — the engine always calls the resolved function, with
+`entity: undefined` on those two ids, whether the policy came from the
+operation, the entity default, or the global default. The one bootstrap
+check left, applied at all three scopes, is that a resolved `policy` value
+actually is a function: a non-function value — including the pre-ADR-0033
+per-operation entity-scope map shape (`{ updateOne: hasPermission(...) }`)
+if a caller still passes one — fails at bootstrap with a
+`ConfigurationException` naming the entity and the scope's path, the same
+bar every other entry in this section holds to.
 
 ### `query.defaultSort`
 

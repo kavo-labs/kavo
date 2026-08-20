@@ -306,12 +306,12 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       await request(server()).patch(`/owners/${id}/restore`).expect(404);
     });
 
-    it("policy: DELETE /owners/:id requires the owner:delete permission (ADR-0032)", async () => {
+    it("policy: DELETE /owners/:id requires the owner:delete permission (ADR-0037)", async () => {
       const created = await request(server()).post("/owners").send({ name: "Zoe", email: "zoe@x.io" }).expect(201);
       const id = created.body.id as number;
 
       // No `x-permissions` header at all: `context.principal` is `null`,
-      // same as every other route in this app — permission() denies it.
+      // same as every other route in this app — hasPermission() denies it.
       const anonymous = await request(server()).delete(`/owners/${id}`).expect(403);
       expect(anonymous.body).toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
 

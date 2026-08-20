@@ -103,24 +103,8 @@ export type {
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
 export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/resolved-entity-config.js";
 
-// ── Policy (ADR-0032) ─────────────────────────────────────────────────
-export {
-  and,
-  authenticated,
-  evaluatePolicy,
-  filtered,
-  not,
-  or,
-  owner,
-  permission,
-  policyNeedsEntity,
-  role,
-  when,
-  type KavoPrincipal,
-  type PolicyNode,
-  type WhenParams,
-  type WhenPredicateArgs,
-} from "./policy/kavo-policy.js";
+// ── Policy (ADR-0037) ─────────────────────────────────────────────────
+export { type Policy, type PolicyArgs, type WhenParams } from "./policy/kavo-policy.js";
 
 // ── Realtime ──────────────────────────────────────────────────────────
 export type { RealtimeEventDto, RealtimeEventId } from "./realtime/realtime-event.js";
