@@ -6,9 +6,9 @@
 built-in defaults → global (KavoModule) → entity (@Kavo config) → operation (operations.<id>) → per-call
 ```
 
-If you don't set a field at a given scope, it falls through to the next one down. The full merge rules (deep-merge behavior, what "unset" means per field) are in [Configuration](/internals/architecture/08-configuration). `policy` is the one field that doesn't follow this chain: entity and operation scope only, no global default and no per-call override (ADR-0032) — a per-call parameter that could loosen a policy would let a caller weaken its own authorization. These pages document what each field means and where to set it:
+If you don't set a field at a given scope, it falls through to the next one down. The full merge rules (deep-merge behavior, what "unset" means per field) are in [Configuration](/internals/architecture/08-configuration). `policy` is the one field that doesn't follow this chain: operation scope only — no entity-scope map, no global default, and no per-call override (ADR-0032, ADR-0033) — a per-call parameter that could loosen a policy would let a caller weaken its own authorization. These pages document what each field means and where to set it:
 
 - **[Module setup](/guides/configuration/module-setup)**: `KavoModule.forRoot`/`forRootAsync`, and the `principal` extractor.
 - **[Settings](/guides/configuration/settings)**: the app-wide `KavoSettings` fields: pagination, query, errors, relations, arrayMutation, cache, softDelete, realtime.
-- **[Entity config](/guides/configuration/entity-config)**: `@Kavo(Entity, config)`'s own fields: `dto`, `allowlists`, `computed`, `policy`.
+- **[Entity config](/guides/configuration/entity-config)**: `@Kavo(Entity, config)`'s own fields: `dto`, `allowlists`, `computed`, plus where `policy` is set.
 - **[Operations](/guides/configuration/operations)**: per-operation overrides, custom operations, and custom list metadata.
