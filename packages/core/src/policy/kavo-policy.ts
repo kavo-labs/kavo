@@ -1,5 +1,45 @@
 import type { KavoContext } from "../context/kavo-context.js";
+import type { KavoRequest } from "../context/kavo-request.js";
+import type { OperationId } from "../operations/operation.js";
 import type { FilterExpression } from "../query/filter.js";
+
+/**
+ * The request-level identifier a `when()` predicate gets alongside
+ * `context`/`entity` — the piece `context` itself never carries at all
+ * (ADR-0032 amendment): `KavoContext` has no `id` field. The type allows
+ * `null`, for an operation with no single-row target (`createOne`/
+ * `findMany`), but a `when()` predicate never actually observes it: `when`
+ * is entity-aware (`policyNeedsEntity`), and `resolveEntityConfig` already
+ * rejects an entity-aware node on `createOne`/`findMany` at bootstrap — so
+ * every operation a `when()` policy can legally be configured on always has
+ * a row, and `params.id` with it.
+ *
+ * Coerced against the id column's kind before a predicate ever sees it —
+ * the engine's policy stage runs `id` through the same `coerceId` every
+ * other consumer of `request.id` does, so a numeric id column always hands
+ * a predicate a `number`, never the raw URL-path string HTTP requests carry
+ * it as. Comparing `params.id` to a numeric literal is safe.
+ *
+ * Deliberately **not** `KavoRequest.query` too: over HTTP that field is a
+ * `WireQuery` at runtime (raw bracket-key params, pre-coercion), not the
+ * `QueryContext` its type declares, so exposing it here would type-check
+ * against a shape it never actually has. `context.query` is already the
+ * normalized query and is what a `when()` predicate should read instead.
+ */
+export type WhenParams<Entity = unknown> = Pick<KavoRequest<Entity>, "id">;
+
+/**
+ * The single object argument a `when()` predicate is called with. `resource`
+ * and `operation` mirror `context.entityName`/`context.operation` at the top
+ * level so a predicate doesn't have to reach through `context` for them.
+ */
+export interface WhenPredicateArgs<Entity = unknown> {
+  readonly context: KavoContext<Entity>;
+  readonly entity?: Entity;
+  readonly resource: string;
+  readonly operation: OperationId;
+  readonly params: WhenParams<Entity>;
+}
 
 /**
  * The optional-field shape the built-in policy nodes (`permission`, `role`,
@@ -36,21 +76,11 @@ export type PolicyNode<Entity = unknown> =
   | { readonly type: "filtered"; readonly field: string }
   | {
       readonly type: "when";
-      readonly predicate: (context: KavoContext<Entity>, entity?: Entity) => boolean | Promise<boolean>;
+      readonly predicate: (args: WhenPredicateArgs<Entity>) => boolean | Promise<boolean>;
     }
   | { readonly type: "and"; readonly children: readonly PolicyNode<Entity>[] }
   | { readonly type: "or"; readonly children: readonly PolicyNode<Entity>[] }
   | { readonly type: "not"; readonly child: PolicyNode<Entity> };
-
-/** The array shorthand a `policy.<operation>` entry also accepts — sugar for `and(...names.map(permission))`. */
-export type PolicyShorthand<Entity = unknown> = readonly string[] | PolicyNode<Entity>;
-
-/** `policy: ['post:update']` → `and(permission('post:update'))`; a single-name array stays a bare `permission` node. */
-export function normalizePolicyShorthand<Entity = unknown>(shorthand: PolicyShorthand<Entity>): PolicyNode<Entity> {
-  if (!Array.isArray(shorthand)) return shorthand as PolicyNode<Entity>;
-  const names = shorthand as readonly string[];
-  return names.length === 1 ? permission(names[0]!) : and(...names.map((name) => permission<Entity>(name)));
-}
 
 export function permission<Entity = unknown>(name: string): PolicyNode<Entity> {
   return { type: "permission", name };
@@ -94,7 +124,7 @@ function filterHasField(expression: FilterExpression<unknown> | null, field: str
 
 /** Escape hatch for a check the other nodes can't express. Not inspectable — see `policyNeedsEntity`'s doc comment. */
 export function when<Entity = unknown>(
-  predicate: (context: KavoContext<Entity>, entity?: Entity) => boolean | Promise<boolean>,
+  predicate: (args: WhenPredicateArgs<Entity>) => boolean | Promise<boolean>,
 ): PolicyNode<Entity> {
   return { type: "when", predicate };
 }
@@ -166,11 +196,17 @@ export function collectOwnerFields<Entity>(node: PolicyNode<Entity>): readonly s
   }
 }
 
-/** Evaluate a policy node against a request's context and (when loaded) its entity. */
+/**
+ * Evaluate a policy node against a request's context and (when loaded) its
+ * entity. `params` is only ever read by a `when` node — see
+ * `WhenPredicateArgs` — and defaults to `{ id: null }` for a caller (a test,
+ * mainly) that has none to give.
+ */
 export async function evaluatePolicy<Entity>(
   node: PolicyNode<Entity>,
   context: KavoContext<Entity>,
   entity?: Entity,
+  params: WhenParams<Entity> = { id: null },
 ): Promise<boolean> {
   switch (node.type) {
     case "permission": {
@@ -193,20 +229,20 @@ export async function evaluatePolicy<Entity>(
     case "filtered":
       return filterHasField(context.query?.filter.root ?? null, node.field);
     case "when":
-      return node.predicate(context, entity);
+      return node.predicate({ context, entity, resource: context.entityName, operation: context.operation, params });
     case "and": {
       for (const child of node.children) {
-        if (!(await evaluatePolicy(child, context, entity))) return false;
+        if (!(await evaluatePolicy(child, context, entity, params))) return false;
       }
       return true;
     }
     case "or": {
       for (const child of node.children) {
-        if (await evaluatePolicy(child, context, entity)) return true;
+        if (await evaluatePolicy(child, context, entity, params)) return true;
       }
       return false;
     }
     case "not":
-      return !(await evaluatePolicy(node.child, context, entity));
+      return !(await evaluatePolicy(node.child, context, entity, params));
   }
 }

@@ -19,21 +19,21 @@ That config makes `POST /posts` require a signed-in caller, `GET /posts` pass fo
 
 ## Node types
 
-| Node                                | Passes when                                                                                                    |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `permission(name)`                  | `principal.permissions` contains `name`                                                                        |
-| `role(name)`                        | `principal.roles` contains `name`                                                                              |
-| `authenticated()`                   | `principal.userId` is set                                                                                      |
-| `filtered(field)`                   | `context.query.filter` carries a condition on `field`, anywhere in the AST (`context.query` is null on writes) |
-| `owner(field = "userId")`           | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value                         |
-| `when((context, entity?) => ...)`   | the predicate returns `true`                                                                                   |
-| `and(...)` / `or(...)` / `not(...)` | short-circuit composition; `not` negates its single child                                                      |
+| Node                                                              | Passes when                                                                                                    |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `permission(name)`                                                | `principal.permissions` contains `name`                                                                        |
+| `role(name)`                                                      | `principal.roles` contains `name`                                                                              |
+| `authenticated()`                                                 | `principal.userId` is set                                                                                      |
+| `filtered(field)`                                                 | `context.query.filter` carries a condition on `field`, anywhere in the AST (`context.query` is null on writes) |
+| `owner(field = "userId")`                                         | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value                         |
+| `when(({ context, entity, resource, operation, params }) => ...)` | the predicate returns `true`                                                                                   |
+| `and(...)` / `or(...)` / `not(...)`                               | short-circuit composition; `not` negates its single child                                                      |
 
 The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.principal` to a `KavoPrincipal` shape: optional `userId`, `roles`, and `permissions`, plus an index signature, so a principal can carry `tenantId`, `plan`, or any other field the built-in nodes never read. Kavo itself never inspects, validates, or shapes `principal`; using a built-in node is what an application opts into, and `when()` reads the raw value however it likes. `filtered()` reads the request's query filter instead (below). [Wiring your own auth](/guides/wiring-your-own-auth) is what moves the caller from the HTTP request onto `context.principal`. Without it `principal` is `null` on every request and a principal-reading node denies everything, and over the GraphQL and MCP bindings it stays `null` unless a caller passes one per call.
 
 ## permission
 
-`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. The array shorthand is this node: `["post:delete", "admin"]` is `and(permission("post:delete"), permission("admin"))`, and a single-name array stays a bare `permission` node. An empty array is a bootstrap error rather than a vacuous `and()`: an empty conjunction is `true` by definition, so `{ policy: [] }` would read as lockdown and behave as "allow everyone".
+`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. Require more than one permission with `and(permission("post:delete"), permission("admin"))`.
 
 ## role
 
@@ -53,11 +53,11 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## when
 
-`when((context, entity?) => ...)` is the escape hatch for a check the other nodes can't express. The predicate returns a boolean or a promise and receives `context` plus the row when the node needs one, so it can read `context.principal` however it likes, inspect `context.query`, or load a relation itself through `context.repository`, the one place a policy can check a value across a relation. Because it holds a closure it is the one node that is not inspectable data, which is why `policy` lives outside the settings chain with no per-call override ([Config placement](#config-placement)). It is entity-aware, with the same operation constraints and pre-fetch cost as `owner`.
+`when(({ context, entity, resource, operation, params }) => ...)` is the escape hatch for a check the other nodes can't express. The predicate returns a boolean or a promise and is called with a single object: `context` and `entity` (the row, when the node needs one) as before, plus `resource` and `operation` — `context.entityName`/`context.operation` surfaced at the top level so a predicate doesn't have to reach through `context` for them — and `params.id`, the request's own single-row target (`null` for an operation with none, e.g. `createOne`/`findMany`), which `context` never carries at all. `params.id` is coerced against the id column's kind before the predicate ever sees it, the same as every other place the engine reads a request id — a numeric id column always hands the predicate a `number`, never the raw string an HTTP path param arrives as. `params` deliberately has no `query`: over HTTP `context.query` is already the normalized query, and the raw request-level value has no one stable shape across transports, so a predicate that wants the query reads `context.query` instead. The predicate can read `context.principal` however it likes, inspect `context.query`, or load a relation itself through `context.repository`, the one place a policy can check a value across a relation. Because it holds a closure it is the one node that is not inspectable data, which is why `policy` lives outside the settings chain with no per-call override ([Config placement](#config-placement)). It is entity-aware, with the same operation constraints and pre-fetch cost as `owner`.
 
 ## and, or, not
 
-`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`.
+`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`. A zero-child `and()` is vacuously `true` — every empty conjunction is — so `policy: and()` reads like a lockdown and behaves as "allow everyone"; name at least one child, or omit `policy` entirely for the same unrestricted result without the trap.
 
 ## Config placement
 
@@ -65,7 +65,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## Default deny (`authorization.required`)
 
-`authorization.required` flips the posture of an operation with **no** `policy.<id>` entry — instead of running unrestricted, it answers 403 `KAVO_FORBIDDEN`, so a new operation added without a `policy` entry fails loudly at request time rather than shipping unauthenticated by accident (ADR-0033):
+`authorization.required` flips the posture of an operation with **no** `policy.<id>` entry — instead of running unrestricted, it answers 403 `KAVO_FORBIDDEN`, so a new operation added without a `policy` entry fails loudly at request time rather than shipping unauthenticated by accident (ADR-0035):
 
 ```ts
 KavoModule.forRoot({
@@ -75,8 +75,8 @@ KavoModule.forRoot({
 
 @Kavo(Post, {
   authorization: { required: true }, // this entity only
-  policy: { updateOne: permission("post:update") },
   operations: {
+    updateOne: { policy: permission("post:update") },
     findMany: { authorization: { required: false } }, // opt this one operation back out
   },
 })
@@ -102,7 +102,7 @@ The policy stage runs after the context is built and before preconditions and th
 
 A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.principal` directly.
 
-`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches: `filtered()` refuses a caller who omits a scoping filter, it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0032](/internals/adr/0032-policy-authorization-dsl), which also argues the enforcement choices above; [ADR-0033](/internals/adr/0033-authorization-required-default-deny-switch) covers `authorization.required`); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
+`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches: `filtered()` refuses a caller who omits a scoping filter, it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0032](/internals/adr/0032-policy-authorization-dsl), which also argues the enforcement choices above; [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch) covers `authorization.required`); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
 
 ## Route identity from a Nest guard
 

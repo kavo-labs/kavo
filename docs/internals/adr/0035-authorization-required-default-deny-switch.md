@@ -1,4 +1,4 @@
-# ADR-0033 — `authorization.required` denies standard operations with no configured policy
+# ADR-0035 — `authorization.required` denies standard operations with no configured policy
 
 **Status:** accepted
 

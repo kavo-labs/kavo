@@ -75,7 +75,7 @@ global, unlike `policy`. `KavoEngine.configViewFor` pins it back to the
 pre-merge value after applying a per-call override, the one scope it is
 excluded from, for the same "no loosening" reason `policy` itself is
 excluded from per-call entirely. See
-[ADR-0033](/internals/adr/0033-authorization-required-default-deny-switch).
+[ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch).
 
 **`operations` is a special case, at two different scopes.** At _global_
 scope, `KavoSettings.operations` is a plain boolean map
@@ -170,13 +170,11 @@ error names the entity and the `operations.<id>.policy` path, the same bar
 every other entry in this section holds to. `permission`/`role`/
 `authenticated` are context-only and legal everywhere.
 
-Two more `policy` shapes fail the same way rather than silently
-misbehaving at request time: an `owner(field)` whose first dotted segment
-names a relation (the pre-fetch loads no relations, so it could never
-pass); and an empty-array shorthand (`policy: []` is a vacuous `and()` —
-always allow, not the lockdown it reads as). A root-level `policy` map —
-the pre-ADR-0033 entity-scope shape — is rejected outright, naming
-`operations.<id>.policy` as the replacement.
+One more `policy` shape fails the same way rather than silently misbehaving
+at request time: an `owner(field)` whose first dotted segment names a
+relation (the pre-fetch loads no relations, so it could never pass). A
+root-level `policy` map — the pre-ADR-0033 entity-scope shape — is rejected
+outright, naming `operations.<id>.policy` as the replacement.
 
 ### `query.defaultSort`
 

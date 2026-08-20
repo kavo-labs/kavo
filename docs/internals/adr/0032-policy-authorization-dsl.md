@@ -2,7 +2,14 @@
 
 **Status:** accepted (the "Config surface" section's entity-scope `policy`
 map is amended by [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) —
-`operations.<id>.policy` is now the only place `policy` is configured)
+`operations.<id>.policy` is now the only place `policy` is configured; the
+array shorthand the "The node types" and "Config surface" sections describe
+below was removed — issue #242 — since the `PolicyNode` DSL already covers
+everything it could express. `policy` now takes a `PolicyNode<Entity>` only.
+"The node types" section's `when(predicate)` signature is further amended by
+[ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument) —
+the predicate now takes one object argument, `{ context, entity, resource,
+operation, params }`, not `(context, entity?)`.)
 
 ## Context
 
@@ -47,10 +54,12 @@ decision tree, not a bare closure:
   never pass. Checking a value across a relation needs `when()`, which
   receives `context` and can load the relation itself.
 - `authenticated()` — `principal.userId != null`.
-- `when(predicate)` — an arbitrary `(context, entity?) => boolean |
-Promise<boolean>` escape hatch. This is the one node that is **not**
-  inspectable — there is no way to make an arbitrary predicate data — and
-  the AST advantage below applies to every node except this one.
+- `when(predicate)` — an arbitrary `(args) => boolean | Promise<boolean>`
+  escape hatch, `args` a single object (`{ context, entity, resource,
+operation, params }` — amended by [ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument)).
+  This is the one node that is **not** inspectable — there is no way to make
+  an arbitrary predicate data — and the AST advantage below applies to every
+  node except this one.
 - `and(...)` / `or(...)` / `not(...)` — composition, short-circuiting.
 
 `permission`/`role`/`owner`/`authenticated` read a documented,
@@ -61,13 +70,16 @@ application opts into; `when()` can read `context.principal` however it
 likes instead, index signature and all, without Kavo widening its own
 contract to match.
 
-A single-string-array shorthand normalizes to `permission` nodes ANDed
-together: `policy: { updateOne: ['post:update'] }` is
-`and(permission('post:update'))`, and `['post:update', 'admin']` requires
-both. An **empty** array is a bootstrap `ConfigurationException` rather
-than a vacuous `and()` — a zero-child `and` is `true` by definition, so
-`policy: { updateOne: [] }` would read as "lock this down" and behave as
-"allow everyone," the opposite of what it looks like.
+A single-string-array shorthand originally normalized to `permission` nodes
+ANDed together — `policy: { updateOne: ['post:update'] }` was
+`and(permission('post:update'))`, and `['post:update', 'admin']` required
+both, with an **empty** array rejected at bootstrap rather than treated as
+a vacuous `and()` (a zero-child `and` is `true` by definition, so
+`policy: { updateOne: [] }` would have read as "lock this down" and behaved
+as "allow everyone"). **Removed (issue #242):** the DSL already expresses
+everything the shorthand could — `and(permission('post:update'), ...)` is
+no longer than the array was — so `policy` now takes a `PolicyNode<Entity>`
+only, one canonical way to write a policy.
 
 ### Config surface
 
@@ -80,11 +92,12 @@ key — **no per-call override**. A per-call parameter that could loosen a
 policy would let a caller weaken its own authorization, which defeats the
 point.
 
-- `EntityConfig.policy?: Partial<Record<StandardOperationId, PolicyShorthand<Entity>>>`
-  — entity scope.
-- `OperationConfig.policy?: PolicyShorthand<Entity>` — per-operation
+- `EntityConfig.policy?: Partial<Record<StandardOperationId, PolicyNode<Entity>>>`
+  — entity scope (removed by ADR-0033; see that ADR).
+- `OperationConfig.policy?: PolicyNode<Entity>` — per-operation
   override, the same fallback `dto` uses: `operations.<id>.policy` wins over
-  `policy.<id>` when both are set.
+  `policy.<id>` when both are set (moot after ADR-0033, which removes the
+  entity-scope surface this precedence rule was between).
 - An operation id absent from the resolved map runs **unrestricted** — the
   same opt-in posture every other Kavo default takes (`exposeInternals`,
   `realtime.enabled`, …). Adding a `policy` entry is how an entity opts in;

@@ -21,7 +21,7 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 @Kavo(Post, {
   operations: {
     createOne: { policy: authenticated() },
-    findMany: { policy: ["post:read"] },
+    findMany: { policy: permission("post:read") },
     findOne: { policy: or(role("admin"), owner("authorId")) },
     updateOne: { policy: and(permission("post:update"), owner("authorId")) },
   },
@@ -32,22 +32,23 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 entity-scope `policy` map (ADR-0033; a leftover root-level `policy` map
 fails at bootstrap, naming this path as the replacement). An operation with
 no `policy` entry is **unrestricted** — opt-in per operation, not a global
-switch (see `authorization.required` below for the opposite default). The
-array shorthand `["post:read"]` is `permission("post:read")`;
-`["a", "b"]` is `and(permission("a"), permission("b"))`. An empty array is a
-bootstrap `ConfigurationException`, not a vacuous allow-everyone.
+switch (see `authorization.required` below for the opposite default).
+`policy` takes a `PolicyNode` only — build multi-permission checks
+with `and(permission("a"), permission("b"))` (ADR-0032, amended by #242: the
+array shorthand was removed since the DSL already covers everything it
+could express).
 
 ## Node types
 
-| Node                                | Passes when                                                                            |
-| ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `permission(name)`                  | `principal.permissions` contains `name`                                                |
-| `role(name)`                        | `principal.roles` contains `name`                                                      |
-| `authenticated()`                   | `principal.userId` is set                                                              |
-| `owner(field = "userId")`           | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
-| `filtered(field)`                   | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
-| `when((context, entity?) => ...)`   | the predicate returns `true` — escape hatch for anything else                          |
-| `and(...)` / `or(...)` / `not(...)` | short-circuit composition; `not` negates its single child                              |
+| Node                                                              | Passes when                                                                            |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `permission(name)`                                                | `principal.permissions` contains `name`                                                |
+| `role(name)`                                                      | `principal.roles` contains `name`                                                      |
+| `authenticated()`                                                 | `principal.userId` is set                                                              |
+| `owner(field = "userId")`                                         | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
+| `filtered(field)`                                                 | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
+| `when(({ context, entity, resource, operation, params }) => ...)` | the predicate returns `true` — escape hatch for anything else                          |
+| `and(...)` / `or(...)` / `not(...)`                               | short-circuit composition; `not` negates its single child                              |
 
 Every built-in node except `filtered`/`when` reads `context.principal` cast
 to `{ userId?, roles?, permissions?, [k: string]: unknown }`. Kavo never
@@ -117,7 +118,7 @@ never cached, so a cache hit can't skip the deferred check.
   `context.principal` directly and throws `ForbiddenException` for the same
   `403 KAVO_FORBIDDEN`.
 
-## `authorization.required` — default-deny for unconfigured operations (ADR-0033)
+## `authorization.required` — default-deny for unconfigured operations (ADR-0035)
 
 ```ts
 KavoModule.forRoot({
@@ -127,8 +128,8 @@ KavoModule.forRoot({
 
 @Kavo(Post, {
   authorization: { required: true }, // this entity
-  policy: { updateOne: permission("post:update") },
   operations: {
+    updateOne: { policy: permission("post:update") },
     findMany: { authorization: { required: false } }, // opt this one back out
   },
 })

@@ -118,7 +118,8 @@ export {
   when,
   type KavoPrincipal,
   type PolicyNode,
-  type PolicyShorthand,
+  type WhenParams,
+  type WhenPredicateArgs,
 } from "./policy/kavo-policy.js";
 
 // ── Realtime ──────────────────────────────────────────────────────────

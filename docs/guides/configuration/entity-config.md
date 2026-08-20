@@ -42,7 +42,7 @@ import { and, owner, permission } from "@kavo/core";
 @Kavo(Post, {
   operations: {
     updateOne: { policy: and(permission("post:update"), owner("authorId")) },
-    deleteOne: { policy: ["post:delete", "admin"] }, // array shorthand: every name required
+    deleteOne: { policy: and(permission("post:delete"), permission("admin")) }, // every name required
   },
 })
 ```

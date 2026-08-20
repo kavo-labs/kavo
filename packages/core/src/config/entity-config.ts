@@ -8,7 +8,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { ComputedFieldDescriptor } from "./computed-field.js";
-import type { PolicyShorthand } from "../policy/kavo-policy.js";
+import type { PolicyNode } from "../policy/kavo-policy.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths
@@ -163,7 +163,7 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
    * on `createOne`/`findMany` they are a bootstrap `ConfigurationException`
    * (`resolveEntityConfig`), since no single entity exists yet to check.
    */
-  readonly policy?: PolicyShorthand<Entity>;
+  readonly policy?: PolicyNode<Entity>;
 }
 
 /**

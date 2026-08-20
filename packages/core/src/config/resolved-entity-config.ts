@@ -93,10 +93,10 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly cacheStore: CacheStore;
   /**
    * Resolved authorization, keyed by standard operation id (ADR-0032,
-   * amended by ADR-0033): `operations.<id>.policy` alone, normalized from
-   * the array shorthand. An id absent here runs unrestricted — the
-   * engine's policy stage looks up `policy[operation]` and skips straight
-   * to the handler when it finds nothing.
+   * amended by ADR-0033): `operations.<id>.policy` alone. An id absent here
+   * runs unrestricted — the engine's policy stage looks up
+   * `policy[operation]` and skips straight to the handler when it finds
+   * nothing.
    */
   readonly policy: Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>>;
 }
