@@ -321,8 +321,20 @@ export class KavoEngine<Entity extends object> {
   /**
    * The policy stage (ADR-0032): looks up `configView.policy[operation]`
    * and, when the entity configured one, evaluates it before anything else
-   * runs. An id with no entry is unrestricted — this is a no-op for every
-   * entity that never configured `policy`.
+   * runs. An id with no entry is unrestricted by default — but denies with
+   * `ForbiddenException` instead when `configView.settings.authorization.
+   * required` is `true` (ADR-0033): a standard operation id with nothing in
+   * the map, under that switch, is treated as "forgot to configure this,"
+   * not "meant to leave it open." The same switch also gates a Kavo-
+   * synthesized array-mutation operation (`replace<Relation>` etc.), which
+   * can never carry a `policy.<id>` entry of its own (`resolvePolicy` only
+   * recognizes standard ids) but is a real mutating write with a Kavo-
+   * supplied handler behind it, not an app-authored one. An **ordinary**
+   * custom operation (app-declared via `EntityConfig.operations`, not
+   * synthesized) is unaffected either way — `node` is `undefined` for it
+   * too, but the `required` branch only fires for a standard or array-
+   * mutation id, so its own handler keeps deciding for itself, exactly as
+   * ADR-0032 already drew that boundary.
    *
    * `owner`/`when` nodes need the loaded row, which no built-in handler
    * fetches ahead of a write (`updateOne`/`patchOne`/`deleteOne`/
@@ -351,8 +363,23 @@ export class KavoEngine<Entity extends object> {
     configView: ResolvedEntityConfig<Entity>,
     context: KavoContext<Entity>,
   ): Promise<void> {
-    const node = isStandardOperationId(descriptor.id) ? configView.policy[descriptor.id] : undefined;
-    if (node === undefined) return;
+    const standard = isStandardOperationId(descriptor.id);
+    const node = standard ? configView.policy[descriptor.id] : undefined;
+    if (node === undefined) {
+      // `authorization.required` also gates the array-mutation operations
+      // Kavo itself synthesizes (`replace<Relation>` etc., ADR-0014/0029) —
+      // never a `policy.<id>` entry, since `resolvePolicy` only recognizes
+      // standard operation ids, but a Kavo-supplied handler with no
+      // app-authored code behind it, unlike an ordinary custom operation
+      // (ADR-0035's amendment). No per-relation opt-out exists: an
+      // array-mutation id is synthesized after `operations.<id>` config is
+      // resolved, so it can never be named there either.
+      const gated = standard || descriptor.meta.arrayMutation !== undefined;
+      if (gated && configView.settings.authorization.required) {
+        this.denyForbidden(descriptor.id, configView, context);
+      }
+      return;
+    }
     if (descriptor.id === "findOne" && policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
 
     // Coerced against the id column's kind, same as every other consumer of
@@ -407,12 +434,19 @@ export class KavoEngine<Entity extends object> {
     params: WhenParams<Entity>,
   ): Promise<void> {
     const allowed = await evaluatePolicy(node, context, entity, params);
-    if (!allowed) {
-      throw new ForbiddenException({
-        messageParams: { entity: configView.entityName, operation },
-        context: { entityName: configView.entityName, operation, correlationId: context.correlationId },
-      });
-    }
+    if (!allowed) this.denyForbidden(operation, configView, context);
+  }
+
+  /** The policy stage's one denial shape — a configured rule that failed, or (ADR-0035) no rule where one is required. */
+  private denyForbidden(
+    operation: OperationId,
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+  ): never {
+    throw new ForbiddenException({
+      messageParams: { entity: configView.entityName, operation },
+      context: { entityName: configView.entityName, operation, correlationId: context.correlationId },
+    });
   }
 
   /**
@@ -805,6 +839,16 @@ export class KavoEngine<Entity extends object> {
     let settings: KavoSettings = base;
     if (overrides !== undefined) {
       settings = mergeSettings(base, overrides);
+      // Immune to per-call override (ADR-0033), the same reasoning
+      // ADR-0032 applies to `policy` itself: a per-call parameter that
+      // could loosen enforcement would let a caller weaken its own
+      // authorization, so the whole subtree is pinned to whatever
+      // global/entity/operation already resolved rather than merged.
+      settings = { ...settings, authorization: base.authorization };
+      // Pinned ahead of validation, deliberately: a malformed per-call
+      // `authorization` override (e.g. a non-boolean `required`) is
+      // already discarded above, so there is nothing of it left to
+      // reject — `validateSettings` below never sees it.
       const scope = `${config.entityName} (per-call)`;
       validateSettings(scope, settings);
       validateDefaultSort(scope, settings, config.allowlists);

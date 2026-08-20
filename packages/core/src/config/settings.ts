@@ -297,6 +297,26 @@ export interface ArrayMutationSettings {
   readonly strategy?: ArrayMutationStrategy;
 }
 
+/**
+ * The default-deny switch for the `policy` stage (ADR-0033). `policy`
+ * itself (`EntityConfig.policy`/`OperationConfig.policy`) is a structural
+ * field, not a `KavoSettings` one, and has no global scope — this is a
+ * deliberately separate, ordinary settings subtree so it gets one. `false`
+ * is not accepted here (unlike `cache`/`realtime`/`softDelete`): there is
+ * nothing else in this subtree to disable wholesale, so the plain object is
+ * always the shape.
+ */
+export interface AuthorizationSettings {
+  /**
+   * `true` denies a standard operation with no `policy.<id>` entry
+   * (`403 KAVO_FORBIDDEN`) instead of running it unrestricted. An operation
+   * with an explicit `policy.<id>` entry is unaffected either way — this
+   * only fills the gap where no rule is configured. Custom operations never
+   * reach the policy stage at all (ADR-0032), so this cannot gate them.
+   */
+  readonly required: boolean;
+}
+
 /** The full settings tree. */
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
@@ -315,6 +335,8 @@ export interface KavoSettings {
    * relation anything by itself.
    */
   readonly arrayMutation: ArrayMutationSettings | false;
+  /** The `policy` default-deny switch (ADR-0033). Excluded from per-call override — see `KavoEngine.configViewFor`. */
+  readonly authorization: AuthorizationSettings;
   /**
    * Global operation enablement, keyed by standard operation id — booleans
    * only, unlike the richer per-entity `EntityConfig.operations` (which also

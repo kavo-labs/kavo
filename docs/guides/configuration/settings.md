@@ -62,6 +62,10 @@ See [Soft delete](/features/soft-delete) for the practical walkthrough, and [Sof
 
 Moved to [Realtime events](/features/realtime-events).
 
+## authorization
+
+`required` (default `false`) makes a standard operation with no configured `policy.<id>` entry deny with `403 KAVO_FORBIDDEN` instead of running unrestricted, and also gates a Kavo-synthesized array-mutation operation (`replace<Relation>` etc.), which can never carry a `policy.<id>` entry of its own. Unlike `policy` itself, this key has a global scope and merges through the ordinary precedence chain — but per-call is excluded: a per-call override can neither loosen nor tighten it. See [Policy](/features/policy#default-deny-authorization-required) and [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch).
+
 ## operations (global scope only)
 
 At global scope, `operations` is a flat map of booleans, keyed by standard operation id. This is coarser than the richer per-entity form:

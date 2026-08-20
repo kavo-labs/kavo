@@ -14,7 +14,8 @@ KavoRequest
  → Query Resolution       reads only: WireQuery → normalizeWire, QueryContext → normalizeInput
  → Context Assembly       KavoContext: identity, config view, principal, transaction ⟨reserved⟩,
                           normalized query, correlationId, typed state bag
- → Policy                 configured operations.<id>.policy node, if any → 403 (ADR-0032)
+ → Policy                 configured operations.<id>.policy node, if any → 403 (ADR-0032);
+                          no node + authorization.required → 403 too (ADR-0035)
  → Precondition Check     If-Match writes only: pre-read + hash → 412 / 404 (ADR-0020)
  → DTO Resolution         descriptor.input/output else the doc-4 slot default
  → Deserialization        writes only: body → allowed-key projection

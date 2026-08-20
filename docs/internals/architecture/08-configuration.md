@@ -68,6 +68,15 @@ since a per-call parameter that could loosen a policy would let a caller
 weaken its own authorization. See
 [ADR-0032](/internals/adr/0032-policy-authorization-dsl).
 
+`authorization` (governing `authorization.required`, the `policy`
+default-deny switch) is, by contrast, an **ordinary** `KavoSettings` key —
+it merges through the generic algebra above at every scope including
+global, unlike `policy`. `KavoEngine.configViewFor` pins it back to the
+pre-merge value after applying a per-call override, the one scope it is
+excluded from, for the same "no loosening" reason `policy` itself is
+excluded from per-call entirely. See
+[ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch).
+
 **`operations` is a special case, at two different scopes.** At _global_
 scope, `KavoSettings.operations` is a plain boolean map
 (`Partial<Record<StandardOperationId, boolean>>`) and merges through

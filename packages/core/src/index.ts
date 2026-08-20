@@ -72,6 +72,7 @@ export type {
   KavoSettings,
   ArrayMutationSettings,
   ArrayMutationStrategy,
+  AuthorizationSettings,
   CacheSettings,
   EtagSettings,
   ErrorSettings,
