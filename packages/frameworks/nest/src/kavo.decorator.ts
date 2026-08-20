@@ -43,6 +43,7 @@ import { KavoResponseInterceptor, isKavoResponse } from "./kavo-response.interce
 import {
   KAVO_CONDITIONAL_DOCS_METADATA,
   KAVO_CONTROLLER_METADATA,
+  KAVO_OPERATION_METADATA,
   KAVO_OVERRIDE_METADATA,
   KAVO_PRINCIPAL_PROPERTY,
   KAVO_SERVICE_PROPERTY,
@@ -615,6 +616,15 @@ function applyRouteDecorators(
 ): void {
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   applyParamDecorators(prototype, methodName, descriptor, route);
+  // Route identity for `getResource`/`getOperation` (issue #238), written
+  // on the handler function itself — the same target Nest's method
+  // decorators write to — so Nest's `Reflector` can read it off
+  // `context.getHandler()` from a `Guard`/`Interceptor`, before the
+  // engine's own `KavoContext` exists. Both paths (generated and
+  // `@Override`'d) run through here, so both carry the key; a
+  // manual-method-wins method skips `defineRoute`/`applyRouteDecorators`
+  // entirely and so never does.
+  Reflect.defineMetadata(KAVO_OPERATION_METADATA, descriptor.id, propertyDescriptor.value);
   HttpCode(route.status)(prototype, methodName, propertyDescriptor);
   METHOD_DECORATORS[route.method](route.path)(prototype, methodName, propertyDescriptor);
   // The envelope unwrap / `ETag` / `304` interceptor (ADR-0020), applied
