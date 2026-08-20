@@ -74,7 +74,7 @@ class HeaderPrincipalGuard implements CanActivate {
   operations: {
     createOne: { policy: authenticated() },
     updateOne: { policy: or(role("admin"), and(permission("post:update"), owner("authorId"))) },
-    deleteOne: { policy: ["post:delete"] },
+    deleteOne: { policy: permission("post:delete") },
     findOne: { policy: owner("authorId") },
     restoreOne: { policy: owner("authorId") },
     purgeOne: { enabled: true, policy: owner("authorId") },
@@ -142,7 +142,7 @@ describe("policy over real HTTP + SQLite (ADR-0032)", () => {
     await request(server()).post("/posts").set(asUser("u-1")).send({ title: "x", authorId: "u-1" }).expect(201);
   });
 
-  it("array shorthand: deleteOne requires the named permission", async () => {
+  it("permission(): deleteOne requires the named permission", async () => {
     const id = await seed("u-1");
     await request(server()).delete(`/posts/${id}`).set(asUser("u-1")).expect(403);
     await request(server())
