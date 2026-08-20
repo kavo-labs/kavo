@@ -10,10 +10,9 @@ import type { IncludePath } from "../types/include-path.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
-import type { PolicyNode } from "../policy/kavo-policy.js";
+import type { Policy } from "../policy/kavo-policy.js";
 import { createMemoryCacheStore } from "../caching/cache-store.js";
 import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
-import { collectOwnerFields, isPolicyNode, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
@@ -74,12 +73,12 @@ export function resolveEntityConfig<Entity extends object>(
   globalDefaults: DeepPartial<KavoSettings> | undefined,
   realtimeTransports: readonly RealtimeTransport[] = [],
   cacheStore: CacheStore = createMemoryCacheStore(),
-  globalPolicy?: PolicyNode,
+  globalPolicy?: Policy,
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
-  const policy = resolvePolicy(entityName, entityConfig, metadata, globalPolicy);
+  const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
   const entitySettings = mergeSettings(
@@ -147,71 +146,41 @@ export function resolveEntityConfig<Entity extends object>(
 }
 
 /**
- * Operations with no single row to check an `owner`/`when` node against:
- * `createOne` has no entity yet, `findMany` has a set of rows rather than
- * one. Configuring an entity-aware node on either is a bootstrap error
- * (ADR-0032), not a runtime one — the same "catch it before it's baked in"
- * treatment every other bootstrap validation in this file gets.
+ * Reject a `policy` value that isn't a function — TypeScript callers get a
+ * compile error instead, but this catches a JS or dynamically-built config
+ * the type system can't see (including the pre-ADR-0033 entity-scope
+ * `Partial<Record<StandardOperationId, PolicyNode>>` map, or a bare array),
+ * which would otherwise reach the engine's policy stage and fail confusingly
+ * on the first request instead of loudly here (ADR-0037).
  */
-const ENTITY_AWARE_POLICY_FORBIDDEN: ReadonlySet<StandardOperationId> = new Set(["createOne", "findMany"]);
-
-/**
- * Reject a shape that cannot be a `PolicyNode`: the array shorthand issue
- * #242 removed (TypeScript callers get a compile error instead, but this
- * catches a JS or dynamically-built config the type system can't see), and
- * — since ADR-0036 gave `policy` real content at every scope — anything else
- * without a recognized `type` discriminant, including the pre-ADR-0033
- * entity-scope `Partial<Record<StandardOperationId, PolicyNode>>` map, which
- * would otherwise reach `evaluatePolicy`'s exhaustive switch, fall through
- * to `undefined`, and silently deny every caller rather than failing loud
- * here.
- */
-function assertPolicyShape(entityName: string, scope: string, node: unknown): asserts node is PolicyNode {
-  if (Array.isArray(node)) {
+function assertIsPolicyFunction(entityName: string, scope: string, value: unknown): asserts value is Policy {
+  if (typeof value !== "function") {
     throw new ConfigurationException(
       entityName,
       scope,
-      `the array shorthand was removed (issue #242) — 'policy' now takes a PolicyNode only. ` +
-        `Use 'permission(name)', or 'and(permission(a), permission(b))' for what a multi-name array expressed.`,
-    );
-  }
-  if (!isPolicyNode(node)) {
-    throw new ConfigurationException(
-      entityName,
-      scope,
-      `'${scope}' must be a PolicyNode built with 'permission'/'role'/'owner'/'authenticated'/'filtered'/'when'/` +
-        `'and'/'or'/'not' — got ${JSON.stringify(node)}. A per-operation entry may also be 'false', to opt out of ` +
-        `an inherited entity- or global-scope default.`,
+      `'${scope}' must be a function — ({ resource, operation, params, context, entity }) => boolean, got ` +
+        `'${typeof value}'. A per-operation entry may also be 'false', to opt out of an inherited entity- or ` +
+        `global-scope default.`,
     );
   }
 }
 
 /**
- * Resolve `policy` (ADR-0032, amended by ADR-0033 and ADR-0036): nearest
- * scope wins, wholesale — `operations.<id>.policy`, else `EntityConfig.policy`,
- * else `GlobalConfig.policy`, else unrestricted. `operations.<id>.policy:
- * false` opts one operation out of an inherited entity/global default.
- *
- * The effective node for every standard operation id is validated against
- * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032) and against a relation-
- * crossing `owner(field)` — including one inherited from entity or global
- * scope, not only one declared on the operation itself, since an inherited
- * `owner`/`when` on `createOne`/`findMany` is exactly as unrunnable as one
- * declared there directly.
+ * Resolve `policy` (ADR-0037): nearest scope wins, wholesale —
+ * `operations.<id>.policy`, else `EntityConfig.policy`, else
+ * `GlobalConfig.policy`, else unrestricted. `operations.<id>.policy: false`
+ * opts one operation out of an inherited entity/global default.
  */
 function resolvePolicy<Entity extends object>(
   entityName: string,
   entityConfig: EntityConfig<Entity> | undefined,
-  metadata: EntityMetadata<Entity>,
-  globalPolicy: PolicyNode | undefined,
-): Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>> {
-  const relationNames = new Set(metadata.relations.map((relation) => relation.name));
-
+  globalPolicy: Policy | undefined,
+): Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>> {
   const entityPolicy = entityConfig?.policy;
-  if (entityPolicy !== undefined) assertPolicyShape(entityName, "policy", entityPolicy);
-  if (globalPolicy !== undefined) assertPolicyShape(entityName, "policy (global default)", globalPolicy);
+  if (entityPolicy !== undefined) assertIsPolicyFunction(entityName, "policy", entityPolicy);
+  if (globalPolicy !== undefined) assertIsPolicyFunction(entityName, "policy (global default)", globalPolicy);
 
-  const resolved: Partial<Record<StandardOperationId, PolicyNode<Entity>>> = {};
+  const resolved: Partial<Record<StandardOperationId, Policy<Entity>>> = {};
   for (const id of STANDARD_OPERATION_IDS) {
     const operationConfig = entityConfig?.operations?.[id];
     const operationPolicy =
@@ -219,37 +188,14 @@ function resolvePolicy<Entity extends object>(
         ? (operationConfig as OperationConfig<Entity>).policy
         : undefined;
     if (operationPolicy !== undefined && operationPolicy !== false) {
-      assertPolicyShape(entityName, `operations.${id}.policy`, operationPolicy);
+      assertIsPolicyFunction(entityName, `operations.${id}.policy`, operationPolicy);
     }
 
-    const node: PolicyNode<Entity> | false | undefined =
-      operationPolicy !== undefined
-        ? operationPolicy
-        : ((entityPolicy ?? globalPolicy) as PolicyNode<Entity> | undefined);
-    if (node === undefined || node === false) continue;
+    const policy: Policy<Entity> | false | undefined =
+      operationPolicy !== undefined ? operationPolicy : ((entityPolicy ?? globalPolicy) as Policy<Entity> | undefined);
+    if (policy === undefined || policy === false) continue;
 
-    if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
-      throw new ConfigurationException(
-        entityName,
-        `operations.${id}.policy`,
-        `'${id}' has no single entity to check an 'owner'/'when' node against — ` +
-          `${id === "createOne" ? "the row doesn't exist yet" : "it resolves a set of rows, not one"}. ` +
-          `Use 'permission'/'role'/'authenticated' here instead.`,
-      );
-    }
-    for (const field of collectOwnerFields(node)) {
-      const [first] = field.split(".");
-      if (first !== undefined && relationNames.has(first)) {
-        throw new ConfigurationException(
-          entityName,
-          `operations.${id}.policy`,
-          `owner('${field}') crosses the '${first}' relation — the policy stage's pre-fetch loads no relations, ` +
-            `so this would silently deny every caller. Address a column on the entity itself, or check the ` +
-            `relation from inside a 'when()' predicate, which can load it through 'context.repository' itself`,
-        );
-      }
-    }
-    resolved[id] = node;
+    resolved[id] = policy;
   }
   return Object.freeze(resolved);
 }

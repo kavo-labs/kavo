@@ -300,24 +300,25 @@ export interface ArrayMutationSettings {
 /**
  * The default-deny switch for the `policy` stage (ADR-0035). `policy`
  * itself (`GlobalConfig.policy`/`EntityConfig.policy`/`OperationConfig.policy`,
- * ADR-0036) is a structural field at every scope it is configured on, never
- * a `KavoSettings` one — `PolicyNode` is a discriminated union `DeepPartial`
- * would corrupt — so this stays a deliberately separate, ordinary settings
- * subtree even though `policy` gained a global default of its own. The two
- * remain distinct mechanisms: `authorization.required` only fills the gap
- * where `policy`'s own fallback chain (operation → entity → global) resolved
- * to nothing at all, it never overrides a resolved `policy` node. `false` is
- * not accepted here (unlike `cache`/`realtime`/`softDelete`): there is
- * nothing else in this subtree to disable wholesale, so the plain object is
- * always the shape.
+ * ADR-0037) is a structural field at every scope it is configured on, never
+ * a `KavoSettings` one — a function type is not something `DeepPartial`
+ * can partialize without losing callability — so this stays a deliberately
+ * separate, ordinary settings subtree even though `policy` has a global
+ * default of its own. The two remain distinct mechanisms:
+ * `authorization.required` only fills the gap where `policy`'s own fallback
+ * chain (operation → entity → global) resolved to nothing at all, it never
+ * overrides a resolved policy. `false` is not accepted here (unlike
+ * `cache`/`realtime`/`softDelete`): there is nothing else in this subtree to
+ * disable wholesale, so the plain object is always the shape.
  */
 export interface AuthorizationSettings {
   /**
-   * `true` denies a standard operation with no `policy.<id>` entry
+   * `true` denies a standard operation with no resolved `policy.<id>`
    * (`403 KAVO_FORBIDDEN`) instead of running it unrestricted. An operation
-   * with an explicit `policy.<id>` entry is unaffected either way — this
-   * only fills the gap where no rule is configured. Custom operations never
-   * reach the policy stage at all (ADR-0032), so this cannot gate them.
+   * whose policy resolved from any scope is unaffected either way — this
+   * only fills the gap where no rule resolved at all. Custom operations
+   * never reach the policy stage at all (ADR-0032), so this cannot gate
+   * them.
    */
   readonly required: boolean;
 }
