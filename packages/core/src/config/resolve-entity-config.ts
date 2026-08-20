@@ -45,6 +45,7 @@ const SETTINGS_KEYS = [
   "softDelete",
   "realtime",
   "arrayMutation",
+  "authorization",
 ] as const satisfies readonly (keyof KavoSettings)[];
 
 /**

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { KavoOptions } from "@kavo/core";
 import {
   ConfigurationException,
   ForbiddenException,
@@ -6,14 +7,48 @@ import {
   createKavo,
   policyNeedsEntity,
 } from "@kavo/core";
+import type { EntityId, KavoContext } from "@kavo/core";
 import { and, authenticated, filtered, not, or, owner, permission, role, when } from "@kavo/core";
-import { Post, SeededAdapter, postMetadata } from "./support/blog-fixture.js";
+import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
 
-function makeCrud(config?: Parameters<ReturnType<typeof createKavo>["createCrud"]>[1]) {
+function makeCrud(config?: Parameters<ReturnType<typeof createKavo>["createCrud"]>[1], options?: KavoOptions) {
   const adapter = new SeededAdapter<Post>([]);
-  const kavo = createKavo();
+  const kavo = createKavo(options);
   const crud = kavo.createCrud(Post, config as never, { adapter, metadata: postMetadata });
+  return { crud, adapter, kavo };
+}
+
+/** `SeededAdapter` plus the one write `arrayMutation`'s `replace` strategy needs (mirrors array-mutation.spec.ts's own). */
+class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter<Entity> {
+  async replaceRelation(
+    id: EntityId,
+    relation: string,
+    memberIds: readonly EntityId[] | null,
+    _context: KavoContext<Entity>,
+  ): Promise<Entity> {
+    const row = await this.findOneById(id, null);
+    if (row === null) throw new Error("fixture: row not found");
+    (row as unknown as Record<string, unknown>)[relation] = memberIds;
+    return row;
+  }
+}
+
+function makeAuthorCrud(config?: Parameters<ReturnType<typeof createKavo>["createCrud"]>[1], options?: KavoOptions) {
+  const adapter = new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]);
+  const kavo = createKavo(options);
+  // Registered on the same root so the entity catalog can resolve `Post`'s
+  // id field when normalizing `posts` refs (the same setup array-mutation.spec.ts uses).
+  kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
+  const crud = kavo.createCrud(
+    Author,
+    {
+      arrayMutation: { strategy: "replace" },
+      relations: { edges: { posts: { write: true } } },
+      ...config,
+    } as never,
+    { adapter, metadata: authorMetadata },
+  );
   return { crud, adapter, kavo };
 }
 
@@ -364,6 +399,145 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
     // reuse this response instead of re-checking ownership.
     await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
     await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe("policy — authorization.required default-deny switch (ADR-0033)", () => {
+  it("off (the default) leaves an operation with no policy entry unrestricted", async () => {
+    const { crud, adapter } = makeCrud();
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    await expect(crud.updateOne(1, { title: "b" } as never)).resolves.toMatchObject({ title: "b" });
+  });
+
+  it("entity-level required:true denies a standard operation with no policy entry, before the adapter is ever touched", async () => {
+    const { crud, adapter } = makeCrud({ authorization: { required: true } } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    const call = crud.updateOne(1, { title: "b" } as never);
+    await expect(call).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(call).rejects.toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
+    // The pre-fetch/cache/write path never ran — lastQuery stays whatever
+    // pushing the fixture row left it as (never set by a read).
+    expect(adapter.lastQuery).toBeNull();
+    expect(adapter.rows[0]!.title).toBe("a");
+  });
+
+  it("required:true denies every standard operation left unconfigured, not just one", async () => {
+    const { crud } = makeCrud({ authorization: { required: true } } as never);
+    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findOne(1)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("a global 'defaults: { authorization: { required: true } }' opts every entity in", async () => {
+    const { crud } = makeCrud(undefined, { defaults: { authorization: { required: true } } });
+    await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("an explicit policy.<id> entry still governs when required is true — it isn't overridden", async () => {
+    const { crud, adapter } = makeCrud({
+      authorization: { required: true },
+      policy: { updateOne: permission("post:update") },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    await expect(
+      crud.updateOne(1, { title: "x" } as never, { principal: { permissions: ["post:update"] } }),
+    ).resolves.toMatchObject({ title: "x" });
+    await expect(crud.updateOne(1, { title: "x" } as never, { principal: { permissions: [] } })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("an explicit entity-aware findOne policy still governs when required is true — the deferred check isn't shadowed by the default-deny branch", async () => {
+    const { crud, adapter } = makeCrud({
+      authorization: { required: true },
+      policy: { findOne: owner("authorId") },
+    } as never);
+    adapter.rows.push({
+      id: 1,
+      title: "a",
+      authorId: "u-1",
+      author: null,
+      comments: [],
+      deletedAt: null,
+    } as unknown as Post);
+
+    // The owner still passes — required:true must not have hoisted the
+    // default-deny check ahead of (or in place of) the deferred owner()
+    // evaluation checkFindOnePolicy runs against the row the handler
+    // already fetched.
+    await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
+    await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("operations.<id>.authorization overrides the entity-level default per operation", async () => {
+    const { crud } = makeCrud({
+      authorization: { required: true },
+      operations: { findMany: { authorization: { required: false } } },
+    } as never);
+    await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
+    await expect(crud.findOne(1)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("a custom operation is unaffected by required:true — it never reaches the policy stage", async () => {
+    const { crud, adapter } = makeCrud({
+      authorization: { required: true },
+      operations: {
+        promoteOne: {
+          handler: {
+            async execute() {
+              return adapter.rows[0] ?? null;
+            },
+          },
+        },
+      },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    await expect(crud.run("promoteOne" as never, { id: 1 } as never)).resolves.toMatchObject({ title: "a" });
+  });
+
+  it("a per-call settings override cannot loosen required:true", async () => {
+    const { crud } = makeCrud({ authorization: { required: true } } as never);
+    await expect(
+      crud.findMany(undefined, { settings: { authorization: { required: false } } } as never),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("a per-call settings override cannot tighten required:false either — the subtree is pinned, not merged", async () => {
+    const { crud } = makeCrud();
+    await expect(
+      crud.findMany(undefined, { settings: { authorization: { required: true } } } as never),
+    ).resolves.toMatchObject({ items: [] });
+  });
+
+  it("rejects a non-boolean authorization.required at bootstrap", () => {
+    expect(() => makeCrud({ authorization: { required: "yes" } } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("also gates a Kavo-synthesized array-mutation operation (replace<Relation>) — it can never carry a policy.<id> entry of its own", async () => {
+    const { crud } = makeAuthorCrud({ authorization: { required: true } } as never);
+    const call = crud.engine.execute({
+      operation: "replacePosts",
+      id: "1",
+      body: [2, 3] as never,
+      query: null,
+      options: null,
+    } as never);
+    await expect(call).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(call).rejects.toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
+  });
+
+  it("leaves an array-mutation operation alone when required is off (the default) — the gate only adds a restriction, it changes nothing else", async () => {
+    const { crud, adapter } = makeAuthorCrud();
+    const response = await crud.engine.execute({
+      operation: "replacePosts",
+      id: "1",
+      body: [2, 3] as never,
+      query: null,
+      options: null,
+    } as never);
+    expect(response.item).toMatchObject({ id: 1, name: "Ada" });
+    expect(adapter.rows[0]).toMatchObject({ posts: [2, 3] });
   });
 });
 

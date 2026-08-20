@@ -29,6 +29,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "ArrayMutationRelationEntry",
   "ArrayMutationSettings",
   "ArrayMutationStrategy",
+  "AuthorizationSettings",
   "BUILT_IN_DEFAULTS",
   "CacheSettings",
   "CacheStore",
