@@ -226,6 +226,8 @@ const PUBLIC_SURFACE: readonly string[] = [
   "TransactionManager",
   "TransactionOptions",
   "TransactionPropagation",
+  "WhenParams",
+  "WhenPredicateArgs",
   "WireQuery",
   "and",
   "assertNever",

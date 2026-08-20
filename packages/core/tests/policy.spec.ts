@@ -122,10 +122,28 @@ describe("policy — Level 2 helper DSL", () => {
 
   it("when() runs an arbitrary predicate against context and the loaded entity", async () => {
     const { crud, adapter } = makeCrud({
-      operations: { updateOne: { policy: when<Post>((_ctx, post) => post?.title !== "locked") } },
+      operations: { updateOne: { policy: when<Post>(({ entity }) => entity?.title !== "locked") } },
     } as never);
     adapter.rows.push({ id: 1, title: "locked", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("when() receives resource, operation, and params (the request's id/query) alongside context and entity", async () => {
+    let seen: { resource: string; operation: string; id: unknown } | undefined;
+    const { crud, adapter } = makeCrud({
+      operations: {
+        updateOne: {
+          policy: when<Post>(({ context, resource, operation, params }) => {
+            seen = { resource, operation, id: params.id };
+            return context.entityName === resource && context.operation === operation;
+          }),
+        },
+      },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    await expect(crud.updateOne(1, { title: "x" } as never)).resolves.toMatchObject({ title: "x" });
+    expect(seen).toEqual({ resource: "Post", operation: "updateOne", id: 1 });
   });
 });
 

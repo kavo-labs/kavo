@@ -29,7 +29,7 @@ import {
   PreconditionUnsupportedException,
   QueryValidationException,
 } from "../errors/exceptions.js";
-import type { PolicyNode } from "../policy/kavo-policy.js";
+import type { PolicyNode, WhenParams } from "../policy/kavo-policy.js";
 import { evaluatePolicy, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
@@ -302,7 +302,7 @@ export class KavoEngine<Entity extends object> {
     const input = this.resolveInput(request, descriptor, context);
 
     const result = await descriptor.handler.execute(input, context);
-    if (descriptor.id === "findOne") await this.checkFindOnePolicy(configView, context, result as Entity);
+    if (descriptor.id === "findOne") await this.checkFindOnePolicy(request, configView, context, result as Entity);
 
     // The one write-driven thing the cache needs, and the whole
     // invalidation strategy: every entry for the entity is dropped after a
@@ -353,10 +353,11 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const node = isStandardOperationId(descriptor.id) ? configView.policy[descriptor.id] : undefined;
     if (node === undefined) return;
+    const params: WhenParams<Entity> = { id: request.id };
 
     if (descriptor.id === "findOne") {
       if (policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
-      await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined);
+      await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined, params);
       return;
     }
 
@@ -378,18 +379,19 @@ export class KavoEngine<Entity extends object> {
       entity = found;
     }
 
-    await this.assertPolicyAllows(node, descriptor.id, configView, context, entity);
+    await this.assertPolicyAllows(node, descriptor.id, configView, context, entity, params);
   }
 
   /** `findOne`'s deferred half of the policy stage — only reached for an entity-aware node; see `checkPolicy`'s doc comment. */
   private async checkFindOnePolicy(
+    request: KavoRequest<Entity>,
     configView: ResolvedEntityConfig<Entity>,
     context: KavoContext<Entity>,
     entity: Entity,
   ): Promise<void> {
     const node = configView.policy.findOne;
     if (node === undefined || !policyNeedsEntity(node)) return;
-    await this.assertPolicyAllows(node, "findOne", configView, context, entity);
+    await this.assertPolicyAllows(node, "findOne", configView, context, entity, { id: request.id });
   }
 
   private async assertPolicyAllows(
@@ -398,8 +400,9 @@ export class KavoEngine<Entity extends object> {
     configView: ResolvedEntityConfig<Entity>,
     context: KavoContext<Entity>,
     entity: Entity | undefined,
+    params: WhenParams<Entity>,
   ): Promise<void> {
-    const allowed = await evaluatePolicy(node, context, entity);
+    const allowed = await evaluatePolicy(node, context, entity, params);
     if (!allowed) {
       throw new ForbiddenException({
         messageParams: { entity: configView.entityName, operation },
