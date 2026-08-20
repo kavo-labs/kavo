@@ -13,7 +13,7 @@ import type { CacheStore } from "../caching/cache-store.js";
 import type { PolicyNode } from "../policy/kavo-policy.js";
 import { createMemoryCacheStore } from "../caching/cache-store.js";
 import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
-import { collectOwnerFields, policyNeedsEntity } from "../policy/kavo-policy.js";
+import { collectOwnerFields, isPolicyNode, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
@@ -74,11 +74,12 @@ export function resolveEntityConfig<Entity extends object>(
   globalDefaults: DeepPartial<KavoSettings> | undefined,
   realtimeTransports: readonly RealtimeTransport[] = [],
   cacheStore: CacheStore = createMemoryCacheStore(),
+  globalPolicy?: PolicyNode,
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
-  const policy = resolvePolicy(entityName, entityConfig, metadata);
+  const policy = resolvePolicy(entityName, entityConfig, metadata, globalPolicy);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
   const entitySettings = mergeSettings(
@@ -155,58 +156,78 @@ export function resolveEntityConfig<Entity extends object>(
 const ENTITY_AWARE_POLICY_FORBIDDEN: ReadonlySet<StandardOperationId> = new Set(["createOne", "findMany"]);
 
 /**
- * Reject a root-level `policy` map (pre-ADR-0033 shape): `policy` now
- * configures only per-operation, at `operations.<id>.policy`, so a caller
- * still passing the old entity-scope map gets a bootstrap error naming the
- * new location instead of the map being silently ignored.
+ * Reject a shape that cannot be a `PolicyNode`: the array shorthand issue
+ * #242 removed (TypeScript callers get a compile error instead, but this
+ * catches a JS or dynamically-built config the type system can't see), and
+ * — since ADR-0036 gave `policy` real content at every scope — anything else
+ * without a recognized `type` discriminant, including the pre-ADR-0033
+ * entity-scope `Partial<Record<StandardOperationId, PolicyNode>>` map, which
+ * would otherwise reach `evaluatePolicy`'s exhaustive switch, fall through
+ * to `undefined`, and silently deny every caller rather than failing loud
+ * here.
  */
-function rejectLegacyEntityLevelPolicy(entityName: string, entityConfig: EntityConfig<never> | undefined): void {
-  if (entityConfig === undefined || !("policy" in entityConfig) || entityConfig.policy === undefined) return;
-  throw new ConfigurationException(
-    entityName,
-    "policy",
-    `an entity-scope 'policy' map is no longer supported (ADR-0033) — configure each operation's policy at ` +
-      `'operations.<id>.policy' instead`,
-  );
+function assertPolicyShape(entityName: string, scope: string, node: unknown): asserts node is PolicyNode {
+  if (Array.isArray(node)) {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `the array shorthand was removed (issue #242) — 'policy' now takes a PolicyNode only. ` +
+        `Use 'permission(name)', or 'and(permission(a), permission(b))' for what a multi-name array expressed.`,
+    );
+  }
+  if (!isPolicyNode(node)) {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a PolicyNode built with 'permission'/'role'/'owner'/'authenticated'/'filtered'/'when'/` +
+        `'and'/'or'/'not' — got ${JSON.stringify(node)}. A per-operation entry may also be 'false', to opt out of ` +
+        `an inherited entity- or global-scope default.`,
+    );
+  }
 }
 
 /**
- * Resolve `policy`: `operations.<id>.policy` alone (ADR-0033 — there is no
- * entity-scope 'policy' map to fall back to), validated against
- * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032). Also rejects, at
- * bootstrap: a bare array (the shorthand issue #242 removed — TypeScript
- * callers get a compile error instead, but this catches a JS or
- * dynamically-built config the type system can't see, which would
- * otherwise reach `evaluatePolicy`'s exhaustive switch, fall through to
- * `undefined`, and silently deny every caller rather than failing loud
- * here); and an `owner(field)` whose first dotted segment names a relation
- * (the pre-fetch loads no relations, so it would silently deny every caller
- * instead of ever passing).
+ * Resolve `policy` (ADR-0032, amended by ADR-0033 and ADR-0036): nearest
+ * scope wins, wholesale — `operations.<id>.policy`, else `EntityConfig.policy`,
+ * else `GlobalConfig.policy`, else unrestricted. `operations.<id>.policy:
+ * false` opts one operation out of an inherited entity/global default.
+ *
+ * The effective node for every standard operation id is validated against
+ * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032) and against a relation-
+ * crossing `owner(field)` — including one inherited from entity or global
+ * scope, not only one declared on the operation itself, since an inherited
+ * `owner`/`when` on `createOne`/`findMany` is exactly as unrunnable as one
+ * declared there directly.
  */
 function resolvePolicy<Entity extends object>(
   entityName: string,
   entityConfig: EntityConfig<Entity> | undefined,
   metadata: EntityMetadata<Entity>,
+  globalPolicy: PolicyNode | undefined,
 ): Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>> {
-  rejectLegacyEntityLevelPolicy(entityName, entityConfig as EntityConfig<never> | undefined);
   const relationNames = new Set(metadata.relations.map((relation) => relation.name));
+
+  const entityPolicy = entityConfig?.policy;
+  if (entityPolicy !== undefined) assertPolicyShape(entityName, "policy", entityPolicy);
+  if (globalPolicy !== undefined) assertPolicyShape(entityName, "policy (global default)", globalPolicy);
 
   const resolved: Partial<Record<StandardOperationId, PolicyNode<Entity>>> = {};
   for (const id of STANDARD_OPERATION_IDS) {
     const operationConfig = entityConfig?.operations?.[id];
-    const node =
+    const operationPolicy =
       typeof operationConfig === "object" && operationConfig !== null
         ? (operationConfig as OperationConfig<Entity>).policy
         : undefined;
-    if (node === undefined) continue;
-    if (Array.isArray(node)) {
-      throw new ConfigurationException(
-        entityName,
-        `operations.${id}.policy`,
-        `the array shorthand was removed (issue #242) — 'policy' now takes a PolicyNode only. ` +
-          `Use 'permission(name)', or 'and(permission(a), permission(b))' for what a multi-name array expressed.`,
-      );
+    if (operationPolicy !== undefined && operationPolicy !== false) {
+      assertPolicyShape(entityName, `operations.${id}.policy`, operationPolicy);
     }
+
+    const node: PolicyNode<Entity> | false | undefined =
+      operationPolicy !== undefined
+        ? operationPolicy
+        : ((entityPolicy ?? globalPolicy) as PolicyNode<Entity> | undefined);
+    if (node === undefined || node === false) continue;
+
     if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
       throw new ConfigurationException(
         entityName,

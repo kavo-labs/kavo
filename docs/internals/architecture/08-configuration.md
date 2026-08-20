@@ -60,13 +60,21 @@ participates in the merge. `computed` carries functions, so like `dto` it
 is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
 `policy` is the same shape of exception, for the same reason (a `when()`
-node carries a closure), but it has no entity-scope map at all
-([ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only)):
-`operations.<id>.policy` is the only place it is configured, and — unlike
-every ordinary settings key — it takes **no** per-call override either,
-since a per-call parameter that could loosen a policy would let a caller
-weaken its own authorization. See
-[ADR-0032](/internals/adr/0032-policy-authorization-dsl).
+node carries a closure, and `PolicyNode` is a discriminated union a
+field-by-field merge would corrupt): it resolves through its own
+nearest-scope-wins walk in `resolveEntityConfig` — `operations.<id>.policy`,
+then `EntityConfig.policy` (one default node for the whole entity), then a
+`GlobalConfig.policy` set once at `createKavo`
+([ADR-0032](/internals/adr/0032-policy-authorization-dsl), amended by
+[ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) and
+[ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults)) —
+never `mergeSettings`, and, unlike every ordinary settings key, it takes
+**no** per-call override at any of its three scopes, since a per-call
+parameter that could loosen a policy would let a caller weaken its own
+authorization. `GlobalConfig.policy` is deliberately not a `KavoSettings`
+field even though it is `policy`'s global-scope home — `DeepPartial`
+(what `GlobalConfig.defaults` is typed as) would partialize each branch of
+the `PolicyNode` union independently, erasing its discriminant.
 
 `authorization` (governing `authorization.required`, the `policy`
 default-deny switch) is, by contrast, an **ordinary** `KavoSettings` key —
@@ -165,16 +173,24 @@ bootstrap rather than as a surprising response later
 An `owner`/`when` node — the two whose result depends on the loaded row,
 not only on `context` — configured on `createOne` or `findMany` fails at
 bootstrap ([ADR-0032](/internals/adr/0032-policy-authorization-dsl)): the
-former has no row yet, the latter resolves a set rather than one. The
-error names the entity and the `operations.<id>.policy` path, the same bar
-every other entry in this section holds to. `permission`/`role`/
+former has no row yet, the latter resolves a set rather than one. This is
+checked against the **effective** (resolved) node for every operation, not
+only one declared directly on it — an entity- or global-scope default that
+inherits onto `createOne`/`findMany` fails exactly the same way
+([ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults)).
+The error names the entity and the `operations.<id>.policy` path, the same
+bar every other entry in this section holds to. `permission`/`role`/
 `authenticated` are context-only and legal everywhere.
 
-One more `policy` shape fails the same way rather than silently misbehaving
+Two more `policy` shapes fail the same way rather than silently misbehaving
 at request time: an `owner(field)` whose first dotted segment names a
-relation (the pre-fetch loads no relations, so it could never pass). A
-root-level `policy` map — the pre-ADR-0033 entity-scope shape — is rejected
-outright, naming `operations.<id>.policy` as the replacement.
+relation (the pre-fetch loads no relations, so it could never pass), checked
+the same way whether declared or inherited; and a value with no recognized
+`PolicyNode` `type` discriminant, which catches the pre-ADR-0033
+per-operation entity-scope map shape (`{ updateOne: permission(...) }`) if a
+caller still passes one — it has no `type` field, so it fails as "not a
+PolicyNode" rather than being silently ignored, at whichever of the three
+scopes it landed on.
 
 ### `query.defaultSort`
 

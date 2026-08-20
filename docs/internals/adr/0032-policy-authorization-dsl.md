@@ -2,14 +2,19 @@
 
 **Status:** accepted (the "Config surface" section's entity-scope `policy`
 map is amended by [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) —
-`operations.<id>.policy` is now the only place `policy` is configured; the
+`operations.<id>.policy` became the only place `policy` was configured; the
 array shorthand the "The node types" and "Config surface" sections describe
 below was removed — issue #242 — since the `PolicyNode` DSL already covers
 everything it could express. `policy` now takes a `PolicyNode<Entity>` only.
 "The node types" section's `when(predicate)` signature is further amended by
 [ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument) —
 the predicate now takes one object argument, `{ context, entity, resource,
-operation, params }`, not `(context, entity?)`.)
+operation, params }`, not `(context, entity?)`. The "Config surface"
+section's "no global `policy`, no entity-scope fallback" posture is further
+amended by [ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults) —
+`policy` gains an entity-scope default (a single node, not the per-operation
+map ADR-0033 removed) and a global-scope default; the "no per-call override"
+half is unchanged.)
 
 ## Context
 

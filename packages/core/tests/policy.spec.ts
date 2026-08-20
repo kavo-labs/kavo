@@ -266,7 +266,7 @@ describe("policy — entity-aware nodes need the loaded row", () => {
 });
 
 describe("policy — bootstrap validation", () => {
-  it("rejects an entity-level 'policy' map, pointing at operations.<id>.policy instead", () => {
+  it("rejects a malformed entity-level 'policy' value — including the pre-ADR-0033 per-operation map shape, which has no PolicyNode 'type'", () => {
     expect(() => makeCrud({ policy: { updateOne: permission("post:update") } } as never)).toThrowError(
       ConfigurationException,
     );
@@ -275,13 +275,19 @@ describe("policy — bootstrap validation", () => {
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as ConfigurationException).detail).toContain("at 'policy'");
-      expect((error as ConfigurationException).detail).toContain("operations.<id>.policy");
+      expect((error as ConfigurationException).detail).toContain("'policy'");
+      expect((error as ConfigurationException).detail).toContain("PolicyNode");
     }
   });
 
-  it("rejects an entity-level 'policy' map even when empty — presence, not content, is what's rejected", () => {
+  it("rejects an entity-level 'policy' value that is an empty object", () => {
     expect(() => makeCrud({ policy: {} } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("rejects a malformed global (createKavo) 'policy' value the same way", () => {
+    expect(() => makeCrud(undefined, { policy: { updateOne: permission("post:update") } } as never)).toThrowError(
+      ConfigurationException,
+    );
   });
 
   it("rejects a bare array reaching 'policy' at runtime, since TypeScript can't catch a JS or dynamically-built config", () => {
@@ -320,6 +326,105 @@ describe("policy — bootstrap validation", () => {
   it("rejects an owner() field that crosses a relation, since the pre-fetch loads no relations", () => {
     expect(() => makeCrud({ operations: { updateOne: { policy: owner("author.id") } } } as never)).toThrowError(
       ConfigurationException,
+    );
+  });
+
+  it("rejects an entity-aware entity-level default that inherits onto createOne, not just one declared there directly", () => {
+    expect(() => makeCrud({ policy: owner("authorId") } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("rejects an entity-aware global default that inherits onto findMany", () => {
+    expect(() => makeCrud(undefined, { policy: when<Post>(() => true) } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("rejects an inherited entity-level owner() field that crosses a relation", () => {
+    expect(() => makeCrud({ policy: owner("author.id") } as never)).toThrowError(ConfigurationException);
+  });
+});
+
+describe("policy — entity-level and global default (ADR-0036)", () => {
+  it("an entity-level default policy applies to every operation that configures none of its own", async () => {
+    const { crud, adapter } = makeCrud({ policy: authenticated() } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    await expect(crud.updateOne(1, { title: "b" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).resolves.toMatchObject({
+      title: "b",
+    });
+    await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findMany(undefined, { principal: OWNER })).resolves.toMatchObject({
+      items: [{ title: "b" }],
+    });
+  });
+
+  it("operations.<id>.policy overrides an inherited entity-level default with a different rule", async () => {
+    const { crud, adapter } = makeCrud({
+      policy: authenticated(),
+      operations: { updateOne: { policy: permission("post:update") } },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    // Merely authenticated is not enough for updateOne: its own rule wins.
+    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(
+      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["post:update"] } }),
+    ).resolves.toMatchObject({ title: "b" });
+    // findMany still falls back to the entity-level default.
+    await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("operations.<id>.policy: false opts one operation out of an inherited entity-level default", async () => {
+    const { crud } = makeCrud({
+      policy: authenticated(),
+      operations: { findMany: { policy: false } },
+    } as never);
+    await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
+    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("a global (createKavo) default policy applies when neither entity nor operation configures one", async () => {
+    const { crud, adapter } = makeCrud(undefined, { policy: authenticated() });
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    await expect(crud.updateOne(1, { title: "b" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).resolves.toMatchObject({
+      title: "b",
+    });
+  });
+
+  it("operations.<id>.policy: false opts an operation out of an inherited global default", async () => {
+    const { crud } = makeCrud({ operations: { findMany: { policy: false } } } as never, {
+      policy: authenticated(),
+    });
+    await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
+    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("precedence is nearest-defined-wins: operation over entity over global", async () => {
+    const { crud, adapter } = makeCrud(
+      {
+        policy: permission("entity:default"),
+        operations: { updateOne: { policy: permission("operation:override") } },
+      } as never,
+      { policy: permission("global:default") },
+    );
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    // updateOne: operation-level wins over both entity and global.
+    await expect(
+      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["operation:override"] } }),
+    ).resolves.toMatchObject({ title: "b" });
+    await expect(
+      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["entity:default"] } }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    // findMany has no operation-level entry: entity-level wins over global.
+    await expect(crud.findMany(undefined, { principal: { permissions: ["entity:default"] } })).resolves.toMatchObject({
+      items: [{ title: "b" }],
+    });
+    await expect(crud.findMany(undefined, { principal: { permissions: ["global:default"] } })).rejects.toBeInstanceOf(
+      ForbiddenException,
     );
   });
 });

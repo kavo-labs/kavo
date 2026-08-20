@@ -7,7 +7,7 @@ import { Kavo, KavoModule } from "@kavo/nest";
 import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
 
 /**
- * `resolveEntityConfig`'s rejection of a root-level `policy` map
+ * `resolveEntityConfig`'s rejection of a malformed `policy` value
  * (`packages/core/tests/policy.spec.ts` pins the core-level behavior
  * directly) only actually runs once `createCrud` is called — for a
  * `@Kavo`-decorated class that happens in `KavoBinder.onModuleInit`
@@ -17,9 +17,15 @@ import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-in
  * `KavoModule`'s bootstrap sequence, the same integration-check shape
  * `array-mutation-route-reachable.e2e.spec.ts` uses for its own
  * `createCrud`-time bootstrap error.
+ *
+ * The entity-scope `policy` field is real again since ADR-0036, but the
+ * pre-ADR-0033 shape — a `Partial<Record<StandardOperationId,
+ * PolicyShorthand>>` map — is still not a `PolicyNode` (it has no `type`
+ * discriminant), so it still fails, just with a different message: "not a
+ * PolicyNode" rather than "entity-scope map no longer supported."
  */
-describe("KavoModule — legacy entity-level 'policy' map (ADR-0033)", () => {
-  it("rejects at bootstrap, naming operations.<id>.policy as the replacement", async () => {
+describe("KavoModule — malformed entity-level 'policy' value (the pre-ADR-0033 per-operation map shape)", () => {
+  it("rejects at bootstrap, naming 'policy' and requiring a PolicyNode", async () => {
     @Kavo(Todo, { policy: { updateOne: ["todo:update"] } } as never)
     @Controller("todos")
     class TodoController {}
@@ -38,6 +44,6 @@ describe("KavoModule — legacy entity-level 'policy' map (ADR-0033)", () => {
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
     expect(error.context.entityName).toBe("Todo");
     expect(error.messageParams).toMatchObject({ path: "policy" });
-    expect(error.detail).toContain("operations.<id>.policy");
+    expect(error.detail).toContain("PolicyNode");
   });
 });
