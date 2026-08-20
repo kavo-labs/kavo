@@ -61,7 +61,7 @@ is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
 `policy` is the same shape of exception, for the same reason (a `when()`
 node carries a closure), but it has no entity-scope map at all
-([ADR-0033](/internals/adr/0034-policy-moves-to-operation-scope-only)):
+([ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only)):
 `operations.<id>.policy` is the only place it is configured, and — unlike
 every ordinary settings key — it takes **no** per-call override either,
 since a per-call parameter that could loosen a policy would let a caller

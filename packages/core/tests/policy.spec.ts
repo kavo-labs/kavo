@@ -168,8 +168,13 @@ describe("policy — bootstrap validation", () => {
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as ConfigurationException).detail).toContain("at 'policy'");
       expect((error as ConfigurationException).detail).toContain("operations.<id>.policy");
     }
+  });
+
+  it("rejects an entity-level 'policy' map even when empty — presence, not content, is what's rejected", () => {
+    expect(() => makeCrud({ policy: {} } as never)).toThrowError(ConfigurationException);
   });
 
   it("rejects an entity-aware node on createOne with ConfigurationException naming the entity and key path", () => {

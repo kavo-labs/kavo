@@ -361,6 +361,14 @@ const config = defineConfig({
                 text: "0031 — Result cache is a live per-entity store",
                 link: "/internals/adr/0031-result-cache-is-a-live-store-invalidated-wholesale",
               },
+              {
+                text: "0032 — Policy authorization DSL",
+                link: "/internals/adr/0032-policy-authorization-dsl",
+              },
+              {
+                text: "0033 — Policy moves to operation scope only",
+                link: "/internals/adr/0033-policy-moves-to-operation-scope-only",
+              },
             ],
           },
         ],
