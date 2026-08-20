@@ -16,7 +16,9 @@ import {
   Account,
   InMemoryAccountAdapter,
   accountMetadata,
+  accountMetadataWithNaturalKey,
   accountMetadataWithoutMarker,
+  accountMetadataWithWritableMarker,
 } from "./support/account-fixture.js";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
 
@@ -218,5 +220,34 @@ describe("soft-delete operation enablement (ADR-0013)", () => {
   it("rejects a non-boolean withDeleted value", async () => {
     const { crud } = makeAccountCrud();
     await expect(crud.findMany({ withDeleted: "yes" } as never)).rejects.toBeInstanceOf(QueryValidationException);
+  });
+});
+
+describe("the soft-delete marker and primary key are not mass-assignable", () => {
+  it("cannot be soft-deleted or revived through a plain PATCH, even when the marker is an ordinary column", async () => {
+    // `accountMetadataWithWritableMarker` reports `softDeleteField: null`
+    // and `generated: false` on `deletedAt` — exactly what
+    // Prisma/Mongoose/MikroORM (and `@kavo/typeorm` with a plain-column
+    // `softDelete.field`) report, the shape a `generated`-only exclusion
+    // cannot see.
+    const { crud, adapter } = makeAccountCrud(undefined, accountMetadataWithWritableMarker);
+    await crud.createOne({ name: "acme" } as never);
+
+    await crud.updateOne(1, { name: "acme", deletedAt: new Date(0) } as never);
+
+    expect(adapter.rows[0]!.deletedAt).toBeNull();
+    // The dedicated operation still works — this isn't a broken feature,
+    // just a route the generic write can no longer bypass it through.
+    await crud.deleteOne(1);
+    expect(adapter.rows[0]!.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it("cannot reassign an existing row's id through a plain PATCH", async () => {
+    const { crud, adapter } = makeAccountCrud(undefined, accountMetadataWithNaturalKey);
+    await crud.createOne({ name: "acme" } as never);
+
+    await crud.patchOne(1, { id: 999, name: "acme corp" } as never);
+
+    expect(adapter.rows).toMatchObject([{ id: 1, name: "acme corp" }]);
   });
 });

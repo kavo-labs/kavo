@@ -254,15 +254,36 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * strip below is what keeps that true for a `DefaultDeserializer`
  * constructed directly — it is exported, and its contract is "computed
  * names never reach the adapter", not "the config resolver checked first".
+ *
+ * The primary key and the soft-delete marker field are excluded from the
+ * derived default **regardless of `generated`**: an app-assigned id (a
+ * natural key, a `@BeforeInsert`-populated UUID) is not driver-generated
+ * but must not be reassignable by an ordinary write, and a soft-delete
+ * marker that isn't the ORM's own delete-date column is an ordinary
+ * writable column with no special exclusion otherwise — either would let a
+ * client rewrite a row's identity or its deleted state through the generic
+ * write route instead of `create`'s intentional choice of id or
+ * `deleteOne`/`restoreOne`'s state machine. Unlike computed
+ * fields, this is a deliberately narrower guarantee: an explicit write DTO
+ * naming the id or marker field still reaches it, because both are real
+ * columns with legitimate opt-in uses (assigning a natural key on
+ * `create`) that a computed field never has.
  */
 export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entity> {
   private readonly writableProjection: readonly string[];
   private readonly relationIdFields: ReadonlyMap<string, () => string | undefined>;
   private readonly computedNames: ReadonlySet<string>;
 
-  constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
+  constructor(
+    metadata: EntityMetadata<Entity>,
+    catalog?: EntityCatalog,
+    computed: ComputedFieldMap<Entity> = {},
+    softDeleteField: string | null = null,
+  ) {
     this.computedNames = new Set(Object.keys(computed));
-    const columns = metadata.fields.filter((field) => !field.generated).map((field) => field.name);
+    const columns = metadata.fields
+      .filter((field) => !field.generated && field.name !== metadata.idField && field.name !== softDeleteField)
+      .map((field) => field.name);
     const relations = new Map<string, () => string | undefined>();
     for (const relation of metadata.relations) {
       // Lazily: the target may enter the catalog after this entity does.

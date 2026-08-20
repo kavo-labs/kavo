@@ -214,6 +214,61 @@ describe("DefaultDeserializer — write projection", () => {
   });
 });
 
+describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
+  // `User.id` is `generated: true`, which already excludes it — these cases
+  // need a primary key an ORM does *not* mark generated (an app-assigned
+  // natural key), the case a `generated`-only check misses entirely.
+  const naturalKeyMetadata = {
+    ...userMetadata,
+    fields: userMetadata.fields.map((field) => (field.name === "id" ? { ...field, generated: false } : field)),
+  };
+
+  it("drops a non-generated primary key from the derived default regardless of `generated`", () => {
+    const deserializer = new DefaultDeserializer(naturalKeyMetadata);
+    const payload = deserializer.deserialize({ id: "chosen-id", name: "Ada" }, null, contextStub());
+    expect(payload).toEqual({ name: "Ada" });
+  });
+
+  it("still lets an explicit write DTO name the primary key", () => {
+    // Unlike a computed field, the id is a real column with a legitimate
+    // opt-in use (assigning a natural key on create), so an explicit DTO
+    // still reaches it.
+    class CreateUserDto {
+      id = "";
+      name = "";
+    }
+    const deserializer = new DefaultDeserializer(naturalKeyMetadata);
+    const payload = deserializer.deserialize({ id: "chosen-id", name: "Ada" }, CreateUserDto, contextStub());
+    expect(payload).toEqual({ id: "chosen-id", name: "Ada" });
+  });
+
+  it("drops the resolved soft-delete marker field from the derived default", () => {
+    // The marker is an ordinary, non-generated column whenever the ORM
+    // cannot declare a delete-date column (Prisma/Mongoose/MikroORM, and
+    // `@kavo/typeorm` too when `softDelete.field` names a plain column) —
+    // exactly the shape a `generated`-only check cannot see.
+    const withMarker = {
+      ...userMetadata,
+      fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
+    };
+    const deserializer = new DefaultDeserializer(withMarker, undefined, {}, "deletedAt");
+    const payload = deserializer.deserialize({ deletedAt: new Date(0), name: "Ada" }, null, contextStub());
+    expect(payload).toEqual({ name: "Ada" });
+  });
+
+  it("leaves an ordinary column named 'deletedAt' writable when the entity has no soft-delete marker", () => {
+    // `softDeleteField` argument is `null` by default — no marker resolved,
+    // no exclusion.
+    const withMarker = {
+      ...userMetadata,
+      fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
+    };
+    const deserializer = new DefaultDeserializer(withMarker);
+    const payload = deserializer.deserialize({ deletedAt: new Date(0), name: "Ada" }, null, contextStub());
+    expect(payload).toEqual({ deletedAt: new Date(0), name: "Ada" });
+  });
+});
+
 describe("DefaultDtoResolver — slot resolution", () => {
   class CreateUserDto {}
   class UpdateUserDto {}
