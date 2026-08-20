@@ -15,7 +15,7 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 })
 ```
 
-That config makes `POST /posts` require a signed-in caller, `GET /posts` pass for an `admin` or a signed-in caller whose query filters `userId`, `GET /posts/:id` pass for an `admin` or the row's author, and `PUT /posts/:id` require both the `post:update` permission and authorship. `patchOne` and `deleteOne` have no entry, so they run for any caller: an operation with no `policy.<id>` is unrestricted by default, the same opt-in posture every other Kavo default takes, and adding an entry is how an entity opts in — there is still no global switch that populates `policy` itself. [`authorization.required`](#default-deny-authorization-required) is a separate, genuinely global switch for the opposite question: what happens when nothing was configured at all.
+That config makes `POST /posts` require a signed-in caller, `GET /posts` pass for an `admin` or a signed-in caller whose query filters `userId`, `GET /posts/:id` pass for an `admin` or the row's author, and `PUT /posts/:id` require both the `post:update` permission and authorship. `patchOne` and `deleteOne` have no entry, so they fall back to whatever `EntityConfig.policy`/`GlobalConfig.policy` default is in force (below), or run for any caller if neither is set: an operation with no policy at any scope is unrestricted by default, the same opt-in posture every other Kavo default takes. [`authorization.required`](#default-deny-authorization-required) is a separate switch for the opposite question: what happens when nothing was configured at _any_ scope.
 
 ## Node types
 
@@ -61,7 +61,19 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## Config placement
 
-`policy` is set per operation, at `operations.<id>.policy` (ADR-0032, amended by ADR-0033) — there is no entity-scope `policy` map to fall back to; an entity that still passes a root-level `policy` map gets a bootstrap error naming the new location. There is no global `policy` and no per-call override either: like `computed`, a `when()` predicate carries a closure, so the key lives outside the settings precedence chain, and a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) covers where the field sits among `@Kavo`'s own keys.
+`policy` resolves nearest-scope-wins across three places (ADR-0032, amended by ADR-0033 and ADR-0036): `operations.<id>.policy`, then the entity's own `policy` (`EntityConfig.policy` — one node, applied as the default for every operation that configures none of its own), then a root-level default set once at `createKavo({ policy })` (`GlobalConfig.policy`). Whichever scope defines a node wins outright — scopes are never merged field-by-field, only replaced wholesale — and `operations.<id>.policy: false` opts one operation back out of an inherited entity- or global-scope default:
+
+```ts
+@Kavo(Post, {
+  policy: authenticated(), // default for every operation on this entity
+  operations: {
+    updateOne: { policy: and(permission("post:update"), owner("authorId")) }, // overrides the default
+    findMany: { policy: false }, // explicitly public, opts out of the default
+  },
+})
+```
+
+Like `computed`, `policy` lives outside the settings precedence chain at every scope — a `when()` predicate carries a closure, and `PolicyNode` is a discriminated union a field-by-field settings merge would corrupt — so `GlobalConfig.policy` is its own field rather than a `KavoSettings` key inside `defaults`. There is still no per-call override at any scope: a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) covers where the field sits among `@Kavo`'s own keys.
 
 ## Default deny (`authorization.required`)
 
@@ -82,7 +94,7 @@ KavoModule.forRoot({
 })
 ```
 
-Unlike `policy` itself, `authorization` is an ordinary `KavoSettings` key: it merges through the usual `built-in defaults → global → entity → operation` chain, so a global default (`KavoModule.forRoot`'s `defaults`), an entity default, and a per-operation override all compose the way `cache`/`realtime`/every other settings key does. It is a genuinely different mechanism from `policy` — a settings subtree that governs _what happens when `policy` has nothing configured_, not a way to populate `policy` from outside an entity's own config; `policy`'s own "no global, no per-call" rule (above) is unchanged.
+Unlike `policy` itself, `authorization` is an ordinary `KavoSettings` key: it merges through the usual `built-in defaults → global → entity → operation` chain, so a global default (`KavoModule.forRoot`'s `defaults`), an entity default, and a per-operation override all compose the way `cache`/`realtime`/every other settings key does — `policy`'s three scopes (above) are resolved by their own nearest-wins walk instead, not `mergeSettings`. `authorization.required` remains a genuinely different mechanism from `policy`, even though both now have a global default: it governs _what happens when `policy`'s own fallback chain resolved to nothing at all_ (operation, entity, and global all silent), never overriding a `policy` node that scope chain did resolve — including one an operation opted out of with `policy: false`, which counts as "resolved to nothing" the same as never having configured one. `policy`'s "no per-call override" rule (above) is unchanged.
 
 **Per-call is the one scope excluded.** A per-call `{ settings: { authorization: { required: false } } }` cannot loosen an entity that requires it, and — symmetrically, since the whole subtree is pinned rather than merged — a per-call override cannot tighten an entity that doesn't either. The reasoning is the same ADR-0032 gives for `policy` itself: a per-call parameter able to loosen enforcement would let a caller weaken its own authorization.
 

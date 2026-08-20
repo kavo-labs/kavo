@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists)), `computed` (see [Computed fields](/features/computed-fields)), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` (below) is configured, per operation.
+`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists)), `computed` (see [Computed fields](/features/computed-fields)), `policy` (below, an entity-wide default), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` may be overridden per operation.
 
 ## dto
 
@@ -34,17 +34,19 @@ Moved to [Allowlists](/features/allowlists) and [Computed fields](/features/comp
 
 ## policy
 
-Authorization, set per operation at `operations.<id>.policy` (ADR-0032, ADR-0033). An operation with no `policy` runs unrestricted:
+Authorization (ADR-0032, amended by ADR-0033 and ADR-0036), resolved nearest-scope-wins across `operations.<id>.policy`, the entity's own `policy` (one default node, applied to every operation that configures none of its own), and a root-level `createKavo({ policy })` default. An operation with no policy at any of the three scopes runs unrestricted:
 
 ```ts
-import { and, owner, permission } from "@kavo/core";
+import { and, authenticated, owner, permission } from "@kavo/core";
 
 @Kavo(Post, {
+  policy: authenticated(), // default for every operation on this entity
   operations: {
-    updateOne: { policy: and(permission("post:update"), owner("authorId")) },
+    updateOne: { policy: and(permission("post:update"), owner("authorId")) }, // overrides the default
     deleteOne: { policy: and(permission("post:delete"), permission("admin")) }, // every name required
+    findMany: { policy: false }, // explicitly public, opts out of the entity-level default
   },
 })
 ```
 
-`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error. There is no entity-scope `policy` map to fall back to — `operations.<id>.policy` is the only place a policy is declared. See [Policy](/features/policy) for the node reference and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.
+`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error, whether declared on the operation directly or inherited from an entity/global default. See [Policy](/features/policy) for the node reference, the full scope-resolution rules, and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.

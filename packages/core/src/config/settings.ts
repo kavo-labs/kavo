@@ -298,11 +298,16 @@ export interface ArrayMutationSettings {
 }
 
 /**
- * The default-deny switch for the `policy` stage (ADR-0033). `policy`
- * itself (`EntityConfig.policy`/`OperationConfig.policy`) is a structural
- * field, not a `KavoSettings` one, and has no global scope — this is a
- * deliberately separate, ordinary settings subtree so it gets one. `false`
- * is not accepted here (unlike `cache`/`realtime`/`softDelete`): there is
+ * The default-deny switch for the `policy` stage (ADR-0035). `policy`
+ * itself (`GlobalConfig.policy`/`EntityConfig.policy`/`OperationConfig.policy`,
+ * ADR-0036) is a structural field at every scope it is configured on, never
+ * a `KavoSettings` one — `PolicyNode` is a discriminated union `DeepPartial`
+ * would corrupt — so this stays a deliberately separate, ordinary settings
+ * subtree even though `policy` gained a global default of its own. The two
+ * remain distinct mechanisms: `authorization.required` only fills the gap
+ * where `policy`'s own fallback chain (operation → entity → global) resolved
+ * to nothing at all, it never overrides a resolved `policy` node. `false` is
+ * not accepted here (unlike `cache`/`realtime`/`softDelete`): there is
  * nothing else in this subtree to disable wholesale, so the plain object is
  * always the shape.
  */
@@ -335,7 +340,7 @@ export interface KavoSettings {
    * relation anything by itself.
    */
   readonly arrayMutation: ArrayMutationSettings | false;
-  /** The `policy` default-deny switch (ADR-0033). Excluded from per-call override — see `KavoEngine.configViewFor`. */
+  /** The `policy` default-deny switch (ADR-0035). Excluded from per-call override — see `KavoEngine.configViewFor`. */
   readonly authorization: AuthorizationSettings;
   /**
    * Global operation enablement, keyed by standard operation id — booleans

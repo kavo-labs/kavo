@@ -141,6 +141,34 @@ export function not<Entity = unknown>(child: PolicyNode<Entity>): PolicyNode<Ent
   return { type: "not", child };
 }
 
+const POLICY_NODE_TYPES: ReadonlySet<PolicyNode["type"]> = new Set([
+  "permission",
+  "role",
+  "owner",
+  "authenticated",
+  "filtered",
+  "when",
+  "and",
+  "or",
+  "not",
+]);
+
+/**
+ * `true` when `value` has the shape of a `PolicyNode` — a recognized `type`
+ * discriminant, nothing more. Not a proof it evaluates correctly (a `when`
+ * predicate's function is not otherwise checkable), but enough for
+ * `resolveEntityConfig` to catch a stray shorthand (the pre-ADR-0033
+ * entity-scope map, an array) reaching a `policy` field at bootstrap rather
+ * than silently falling through `evaluatePolicy`'s switch to `undefined`.
+ */
+export function isPolicyNode<Entity>(value: unknown): value is PolicyNode<Entity> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    POLICY_NODE_TYPES.has((value as { type?: unknown }).type as PolicyNode["type"])
+  );
+}
+
 function principalOf<Entity>(context: KavoContext<Entity>): KavoPrincipal {
   return (context.principal as KavoPrincipal | null | undefined) ?? {};
 }

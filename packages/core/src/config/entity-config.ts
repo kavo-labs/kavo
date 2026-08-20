@@ -154,16 +154,21 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
    */
   readonly dto?: DtoOverride;
   /**
-   * Authorization for this operation (ADR-0032, amended by ADR-0033) — the
-   * only surface `policy` is configured on; there is no entity-scope
-   * `policy` map to fall back to. Absent, the operation runs unrestricted:
-   * the same opt-in posture every other Kavo default takes. `owner`/`when`
-   * nodes are only meaningful on a single-row operation
+   * Authorization for this operation (ADR-0032, amended by ADR-0033 and
+   * ADR-0036). Nearest scope wins, wholesale: this overrides the entity's
+   * own `EntityConfig.policy`, which overrides the root `GlobalConfig.policy`
+   * (`createKavo({ policy })`). `false` opts this operation back out of an
+   * inherited entity- or global-scope default, back to unrestricted — the
+   * only way to spell that, since omitting the key here instead means
+   * "inherit," not "no policy." Absent every scope, the operation runs
+   * unrestricted: the same opt-in posture every other Kavo default takes.
+   * `owner`/`when` nodes are only meaningful on a single-row operation
    * (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`);
    * on `createOne`/`findMany` they are a bootstrap `ConfigurationException`
-   * (`resolveEntityConfig`), since no single entity exists yet to check.
+   * (`resolveEntityConfig`), since no single entity exists yet to check —
+   * this applies to an inherited node too, not just one declared here.
    */
-  readonly policy?: PolicyNode<Entity>;
+  readonly policy?: PolicyNode<Entity> | false;
 }
 
 /**
@@ -364,6 +369,23 @@ export interface EntityConfig<
   >,
 > extends Omit<DeepPartial<KavoSettings>, "operations"> {
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  /**
+   * Default authorization for every operation on this entity (ADR-0036,
+   * reintroducing entity scope after ADR-0033 removed it — see that ADR for
+   * why this is a single default-for-all-operations node rather than the
+   * pre-ADR-0033 per-operation map: a map invited "which of the two spots
+   * governs `updateOne`?"; a plain default that `operations.<id>.policy`
+   * overrides (or opts out of with `false`) does not.
+   *
+   * Structural entity-scope config like `dto`/`computed` — outside the
+   * settings precedence chain (`policy` still carries `when()`'s closure) —
+   * resolved by its own "nearest scope wins" walk, not `mergeSettings`.
+   * Falls back to `GlobalConfig.policy` (`createKavo({ policy })`) when
+   * unset here; overridden per operation by `operations.<id>.policy`,
+   * including `operations.<id>.policy: false` to opt one operation out.
+   * There is still no per-call override (ADR-0032).
+   */
+  readonly policy?: PolicyNode<Entity>;
   /**
    * Computed (virtual) response fields, keyed by the name each serializes
    * as — structural entity-scope config like `dto`, deliberately outside

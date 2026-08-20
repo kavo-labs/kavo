@@ -377,6 +377,10 @@ const config = defineConfig({
                 text: "0035 — authorization.required denies standard operations with no configured policy",
                 link: "/internals/adr/0035-authorization-required-default-deny-switch",
               },
+              {
+                text: "0036 — policy gains entity- and global-scope defaults",
+                link: "/internals/adr/0036-policy-gains-entity-and-global-defaults",
+              },
             ],
           },
         ],

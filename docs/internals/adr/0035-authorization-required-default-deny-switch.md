@@ -1,6 +1,10 @@
 # ADR-0035 — `authorization.required` denies standard operations with no configured policy
 
-**Status:** accepted
+**Status:** accepted (the closing Consequence's "does not reopen ADR-0032's
+'no global `policy`' decision" is superseded by
+[ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults),
+which gives `policy` a global scope — the two mechanisms stay orthogonal;
+see that ADR's "Interaction with `authorization.required`" section)
 
 ## Context
 

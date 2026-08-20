@@ -147,6 +147,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         options.defaults,
         options.realtimeTransports,
         cacheStore,
+        options.policy,
       );
       // `builtInHandlers()` takes no adapter: the built-ins read the
       // request's `context.repository`, which the engine below fills from
