@@ -295,16 +295,6 @@ null }`).
   adding it later is a capability gain, not a bug fix.
 - **Virtual populate:** see §3 — needs a metadata source beyond
   `schema.paths`.
-- **The soft-delete marker is writable.** Nothing in a Mongoose schema
-  declares "this is the delete column", so `EntityMetadata.softDeleteField`
-  is `null` and the marker path is an ordinary field — which means a client
-  can soft-delete or revive a document with a plain `PATCH` of `deletedAt`,
-  bypassing `deleteOne`'s already-deleted check. `@kavo/prisma` is in
-  exactly the same position for the same reason (`@kavo/typeorm` escapes it
-  only because `@DeleteDateColumn` is detectable). The fix belongs in core —
-  excluding the _resolved_ `softDelete.field` from the writable projection,
-  which would close it for both adapters at once — and is deliberately not
-  worked around here.
 - **Un-included reference ids:** see §1 — also a core-side change.
 - **Projections:** `query.fields` is applied by core's serializer, not
   pushed down as a MongoDB projection. Correct today, and a clear

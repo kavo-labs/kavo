@@ -54,10 +54,18 @@ the defaults derive from:
   A registered DTO wins outright over the allowlist rather than
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
-  scalar column with `generated: false`. Generated columns (auto ids,
-  `@CreateDateColumn`, versions) can never be written from a request
-  body — the default deserializer silently strips them, which is the safe
-  posture in a system with no validation stage.
+  scalar column with `generated: false`, minus the primary key and the
+  resolved soft-delete marker field, which are excluded **regardless of**
+  `generated` — an app-assigned id or a marker column that isn't the ORM's
+  own delete-date column would otherwise be an ordinary writable field with
+  no other guard. Generated columns (auto ids, `@CreateDateColumn`,
+  versions) can never be written from a request body either — the default
+  deserializer silently strips all of these, which is the safe posture in a
+  system with no validation stage. An explicit write DTO can still name the
+  id or the marker field (a legitimate opt-in for a caller-assigned key);
+  `update`/`patch` write paths additionally strip both from the payload
+  before persisting, as defence in depth against reassigning an _existing_
+  row's identity or soft-delete state that way.
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.
 
