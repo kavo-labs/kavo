@@ -73,7 +73,7 @@ export class NotFoundException extends KavoException {
 }
 
 /**
- * A `policy` node (ADR-0032) evaluated to `false` for the current
+ * A `policy` function (ADR-0037) returned `false` for the current
  * `context.principal` on this entity/operation. Raised by the engine's
  * policy stage, never by application code directly — a custom operation's
  * handler that wants the same status throws this itself, the same way it

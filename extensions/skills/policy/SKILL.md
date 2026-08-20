@@ -1,119 +1,127 @@
 ---
 name: policy
-description: Reference for Kavo's policy authorization DSL — permission()/role()/owner()/authenticated()/filtered()/when() composed with and()/or()/not(), config placement, entity-aware nodes, enforcement order, and the authorization.required default-deny switch. Use when gating an operation on the caller (403 KAVO_FORBIDDEN), requiring an authenticated principal, checking row ownership, requiring a query filter to be present, or making an unconfigured operation deny by default.
+description: Reference for Kavo's `policy` authorization function — a plain `(args) => boolean | Promise<boolean>` at operation/entity/global scope, enforcement order, and the authorization.required default-deny switch. Use when gating an operation on the caller (403 KAVO_FORBIDDEN), requiring an authenticated principal, checking row ownership, requiring a query filter to be present, or making an unconfigured operation deny by default.
 ---
 
 # Policy authorization reference
 
 `policy` refuses a request before its handler runs. Each standard operation
 on an entity can carry a rule evaluated against `context.principal` and,
-when the rule needs it, the loaded row — a rule that fails answers `403`
-with `KAVO_FORBIDDEN`. Full detail: `docs/features/policy.md` and
-[ADR-0032](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0032-policy-authorization-dsl.md)/[ADR-0033](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0033-policy-moves-to-operation-scope-only.md).
+when the rule needs it, the loaded row — a rule that returns `false` answers
+`403` with `KAVO_FORBIDDEN`. Full detail: `docs/features/policy.md`
+([ADR-0037](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0037-policy-collapses-to-a-single-predicate.md)).
 Wiring `context.principal` itself is the `global-config`/`kavo-decorator`
 skills' territory (an app's own auth layer) — `policy` only ever reads it.
 
 ## Config shape
 
 ```ts
-import { and, authenticated, filtered, or, owner, permission, role } from "@kavo/core";
+import type { Policy } from "@kavo/core";
+
+const isAuthenticated: Policy<Post> = ({ context }) => context.principal != null;
+const isOwner: Policy<Post> = ({ context, entity }) => entity?.authorId === (context.principal as { userId?: string })?.userId;
 
 @Kavo(Post, {
+  policy: isAuthenticated, // entity-level default for every operation
   operations: {
-    createOne: { policy: authenticated() },
-    findMany: { policy: permission("post:read") },
-    findOne: { policy: or(role("admin"), owner("authorId")) },
-    updateOne: { policy: and(permission("post:update"), owner("authorId")) },
+    createOne: { policy: isAuthenticated },
+    findMany: { policy: () => true },
+    findOne: {
+      policy: (args) => (args.context.principal as { roles?: string[] })?.roles?.includes("admin") || isOwner(args),
+    },
+    updateOne: {
+      policy: (args) =>
+        ((args.context.principal as { permissions?: string[] })?.permissions?.includes("post:update") ?? false) &&
+        isOwner(args),
+    },
   },
 })
 ```
 
-`policy` is set per operation, at `operations.<id>.policy` — there is no
-entity-scope `policy` map (ADR-0033; a leftover root-level `policy` map
-fails at bootstrap, naming this path as the replacement). An operation with
-no `policy` entry is **unrestricted** — opt-in per operation, not a global
-switch (see `authorization.required` below for the opposite default).
-`policy` takes a `PolicyNode` only — build multi-permission checks
-with `and(permission("a"), permission("b"))` (ADR-0032, amended by #242: the
-array shorthand was removed since the DSL already covers everything it
-could express).
+`policy` resolves nearest-scope-wins across three places: `operations.<id>.policy`,
+then the entity's own `policy` (`EntityConfig.policy`, one function applied as
+the default for every operation that configures none of its own), then a
+root-level default set once at `createKavo({ policy })` (`GlobalConfig.policy`).
+`operations.<id>.policy: false` opts one operation back out of an inherited
+entity- or global-scope default, back to unrestricted. An operation with no
+policy resolved at any scope is unrestricted by default — opt-in, not a
+global switch (see `authorization.required` below for the opposite default).
 
-## Node types
+## The policy function
 
-| Node                                                              | Passes when                                                                            |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `permission(name)`                                                | `principal.permissions` contains `name`                                                |
-| `role(name)`                                                      | `principal.roles` contains `name`                                                      |
-| `authenticated()`                                                 | `principal.userId` is set                                                              |
-| `owner(field = "userId")`                                         | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
-| `filtered(field)`                                                 | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
-| `when(({ context, entity, resource, operation, params }) => ...)` | the predicate returns `true` — escape hatch for anything else                          |
-| `and(...)` / `or(...)` / `not(...)`                               | short-circuit composition; `not` negates its single child                              |
+`policy` is one function per scope — `(args: PolicyArgs<Entity>) => boolean | Promise<boolean>`,
+not a combinator DSL:
 
-Every built-in node except `filtered`/`when` reads `context.principal` cast
-to `{ userId?, roles?, permissions?, [k: string]: unknown }`. Kavo never
-inspects or shapes `principal` itself — a `null` principal (no auth wired
-yet) makes every built-in node except `filtered` deny.
+| Field       | What it is                                                                                                      |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `context`   | the request's `KavoContext<Entity>` — `context.principal`, `context.query`, `context.repository`                  |
+| `entity`    | the loaded row, on a single-row operation; `undefined` on `createOne`/`findMany`, where there is no single row    |
+| `resource`  | `context.entityName` surfaced at the top level                                                                    |
+| `operation` | `context.operation` surfaced at the top level                                                                     |
+| `params`    | `{ id }` — the request's own single-row target, coerced to the id column's kind, `null` when there isn't one      |
 
-### `filtered(field)` — require a query filter, not a principal check
+Kavo never inspects, validates, or shapes `context.principal` — a policy
+function reads it however an application's auth layer fills it in. Without
+that wiring, `principal` is `null` on every request and a principal-reading
+policy denies everything.
+
+Composition (`and`/`or`/`not`) is ordinary `&&`/`||`/`!` inside the function.
+A reusable check (an ownership check, a permission check) is just a function
+that takes `PolicyArgs` and gets called from a larger one, as `isOwner` does
+above. A policy that needs a value across a relation loads it itself through
+`context.repository`.
+
+## `owner`/row-dependent checks — single-row operations only
+
+A policy that reads `entity` only makes sense on `findOne`, `updateOne`,
+`patchOne`, `deleteOne`, `restoreOne`, `purgeOne` — the operations with a
+single loaded row. On `createOne` (no row yet) or `findMany` (a set, not one
+row), `entity` is always `undefined`; write the function so it accounts for
+that rather than assuming a row is present.
+
+### Requiring a query filter, not just a principal check
 
 ```ts
 @Kavo(Post, {
-  operations: { findMany: { policy: and(authenticated(), filtered("userId")) } },
+  operations: {
+    findMany: {
+      policy: ({ context }) => context.principal != null && context.query?.filter?.some((c) => c.field === "userId"),
+    },
+  },
 })
 ```
 
-`GET /posts?filter[userId][eq]=u-1` passes; a bare `GET /posts` 403s. Unlike
-every other built-in, `filtered` reads `context.query`, not `principal` —
-it is context-only (not entity-aware), so it is legal on `createOne` and
-`findMany` where `owner`/`when` are rejected at bootstrap. `context.query`
-is `null` on writes, so `filtered` denies unconditionally there rather than
-throwing — it's meant for reads.
-
-`filtered` gates whether the operation runs at all; it is **not**
-row-scoping. A caller who supplies `userId` still sees every row that
-filter matches, not only their own — pair it with `owner`/`when` (or an
-app-level default filter you add yourself) when the requirement is "only
-your own rows," not just "some filter is present."
-
-### `owner`/`when` — entity-aware, single-row operations only
-
-`owner` and `when` need the loaded row, so they're legal only on
-`findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`.
-Configuring either on `createOne` (no row yet) or `findMany` (a set, not
-one row) is a bootstrap `ConfigurationException` naming the entity and the
-`operations.<id>.policy` path. An `owner(field)` whose first dotted segment names a
-relation (`owner("author.id")`) is the same error — the pre-fetch loads no
-relations, so it could never pass.
-
-`when()` is the one node that can reach a relation itself, through
-`context.repository`, since its predicate runs with the full context.
+`GET /posts?filter[userId][eq]=u-1` passes; a bare `GET /posts` 403s. This
+gates whether the operation runs at all — it is **not** row-scoping. A
+caller who supplies `userId` still sees every row that filter matches, not
+only their own; pair it with an ownership check (or an app-level default
+filter) when the requirement is "only your own rows."
 
 ## Enforcement order
 
 The policy stage runs after context is built, before preconditions and the
 cache — a denied request never learns whether its `If-Match` would have
-succeeded. A context-only rule (`permission`/`role`/`authenticated`/
-`filtered`) costs a lookup plus a boolean check. A row-needing rule on a
-write costs one extra read: the stage pre-fetches the row (including
-soft-deleted, since `restoreOne`/`purgeOne` target a deleted row by
-definition) before the handler runs. **No row found → 404, never 403** —
-the status code must not leak whether the row exists.
+succeeded. On a single-row operation with a resolved policy (from any
+scope), the engine always pre-fetches the row (including soft-deleted, since
+`restoreOne`/`purgeOne` target a deleted row by definition) before the
+handler runs — a plain function can't be inspected for whether it reads the
+row. **No row found → 404, never 403** — the status code must not leak
+whether the row exists. `createOne`/`findMany` always run with
+`entity: undefined`.
 
-`findOne` is the exception to the pre-fetch: it already loads the row as
-its own result, so a row-needing rule runs _after_ the handler, against
-what it fetched — and an entity whose `findOne` rule needs the row is
-never cached, so a cache hit can't skip the deferred check.
+`findOne` is the exception to the pre-fetch: it already loads the row as its
+own result, so a resolved policy runs _after_ the handler, against what it
+fetched — and `findOne` is never cached for an entity with a resolved
+`findOne` policy, so a cache hit can't skip the deferred check.
 
 ## What policy does not do
 
 - **No row-scoping.** `findMany` still returns every row its query
   matches; `policy` decides _whether_ the call runs, not what a passing
   call sees.
-- **No global or per-call policy.** Unlike ordinary `KavoSettings`, `policy`
-  lives outside the precedence chain — no global default, and no per-call
-  override (a per-call parameter that could loosen a rule would let a
-  caller weaken its own authorization).
+- **No per-call override.** `policy` lives outside the settings precedence
+  chain — a per-call parameter that could loosen a rule would let a caller
+  weaken its own authorization.
 - **Custom operations get no `policy` entry** — their handler reaches
   `context.principal` directly and throws `ForbiddenException` for the same
   `403 KAVO_FORBIDDEN`.
@@ -129,7 +137,7 @@ KavoModule.forRoot({
 @Kavo(Post, {
   authorization: { required: true }, // this entity
   operations: {
-    updateOne: { policy: permission("post:update") },
+    updateOne: { policy: (args) => (args.context.principal as { permissions?: string[] })?.permissions?.includes("post:update") ?? false },
     findMany: { authorization: { required: false } }, // opt this one back out
   },
 })
@@ -137,25 +145,23 @@ KavoModule.forRoot({
 
 Unlike `policy` itself, `authorization` is an **ordinary `KavoSettings`
 key** — it merges through the normal `built-in defaults → global → entity →
-operation` chain, so it _does_ have a global default, unlike `policy`. It
-governs a different question: not "who may call this," but "what happens
-when `policy` has nothing to say about this operation at all." With
-`required: true`, a standard operation with no `policy.<id>` entry answers
-`403 KAVO_FORBIDDEN` instead of running unrestricted — catching the case
-where a new operation shipped without anyone remembering to add a `policy`
-entry for it.
+operation` chain, so it has a global default the way `policy` reaches
+through `GlobalConfig.policy` instead. It governs a different question: not
+"who may call this," but "what happens when `policy` resolved to nothing at
+all, at any scope." With `required: true`, a standard operation with no
+resolved policy answers `403 KAVO_FORBIDDEN` instead of running
+unrestricted — catching the case where a new operation shipped without
+anyone remembering to add a `policy`.
 
-- An operation with an explicit `policy.<id>` entry is unaffected either
-  way — the switch only fills the gap where nothing is configured.
+- An operation whose `policy` resolved at any scope is unaffected either
+  way — the switch only fills the gap where nothing resolved.
 - **Per-call is excluded**, symmetrically: a per-call settings override can
   neither loosen an entity that requires it nor tighten one that doesn't —
   the whole `authorization` subtree is pinned to whatever
-  global/entity/operation already resolved, the same "no per-call
-  loosening" reasoning ADR-0032 applies to `policy`.
+  global/entity/operation already resolved.
 - **Ordinary custom operations are never gated** — their id is never a
-  standard operation id, so they never reach the `policy[operation]` lookup
-  this switch extends; their handler reaches `context.principal` directly
-  instead.
+  standard operation id, so they never reach the policy lookup this switch
+  extends; their handler reaches `context.principal` directly instead.
 - **Kavo-synthesized array-mutation operations (`replace<Relation>` etc.,
   from `relations.edges.<name>.write`) ARE gated**, unlike ordinary custom
   operations — they can never carry a `policy.<id>` entry either, but their

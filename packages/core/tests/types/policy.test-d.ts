@@ -23,7 +23,7 @@ kavo.createCrud(Post, {
 });
 
 kavo.createCrud(Post, {
-  // @ts-expect-error — entity-level 'policy' takes a function too, not the pre-ADR-0033 per-operation map.
+  // @ts-expect-error — entity-level 'policy' takes a function, not a per-operation map.
   policy: { updateOne: () => false },
 });
 

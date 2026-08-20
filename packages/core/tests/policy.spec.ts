@@ -287,7 +287,7 @@ describe("policy — single-row operations always get the loaded entity", () => 
   });
 
   it("404s rather than 403 for a missing row even under a context-only policy that would have denied anyway", async () => {
-    // Uniform, intentional behavior (ADR-0036): since the engine can no longer
+    // Uniform, intentional behavior (ADR-0037): since the engine can no longer
     // tell a context-only policy from a row-dependent one, a missing row
     // always answers 404 ahead of the policy — extending what was already
     // true for owner-style checks (the test above) to every policy.
@@ -326,7 +326,7 @@ describe("policy — bootstrap validation", () => {
     }
   });
 
-  it("rejects a non-function reaching the entity-level 'policy' default — including the pre-ADR-0033 per-operation map shape", () => {
+  it("rejects a non-function reaching the entity-level 'policy' default — including a per-operation map shape", () => {
     expect(() => makeCrud({ policy: { updateOne: () => false } } as never)).toThrowError(ConfigurationException);
     try {
       makeCrud({ policy: { updateOne: () => false } } as never);

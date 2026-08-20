@@ -83,7 +83,7 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // ADR-0013's soft-delete-driven `restoreOne` auto-enable) is unchanged
   // for apps that don't set a global default.
   operations: Object.freeze({}),
-  // Off by default (ADR-0033): an operation with no `policy.<id>` entry
+  // Off by default (ADR-0035): an operation with no resolved `policy` entry
   // runs unrestricted, today's behavior, until an app opts in.
   authorization: Object.freeze({
     required: false,

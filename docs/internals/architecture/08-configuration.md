@@ -173,9 +173,8 @@ single row — the engine always calls the resolved function, with
 `entity: undefined` on those two ids, whether the policy came from the
 operation, the entity default, or the global default. The one bootstrap
 check left, applied at all three scopes, is that a resolved `policy` value
-actually is a function: a non-function value — including the pre-ADR-0033
-per-operation entity-scope map shape (`{ updateOne: hasPermission(...) }`)
-if a caller still passes one — fails at bootstrap with a
+actually is a function: any other shape (an object, an array, anything a
+dynamically-built config might produce) fails at bootstrap with a
 `ConfigurationException` naming the entity and the scope's path, the same
 bar every other entry in this section holds to.
 

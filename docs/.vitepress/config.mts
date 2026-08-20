@@ -362,27 +362,11 @@ const config = defineConfig({
                 link: "/internals/adr/0031-result-cache-is-a-live-store-invalidated-wholesale",
               },
               {
-                text: "0032 — Policy authorization DSL",
-                link: "/internals/adr/0032-policy-authorization-dsl",
-              },
-              {
-                text: "0033 — Policy moves to operation scope only",
-                link: "/internals/adr/0033-policy-moves-to-operation-scope-only",
-              },
-              {
-                text: "0034 — when() predicate takes a single object argument",
-                link: "/internals/adr/0034-when-predicate-takes-a-single-object-argument",
-              },
-              {
                 text: "0035 — authorization.required denies standard operations with no configured policy",
                 link: "/internals/adr/0035-authorization-required-default-deny-switch",
               },
               {
-                text: "0036 — policy gains entity- and global-scope defaults",
-                link: "/internals/adr/0036-policy-gains-entity-and-global-defaults",
-              },
-              {
-                text: "0037 — policy collapses to a single predicate function, at three scopes",
+                text: "0037 — policy is a single predicate function, at three scopes",
                 link: "/internals/adr/0037-policy-collapses-to-a-single-predicate",
               },
             ],

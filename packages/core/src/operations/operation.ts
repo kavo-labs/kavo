@@ -26,7 +26,7 @@ export const STANDARD_OPERATION_IDS: readonly StandardOperationId[] = [
 
 /**
  * The bare-verb name each standard operation folds into for a **class-based
- * policy** (ADR-0032's deferred Level 3 — `policy: PostPolicy`, not built
+ * policy** (a deferred Level 3 — `policy: PostPolicy`, not built
  * yet): the DTO-slot convention's own verbs (`CLAUDE.md` Conventions —
  * `create`, `update`, `patch`, `query`, `item`, `list`) plus `delete`,
  * `restore`, and `purge`, which have no DTO slot of their own but need a

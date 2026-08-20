@@ -18,7 +18,7 @@ import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-in
  * uses for its own `createCrud`-time bootstrap error.
  */
 describe("KavoModule — 'policy' bootstrap rejection (ADR-0037)", () => {
-  it("rejects a non-function entity-level 'policy' default — including the pre-ADR-0033 per-operation map shape", async () => {
+  it("rejects a non-function entity-level 'policy' default — including a per-operation map shape", async () => {
     @Kavo(Todo, { policy: { updateOne: () => false } } as never)
     @Controller("todos")
     class TodoController {}

@@ -1,17 +1,12 @@
 # ADR-0035 — `authorization.required` denies standard operations with no configured policy
 
-**Status:** accepted (the closing Consequence's "does not reopen ADR-0032's
-'no global `policy`' decision" is superseded by
-[ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults),
-which gives `policy` a global scope — the two mechanisms stay orthogonal;
-see that ADR's "Interaction with `authorization.required`" section)
+**Status:** accepted
 
 ## Context
 
-ADR-0032's `policy` is opt-in per standard operation: an operation id absent
-from `EntityConfig.policy`/`operations.<id>.policy` runs unrestricted, and
-that ADR is explicit that there is no global `policy` and no per-call
-override — "a per-call parameter that could loosen a policy would let a
+`policy` (ADR-0037) is opt-in per standard operation: an operation id absent
+from every configured scope runs unrestricted, and a per-call override is
+deliberately not supported — "a per-call parameter that could loosen a
 caller weaken its own authorization." Issue #237 asks for a default-deny
 posture: a switch that makes an operation with no configured `policy.<id>`
 answer `403 KAVO_FORBIDDEN` instead of running unrestricted, so a new
@@ -52,7 +47,7 @@ to `{ required: false }`.**
   `options.settings` override into every other `KavoSettings` field as
   usual, then pins `authorization` back to the pre-per-call value — the same
   treatment `configViewFor` already gives the (structural) `policy` map
-  itself. The reasoning is identical to ADR-0032's: a per-call parameter
+  itself. The reasoning is identical to ADR-0037's: a per-call parameter
   that could loosen enforcement defeats the point of the switch, and pinning
   the whole subtree is simpler and more obviously correct than trying to
   allow tightening but not loosening.
@@ -63,7 +58,7 @@ to `{ required: false }`.**
   `isStandardOperationId` already excludes it upstream of this change). A
   custom operation's handler still reaches `context.principal` directly and
   refuses a caller on its own terms (`ForbiddenException`, or its own
-  exception) — exactly the boundary ADR-0032 already drew, and #182's
+  exception) — exactly the boundary ADR-0037 already drew, and #182's
   concern, not this one's.
 - **Kavo-synthesized array-mutation operations ARE gated, unlike ordinary
   custom operations.** `registerArrayMutationOperations`
@@ -101,7 +96,7 @@ to `{ required: false }`.**
   or array-mutation operation with no entry, deny with `ForbiddenException`
   when `configView.settings.authorization.required` is `true`; otherwise,
   return unrestricted as before. This runs at exactly the same point in the
-  pipeline the ADR-0032 policy stage already occupies (after context is
+  pipeline the ADR-0037 policy stage already occupies (after context is
   built, before preconditions and the cache), so a denial here gets the same
   guarantees (never learns whether `If-Match` would have passed, never
   answered from a stale cache entry).
@@ -122,8 +117,7 @@ to `{ required: false }`.**
   global/entity/operation default-deny switch for operations `policy`
   leaves unconfigured) — a reader has to learn they are two different
   mechanisms rather than one, which the naming keeps distinct on purpose.
-- This does not reopen ADR-0032's "no global `policy`" decision: the
-  `policy` map itself still has no global scope and no per-call override.
-  `authorization.required` is a sibling switch over what happens when that
-  map has nothing to say, not a way to populate the map from outside an
-  entity's own config.
+- `policy` (ADR-0037) has its own global scope (`GlobalConfig.policy`) and
+  no per-call override; `authorization.required` is a sibling switch over
+  what happens when no scope resolves a policy at all, not a way to
+  populate `policy` from outside an entity's own config.

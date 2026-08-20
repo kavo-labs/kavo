@@ -320,7 +320,7 @@ export interface AuthorizationSettings {
    * (`403 KAVO_FORBIDDEN`) instead of running it unrestricted. An operation
    * whose policy resolved from any scope is unaffected either way — this
    * only fills the gap where no rule resolved at all. Custom operations
-   * never reach the policy stage at all (ADR-0032), so this cannot gate
+   * never reach the policy stage at all (ADR-0037), so this cannot gate
    * them.
    */
   readonly required: boolean;

@@ -58,13 +58,9 @@ never behavior.
 `onPublishError` (a function — already safe, since `deepFreeze`'s
 `typeof value === "object"` guard never touches functions in the first
 place) — the actual configuration, still merged through the normal
-precedence chain and still `false`-disables-the-subtree like `softDelete`.
-Only the live objects moved out.
-
-(Issue #247 later removed the `enabled` key this ADR originally listed
-alongside `events`: `realtime: false` was already the one way to disable the
-subtree, so a separate `enabled: boolean` inside it was redundant state.
-`realtime: { ... }` — any object — is now the sole way to turn it on.)
+precedence chain. `realtime: false` disables the subtree, the same
+`false`-disables-the-subtree shape `softDelete` uses; `realtime: { ... }`
+(any object) turns it on. Only the live objects moved out.
 
 ## Consequences
 

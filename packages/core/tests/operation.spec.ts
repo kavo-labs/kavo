@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { STANDARD_OPERATION_IDS, STANDARD_OPERATION_VERB } from "../src/operations/operation.js";
 
-describe("STANDARD_OPERATION_VERB (ADR-0032's reserved Level 3 mapping)", () => {
+describe("STANDARD_OPERATION_VERB (reserved Level 3 mapping)", () => {
   it("has exactly one entry per standard operation id, no more and no fewer", () => {
     expect(Object.keys(STANDARD_OPERATION_VERB).sort()).toEqual([...STANDARD_OPERATION_IDS].sort());
   });

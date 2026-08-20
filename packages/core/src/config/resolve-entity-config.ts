@@ -148,10 +148,9 @@ export function resolveEntityConfig<Entity extends object>(
 /**
  * Reject a `policy` value that isn't a function — TypeScript callers get a
  * compile error instead, but this catches a JS or dynamically-built config
- * the type system can't see (including the pre-ADR-0033 entity-scope
- * `Partial<Record<StandardOperationId, PolicyNode>>` map, or a bare array),
- * which would otherwise reach the engine's policy stage and fail confusingly
- * on the first request instead of loudly here (ADR-0037).
+ * the type system can't see (an object map, a bare array, or anything
+ * else), which would otherwise reach the engine's policy stage and fail
+ * confusingly on the first request instead of loudly here (ADR-0037).
  */
 function assertIsPolicyFunction(entityName: string, scope: string, value: unknown): asserts value is Policy {
   if (typeof value !== "function") {

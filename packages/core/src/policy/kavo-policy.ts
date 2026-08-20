@@ -4,7 +4,7 @@ import type { OperationId } from "../operations/operation.js";
 
 /**
  * The request-level identifier a policy gets alongside `context`/`entity` —
- * the piece `context` itself never carries at all (ADR-0032 amendment):
+ * the piece `context` itself never carries at all (ADR-0037):
  * `KavoContext` has no `id` field. The type allows `null`, for an operation
  * with no single-row target (`createOne`/`findMany`).
  *

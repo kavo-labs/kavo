@@ -135,7 +135,7 @@ async function putOwner(id: number, body: Record<string, unknown>): Promise<numb
 }
 
 async function deleteOwner(id: number): Promise<number> {
-  // Owner's deleteOne requires the owner:delete permission (ADR-0032) —
+  // Owner's deleteOne requires the owner:delete permission (ADR-0037) —
   // see owner.controller.ts's `policy` and `OwnerPrincipalGuard`.
   return (await fetch(`${baseUrl}/owners/${id}`, { method: "DELETE", headers: { "x-permissions": "owner:delete" } }))
     .status;
