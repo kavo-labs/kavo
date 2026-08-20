@@ -57,7 +57,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## and, or, not
 
-`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`.
+`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`. A zero-child `and()` is vacuously `true` — every empty conjunction is — so `policy: and()` reads like a lockdown and behaves as "allow everyone"; name at least one child, or omit `policy` entirely for the same unrestricted result without the trap.
 
 ## Config placement
 
