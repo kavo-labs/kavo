@@ -81,6 +81,12 @@ model Invoice {
   archivedAt DateTime?
 }
 
+model Coupon {
+  code      String    @id
+  label     String
+  retiredAt DateTime?
+}
+
 // ── cursor-pagination.spec.ts ───────────────────────────────────────────
 
 model Post {

@@ -26,15 +26,32 @@ class Invoice {
   archivedAt!: Date | null;
 }
 
+/** A natural (non-auto) primary key, plus a configured soft-delete marker —
+ * both are ordinary `generated: false` columns Prisma reports the same way. */
+class Coupon {
+  code!: string;
+  label!: string;
+  retiredAt!: Date | null;
+}
+
+/** Names the id and the configured marker explicitly — the opt-in an
+ * explicit write DTO is still allowed to make. */
+class UpdateCouponDto {
+  code = "";
+  label = "";
+  retiredAt: Date | null = null;
+}
+
 let client: PrismaClient;
 let tickets: DefaultKavoService<Ticket>;
 let invoices: DefaultKavoService<Invoice>;
+let coupons: DefaultKavoService<Coupon>;
 
 beforeAll(() => {
   client = newTestPrismaClient();
   const kavo = createPrismaKavo(client as never, {
     datamodel: Prisma.dmmf.datamodel,
-    entities: [Ticket, Invoice],
+    entities: [Ticket, Invoice, Coupon],
     caseInsensitiveFilters: false,
   });
   tickets = kavo.createCrud(Ticket, {
@@ -44,6 +61,10 @@ beforeAll(() => {
   invoices = kavo.createCrud(Invoice, {
     softDelete: { field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
+  coupons = kavo.createCrud(Coupon, {
+    softDelete: { field: "retiredAt" },
+    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+  }) as DefaultKavoService<Coupon>;
 });
 
 afterAll(async () => {
@@ -53,6 +74,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await client.ticket.deleteMany();
   await client.invoice.deleteMany();
+  await client.coupon.deleteMany();
 });
 
 async function newTicket(reference = "T-1"): Promise<number> {
@@ -251,5 +273,29 @@ describe("PrismaRepositoryAdapter — hard-delete strategy guards", () => {
       entity: "Invoice",
       id: String(created.id),
     });
+  });
+});
+
+describe("PrismaRepositoryAdapter — id and soft-delete marker mass assignment", () => {
+  it("never reassigns an existing row's id through update/patch, even when a write DTO names it", async () => {
+    await coupons.createOne({ code: "SAVE10", label: "10% off", retiredAt: null } as never);
+
+    const patched = await coupons.patchOne("SAVE10", { code: "STOLEN", label: "hijacked" } as never);
+    expect(patched).toMatchObject({ code: "SAVE10", label: "hijacked" });
+
+    await expect(coupons.findOne("STOLEN")).rejects.toBeInstanceOf(NotFoundException);
+    expect(await coupons.findOne("SAVE10")).toMatchObject({ code: "SAVE10", label: "hijacked" });
+  });
+
+  it("never soft-deletes or revives through update/patch, even when a write DTO names the marker", async () => {
+    const created = await coupons.createOne({ code: "WELCOME", label: "welcome", retiredAt: null } as never);
+    expect(created).toMatchObject({ retiredAt: null });
+
+    const patched = await coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never);
+    expect(patched).toMatchObject({ retiredAt: null });
+    expect((await coupons.findMany()).items).toHaveLength(1);
+
+    await coupons.deleteOne("WELCOME");
+    expect((await coupons.findMany()).items).toHaveLength(0);
   });
 });
