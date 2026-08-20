@@ -29,7 +29,7 @@ import {
   PreconditionUnsupportedException,
   QueryValidationException,
 } from "../errors/exceptions.js";
-import type { PolicyNode } from "../policy/kavo-policy.js";
+import type { PolicyNode, WhenParams } from "../policy/kavo-policy.js";
 import { evaluatePolicy, policyNeedsEntity } from "../policy/kavo-policy.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
@@ -302,7 +302,7 @@ export class KavoEngine<Entity extends object> {
     const input = this.resolveInput(request, descriptor, context);
 
     const result = await descriptor.handler.execute(input, context);
-    if (descriptor.id === "findOne") await this.checkFindOnePolicy(configView, context, result as Entity);
+    if (descriptor.id === "findOne") await this.checkFindOnePolicy(request, configView, context, result as Entity);
 
     // The one write-driven thing the cache needs, and the whole
     // invalidation strategy: every entry for the entity is dropped after a
@@ -353,18 +353,22 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const node = isStandardOperationId(descriptor.id) ? configView.policy[descriptor.id] : undefined;
     if (node === undefined) return;
+    if (descriptor.id === "findOne" && policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
+
+    // Coerced against the id column's kind, same as every other consumer of
+    // `request.id` below — a `when()` predicate comparing `params.id` to a
+    // numeric constant must see a number, not the raw URL-path string.
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const params: WhenParams<Entity> = { id };
 
     if (descriptor.id === "findOne") {
-      if (policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
-      await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined);
+      await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined, params);
       return;
     }
 
     let entity: Entity | undefined;
     if (policyNeedsEntity(node)) {
-      const id = request.id === null ? null : this.coerceId(request.id);
-      const found =
-        id === null ? null : await context.repository.findOneById(id as EntityId, this.policyPrefetchQuery(), context);
+      const found = id === null ? null : await context.repository.findOneById(id, this.policyPrefetchQuery(), context);
       if (found === null) {
         throw new NotFoundException({
           messageParams: { entity: configView.entityName, id: String(request.id) },
@@ -378,18 +382,20 @@ export class KavoEngine<Entity extends object> {
       entity = found;
     }
 
-    await this.assertPolicyAllows(node, descriptor.id, configView, context, entity);
+    await this.assertPolicyAllows(node, descriptor.id, configView, context, entity, params);
   }
 
   /** `findOne`'s deferred half of the policy stage — only reached for an entity-aware node; see `checkPolicy`'s doc comment. */
   private async checkFindOnePolicy(
+    request: KavoRequest<Entity>,
     configView: ResolvedEntityConfig<Entity>,
     context: KavoContext<Entity>,
     entity: Entity,
   ): Promise<void> {
     const node = configView.policy.findOne;
     if (node === undefined || !policyNeedsEntity(node)) return;
-    await this.assertPolicyAllows(node, "findOne", configView, context, entity);
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    await this.assertPolicyAllows(node, "findOne", configView, context, entity, { id });
   }
 
   private async assertPolicyAllows(
@@ -398,8 +404,9 @@ export class KavoEngine<Entity extends object> {
     configView: ResolvedEntityConfig<Entity>,
     context: KavoContext<Entity>,
     entity: Entity | undefined,
+    params: WhenParams<Entity>,
   ): Promise<void> {
-    const allowed = await evaluatePolicy(node, context, entity);
+    const allowed = await evaluatePolicy(node, context, entity, params);
     if (!allowed) {
       throw new ForbiddenException({
         messageParams: { entity: configView.entityName, operation },

@@ -39,15 +39,15 @@ could express).
 
 ## Node types
 
-| Node                                | Passes when                                                                            |
-| ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `permission(name)`                  | `principal.permissions` contains `name`                                                |
-| `role(name)`                        | `principal.roles` contains `name`                                                      |
-| `authenticated()`                   | `principal.userId` is set                                                              |
-| `owner(field = "userId")`           | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
-| `filtered(field)`                   | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
-| `when((context, entity?) => ...)`   | the predicate returns `true` — escape hatch for anything else                          |
-| `and(...)` / `or(...)` / `not(...)` | short-circuit composition; `not` negates its single child                              |
+| Node                                                              | Passes when                                                                            |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `permission(name)`                                                | `principal.permissions` contains `name`                                                |
+| `role(name)`                                                      | `principal.roles` contains `name`                                                      |
+| `authenticated()`                                                 | `principal.userId` is set                                                              |
+| `owner(field = "userId")`                                         | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value |
+| `filtered(field)`                                                 | `context.query.filter` carries a condition on `field`, anywhere in the AST             |
+| `when(({ context, entity, resource, operation, params }) => ...)` | the predicate returns `true` — escape hatch for anything else                          |
+| `and(...)` / `or(...)` / `not(...)`                               | short-circuit composition; `not` negates its single child                              |
 
 Every built-in node except `filtered`/`when` reads `context.principal` cast
 to `{ userId?, roles?, permissions?, [k: string]: unknown }`. Kavo never

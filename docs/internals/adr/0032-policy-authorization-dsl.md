@@ -5,7 +5,11 @@ map is amended by [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope
 `operations.<id>.policy` is now the only place `policy` is configured; the
 array shorthand the "The node types" and "Config surface" sections describe
 below was removed — issue #242 — since the `PolicyNode` DSL already covers
-everything it could express. `policy` now takes a `PolicyNode<Entity>` only.)
+everything it could express. `policy` now takes a `PolicyNode<Entity>` only.
+"The node types" section's `when(predicate)` signature is further amended by
+[ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument) —
+the predicate now takes one object argument, `{ context, entity, resource,
+operation, params }`, not `(context, entity?)`.)
 
 ## Context
 
@@ -50,10 +54,12 @@ decision tree, not a bare closure:
   never pass. Checking a value across a relation needs `when()`, which
   receives `context` and can load the relation itself.
 - `authenticated()` — `principal.userId != null`.
-- `when(predicate)` — an arbitrary `(context, entity?) => boolean |
-Promise<boolean>` escape hatch. This is the one node that is **not**
-  inspectable — there is no way to make an arbitrary predicate data — and
-  the AST advantage below applies to every node except this one.
+- `when(predicate)` — an arbitrary `(args) => boolean | Promise<boolean>`
+  escape hatch, `args` a single object (`{ context, entity, resource,
+operation, params }` — amended by [ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument)).
+  This is the one node that is **not** inspectable — there is no way to make
+  an arbitrary predicate data — and the AST advantage below applies to every
+  node except this one.
 - `and(...)` / `or(...)` / `not(...)` — composition, short-circuiting.
 
 `permission`/`role`/`owner`/`authenticated` read a documented,
