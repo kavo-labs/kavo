@@ -37,10 +37,11 @@ does) reads as a trap rather than a feature.
   entry in ADR-0032's "Where entity-aware nodes are and aren't legal" and
   "bootstrap validation" sections holds to.
 - Everything else ADR-0032 decided is unchanged: the node types, the
-  array shorthand and its empty-array rejection, the entity-aware-node
-  legality rules (`createOne`/`findMany` forbidden), the engine's
-  enforcement point and pre-fetch behavior, and the absence of a global
-  default or per-call override.
+  entity-aware-node legality rules (`createOne`/`findMany` forbidden), the
+  engine's enforcement point and pre-fetch behavior, and the absence of a
+  global default or per-call override. (The array shorthand this bullet
+  originally also named was removed afterward — see ADR-0032's own amended
+  "Config surface" section.)
 
 ## Consequences
 

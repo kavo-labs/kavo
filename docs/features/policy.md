@@ -33,7 +33,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## permission
 
-`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. The array shorthand is this node: `["post:delete", "admin"]` is `and(permission("post:delete"), permission("admin"))`, and a single-name array stays a bare `permission` node. An empty array is a bootstrap error rather than a vacuous `and()`: an empty conjunction is `true` by definition, so `{ policy: [] }` would read as lockdown and behave as "allow everyone".
+`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. Require more than one permission with `and(permission("post:delete"), permission("admin"))`.
 
 ## role
 
@@ -57,7 +57,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## and, or, not
 
-`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`.
+`and(...)` passes when every child passes, `or(...)` when any child passes, and `not(child)` inverts its single child; `and` stops at the first failure and `or` at the first success. Composition propagates entity-awareness: a subtree that contains `owner`/`when` needs the row even when a sibling doesn't. The intro example shows both shapes at once, the admin bypass in `findOne`'s `or(...)` and the required conjunction in `updateOne`'s `and(...)`. A zero-child `and()` is vacuously `true` — every empty conjunction is — so `policy: and()` reads like a lockdown and behaves as "allow everyone"; name at least one child, or omit `policy` entirely for the same unrestricted result without the trap.
 
 ## Config placement
 

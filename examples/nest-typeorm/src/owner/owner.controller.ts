@@ -1,6 +1,6 @@
 import { Controller, Inject, UseGuards } from "@nestjs/common";
 import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
-import type { DefaultKavoService, EntityId, RequestPreconditions } from "@kavo/core";
+import { permission, type DefaultKavoService, type EntityId, type RequestPreconditions } from "@kavo/core";
 import { Owner } from "./owner.entity.js";
 import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
 import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
@@ -44,8 +44,8 @@ import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
  * `@Override()` recovers it. Each override otherwise just delegates.
  *
  * Authorization: `DELETE /owners/:id` additionally requires the
- * `owner:delete` permission (ADR-0032) — `permission('owner:delete')`,
- * sugared to the array shorthand. `OwnerPrincipalGuard` stands in for a
+ * `owner:delete` permission (ADR-0032) — `permission('owner:delete')`.
+ * `OwnerPrincipalGuard` stands in for a
  * real app's auth layer, reading a comma-separated `x-permissions` header
  * into the `KavoPrincipal` shape `permission()` reads; `AppModule`'s
  * `principal: true` is what moves it from `request.user` onto
@@ -81,7 +81,7 @@ import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
   operations: {
     purgeOne: true,
     restoreOne: true,
-    deleteOne: { policy: ["owner:delete"] },
+    deleteOne: { policy: permission("owner:delete") },
   },
 })
 @Controller("owners")

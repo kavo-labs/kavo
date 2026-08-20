@@ -27,9 +27,9 @@ function makeAccountCrud(config?: Parameters<ReturnType<typeof createKavo>["crea
 const OWNER = { userId: "u-1" };
 const OTHER = { userId: "u-2" };
 
-describe("policy — Level 1 array shorthand", () => {
+describe("policy — Level 1 permission()", () => {
   it("allows a call carrying the required permission", async () => {
-    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: permission("post:update") } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     const updated = await crud.updateOne(1, { title: "b" } as never, {
       principal: { permissions: ["post:update"] },
@@ -38,16 +38,16 @@ describe("policy — Level 1 array shorthand", () => {
   });
 
   it("denies a call missing the required permission with KAVO_FORBIDDEN (403)", async () => {
-    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: permission("post:update") } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     const call = crud.updateOne(1, { title: "b" } as never, { principal: { permissions: [] } });
     await expect(call).rejects.toBeInstanceOf(ForbiddenException);
     await expect(call).rejects.toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
   });
 
-  it("ANDs a multi-name array — every listed permission is required", async () => {
+  it("ANDs multiple permissions — every listed permission is required", async () => {
     const { crud, adapter } = makeCrud({
-      operations: { deleteOne: { policy: ["post:delete", "admin"] } },
+      operations: { deleteOne: { policy: and(permission("post:delete"), permission("admin")) } },
     } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.deleteOne(1, { principal: { permissions: ["post:delete"] } })).rejects.toBeInstanceOf(
@@ -162,9 +162,11 @@ describe("policy — entity-aware nodes need the loaded row", () => {
 
 describe("policy — bootstrap validation", () => {
   it("rejects an entity-level 'policy' map, pointing at operations.<id>.policy instead", () => {
-    expect(() => makeCrud({ policy: { updateOne: ["post:update"] } } as never)).toThrowError(ConfigurationException);
+    expect(() => makeCrud({ policy: { updateOne: permission("post:update") } } as never)).toThrowError(
+      ConfigurationException,
+    );
     try {
-      makeCrud({ policy: { updateOne: ["post:update"] } } as never);
+      makeCrud({ policy: { updateOne: permission("post:update") } } as never);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
@@ -175,6 +177,20 @@ describe("policy — bootstrap validation", () => {
 
   it("rejects an entity-level 'policy' map even when empty — presence, not content, is what's rejected", () => {
     expect(() => makeCrud({ policy: {} } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("rejects a bare array reaching 'policy' at runtime, since TypeScript can't catch a JS or dynamically-built config", () => {
+    expect(() => makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never)).toThrowError(
+      ConfigurationException,
+    );
+    try {
+      makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as ConfigurationException).detail).toContain("operations.updateOne.policy");
+      expect((error as ConfigurationException).detail).toContain("#242");
+    }
   });
 
   it("rejects an entity-aware node on createOne with ConfigurationException naming the entity and key path", () => {
@@ -194,17 +210,6 @@ describe("policy — bootstrap validation", () => {
     expect(() => makeCrud({ operations: { findMany: { policy: when<Post>(() => true) } } } as never)).toThrowError(
       ConfigurationException,
     );
-  });
-
-  it("rejects an empty-array shorthand rather than silently allowing everyone", () => {
-    expect(() => makeCrud({ operations: { updateOne: { policy: [] } } } as never)).toThrowError(ConfigurationException);
-    try {
-      makeCrud({ operations: { updateOne: { policy: [] } } } as never);
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as ConfigurationException).detail).toContain("operations.updateOne.policy");
-    }
   });
 
   it("rejects an owner() field that crosses a relation, since the pre-fetch loads no relations", () => {

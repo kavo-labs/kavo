@@ -42,16 +42,6 @@ export type PolicyNode<Entity = unknown> =
   | { readonly type: "or"; readonly children: readonly PolicyNode<Entity>[] }
   | { readonly type: "not"; readonly child: PolicyNode<Entity> };
 
-/** The array shorthand a `policy.<operation>` entry also accepts — sugar for `and(...names.map(permission))`. */
-export type PolicyShorthand<Entity = unknown> = readonly string[] | PolicyNode<Entity>;
-
-/** `policy: ['post:update']` → `and(permission('post:update'))`; a single-name array stays a bare `permission` node. */
-export function normalizePolicyShorthand<Entity = unknown>(shorthand: PolicyShorthand<Entity>): PolicyNode<Entity> {
-  if (!Array.isArray(shorthand)) return shorthand as PolicyNode<Entity>;
-  const names = shorthand as readonly string[];
-  return names.length === 1 ? permission(names[0]!) : and(...names.map((name) => permission<Entity>(name)));
-}
-
 export function permission<Entity = unknown>(name: string): PolicyNode<Entity> {
   return { type: "permission", name };
 }
