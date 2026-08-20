@@ -1,6 +1,6 @@
 ---
 name: policy
-description: Reference for Kavo's policy authorization DSL — permission()/role()/owner()/authenticated()/filtered()/when() composed with and()/or()/not(), config placement, entity-aware nodes, and enforcement order. Use when gating an operation on the caller (403 KAVO_FORBIDDEN), requiring an authenticated principal, checking row ownership, or requiring a query filter to be present.
+description: Reference for Kavo's policy authorization DSL — permission()/role()/owner()/authenticated()/filtered()/when() composed with and()/or()/not(), config placement, entity-aware nodes, enforcement order, and the authorization.required default-deny switch. Use when gating an operation on the caller (403 KAVO_FORBIDDEN), requiring an authenticated principal, checking row ownership, requiring a query filter to be present, or making an unconfigured operation deny by default.
 ---
 
 # Policy authorization reference
@@ -31,8 +31,9 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 `policy` is keyed by standard operation id, entity-scope config on
 `@Kavo(Entity, config)`; `operations.<id>.policy` overrides the entity-level
 entry for that operation, the same fallback `dto` uses. An operation with no
-`policy.<id>` entry is **unrestricted** — opt-in per operation, not a global
-switch. The array shorthand `["post:read"]` is `permission("post:read")`;
+`policy.<id>` entry is **unrestricted** by default — opt-in per operation,
+not a global switch (see `authorization.required` below for the opposite
+default). The array shorthand `["post:read"]` is `permission("post:read")`;
 `["a", "b"]` is `and(permission("a"), permission("b"))`. An empty array is a
 bootstrap `ConfigurationException`, not a vacuous allow-everyone.
 
@@ -115,3 +116,50 @@ never cached, so a cache hit can't skip the deferred check.
 - **Custom operations get no `policy` entry** — their handler reaches
   `context.principal` directly and throws `ForbiddenException` for the same
   `403 KAVO_FORBIDDEN`.
+
+## `authorization.required` — default-deny for unconfigured operations (ADR-0033)
+
+```ts
+KavoModule.forRoot({
+  infrastructure: createInfrastructure(dataSource),
+  defaults: { authorization: { required: true } }, // every entity/operation
+});
+
+@Kavo(Post, {
+  authorization: { required: true }, // this entity
+  policy: { updateOne: permission("post:update") },
+  operations: {
+    findMany: { authorization: { required: false } }, // opt this one back out
+  },
+})
+```
+
+Unlike `policy` itself, `authorization` is an **ordinary `KavoSettings`
+key** — it merges through the normal `built-in defaults → global → entity →
+operation` chain, so it _does_ have a global default, unlike `policy`. It
+governs a different question: not "who may call this," but "what happens
+when `policy` has nothing to say about this operation at all." With
+`required: true`, a standard operation with no `policy.<id>` entry answers
+`403 KAVO_FORBIDDEN` instead of running unrestricted — catching the case
+where a new operation shipped without anyone remembering to add a `policy`
+entry for it.
+
+- An operation with an explicit `policy.<id>` entry is unaffected either
+  way — the switch only fills the gap where nothing is configured.
+- **Per-call is excluded**, symmetrically: a per-call settings override can
+  neither loosen an entity that requires it nor tighten one that doesn't —
+  the whole `authorization` subtree is pinned to whatever
+  global/entity/operation already resolved, the same "no per-call
+  loosening" reasoning ADR-0032 applies to `policy`.
+- **Ordinary custom operations are never gated** — their id is never a
+  standard operation id, so they never reach the `policy[operation]` lookup
+  this switch extends; their handler reaches `context.principal` directly
+  instead.
+- **Kavo-synthesized array-mutation operations (`replace<Relation>` etc.,
+  from `relations.edges.<name>.write`) ARE gated**, unlike ordinary custom
+  operations — they can never carry a `policy.<id>` entry either, but their
+  handler is Kavo's own, not app-authored, so this switch is the only
+  authorization hook available for them. There is no per-relation opt-out
+  today (an array-mutation id can't be named in `operations.<id>` — it's
+  synthesized after that config is resolved); exempt a relation by leaving
+  it out of `write`, or turn `authorization.required` off for the entity.

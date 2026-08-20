@@ -15,7 +15,7 @@ import { and, authenticated, filtered, or, owner, permission, role } from "@kavo
 })
 ```
 
-That config makes `POST /posts` require a signed-in caller, `GET /posts` pass for an `admin` or a signed-in caller whose query filters `userId`, `GET /posts/:id` pass for an `admin` or the row's author, and `PUT /posts/:id` require both the `post:update` permission and authorship. `patchOne` and `deleteOne` have no entry, so they run for any caller: an operation with no `policy.<id>` is unrestricted, the same opt-in posture every other Kavo default takes, and adding an entry is how an entity opts in rather than a global switch to flip.
+That config makes `POST /posts` require a signed-in caller, `GET /posts` pass for an `admin` or a signed-in caller whose query filters `userId`, `GET /posts/:id` pass for an `admin` or the row's author, and `PUT /posts/:id` require both the `post:update` permission and authorship. `patchOne` and `deleteOne` have no entry, so they run for any caller: an operation with no `policy.<id>` is unrestricted by default, the same opt-in posture every other Kavo default takes, and adding an entry is how an entity opts in — there is still no global switch that populates `policy` itself. [`authorization.required`](#default-deny-authorization-required) is a separate, genuinely global switch for the opposite question: what happens when nothing was configured at all.
 
 ## Node types
 
@@ -63,6 +63,33 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 `policy` is entity-scope config on `@Kavo(Entity, config)`, keyed by standard operation id. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. There is no global `policy` and no per-call override: like `computed`, a `when()` predicate carries a closure, so the key lives outside the settings precedence chain, and a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) lists the field among `@Kavo`'s own keys.
 
+## Default deny (`authorization.required`)
+
+`authorization.required` flips the posture of an operation with **no** `policy.<id>` entry — instead of running unrestricted, it answers 403 `KAVO_FORBIDDEN`, so a new operation added without a `policy` entry fails loudly at request time rather than shipping unauthenticated by accident (ADR-0033):
+
+```ts
+KavoModule.forRoot({
+  infrastructure: createInfrastructure(dataSource),
+  defaults: { authorization: { required: true } }, // every entity, every operation
+});
+
+@Kavo(Post, {
+  authorization: { required: true }, // this entity only
+  policy: { updateOne: permission("post:update") },
+  operations: {
+    findMany: { authorization: { required: false } }, // opt this one operation back out
+  },
+})
+```
+
+Unlike `policy` itself, `authorization` is an ordinary `KavoSettings` key: it merges through the usual `built-in defaults → global → entity → operation` chain, so a global default (`KavoModule.forRoot`'s `defaults`), an entity default, and a per-operation override all compose the way `cache`/`realtime`/every other settings key does. It is a genuinely different mechanism from `policy` — a settings subtree that governs _what happens when `policy` has nothing configured_, not a way to populate `policy` from outside an entity's own config; `policy`'s own "no global, no per-call" rule (above) is unchanged.
+
+**Per-call is the one scope excluded.** A per-call `{ settings: { authorization: { required: false } } }` cannot loosen an entity that requires it, and — symmetrically, since the whole subtree is pinned rather than merged — a per-call override cannot tighten an entity that doesn't either. The reasoning is the same ADR-0032 gives for `policy` itself: a per-call parameter able to loosen enforcement would let a caller weaken its own authorization.
+
+An operation with an explicit `policy.<id>` entry is unaffected by `authorization.required` either way — the switch only fills the gap where no rule is configured, it never overrides a configured one. It also cannot gate an **ordinary custom operation**: a custom operation's id is never a standard operation id, so it never reaches the `policy[operation]` lookup this switch extends — its handler reaches `context.principal` directly and refuses a caller on its own terms, the same boundary ADR-0032 already drew ([Custom operations](/core/custom-operations)).
+
+It **does** gate a Kavo-synthesized array-mutation operation (`replace<Relation>` and friends, from `relations.edges.<name>.write` — see [Relations](/features/relations#arraymutation)), unlike an ordinary custom operation: that route can never carry a `policy.<id>` entry of its own either, but its handler is Kavo's own, not app-authored code, so there's no other place a check on it could live. There is no per-relation opt-out today — `operations.<id>.authorization` can't target an array-mutation id, since that id is synthesized after the point where `operations.<id>` entries are resolved. To exempt a relation, leave it out of `write`, or turn `authorization.required` off for the whole entity.
+
 ## Entity-aware nodes
 
 `owner` and `when` need the loaded row; `permission`, `role`, `authenticated`, and `filtered` do not. The row-needing nodes are legal only on the single-row operations (`findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`). `createOne` has no row yet and `findMany` resolves a set of rows, so an entity-aware node configured on either is a bootstrap `ConfigurationException` that names the entity and the `policy.<id>` path, caught before the config is frozen rather than surfacing as a silent allow or deny. An `owner` field whose first dotted segment names a relation is the same error: the policy stage's pre-fetch loads no relations, so `owner("author.id")` could never pass and fails at startup instead of denying every caller at runtime.
@@ -75,4 +102,4 @@ The policy stage runs after the context is built and before preconditions and th
 
 A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.principal` directly.
 
-`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches: `filtered()` refuses a caller who omits a scoping filter, it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0032](/internals/adr/0032-policy-authorization-dsl), which also argues the enforcement choices above); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
+`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches: `filtered()` refuses a caller who omits a scoping filter, it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0032](/internals/adr/0032-policy-authorization-dsl), which also argues the enforcement choices above; [ADR-0033](/internals/adr/0033-authorization-required-default-deny-switch) covers `authorization.required`); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
