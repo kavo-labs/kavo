@@ -1,6 +1,6 @@
 import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Column, DataSource, DeleteDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
+import { Column, DataSource, DeleteDateColumn, Entity, PrimaryColumn, PrimaryGeneratedColumn } from "typeorm";
 import {
   AlreadyDeletedException,
   ConfigurationException,
@@ -50,16 +50,41 @@ class Receipt {
   number!: string;
 }
 
+/** An app-assigned (non-generated) primary key, and a soft-delete marker
+ * configured over an ordinary column — the shape that lets a client rewrite
+ * a row's identity or deleted state unless the deserializer and the
+ * adapter's own defence in depth both exclude it. */
+@Entity()
+class Coupon {
+  @PrimaryColumn("varchar")
+  code!: string;
+
+  @Column("varchar")
+  label!: string;
+
+  @Column("datetime", { nullable: true })
+  retiredAt!: Date | null;
+}
+
+/** Names the id and the configured marker explicitly — the opt-in an
+ * explicit write DTO is still allowed to make. */
+class UpdateCouponDto {
+  code = "";
+  label = "";
+  retiredAt: Date | null = null;
+}
+
 let dataSource: DataSource;
 let tickets: DefaultKavoService<Ticket>;
 let invoices: DefaultKavoService<Invoice>;
 let receipts: DefaultKavoService<Receipt>;
+let coupons: DefaultKavoService<Coupon>;
 
 beforeAll(async () => {
   dataSource = new DataSource({
     type: "better-sqlite3",
     database: ":memory:",
-    entities: [Ticket, Invoice, Receipt],
+    entities: [Ticket, Invoice, Receipt, Coupon],
     synchronize: true,
   });
   await dataSource.initialize();
@@ -72,6 +97,10 @@ beforeAll(async () => {
     softDelete: { field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
   receipts = kavo.createCrud(Receipt) as DefaultKavoService<Receipt>;
+  coupons = kavo.createCrud(Coupon, {
+    softDelete: { field: "retiredAt" },
+    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+  }) as DefaultKavoService<Coupon>;
 });
 
 afterAll(async () => {
@@ -82,6 +111,7 @@ beforeEach(async () => {
   await dataSource.getRepository(Ticket).clear();
   await dataSource.getRepository(Invoice).clear();
   await dataSource.getRepository(Receipt).clear();
+  await dataSource.getRepository(Coupon).clear();
 });
 
 /**
@@ -253,5 +283,31 @@ describe("TypeOrmRepositoryAdapter — the adapter's own hard-delete guards", ()
     expect(await dataSource.getRepository(Receipt).countBy({ id: created.id })).toBe(0);
 
     await expect(adapter.purge(created.id, hardContext("purgeOne") as never)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("TypeOrmRepositoryAdapter — id and soft-delete marker mass assignment", () => {
+  it("never reassigns an existing row's id through update/patch, even when a write DTO names it", async () => {
+    await coupons.createOne({ code: "SAVE10", label: "10% off", retiredAt: null } as never);
+
+    const patched = await coupons.patchOne("SAVE10", { code: "STOLEN", label: "hijacked" } as never);
+    expect(patched).toMatchObject({ code: "SAVE10", label: "hijacked" });
+
+    await expect(coupons.findOne("STOLEN")).rejects.toBeInstanceOf(NotFoundException);
+    expect(await coupons.findOne("SAVE10")).toMatchObject({ code: "SAVE10", label: "hijacked" });
+  });
+
+  it("never soft-deletes or revives through update/patch, even when a write DTO names the marker", async () => {
+    const created = await coupons.createOne({ code: "WELCOME", label: "welcome", retiredAt: null } as never);
+    expect(created).toMatchObject({ retiredAt: null });
+
+    const patched = await coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never);
+    expect(patched).toMatchObject({ retiredAt: null });
+    expect((await coupons.findMany()).items).toHaveLength(1);
+
+    // The dedicated operation is unaffected — this closes a bypass, not the
+    // feature itself.
+    await coupons.deleteOne("WELCOME");
+    expect((await coupons.findMany()).items).toHaveLength(0);
   });
 });
