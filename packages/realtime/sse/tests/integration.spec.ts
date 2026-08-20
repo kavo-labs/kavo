@@ -102,7 +102,7 @@ describe("@kavo/sse — end-to-end over a real HTTP server", () => {
 
   it("delivers a created event as a spec-correct SSE frame to a connected subscriber", async () => {
     const kavo = createKavo({ realtimeTransports: [transport] });
-    const crud = kavo.createCrud(Book, { realtime: { enabled: true, events: {} } } as never, {
+    const crud = kavo.createCrud(Book, { realtime: { events: {} } } as never, {
       adapter,
       metadata: bookMetadata,
     });

@@ -65,16 +65,11 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     field: "deletedAt",
     strategy: "auto" as const,
   }),
-  // Off by default. A full object rather than `false` — like `softDelete`'s
-  // default — so a partial override (`realtime: { events: {...} }`) merges
-  // against a complete base instead of replacing a `false` wholesale and
-  // dropping `enabled`. Registered transports live outside this tree
-  // entirely (`KavoOptions.realtimeTransports` — see `RealtimeSettings`'s
-  // doc), so there is nothing transport-shaped to default here.
-  realtime: Object.freeze({
-    enabled: false,
-    events: Object.freeze({}),
-  }),
+  // Off by default, the same `false` sentinel `softDelete`/`cache` use at
+  // this scope. Registered transports live outside this tree entirely
+  // (`KavoOptions.realtimeTransports` — see `RealtimeSettings`'s doc), so
+  // there is nothing transport-shaped to default here.
+  realtime: false,
   // No default strategy (issue #221 amends ADR-0029): the key is never
   // consulted unless a relation opts in via `relations.edges.<name>.write`,
   // and once one does, `validateArrayMutationRelations`
@@ -82,7 +77,7 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // silently assuming one. The empty object — not `false` — is still the
   // base, so a partial `arrayMutation: {...}` override merges against a
   // complete base instead of replacing a `false` wholesale, the same
-  // "harmless default" reasoning `realtime`'s object default documents.
+  // "harmless default" reasoning `cache`'s `ttl: 0` object default documents.
   arrayMutation: Object.freeze({}),
   // Unset: today's `STANDARD_OPERATIONS` enabled-by-default behavior (and
   // ADR-0013's soft-delete-driven `restoreOne` auto-enable) is unchanged

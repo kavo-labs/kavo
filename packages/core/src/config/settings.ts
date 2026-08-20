@@ -222,9 +222,10 @@ export type RealtimeFieldSelector = readonly string[] | { readonly exclude: read
 
 /**
  * Realtime event publishing. `false` disables the subtree entirely, the
- * same convention `softDelete` uses.
+ * same convention `softDelete` uses; any object enables it — there is no
+ * separate `enabled` switch inside.
  *
- * Registered transports are **not** a key here, unlike `enabled`/`events`/
+ * Registered transports are **not** a key here, unlike `events`/
  * `subscribableFields`: a transport is a live object (a socket server, a
  * broker connection), not configuration data, and this schema is deep-
  * frozen once resolved (`deepFreeze`, merge-settings.ts) — freezing a
@@ -238,14 +239,18 @@ export type RealtimeFieldSelector = readonly string[] | { readonly exclude: read
  * exception to "settings are data."
  */
 export interface RealtimeSettings {
-  readonly enabled: boolean;
   /**
    * Per-event opt-out: an id absent here is emitted, like every other
    * positively-phrased boolean in this schema — enabling realtime means
    * "emit everything" by default, then dial specific events back with
-   * `false`.
+   * `false`. Optional rather than defaulted to `{}` in `BUILT_IN_DEFAULTS`:
+   * the built-in default for the whole subtree is `false` (issue #247), so
+   * there is no complete base object left for a first-time partial override
+   * (say, `realtime: { subscribableFields: [...] }`) to merge `events` in
+   * from — `mergeSettings` replaces a non-object base wholesale. Omitted
+   * here behaves exactly like `{}`: nothing is suppressed.
    */
-  readonly events: Readonly<Partial<Record<RealtimeEventId, boolean>>>;
+  readonly events?: Readonly<Partial<Record<RealtimeEventId, boolean>>>;
   /**
    * Bounds what a future field-scoped subscription may reach for this
    * entity (not built yet — this issue only emits whole-item, entity-level

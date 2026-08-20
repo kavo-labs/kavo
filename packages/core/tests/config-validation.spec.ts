@@ -287,14 +287,20 @@ describe("validateSettings — soft delete", () => {
 });
 
 describe("validateSettings — realtime", () => {
+  it("defaults to `false` — no separate `enabled` key (issue #247)", () => {
+    expect(BUILT_IN_DEFAULTS.realtime).toBe(false);
+  });
+
   it("accepts `false` — the documented way to disable the feature entirely", () => {
     expect(() => accept({ realtime: false })).not.toThrow();
   });
 
-  it("rejects a non-boolean enabled", () => {
-    for (const value of ["true", 1, null]) {
-      expectRejected({ realtime: { enabled: value } }, "realtime.enabled", value);
-    }
+  it("accepts a realtime override that omits `events` entirely, even against the `false` base (issue #247)", () => {
+    // `mergeSettings` replaces a non-object base wholesale, so a first-time
+    // partial override has no complete `{ events: {} }` object to merge
+    // against — `events` must tolerate being entirely absent, not just `{}`.
+    expect(() => accept({ realtime: { subscribableFields: ["title"] } })).not.toThrow();
+    expect(() => accept({ realtime: {} })).not.toThrow();
   });
 
   it("rejects a realtime setting that is neither an object nor false", () => {
@@ -305,19 +311,19 @@ describe("validateSettings — realtime", () => {
 
   it("rejects a realtime.events that is not an object", () => {
     for (const value of ["created", 1, true, null]) {
-      expectRejected({ realtime: { enabled: true, events: value } }, "realtime.events", value);
+      expectRejected({ realtime: { events: value } }, "realtime.events", value);
     }
   });
 
   it("rejects an unknown realtime event id", () => {
-    const error = rejectionOf({ realtime: { enabled: true, events: { archived: true } } });
+    const error = rejectionOf({ realtime: { events: { archived: true } } });
     expect(error.code).toBe("KAVO_CONFIG_INVALID");
     expect(error.messageParams).toMatchObject({ entity: "User", path: "realtime.events.archived" });
   });
 
   it("rejects a non-boolean value for a known realtime event id", () => {
     for (const value of ["off", 1, null]) {
-      expectRejected({ realtime: { enabled: true, events: { patched: value } } }, "realtime.events.patched", value);
+      expectRejected({ realtime: { events: { patched: value } } }, "realtime.events.patched", value);
     }
   });
 
@@ -325,7 +331,6 @@ describe("validateSettings — realtime", () => {
     expect(() =>
       accept({
         realtime: {
-          enabled: true,
           events: { created: true, updated: true, patched: false, deleted: true, restored: false },
         },
       }),
@@ -333,34 +338,24 @@ describe("validateSettings — realtime", () => {
   });
 
   it("accepts subscribableFields as an explicit array", () => {
-    expect(() =>
-      accept({ realtime: { enabled: true, events: {}, subscribableFields: ["title", "status"] } }),
-    ).not.toThrow();
+    expect(() => accept({ realtime: { events: {}, subscribableFields: ["title", "status"] } })).not.toThrow();
   });
 
   it("accepts subscribableFields as an exclude selector", () => {
     expect(() =>
-      accept({ realtime: { enabled: true, events: {}, subscribableFields: { exclude: ["internalNotes"] } } }),
+      accept({ realtime: { events: {}, subscribableFields: { exclude: ["internalNotes"] } } }),
     ).not.toThrow();
   });
 
   it("rejects a subscribableFields shape that is neither an array nor { exclude }", () => {
     for (const value of ["title", 1, { includes: ["title"] }, { exclude: "title" }]) {
-      expectRejected(
-        { realtime: { enabled: true, events: {}, subscribableFields: value } },
-        "realtime.subscribableFields",
-        value,
-      );
+      expectRejected({ realtime: { events: {}, subscribableFields: value } }, "realtime.subscribableFields", value);
     }
   });
 
   it("rejects a non-function onPublishError", () => {
     for (const value of ["log", 1, {}]) {
-      expectRejected(
-        { realtime: { enabled: true, events: {}, onPublishError: value } },
-        "realtime.onPublishError",
-        value,
-      );
+      expectRejected({ realtime: { events: {}, onPublishError: value } }, "realtime.onPublishError", value);
     }
   });
 });
