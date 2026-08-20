@@ -155,59 +155,61 @@ export function resolveEntityConfig<Entity extends object>(
 const ENTITY_AWARE_POLICY_FORBIDDEN: ReadonlySet<StandardOperationId> = new Set(["createOne", "findMany"]);
 
 /**
- * Resolve `policy`: entity-scope `policy.<id>` with `operations.<id>.policy`
- * merged in where present (the latter wins, the same fallback `dto` uses),
- * normalized from the array shorthand, and validated against
- * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032). Also rejects, at
- * bootstrap: an empty-array shorthand (`policy: { updateOne: [] }` reads
- * like "lock this down" but an empty `and()` is vacuously `true` — always
- * allow, the opposite of what it looks like); an `owner(field)` whose first
- * dotted segment names a relation (the pre-fetch loads no relations, so it
- * would silently deny every caller instead of ever passing); and a
- * `policy.<key>` naming something other than a standard operation id (a
- * typo that would otherwise protect nothing, silently).
+ * Reject a root-level `policy` map (pre-ADR-0033 shape): `policy` now
+ * configures only per-operation, at `operations.<id>.policy`, so a caller
+ * still passing the old entity-scope map gets a bootstrap error naming the
+ * new location instead of the map being silently ignored.
+ */
+function rejectLegacyEntityLevelPolicy(entityName: string, entityConfig: EntityConfig<never> | undefined): void {
+  if (entityConfig === undefined || !("policy" in entityConfig) || entityConfig.policy === undefined) return;
+  throw new ConfigurationException(
+    entityName,
+    "policy",
+    `an entity-scope 'policy' map is no longer supported (ADR-0033) — configure each operation's policy at ` +
+      `'operations.<id>.policy' instead`,
+  );
+}
+
+/**
+ * Resolve `policy`: `operations.<id>.policy` alone (ADR-0033 — there is no
+ * entity-scope 'policy' map to fall back to), normalized from the array
+ * shorthand, and validated against {@link ENTITY_AWARE_POLICY_FORBIDDEN}
+ * (ADR-0032). Also rejects, at bootstrap: an empty-array shorthand
+ * (`policy: []` reads like "lock this down" but an empty `and()` is
+ * vacuously `true` — always allow, the opposite of what it looks like); and
+ * an `owner(field)` whose first dotted segment names a relation (the
+ * pre-fetch loads no relations, so it would silently deny every caller
+ * instead of ever passing).
  */
 function resolvePolicy<Entity extends object>(
   entityName: string,
   entityConfig: EntityConfig<Entity> | undefined,
   metadata: EntityMetadata<Entity>,
 ): Readonly<Partial<Record<StandardOperationId, PolicyNode<Entity>>>> {
-  const entityLevel = entityConfig?.policy ?? {};
+  rejectLegacyEntityLevelPolicy(entityName, entityConfig as EntityConfig<never> | undefined);
   const relationNames = new Set(metadata.relations.map((relation) => relation.name));
-
-  for (const key of Object.keys(entityLevel)) {
-    if (!STANDARD_OPERATION_IDS.includes(key as StandardOperationId)) {
-      throw new ConfigurationException(
-        entityName,
-        `policy.${key}`,
-        `'${key}' is not a standard operation id (${STANDARD_OPERATION_IDS.join(", ")}) — ` +
-          `a misspelled key here protects nothing`,
-      );
-    }
-  }
 
   const resolved: Partial<Record<StandardOperationId, PolicyNode<Entity>>> = {};
   for (const id of STANDARD_OPERATION_IDS) {
     const operationConfig = entityConfig?.operations?.[id];
-    const operationShorthand =
+    const shorthand =
       typeof operationConfig === "object" && operationConfig !== null
         ? (operationConfig as OperationConfig<Entity>).policy
         : undefined;
-    const shorthand = operationShorthand ?? entityLevel[id];
     if (shorthand === undefined) continue;
     if (Array.isArray(shorthand) && shorthand.length === 0) {
       throw new ConfigurationException(
         entityName,
-        `policy.${id}`,
+        `operations.${id}.policy`,
         `an empty permission array allows every caller — vacuously true, the opposite of what it reads as. ` +
-          `Name at least one permission, or omit '${id}' from 'policy' to leave it genuinely unrestricted`,
+          `Name at least one permission, or omit 'policy' from '${id}' to leave it genuinely unrestricted`,
       );
     }
     const node = normalizePolicyShorthand(shorthand);
     if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
       throw new ConfigurationException(
         entityName,
-        `policy.${id}`,
+        `operations.${id}.policy`,
         `'${id}' has no single entity to check an 'owner'/'when' node against — ` +
           `${id === "createOne" ? "the row doesn't exist yet" : "it resolves a set of rows, not one"}. ` +
           `Use 'permission'/'role'/'authenticated' here instead.`,
@@ -218,7 +220,7 @@ function resolvePolicy<Entity extends object>(
       if (first !== undefined && relationNames.has(first)) {
         throw new ConfigurationException(
           entityName,
-          `policy.${id}`,
+          `operations.${id}.policy`,
           `owner('${field}') crosses the '${first}' relation — the policy stage's pre-fetch loads no relations, ` +
             `so this would silently deny every caller. Address a column on the entity itself, or check the ` +
             `relation from inside a 'when()' predicate, which can load it through 'context.repository' itself`,

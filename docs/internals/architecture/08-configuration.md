@@ -55,15 +55,17 @@ and an etag-only override (`cache: { etag: false }`) leaves the result
 cache off rather than accidentally flipping it on.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`allowlists`, `computed`, `policy`, `operations`); only the settings subset
+`allowlists`, `computed`, `operations`); only the settings subset
 participates in the merge. `computed` carries functions, so like `dto` it
 is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
 `policy` is the same shape of exception, for the same reason (a `when()`
-node carries a closure): it is entity-scope with one narrower override,
-`operations.<id>.policy`, but — unlike every ordinary settings key — takes
-**no** per-call override at all, since a per-call parameter that could
-loosen a policy would let a caller weaken its own authorization. See
+node carries a closure), but it has no entity-scope map at all
+([ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only)):
+`operations.<id>.policy` is the only place it is configured, and — unlike
+every ordinary settings key — it takes **no** per-call override either,
+since a per-call parameter that could loosen a policy would let a caller
+weaken its own authorization. See
 [ADR-0032](/internals/adr/0032-policy-authorization-dsl).
 
 `authorization` (governing `authorization.required`, the `policy`
@@ -164,17 +166,17 @@ An `owner`/`when` node — the two whose result depends on the loaded row,
 not only on `context` — configured on `createOne` or `findMany` fails at
 bootstrap ([ADR-0032](/internals/adr/0032-policy-authorization-dsl)): the
 former has no row yet, the latter resolves a set rather than one. The
-error names the entity and the `policy.<id>` path, the same bar every
-other entry in this section holds to. `permission`/`role`/`authenticated`
-are context-only and legal everywhere.
+error names the entity and the `operations.<id>.policy` path, the same bar
+every other entry in this section holds to. `permission`/`role`/
+`authenticated` are context-only and legal everywhere.
 
-Three more `policy` shapes fail the same way rather than silently
+Two more `policy` shapes fail the same way rather than silently
 misbehaving at request time: an `owner(field)` whose first dotted segment
 names a relation (the pre-fetch loads no relations, so it could never
-pass); an empty-array shorthand (`policy: { updateOne: [] }` is a vacuous
-`and()` — always allow, not the lockdown it reads as); and a `policy.<key>`
-that isn't one of the eight standard operation ids (a typo that would
-otherwise protect nothing).
+pass); and an empty-array shorthand (`policy: []` is a vacuous `and()` —
+always allow, not the lockdown it reads as). A root-level `policy` map —
+the pre-ADR-0033 entity-scope shape — is rejected outright, naming
+`operations.<id>.policy` as the replacement.
 
 ### `query.defaultSort`
 

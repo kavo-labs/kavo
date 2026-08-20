@@ -6,11 +6,11 @@
 import { and, authenticated, filtered, or, owner, permission, role } from "@kavo/core";
 
 @Kavo(Post, {
-  policy: {
-    createOne: authenticated(),
-    findMany: or(role("admin"), and(authenticated(), filtered("userId"))),
-    findOne: or(role("admin"), owner("authorId")),
-    updateOne: and(permission("post:update"), owner("authorId")),
+  operations: {
+    createOne: { policy: authenticated() },
+    findMany: { policy: or(role("admin"), and(authenticated(), filtered("userId"))) },
+    findOne: { policy: or(role("admin"), owner("authorId")) },
+    updateOne: { policy: and(permission("post:update"), owner("authorId")) },
   },
 })
 ```
@@ -33,7 +33,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## permission
 
-`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. The array shorthand is this node: `["post:delete", "admin"]` is `and(permission("post:delete"), permission("admin"))`, and a single-name array stays a bare `permission` node. An empty array is a bootstrap error rather than a vacuous `and()`: an empty conjunction is `true` by definition, so `policy: { updateOne: [] }` would read as lockdown and behave as "allow everyone".
+`permission(name)` passes when `principal.permissions` contains `name`, a plain application-defined string (`post:update`, `owner:delete`). It reads no row, so it is legal on every operation, `createOne` and `findMany` included. The array shorthand is this node: `["post:delete", "admin"]` is `and(permission("post:delete"), permission("admin"))`, and a single-name array stays a bare `permission` node. An empty array is a bootstrap error rather than a vacuous `and()`: an empty conjunction is `true` by definition, so `{ policy: [] }` would read as lockdown and behave as "allow everyone".
 
 ## role
 
@@ -61,7 +61,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## Config placement
 
-`policy` is entity-scope config on `@Kavo(Entity, config)`, keyed by standard operation id. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. There is no global `policy` and no per-call override: like `computed`, a `when()` predicate carries a closure, so the key lives outside the settings precedence chain, and a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) lists the field among `@Kavo`'s own keys.
+`policy` is set per operation, at `operations.<id>.policy` (ADR-0032, amended by ADR-0033) — there is no entity-scope `policy` map to fall back to; an entity that still passes a root-level `policy` map gets a bootstrap error naming the new location. There is no global `policy` and no per-call override either: like `computed`, a `when()` predicate carries a closure, so the key lives outside the settings precedence chain, and a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) covers where the field sits among `@Kavo`'s own keys.
 
 ## Default deny (`authorization.required`)
 
@@ -92,7 +92,7 @@ It **does** gate a Kavo-synthesized array-mutation operation (`replace<Relation>
 
 ## Entity-aware nodes
 
-`owner` and `when` need the loaded row; `permission`, `role`, `authenticated`, and `filtered` do not. The row-needing nodes are legal only on the single-row operations (`findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`). `createOne` has no row yet and `findMany` resolves a set of rows, so an entity-aware node configured on either is a bootstrap `ConfigurationException` that names the entity and the `policy.<id>` path, caught before the config is frozen rather than surfacing as a silent allow or deny. An `owner` field whose first dotted segment names a relation is the same error: the policy stage's pre-fetch loads no relations, so `owner("author.id")` could never pass and fails at startup instead of denying every caller at runtime.
+`owner` and `when` need the loaded row; `permission`, `role`, `authenticated`, and `filtered` do not. The row-needing nodes are legal only on the single-row operations (`findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`). `createOne` has no row yet and `findMany` resolves a set of rows, so an entity-aware node configured on either is a bootstrap `ConfigurationException` that names the entity and the `operations.<id>.policy` path, caught before the config is frozen rather than surfacing as a silent allow or deny. An `owner` field whose first dotted segment names a relation is the same error: the policy stage's pre-fetch loads no relations, so `owner("author.id")` could never pass and fails at startup instead of denying every caller at runtime.
 
 ## Enforcement
 
