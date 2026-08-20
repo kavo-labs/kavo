@@ -161,24 +161,15 @@ describe("validateSettings — errors", () => {
 });
 
 describe("validateSettings — cache", () => {
-  it("rejects a cache.etag that is neither a boolean nor an object", () => {
-    for (const value of ["false", 0, null]) {
+  it("rejects a cache.etag that is not a boolean", () => {
+    for (const value of ["false", 0, null, {}, { enabled: true }]) {
       expectRejected({ cache: { etag: value } }, "cache.etag", value);
     }
   });
 
-  it("rejects a cache.etag object without a boolean enabled", () => {
-    for (const value of [{}, { enabled: "yes" }]) {
-      const error = rejectionOf({ cache: { etag: value } });
-      expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.etag.enabled" });
-    }
-  });
-
-  it("accepts the boolean shorthand and the object form", () => {
+  it("accepts the boolean shorthand", () => {
     expect(() => accept({ cache: { etag: true } })).not.toThrow();
     expect(() => accept({ cache: { etag: false } })).not.toThrow();
-    expect(() => accept({ cache: { etag: { enabled: true } } })).not.toThrow();
-    expect(() => accept({ cache: { etag: { enabled: false } } })).not.toThrow();
     expect(() => accept({ cache: false })).not.toThrow();
   });
 
