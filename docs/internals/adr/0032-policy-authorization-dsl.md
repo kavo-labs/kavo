@@ -1,6 +1,8 @@
 # ADR-0032 — Kavo reverses its no-policy-layer non-goal and adopts a policy stage
 
-**Status:** accepted
+**Status:** accepted (the "Config surface" section's entity-scope `policy`
+map is amended by [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) —
+`operations.<id>.policy` is now the only place `policy` is configured)
 
 ## Context
 

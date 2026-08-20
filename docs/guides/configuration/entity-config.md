@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus five fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists)), `computed` (see [Computed fields](/features/computed-fields)), `policy` (below), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)).
+`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists)), `computed` (see [Computed fields](/features/computed-fields)), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` (below) is configured, per operation.
 
 ## dto
 
@@ -34,17 +34,17 @@ Moved to [Allowlists](/features/allowlists) and [Computed fields](/features/comp
 
 ## policy
 
-Authorization, keyed by standard operation id (ADR-0032). An id absent here runs unrestricted:
+Authorization, set per operation at `operations.<id>.policy` (ADR-0032, ADR-0033). An operation with no `policy` runs unrestricted:
 
 ```ts
 import { and, owner, permission } from "@kavo/core";
 
 @Kavo(Post, {
-  policy: {
-    updateOne: and(permission("post:update"), owner("authorId")),
-    deleteOne: ["post:delete", "admin"], // array shorthand: every name required
+  operations: {
+    updateOne: { policy: and(permission("post:update"), owner("authorId")) },
+    deleteOne: { policy: ["post:delete", "admin"] }, // array shorthand: every name required
   },
 })
 ```
 
-`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error. `operations.<id>.policy` overrides the entity-level entry for that operation, the same fallback `dto` uses. See [Policy](/features/policy) for the node reference and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.
+`owner`/`when` need the loaded row, so they're only legal on the single-row operations (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — configuring either on `createOne`/`findMany` is a bootstrap error. There is no entity-scope `policy` map to fall back to — `operations.<id>.policy` is the only place a policy is declared. See [Policy](/features/policy) for the node reference and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.

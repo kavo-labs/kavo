@@ -117,7 +117,7 @@ Request
  → Operation Resolution     OperationRegistry lookup
  → Config Resolution        frozen ResolvedEntityConfig (bootstrap-merged)
  → Query Resolution         GET only: query → filter AST (+ IncludeTree, doc 12)
- → Policy                   configured `policy.<id>` node, if any (ADR-0032)
+ → Policy                   configured `operations.<id>.policy` node, if any (ADR-0032)
  → DTO Resolution           explicit DTO, else entity-derived default
  → Deserialization
  → Repository Adapter call  transactional via the adapter-level hook ⟨reserved⟩

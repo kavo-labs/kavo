@@ -29,7 +29,7 @@ const OTHER = { userId: "u-2" };
 
 describe("policy — Level 1 array shorthand", () => {
   it("allows a call carrying the required permission", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: ["post:update"] } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     const updated = await crud.updateOne(1, { title: "b" } as never, {
       principal: { permissions: ["post:update"] },
@@ -38,7 +38,7 @@ describe("policy — Level 1 array shorthand", () => {
   });
 
   it("denies a call missing the required permission with KAVO_FORBIDDEN (403)", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: ["post:update"] } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     const call = crud.updateOne(1, { title: "b" } as never, { principal: { permissions: [] } });
     await expect(call).rejects.toBeInstanceOf(ForbiddenException);
@@ -46,7 +46,9 @@ describe("policy — Level 1 array shorthand", () => {
   });
 
   it("ANDs a multi-name array — every listed permission is required", async () => {
-    const { crud, adapter } = makeCrud({ policy: { deleteOne: ["post:delete", "admin"] } } as never);
+    const { crud, adapter } = makeCrud({
+      operations: { deleteOne: { policy: ["post:delete", "admin"] } },
+    } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.deleteOne(1, { principal: { permissions: ["post:delete"] } })).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -62,7 +64,7 @@ describe("policy — Level 1 array shorthand", () => {
 
 describe("policy — Level 2 helper DSL", () => {
   it("owner() checks the loaded entity against principal.userId", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: owner("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: owner("authorId") } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -83,7 +85,7 @@ describe("policy — Level 2 helper DSL", () => {
 
   it("composes and()/or()/not() — admin bypasses ownership, a banned owner is still denied", async () => {
     const policy = or(role("admin"), and(permission("post:update"), owner("authorId"), not(role("banned"))));
-    const { crud, adapter } = makeCrud({ policy: { updateOne: policy } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -109,7 +111,7 @@ describe("policy — Level 2 helper DSL", () => {
   });
 
   it("authenticated() checks principal.userId presence", async () => {
-    const { crud } = makeCrud({ policy: { createOne: authenticated() } } as never);
+    const { crud } = makeCrud({ operations: { createOne: { policy: authenticated() } } } as never);
     await expect(crud.createOne({ title: "x", authorId: "u-1" } as never, { principal: null })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -120,7 +122,7 @@ describe("policy — Level 2 helper DSL", () => {
 
   it("when() runs an arbitrary predicate against context and the loaded entity", async () => {
     const { crud, adapter } = makeCrud({
-      policy: { updateOne: when<Post>((_ctx, post) => post?.title !== "locked") },
+      operations: { updateOne: { policy: when<Post>((_ctx, post) => post?.title !== "locked") } },
     } as never);
     adapter.rows.push({ id: 1, title: "locked", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
@@ -129,12 +131,12 @@ describe("policy — Level 2 helper DSL", () => {
 
 describe("policy — entity-aware nodes need the loaded row", () => {
   it("findOne evaluates the policy against the row it already fetched, and 404s before 403 for a missing row", async () => {
-    const { crud } = makeCrud({ policy: { findOne: owner("authorId") } } as never);
+    const { crud } = makeCrud({ operations: { findOne: { policy: owner("authorId") } } } as never);
     await expect(crud.findOne(1, undefined, { principal: OWNER })).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("updateOne pre-fetches the row to check owner(), independent of what the handler itself does", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: owner("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: owner("authorId") } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -151,77 +153,70 @@ describe("policy — entity-aware nodes need the loaded row", () => {
   });
 
   it("404s rather than 403 for an owner-checked id that doesn't exist", async () => {
-    const { crud } = makeCrud({ policy: { updateOne: owner("authorId") } } as never);
+    const { crud } = makeCrud({ operations: { updateOne: { policy: owner("authorId") } } } as never);
     await expect(crud.updateOne(999, { title: "x" } as never, { principal: OWNER })).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 });
 
-describe("policy — operation-level override", () => {
-  it("operations.<id>.policy wins over the entity-level policy.<id> entry", async () => {
-    const { crud, adapter } = makeCrud({
-      policy: { updateOne: permission("post:update") },
-      operations: { updateOne: { policy: permission("post:override") } },
-    } as never);
-    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
-
-    await expect(
-      crud.updateOne(1, { title: "x" } as never, { principal: { permissions: ["post:update"] } }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(
-      crud.updateOne(1, { title: "x" } as never, { principal: { permissions: ["post:override"] } }),
-    ).resolves.toMatchObject({ title: "x" });
-  });
-});
-
 describe("policy — bootstrap validation", () => {
-  it("rejects an entity-aware node on createOne with ConfigurationException naming the entity and key path", () => {
-    expect(() => makeCrud({ policy: { createOne: owner("authorId") } } as never)).toThrowError(ConfigurationException);
+  it("rejects an entity-level 'policy' map, pointing at operations.<id>.policy instead", () => {
+    expect(() => makeCrud({ policy: { updateOne: ["post:update"] } } as never)).toThrowError(ConfigurationException);
     try {
-      makeCrud({ policy: { createOne: owner("authorId") } } as never);
+      makeCrud({ policy: { updateOne: ["post:update"] } } as never);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as ConfigurationException).detail).toContain("policy.createOne");
+      expect((error as ConfigurationException).detail).toContain("at 'policy'");
+      expect((error as ConfigurationException).detail).toContain("operations.<id>.policy");
+    }
+  });
+
+  it("rejects an entity-level 'policy' map even when empty — presence, not content, is what's rejected", () => {
+    expect(() => makeCrud({ policy: {} } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("rejects an entity-aware node on createOne with ConfigurationException naming the entity and key path", () => {
+    expect(() => makeCrud({ operations: { createOne: { policy: owner("authorId") } } } as never)).toThrowError(
+      ConfigurationException,
+    );
+    try {
+      makeCrud({ operations: { createOne: { policy: owner("authorId") } } } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as ConfigurationException).detail).toContain("operations.createOne.policy");
     }
   });
 
   it("rejects an entity-aware node on findMany", () => {
-    expect(() => makeCrud({ policy: { findMany: when<Post>(() => true) } } as never)).toThrowError(
-      ConfigurationException,
-    );
-  });
-
-  it("rejects an entity-aware node configured through operations.<id>.policy too, not just entity-level policy.<id>", () => {
-    expect(() => makeCrud({ operations: { createOne: { policy: owner("authorId") } } } as never)).toThrowError(
+    expect(() => makeCrud({ operations: { findMany: { policy: when<Post>(() => true) } } } as never)).toThrowError(
       ConfigurationException,
     );
   });
 
   it("rejects an empty-array shorthand rather than silently allowing everyone", () => {
-    expect(() => makeCrud({ policy: { updateOne: [] } } as never)).toThrowError(ConfigurationException);
+    expect(() => makeCrud({ operations: { updateOne: { policy: [] } } } as never)).toThrowError(ConfigurationException);
     try {
-      makeCrud({ policy: { updateOne: [] } } as never);
+      makeCrud({ operations: { updateOne: { policy: [] } } } as never);
       expect.unreachable();
     } catch (error) {
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as ConfigurationException).detail).toContain("policy.updateOne");
+      expect((error as ConfigurationException).detail).toContain("operations.updateOne.policy");
     }
   });
 
   it("rejects an owner() field that crosses a relation, since the pre-fetch loads no relations", () => {
-    expect(() => makeCrud({ policy: { updateOne: owner("author.id") } } as never)).toThrowError(ConfigurationException);
-  });
-
-  it("rejects a policy.<key> that isn't a standard operation id", () => {
-    expect(() => makeCrud({ policy: { updateAll: permission("x") } } as never)).toThrowError(ConfigurationException);
+    expect(() => makeCrud({ operations: { updateOne: { policy: owner("author.id") } } } as never)).toThrowError(
+      ConfigurationException,
+    );
   });
 });
 
 describe("policy — findOne: the deny branch on an existing row", () => {
   it("denies findOne against a row that exists but fails the policy", async () => {
-    const { crud, adapter } = makeCrud({ policy: { findOne: owner("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { findOne: { policy: owner("authorId") } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -237,7 +232,7 @@ describe("policy — findOne: the deny branch on an existing row", () => {
 
 describe("policy — findMany and patchOne runtime coverage", () => {
   it("evaluates a context-only policy on findMany", async () => {
-    const { crud } = makeCrud({ policy: { findMany: permission("post:list") } } as never);
+    const { crud } = makeCrud({ operations: { findMany: { policy: permission("post:list") } } } as never);
     await expect(crud.findMany(undefined, { principal: { permissions: [] } })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -247,7 +242,7 @@ describe("policy — findMany and patchOne runtime coverage", () => {
   });
 
   it("evaluates owner() on patchOne", async () => {
-    const { crud, adapter } = makeCrud({ policy: { patchOne: owner("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { patchOne: { policy: owner("authorId") } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -268,7 +263,7 @@ describe("policy — findMany and patchOne runtime coverage", () => {
 describe("policy — missing/undefined principal", () => {
   it("permission()/role()/owner() deny (never throw) when options.principal is simply omitted", async () => {
     const { crud, adapter } = makeCrud({
-      policy: { updateOne: or(permission("post:update"), role("admin"), owner("authorId")) },
+      operations: { updateOne: { policy: or(permission("post:update"), role("admin"), owner("authorId")) } },
     } as never);
     adapter.rows.push({
       id: 1,
@@ -284,7 +279,7 @@ describe("policy — missing/undefined principal", () => {
 
 describe("policy — malformed id still gets the engine's usual 400, not a policy-specific failure", () => {
   it("coerces the id before the policy pre-fetch runs", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: owner("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: owner("authorId") } } } as never);
     adapter.rows.push({
       id: 1,
       title: "a",
@@ -305,7 +300,7 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
   it("evaluates owner() on restoreOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
       softDelete: { strategy: "soft" },
-      policy: { restoreOne: owner("name") },
+      operations: { restoreOne: { policy: owner("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
@@ -318,8 +313,7 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
   it("evaluates owner() on purgeOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
       softDelete: { strategy: "soft" },
-      operations: { purgeOne: true },
-      policy: { purgeOne: owner("name") },
+      operations: { purgeOne: { enabled: true, policy: owner("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
@@ -334,7 +328,7 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
   it("re-evaluates a context-only findOne policy on every call, cache hit or not", async () => {
     const { crud } = makeCrud({
       cache: { ttl: 60 },
-      policy: { findOne: permission("post:read") },
+      operations: { findOne: { policy: permission("post:read") } },
     } as never);
     const allowed = { principal: { permissions: ["post:read"] } };
     const denied = { principal: { permissions: [] } };
@@ -349,7 +343,7 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
   it("never caches a findOne whose policy is entity-aware, so a later denial can't be starved by a stale hit", async () => {
     const { crud, adapter } = makeCrud({
       cache: { ttl: 60 },
-      policy: { findOne: owner("authorId") },
+      operations: { findOne: { policy: owner("authorId") } },
     } as never);
     adapter.rows.push({
       id: 1,
@@ -369,12 +363,12 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
 
 describe("policy — filtered() requires a query filter on a given field", () => {
   it("denies findMany when the required filter is absent", async () => {
-    const { crud } = makeCrud({ policy: { findMany: filtered("authorId") } } as never);
+    const { crud } = makeCrud({ operations: { findMany: { policy: filtered("authorId") } } } as never);
     await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("allows findMany when the filter is present, anywhere in the AST", async () => {
-    const { crud } = makeCrud({ policy: { findMany: filtered("authorId") } } as never);
+    const { crud } = makeCrud({ operations: { findMany: { policy: filtered("authorId") } } } as never);
     await expect(
       crud.findMany({ filter: { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" } } as never),
     ).resolves.toMatchObject({ items: [] });
@@ -394,7 +388,7 @@ describe("policy — filtered() requires a query filter on a given field", () =>
   });
 
   it("denies unconditionally on writes, where context.query is null", async () => {
-    const { crud, adapter } = makeCrud({ policy: { updateOne: filtered("authorId") } } as never);
+    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: filtered("authorId") } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
   });

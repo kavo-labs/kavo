@@ -9,7 +9,7 @@ description: Reference for Kavo's policy authorization DSL — permission()/role
 on an entity can carry a rule evaluated against `context.principal` and,
 when the rule needs it, the loaded row — a rule that fails answers `403`
 with `KAVO_FORBIDDEN`. Full detail: `docs/features/policy.md` and
-[ADR-0032](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0032-policy-authorization-dsl.md).
+[ADR-0032](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0032-policy-authorization-dsl.md)/[ADR-0033](https://github.com/kavo-labs/kavo/blob/main/docs/internals/adr/0033-policy-moves-to-operation-scope-only.md).
 Wiring `context.principal` itself is the `global-config`/`kavo-decorator`
 skills' territory (an app's own auth layer) — `policy` only ever reads it.
 
@@ -19,19 +19,19 @@ skills' territory (an app's own auth layer) — `policy` only ever reads it.
 import { and, authenticated, filtered, or, owner, permission, role } from "@kavo/core";
 
 @Kavo(Post, {
-  policy: {
-    createOne: authenticated(),
-    findMany: ["post:read"],
-    findOne: or(role("admin"), owner("authorId")),
-    updateOne: and(permission("post:update"), owner("authorId")),
+  operations: {
+    createOne: { policy: authenticated() },
+    findMany: { policy: ["post:read"] },
+    findOne: { policy: or(role("admin"), owner("authorId")) },
+    updateOne: { policy: and(permission("post:update"), owner("authorId")) },
   },
 })
 ```
 
-`policy` is keyed by standard operation id, entity-scope config on
-`@Kavo(Entity, config)`; `operations.<id>.policy` overrides the entity-level
-entry for that operation, the same fallback `dto` uses. An operation with no
-`policy.<id>` entry is **unrestricted** — opt-in per operation, not a global
+`policy` is set per operation, at `operations.<id>.policy` — there is no
+entity-scope `policy` map (ADR-0033; a leftover root-level `policy` map
+fails at bootstrap, naming this path as the replacement). An operation with
+no `policy` entry is **unrestricted** — opt-in per operation, not a global
 switch. The array shorthand `["post:read"]` is `permission("post:read")`;
 `["a", "b"]` is `and(permission("a"), permission("b"))`. An empty array is a
 bootstrap `ConfigurationException`, not a vacuous allow-everyone.
@@ -57,7 +57,7 @@ yet) makes every built-in node except `filtered` deny.
 
 ```ts
 @Kavo(Post, {
-  policy: { findMany: and(authenticated(), filtered("userId")) },
+  operations: { findMany: { policy: and(authenticated(), filtered("userId")) } },
 })
 ```
 
@@ -80,7 +80,7 @@ your own rows," not just "some filter is present."
 `findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`.
 Configuring either on `createOne` (no row yet) or `findMany` (a set, not
 one row) is a bootstrap `ConfigurationException` naming the entity and the
-`policy.<id>` path. An `owner(field)` whose first dotted segment names a
+`operations.<id>.policy` path. An `owner(field)` whose first dotted segment names a
 relation (`owner("author.id")`) is the same error — the pre-fetch loads no
 relations, so it could never pass.
 

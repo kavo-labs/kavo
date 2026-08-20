@@ -71,14 +71,13 @@ class HeaderPrincipalGuard implements CanActivate {
 
 @Kavo(Post, {
   softDelete: { strategy: "soft" },
-  operations: { purgeOne: true },
-  policy: {
-    createOne: authenticated(),
-    updateOne: or(role("admin"), and(permission("post:update"), owner("authorId"))),
-    deleteOne: ["post:delete"],
-    findOne: owner("authorId"),
-    restoreOne: owner("authorId"),
-    purgeOne: owner("authorId"),
+  operations: {
+    createOne: { policy: authenticated() },
+    updateOne: { policy: or(role("admin"), and(permission("post:update"), owner("authorId"))) },
+    deleteOne: { policy: ["post:delete"] },
+    findOne: { policy: owner("authorId") },
+    restoreOne: { policy: owner("authorId") },
+    purgeOne: { enabled: true, policy: owner("authorId") },
   },
 } as never)
 @Controller("posts")
