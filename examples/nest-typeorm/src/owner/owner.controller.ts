@@ -1,9 +1,10 @@
 import { Controller, Inject, UseGuards } from "@nestjs/common";
 import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
-import { permission, type DefaultKavoService, type EntityId, type RequestPreconditions } from "@kavo/core";
+import type { DefaultKavoService, EntityId, RequestPreconditions } from "@kavo/core";
 import { Owner } from "./owner.entity.js";
 import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
 import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
+import { hasPermission } from "./owner.policy.js";
 
 /**
  * CRUD over the relation side. The unique `email` column is what surfaces a
@@ -44,14 +45,14 @@ import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
  * `@Override()` recovers it. Each override otherwise just delegates.
  *
  * Authorization: `DELETE /owners/:id` additionally requires the
- * `owner:delete` permission (ADR-0032) — `permission('owner:delete')`.
- * `OwnerPrincipalGuard` stands in for a
- * real app's auth layer, reading a comma-separated `x-permissions` header
- * into the `KavoPrincipal` shape `permission()` reads; `AppModule`'s
- * `principal: true` is what moves it from `request.user` onto
- * `context.principal`. No other route on this controller, and no other
- * controller in this app, is gated — see `docs/guides/wiring-your-own-auth`
- * for the full DSL (`role`/`owner`/`authenticated`/`when`/`and`/`or`/`not`).
+ * `owner:delete` permission (ADR-0037) — `hasPermission('owner:delete')`
+ * (`owner.policy.ts`), a one-line `Policy<Owner>`. `OwnerPrincipalGuard`
+ * stands in for a real app's auth layer, reading a comma-separated
+ * `x-permissions` header into the shape `hasPermission` reads off
+ * `context.principal`; `AppModule`'s `principal: true` is what moves it
+ * from `request.user` onto `context.principal`. No other route on this
+ * controller, and no other controller in this app, is gated — see
+ * `docs/guides/wiring-your-own-auth` for more on writing a policy function.
  */
 @Kavo(Owner, {
   dto: {
@@ -81,7 +82,7 @@ import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
   operations: {
     purgeOne: true,
     restoreOne: true,
-    deleteOne: { policy: permission("owner:delete") },
+    deleteOne: { policy: hasPermission("owner:delete") },
   },
 })
 @Controller("owners")
