@@ -173,7 +173,12 @@ function rejectLegacyEntityLevelPolicy(entityName: string, entityConfig: EntityC
  * Resolve `policy`: `operations.<id>.policy` alone (ADR-0033 — there is no
  * entity-scope 'policy' map to fall back to), validated against
  * {@link ENTITY_AWARE_POLICY_FORBIDDEN} (ADR-0032). Also rejects, at
- * bootstrap: an `owner(field)` whose first dotted segment names a relation
+ * bootstrap: a bare array (the shorthand issue #242 removed — TypeScript
+ * callers get a compile error instead, but this catches a JS or
+ * dynamically-built config the type system can't see, which would
+ * otherwise reach `evaluatePolicy`'s exhaustive switch, fall through to
+ * `undefined`, and silently deny every caller rather than failing loud
+ * here); and an `owner(field)` whose first dotted segment names a relation
  * (the pre-fetch loads no relations, so it would silently deny every caller
  * instead of ever passing).
  */
@@ -193,6 +198,14 @@ function resolvePolicy<Entity extends object>(
         ? (operationConfig as OperationConfig<Entity>).policy
         : undefined;
     if (node === undefined) continue;
+    if (Array.isArray(node)) {
+      throw new ConfigurationException(
+        entityName,
+        `operations.${id}.policy`,
+        `the array shorthand was removed (issue #242) — 'policy' now takes a PolicyNode only. ` +
+          `Use 'permission(name)', or 'and(permission(a), permission(b))' for what a multi-name array expressed.`,
+      );
+    }
     if (ENTITY_AWARE_POLICY_FORBIDDEN.has(id) && policyNeedsEntity(node)) {
       throw new ConfigurationException(
         entityName,

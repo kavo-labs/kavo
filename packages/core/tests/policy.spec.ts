@@ -179,6 +179,20 @@ describe("policy — bootstrap validation", () => {
     expect(() => makeCrud({ policy: {} } as never)).toThrowError(ConfigurationException);
   });
 
+  it("rejects a bare array reaching 'policy' at runtime, since TypeScript can't catch a JS or dynamically-built config", () => {
+    expect(() => makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never)).toThrowError(
+      ConfigurationException,
+    );
+    try {
+      makeCrud({ operations: { updateOne: { policy: ["post:update"] } } } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as ConfigurationException).detail).toContain("operations.updateOne.policy");
+      expect((error as ConfigurationException).detail).toContain("#242");
+    }
+  });
+
   it("rejects an entity-aware node on createOne with ConfigurationException naming the entity and key path", () => {
     expect(() => makeCrud({ operations: { createOne: { policy: owner("authorId") } } } as never)).toThrowError(
       ConfigurationException,
