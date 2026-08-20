@@ -302,7 +302,7 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
    * turn a missing id into `NotFoundException`, so this costs no extra
    * query.
    */
-  private async mergeAndFlush(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async mergeAndFlush(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
       const em = this.fork();
       // Scoped to live rows: a soft-deleted row is invisible to updates,
@@ -310,7 +310,17 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
       const where = this.scopeToLive({ [this.idField]: id }, context, false);
       const existing = await em.findOne(this.entity, where as never);
       if (existing === null) throw this.notFound(id, context);
-      wrap(existing).assign(this.toWriteData(data) as never, { em });
+      // Defence in depth, mirroring the deserializer's own exclusion: even
+      // an explicit write DTO that legitimately names the id (to assign a
+      // natural key on `create`) must not be allowed to reassign an
+      // *existing* row's identity, and the soft-delete marker is
+      // `deleteOne`/`restoreOne`'s state machine to change, not an
+      // ordinary property an update/patch body happens to include.
+      const softDeleteField = context.config.softDelete.field;
+      const data = { ...(rawData as Record<string, unknown>) };
+      delete data[this.idField];
+      if (softDeleteField !== null) delete data[softDeleteField];
+      wrap(existing).assign(this.toWriteData(data as Partial<Entity>) as never, { em });
       await em.flush();
       return toPlain(existing);
     } catch (error) {
