@@ -31,6 +31,20 @@ interface Invoice {
   archivedAt: Date | null;
 }
 
+interface Coupon {
+  _id: string;
+  label: string;
+  retiredAt: Date | null;
+}
+
+/** Names `_id` and the configured marker explicitly — the opt-in an
+ * explicit write DTO is still allowed to make. */
+class UpdateCouponDto {
+  _id = "";
+  label = "";
+  retiredAt: Date | null = null;
+}
+
 /**
  * Declared through a factory so the models keep their *inferred* Mongoose
  * types — annotating them with `ReturnType<connection["model"]>` would
@@ -47,6 +61,7 @@ function defineModels(connection: TestDatabase["connection"]) {
       }),
     ),
     Invoice: connection.model("Invoice", new Schema({ number: String, archivedAt: { type: Date, default: null } })),
+    Coupon: connection.model("Coupon", new Schema({ label: String, retiredAt: { type: Date, default: null } })),
   };
 }
 
@@ -54,6 +69,7 @@ let database: TestDatabase;
 let models: ReturnType<typeof defineModels>;
 let tickets: DefaultKavoService<Ticket>;
 let invoices: DefaultKavoService<Invoice>;
+let coupons: DefaultKavoService<Coupon>;
 
 beforeAll(async () => {
   database = await startTestDatabase();
@@ -72,6 +88,10 @@ beforeAll(async () => {
   invoices = kavo.createCrud(models.Invoice, {
     softDelete: { field: "archivedAt" },
   }) as unknown as DefaultKavoService<Invoice>;
+  coupons = kavo.createCrud(models.Coupon, {
+    softDelete: { field: "retiredAt" },
+    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+  }) as unknown as DefaultKavoService<Coupon>;
 });
 
 afterAll(async () => {
@@ -236,6 +256,28 @@ describe("MongooseRepositoryAdapter — configured marker field", () => {
 
     const list = await invoices.findMany({ onlyDeleted: true });
     expect(list.items).toMatchObject([{ _id: deleted._id }]);
+  });
+});
+
+describe("MongooseRepositoryAdapter — id and soft-delete marker mass assignment", () => {
+  it("never reassigns an existing document's id through update/patch, even when a write DTO names it", async () => {
+    const created = (await coupons.createOne({ label: "10% off", retiredAt: null } as never)) as Coupon;
+
+    const patched = await coupons.patchOne(created._id, { _id: "hijacked", label: "changed" } as never);
+    expect(patched).toMatchObject({ _id: created._id, label: "changed" });
+
+    await expect(coupons.findOne("hijacked")).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("never soft-deletes or revives through update/patch, even when a write DTO names the marker", async () => {
+    const created = (await coupons.createOne({ label: "welcome", retiredAt: null } as never)) as Coupon;
+
+    const patched = await coupons.patchOne(created._id, { retiredAt: new Date(0) } as never);
+    expect(patched).toMatchObject({ retiredAt: null });
+    expect((await coupons.findMany()).items).toHaveLength(1);
+
+    await coupons.deleteOne(created._id);
+    expect((await coupons.findMany()).items).toHaveLength(0);
   });
 });
 

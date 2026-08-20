@@ -272,10 +272,19 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    * reported without a separate existence check — no read-then-write gap
    * for a concurrent delete to slip through.
    */
-  private async writeExisting(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async writeExisting(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
       const where = this.scopeToLive({ [this.idField]: { $eq: id } }, context, false);
-      const changes = data as Record<string, unknown>;
+      // Defence in depth, mirroring the deserializer's own exclusion: even
+      // an explicit write DTO that legitimately names the id (to assign a
+      // natural key on `create`) must not be allowed to reassign an
+      // *existing* document's identity, and the soft-delete marker is
+      // `deleteOne`/`restoreOne`'s state machine to change, not an
+      // ordinary path an update/patch body happens to include.
+      const softDeleteField = context.config.softDelete.field;
+      const changes = { ...(rawData as Record<string, unknown>) };
+      delete changes[this.idField];
+      if (softDeleteField !== null) delete changes[softDeleteField];
       if (Object.keys(changes).length === 0) {
         // MongoDB rejects an empty `$set`. Nothing to write is not an
         // error — it is the current document, unchanged.
