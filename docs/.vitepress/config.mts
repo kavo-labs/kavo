@@ -369,6 +369,10 @@ const config = defineConfig({
                 text: "0033 — Policy moves to operation scope only",
                 link: "/internals/adr/0033-policy-moves-to-operation-scope-only",
               },
+              {
+                text: "0034 — when() predicate takes a single object argument",
+                link: "/internals/adr/0034-when-predicate-takes-a-single-object-argument",
+              },
             ],
           },
         ],

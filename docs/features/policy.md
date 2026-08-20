@@ -19,15 +19,15 @@ That config makes `POST /posts` require a signed-in caller, `GET /posts` pass fo
 
 ## Node types
 
-| Node                                | Passes when                                                                                                    |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `permission(name)`                  | `principal.permissions` contains `name`                                                                        |
-| `role(name)`                        | `principal.roles` contains `name`                                                                              |
-| `authenticated()`                   | `principal.userId` is set                                                                                      |
-| `filtered(field)`                   | `context.query.filter` carries a condition on `field`, anywhere in the AST (`context.query` is null on writes) |
-| `owner(field = "userId")`           | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value                         |
-| `when((context, entity?) => ...)`   | the predicate returns `true`                                                                                   |
-| `and(...)` / `or(...)` / `not(...)` | short-circuit composition; `not` negates its single child                                                      |
+| Node                                                              | Passes when                                                                                                    |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `permission(name)`                                                | `principal.permissions` contains `name`                                                                        |
+| `role(name)`                                                      | `principal.roles` contains `name`                                                                              |
+| `authenticated()`                                                 | `principal.userId` is set                                                                                      |
+| `filtered(field)`                                                 | `context.query.filter` carries a condition on `field`, anywhere in the AST (`context.query` is null on writes) |
+| `owner(field = "userId")`                                         | the row's `field` equals `principal.userId`; `owner("author.id")` walks a nested value                         |
+| `when(({ context, entity, resource, operation, params }) => ...)` | the predicate returns `true`                                                                                   |
+| `and(...)` / `or(...)` / `not(...)`                               | short-circuit composition; `not` negates its single child                                                      |
 
 The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.principal` to a `KavoPrincipal` shape: optional `userId`, `roles`, and `permissions`, plus an index signature, so a principal can carry `tenantId`, `plan`, or any other field the built-in nodes never read. Kavo itself never inspects, validates, or shapes `principal`; using a built-in node is what an application opts into, and `when()` reads the raw value however it likes. `filtered()` reads the request's query filter instead (below). [Wiring your own auth](/guides/wiring-your-own-auth) is what moves the caller from the HTTP request onto `context.principal`. Without it `principal` is `null` on every request and a principal-reading node denies everything, and over the GraphQL and MCP bindings it stays `null` unless a caller passes one per call.
 
@@ -53,7 +53,7 @@ The `permission`, `role`, `owner`, and `authenticated` nodes cast `context.princ
 
 ## when
 
-`when((context, entity?) => ...)` is the escape hatch for a check the other nodes can't express. The predicate returns a boolean or a promise and receives `context` plus the row when the node needs one, so it can read `context.principal` however it likes, inspect `context.query`, or load a relation itself through `context.repository`, the one place a policy can check a value across a relation. Because it holds a closure it is the one node that is not inspectable data, which is why `policy` lives outside the settings chain with no per-call override ([Config placement](#config-placement)). It is entity-aware, with the same operation constraints and pre-fetch cost as `owner`.
+`when(({ context, entity, resource, operation, params }) => ...)` is the escape hatch for a check the other nodes can't express. The predicate returns a boolean or a promise and is called with a single object: `context` and `entity` (the row, when the node needs one) as before, plus `resource` and `operation` — `context.entityName`/`context.operation` surfaced at the top level so a predicate doesn't have to reach through `context` for them — and `params.id`, the request's own single-row target (`null` for an operation with none, e.g. `createOne`/`findMany`), which `context` never carries at all. `params` deliberately has no `query`: over HTTP `context.query` is already the normalized query, and the raw request-level value has no one stable shape across transports, so a predicate that wants the query reads `context.query` instead. The predicate can read `context.principal` however it likes, inspect `context.query`, or load a relation itself through `context.repository`, the one place a policy can check a value across a relation. Because it holds a closure it is the one node that is not inspectable data, which is why `policy` lives outside the settings chain with no per-call override ([Config placement](#config-placement)). It is entity-aware, with the same operation constraints and pre-fetch cost as `owner`.
 
 ## and, or, not
 
