@@ -45,12 +45,23 @@ interface WhenPredicateArgs<Entity = unknown> {
   `context` for them.
 - `params.id` is new: the request's own single-row target
   (`Pick<KavoRequest<Entity>, "id">`), the one thing `context` never
-  carried. It is `null` for an operation with no single-row target
-  (`createOne`, `findMany`). `evaluatePolicy` grows a fourth parameter,
+  carried. The type allows `null`, for an operation with no single-row
+  target (`createOne`, `findMany`), but a `when()` predicate never actually
+  observes it in practice: `when` is entity-aware, and `resolveEntityConfig`
+  already rejects an entity-aware node on `createOne`/`findMany` at
+  bootstrap, so every operation a `when()` policy can legally be configured
+  on always has a row. `evaluatePolicy` grows a fourth parameter,
   `params`, defaulted to `{ id: null }` for a caller with none to give (e.g.
   a direct unit test); `KavoEngine`'s policy stage
   (`checkPolicy`/`checkFindOnePolicy`) is the one caller that always has a
-  real `request` in scope and passes its `id` through.
+  real `request` in scope, and it runs `request.id` through the same
+  `coerceId` every other consumer of it already does before building
+  `params` — a predicate comparing `params.id` to a numeric literal sees a
+  `number`, never the raw URL-path string an HTTP route hands the engine.
+  (Caught during review of this ADR's own PR: an earlier draft passed
+  `request.id` through uncoerced, which is exactly the `WireQuery`-typed-as-
+  `QueryContext` hazard the next bullet describes, just for `id` instead of
+  `query`.)
 - **`params` deliberately excludes `query`.** `KavoRequest.query` is typed
   `QueryDto | null` (defaulting to `QueryContext<Entity>`), but over HTTP
   the value the engine actually receives at that field is a `WireQuery` —

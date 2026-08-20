@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { KavoContext } from "@kavo/core";
 import {
   ConfigurationException,
   ForbiddenException,
   NotFoundException,
   createKavo,
+  evaluatePolicy,
   policyNeedsEntity,
 } from "@kavo/core";
 import { and, authenticated, filtered, not, or, owner, permission, role, when } from "@kavo/core";
@@ -128,14 +130,14 @@ describe("policy — Level 2 helper DSL", () => {
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("when() receives resource, operation, and params (the request's id/query) alongside context and entity", async () => {
+  it("when() receives resource, operation, and params.id alongside context and entity", async () => {
     let seen: { resource: string; operation: string; id: unknown } | undefined;
     const { crud, adapter } = makeCrud({
       operations: {
         updateOne: {
-          policy: when<Post>(({ context, resource, operation, params }) => {
+          policy: when<Post>(({ resource, operation, params }) => {
             seen = { resource, operation, id: params.id };
-            return context.entityName === resource && context.operation === operation;
+            return true;
           }),
         },
       },
@@ -144,6 +146,57 @@ describe("policy — Level 2 helper DSL", () => {
 
     await expect(crud.updateOne(1, { title: "x" } as never)).resolves.toMatchObject({ title: "x" });
     expect(seen).toEqual({ resource: "Post", operation: "updateOne", id: 1 });
+  });
+
+  it("when() sees params.id coerced to the id column's kind, not the raw string a caller passed", async () => {
+    const { crud, adapter } = makeCrud({
+      operations: { updateOne: { policy: when<Post>(({ params }) => params.id === 1) } },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    // The string "1", not the number 1 — what an HTTP path param arrives as.
+    await expect(crud.updateOne("1" as never, { title: "x" } as never)).resolves.toMatchObject({ title: "x" });
+  });
+
+  it("when() as a leaf of and()/or()/not() still receives params after composition", async () => {
+    const { crud, adapter } = makeCrud({
+      operations: {
+        updateOne: {
+          policy: and<Post>(
+            authenticated(),
+            when(({ params }) => params.id === 1),
+          ),
+        },
+      },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    adapter.rows.push({ id: 2, title: "b", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    await expect(crud.updateOne(1, { title: "x" } as never, { principal: OWNER })).resolves.toMatchObject({
+      title: "x",
+    });
+
+    await expect(crud.updateOne(2, { title: "x" } as never, { principal: OWNER })).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("when() on findOne (the deferred entity-aware path) also receives params.id, coerced", async () => {
+    const { crud, adapter } = makeCrud({
+      operations: { findOne: { policy: when<Post>(({ params }) => params.id === 1) } },
+    } as never);
+    adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+    adapter.rows.push({ id: 2, title: "b", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
+
+    // The string "1" — what an HTTP path param arrives as — still matches the coerced comparison.
+    await expect(crud.findOne("1" as never)).resolves.toMatchObject({ title: "a" });
+    await expect(crud.findOne(2)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("evaluatePolicy defaults params to { id: null } for a direct caller with none to give", async () => {
+    const context = { entityName: "Post", operation: "updateOne" } as unknown as KavoContext<Post>;
+    const node = when<Post>(({ params }) => params.id === null);
+    await expect(evaluatePolicy(node, context)).resolves.toBe(true);
   });
 });
 

@@ -6,8 +6,19 @@ import type { FilterExpression } from "../query/filter.js";
 /**
  * The request-level identifier a `when()` predicate gets alongside
  * `context`/`entity` — the piece `context` itself never carries at all
- * (ADR-0032 amendment): `KavoContext` has no `id` field. `null` for an
- * operation with no single-row target (`createOne`/`findMany`).
+ * (ADR-0032 amendment): `KavoContext` has no `id` field. The type allows
+ * `null`, for an operation with no single-row target (`createOne`/
+ * `findMany`), but a `when()` predicate never actually observes it: `when`
+ * is entity-aware (`policyNeedsEntity`), and `resolveEntityConfig` already
+ * rejects an entity-aware node on `createOne`/`findMany` at bootstrap — so
+ * every operation a `when()` policy can legally be configured on always has
+ * a row, and `params.id` with it.
+ *
+ * Coerced against the id column's kind before a predicate ever sees it —
+ * the engine's policy stage runs `id` through the same `coerceId` every
+ * other consumer of `request.id` does, so a numeric id column always hands
+ * a predicate a `number`, never the raw URL-path string HTTP requests carry
+ * it as. Comparing `params.id` to a numeric literal is safe.
  *
  * Deliberately **not** `KavoRequest.query` too: over HTTP that field is a
  * `WireQuery` at runtime (raw bracket-key params, pre-coercion), not the

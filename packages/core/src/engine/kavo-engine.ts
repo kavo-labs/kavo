@@ -353,19 +353,22 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const node = isStandardOperationId(descriptor.id) ? configView.policy[descriptor.id] : undefined;
     if (node === undefined) return;
-    const params: WhenParams<Entity> = { id: request.id };
+    if (descriptor.id === "findOne" && policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
+
+    // Coerced against the id column's kind, same as every other consumer of
+    // `request.id` below — a `when()` predicate comparing `params.id` to a
+    // numeric constant must see a number, not the raw URL-path string.
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const params: WhenParams<Entity> = { id };
 
     if (descriptor.id === "findOne") {
-      if (policyNeedsEntity(node)) return; // deferred to checkFindOnePolicy
       await this.assertPolicyAllows(node, descriptor.id, configView, context, undefined, params);
       return;
     }
 
     let entity: Entity | undefined;
     if (policyNeedsEntity(node)) {
-      const id = request.id === null ? null : this.coerceId(request.id);
-      const found =
-        id === null ? null : await context.repository.findOneById(id as EntityId, this.policyPrefetchQuery(), context);
+      const found = id === null ? null : await context.repository.findOneById(id, this.policyPrefetchQuery(), context);
       if (found === null) {
         throw new NotFoundException({
           messageParams: { entity: configView.entityName, id: String(request.id) },
@@ -391,7 +394,8 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const node = configView.policy.findOne;
     if (node === undefined || !policyNeedsEntity(node)) return;
-    await this.assertPolicyAllows(node, "findOne", configView, context, entity, { id: request.id });
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    await this.assertPolicyAllows(node, "findOne", configView, context, entity, { id });
   }
 
   private async assertPolicyAllows(
