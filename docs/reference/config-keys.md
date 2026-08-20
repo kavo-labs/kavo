@@ -61,12 +61,11 @@ Whether a relation is includable at all is `allowlists.includable` (entity scope
 
 ## cache
 
-| Key                  | Type                     | Default |
-| -------------------- | ------------------------ | ------- |
-| `cache`              | `{ ttl, etag } \| false` | `false` |
-| `cache.ttl`          | `number` (seconds)       | `0`     |
-| `cache.etag`         | `boolean \| { enabled }` | `true`  |
-| `cache.etag.enabled` | `boolean`                | `true`  |
+| Key          | Type                     | Default |
+| ------------ | ------------------------ | ------- |
+| `cache`      | `{ ttl, etag } \| false` | `false` |
+| `cache.ttl`  | `number` (seconds)       | `0`     |
+| `cache.etag` | `boolean`                | `true`  |
 
 One subtree covers both halves of HTTP response caching. `cache.ttl` is the engine-level result cache that serves a repeated `findOne`/`findMany` read from a store without touching the adapter — a positive `ttl` turns it on, `0` (the default) means off, and there is no separate `enabled` key. `cache.etag` is the conditional-request machinery — the ETag on single-item responses plus `If-None-Match`/`If-Match`. `cache: false` turns both halves off together. The result cache's backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Caching & ETags](/features/caching-and-etags) and [Result cache](/features/result-cache).
 
