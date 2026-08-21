@@ -239,7 +239,10 @@ describe("createKavoGraphQLSchema", () => {
     const adapter = new InMemoryNoteAdapter();
     const service = createKavo().createCrud(
       Note,
-      { softDelete: { strategy: "soft" }, operations: { purgeOne: true } },
+      {
+        softDelete: { strategy: "soft" },
+        operations: { createOne: {}, deleteOne: {}, restoreOne: {}, purgeOne: {} },
+      },
       { adapter, metadata: noteMetadata },
     );
     const created = await service.createOne({ text: "keep me" } as never);
