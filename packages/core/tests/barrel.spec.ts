@@ -229,6 +229,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "TransactionPropagation",
   "WhenParams",
   "WireQuery",
+  "WritableFieldSelector",
   "assertNever",
   "builtInHandlers",
   "builtInPaginationStrategies",

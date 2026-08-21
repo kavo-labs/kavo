@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUILT_IN_DEFAULTS, ConfigurationException, createKavo, mergeSettings, resolveEntityConfig } from "@kavo/core";
 import { User, userMetadata } from "./support/user-fixture.js";
-import { authorMetadata } from "./support/blog-fixture.js";
+import { authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
 describe("mergeSettings — merge algebra", () => {
   it("replaces scalars key-by-key, nearer scope wins", () => {
@@ -210,6 +210,62 @@ describe("resolveEntityConfig — bootstrap", () => {
       undefined,
     );
     expect(config.allowlists.searchable).toEqual(["posts.authorId"]);
+  });
+
+  it("defaults creatable/updatable to every non-generated own column except the id, plus every relation", () => {
+    const config = resolveEntityConfig(postMetadata, undefined, undefined);
+    // `id` (generated, and the primary key regardless) and `deletedAt`
+    // (generated) are excluded; `title`/`authorId` and both relations join
+    // the default, the same base `DefaultDeserializer`'s own derived
+    // writable projection uses.
+    expect(config.allowlists.creatable).toEqual(["title", "authorId", "author", "comments"]);
+    expect(config.allowlists.updatable).toEqual(["title", "authorId", "author", "comments"]);
+  });
+
+  it("uses explicit creatable/updatable arrays verbatim, independently of each other", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      { allowlists: { creatable: ["name"], updatable: ["name", "email"] } },
+      undefined,
+    );
+    expect(config.allowlists.creatable).toEqual(["name"]);
+    expect(config.allowlists.updatable).toEqual(["name", "email"]);
+    // Unconfigured allowlists still derive.
+    expect(config.allowlists.filterable).toContain("age");
+  });
+
+  it("resolves creatable/updatable { exclude } against the writable base, not every column", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      { allowlists: { creatable: { exclude: ["age"] }, updatable: { exclude: ["status"] } } },
+      undefined,
+    );
+    // `id`/`createdAt` are excluded from the base itself (generated/id), so
+    // naming them in `exclude` would be a no-op either way.
+    expect(config.allowlists.creatable).toEqual(["name", "email", "status"]);
+    expect(config.allowlists.updatable).toEqual(["name", "email", "age"]);
+  });
+
+  it("rejects a computed field named in allowlists.creatable or allowlists.updatable", () => {
+    try {
+      resolveEntityConfig(
+        userMetadata,
+        {
+          computed: { fullName: { resolve: () => "" } },
+          allowlists: { creatable: ["fullName" as never] },
+        },
+        undefined,
+      );
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "User",
+        path: "allowlists.creatable",
+      });
+      expect((error as ConfigurationException).message).toContain("never writable");
+    }
   });
 
   it("resolves an entity-scope defaultSort", () => {

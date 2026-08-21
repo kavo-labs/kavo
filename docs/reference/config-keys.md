@@ -102,13 +102,15 @@ Coarser than the per-entity `EntityConfig.operations`, which also carries `handl
 
 Not part of `KavoSettings`. Declared on `EntityConfig` directly, so there's no global default and no per-operation override.
 
-| Key                     | Type                                          | Default                            |
-| ----------------------- | --------------------------------------------- | ---------------------------------- |
-| `allowlists.filterable` | `FieldPath[] \| { exclude: FieldPath[] }`     | every own column                   |
-| `allowlists.sortable`   | same shape                                    | every own column                   |
-| `allowlists.selectable` | same shape                                    | every own column + computed fields |
-| `allowlists.includable` | `IncludePath[] \| { exclude: IncludePath[] }` | `[]`, no relation includable       |
-| `allowlists.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`     | every own string-kind column       |
+| Key                     | Type                                                          | Default                                                           |
+| ----------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `allowlists.filterable` | `FieldPath[] \| { exclude: FieldPath[] }`                     | every own column                                                  |
+| `allowlists.sortable`   | same shape                                                    | every own column                                                  |
+| `allowlists.selectable` | same shape                                                    | every own column + computed fields                                |
+| `allowlists.includable` | `IncludePath[] \| { exclude: IncludePath[] }`                 | `[]`, no relation includable                                      |
+| `allowlists.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`                     | every own string-kind column                                      |
+| `allowlists.creatable`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
+| `allowlists.updatable`  | same shape                                                    | same default as `creatable`                                       |
 
 See [Allowlists](/features/allowlists).
 
