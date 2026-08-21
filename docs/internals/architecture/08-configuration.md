@@ -96,7 +96,7 @@ Instead, `createOperationRegistry` resolves `enabled` for each operation
 directly. When the entity declares no `operations` key at all, the chain is
 the unconditional/soft-delete-declared default, then the global
 `operations.<id>` boolean. The moment the entity _does_ declare `operations`
-(issue #257), that key becomes an explicit whitelist: an id the config
+(ADR-0038, issue #257), that key becomes an explicit whitelist: an id the config
 doesn't name at all resolves to disabled, regardless of its
 unconditional/soft-delete/global default. `true`/`false` names an id
 explicitly, in either direction; an object carrying settings enables by
