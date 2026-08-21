@@ -218,6 +218,15 @@ describe("soft-delete operation enablement (ADR-0013)", () => {
     );
   });
 
+  it("fails at bootstrap the same way when the object form enables it by presence alone, no boolean", () => {
+    // Naming purgeOne with settings — not the `true` shorthand — is what
+    // enables it now (issue #257), so it has to hit the same bootstrap
+    // guard as the boolean form does above.
+    expect(() => makeAccountCrud({ operations: { purgeOne: { meta: {} } } }, accountMetadataWithoutMarker)).toThrow(
+      ConfigurationException,
+    );
+  });
+
   it("rejects a non-boolean withDeleted value", async () => {
     const { crud } = makeAccountCrud();
     await expect(crud.findMany({ withDeleted: "yes" } as never)).rejects.toBeInstanceOf(QueryValidationException);

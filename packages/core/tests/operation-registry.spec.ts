@@ -241,6 +241,19 @@ describe("createOperationRegistry — the control surface", () => {
     }
   });
 
+  it("treats a key present with an `undefined` value as unlisted, not as naming the id", () => {
+    // A conditionally-built config (`{ purgeOne: cond ? true : undefined }`,
+    // or a spread of a partial object) can leave a key present with
+    // `undefined` rather than absent. That must stay off, the same as
+    // omitting the key outright — `hasOwnProperty` alone would say
+    // otherwise and silently enable a destructive operation.
+    const registry = createOperationRegistry<User>(
+      { operations: { createOne: true, purgeOne: undefined } } as UserConfig,
+      standardHandlers,
+    );
+    expect(registry.get("purgeOne")?.enabled).toBe(false);
+  });
+
   it("disables an operation with the `false` shorthand, keeping its entry", () => {
     const registry = createOperationRegistry<User>(
       { operations: { createOne: true, patchOne: false } } as UserConfig,
@@ -705,6 +718,31 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
       { restoreOne: false },
     );
     expect(registry.get("restoreOne")?.enabled).toBe(false);
+  });
+
+  it("suppresses the soft-delete auto-enable of restoreOne once operations is declared (issue #257)", () => {
+    // softDelete alone would auto-enable restoreOne (the test above this
+    // block, with no `operations` key at all). Once `operations` is
+    // declared, that auto-enable no longer applies on its own — restoreOne
+    // still needs naming, soft-deletable or not.
+    const registry = createOperationRegistry<User>(
+      { softDelete: { strategy: "soft", field: "deletedAt" }, operations: { createOne: true } } as UserConfig,
+      standardHandlers,
+    );
+    expect(registry.get("restoreOne")?.enabled).toBe(false);
+  });
+
+  it("bypasses the global operations default for an id the entity's whitelist doesn't name", () => {
+    // The global map still fills in for an entity with no `operations` key
+    // at all (tested above). Once the entity declares `operations`, an
+    // unnamed id is off regardless of what the global default says about
+    // it — the global default never gets consulted for it.
+    const registry = createOperationRegistry<User>(
+      { operations: { deleteOne: true } } as UserConfig,
+      standardHandlers,
+      { patchOne: true },
+    );
+    expect(registry.get("patchOne")?.enabled).toBe(false);
   });
 
   it("reproduces today's STANDARD_OPERATIONS behavior byte-for-byte when unset", () => {
