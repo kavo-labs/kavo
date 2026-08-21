@@ -241,7 +241,7 @@ describe("createKavoGraphQLSchema", () => {
       Note,
       {
         softDelete: { strategy: "soft" },
-        operations: { createOne: {}, deleteOne: {}, restoreOne: {}, purgeOne: {} },
+        operations: { createOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
       },
       { adapter, metadata: noteMetadata },
     );
