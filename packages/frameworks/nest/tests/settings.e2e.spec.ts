@@ -244,7 +244,7 @@ describe("@Kavo per-operation settings override — scoped to that operation onl
 describe("@Kavo custom meta.routes on a standard, non-@Override'd operation", () => {
   @Kavo(Todo, {
     operations: {
-      createOne: {},
+      createOne: true,
       deleteOne: { meta: { routes: { path: ":id/remove", successStatus: 200 } } },
     },
   })
@@ -273,8 +273,8 @@ describe("@Kavo meta.routes.enabled: false — service-only operations", () => {
   // feature with a different meaning.
   @Kavo(Todo, {
     operations: {
-      createOne: {},
-      findOne: {},
+      createOne: true,
+      findOne: true,
       deleteOne: { meta: { routes: { enabled: false } } },
     },
   })
