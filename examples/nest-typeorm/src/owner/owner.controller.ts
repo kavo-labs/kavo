@@ -17,11 +17,11 @@ import { hasPermission } from "./owner.policy.js";
  * `PATCH /owners/:id/restore` on the router — route generation runs before
  * any ORM metadata exists, so the config, not the entity, is what it can
  * read (ADR-0013). `purgeOne` is off by default everywhere; asked for by
- * name it adds `DELETE /owners/:id/purge`. `restoreOne: true` here is
- * explicit rather than relying on the soft-delete auto-enable, because
- * `AppModule` sets a global `defaults.operations.restoreOne: false`
- * (issue #38) — this entity opts back in, which is the whole point of the
- * precedence chain: entity config always wins over the global default.
+ * name it adds `DELETE /owners/:id/purge`. Naming `restoreOne` below is
+ * required regardless of the soft-delete auto-enable, because `operations`
+ * is an exclusive whitelist here (issue #257) — and it also opts back in
+ * from `AppModule`'s global `defaults.operations.restoreOne: false`
+ * (issue #38), since entity config always wins over the global default.
  *
  * Realtime: every standard write publishes to whatever transports
  * `AppModule.forRoot`'s second argument registers — `main.ts` wires
@@ -80,8 +80,13 @@ import { hasPermission } from "./owner.policy.js";
     includable: ["pets", "address"],
   },
   operations: {
-    purgeOne: true,
-    restoreOne: true,
+    createOne: {},
+    findOne: {},
+    findMany: {},
+    updateOne: {},
+    patchOne: {},
+    purgeOne: {},
+    restoreOne: {},
     deleteOne: { policy: hasPermission("owner:delete") },
   },
 })

@@ -27,7 +27,16 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     list: ArticleListDto,
   },
   softDelete: { field: "deletedAt" },
-  operations: { purgeOne: true },
+  operations: {
+    createOne: {},
+    findOne: {},
+    findMany: {},
+    updateOne: {},
+    patchOne: {},
+    deleteOne: {},
+    restoreOne: {},
+    purgeOne: {},
+  },
   pagination: { defaultLimit: 10, maxLimit: 50 },
   allowlists: {
     filterable: ["_id", "title", "status", "tags", "author"],

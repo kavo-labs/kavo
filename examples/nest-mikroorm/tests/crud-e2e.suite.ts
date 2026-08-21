@@ -82,7 +82,8 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       const after = await request(server()).get(`/cats/${id}`).expect(200);
       expect(after.body).toMatchObject({ name: "Renamed", age: 4, size: "large" });
 
-      // PATCH is disabled on this route by `operations.patchOne: false`.
+      // PATCH is disabled on this route: `operations` names every other
+      // standard id, but deliberately not `patchOne`.
       await request(server()).patch(`/cats/${id}`).send({ name: "Nope" }).expect(404);
 
       await request(server()).delete(`/cats/${id}`).expect(204);

@@ -33,7 +33,12 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     includable: ["owner", "tags"],
   },
   operations: {
-    patchOne: false,
+    createOne: {},
+    findOne: {},
+    findMany: {},
+    updateOne: {},
+    deleteOne: {},
+    // patchOne is deliberately not named here, so it stays off.
   },
 })
 @Controller("cats")

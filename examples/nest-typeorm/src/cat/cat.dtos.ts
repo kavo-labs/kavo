@@ -25,7 +25,8 @@ import { PhotoItemDto } from "../photo/photo.dtos.js";
  * `Create`/`UpdateCatDto` additionally carry `class-validator` decorators —
  * see `cat.controller.ts`'s `@Override()`'d write methods for how they get
  * validated. There is no `PatchCatDto`: `patchOne` is disabled on this
- * entity (`cat.controller.ts`'s `operations.patchOne: false`).
+ * entity (`cat.controller.ts`'s `operations` whitelist deliberately
+ * doesn't name it).
  *
  * `size`'s own default is `enumProp(...)`'s schema-hint marker object
  * (`@kavo/nest`'s `schema-hints.ts`), not a real `PetSizeEnum` value — it
