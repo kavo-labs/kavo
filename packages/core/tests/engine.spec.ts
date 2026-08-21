@@ -144,12 +144,12 @@ describe("KavoEngine pipeline", () => {
   });
 
   it("raises OperationDisabledException for config-disabled operations", async () => {
-    const { crud } = makeCrud({ operations: { deleteOne: false } } as never);
+    const { crud } = makeCrud({ operations: { createOne: {} } } as never);
     await expect(crud.deleteOne(1)).rejects.toBeInstanceOf(OperationDisabledException);
   });
 
   it("names the config key that would switch a disabled operation back on", async () => {
-    const { crud } = makeCrud({ operations: { deleteOne: false } } as never);
+    const { crud } = makeCrud({ operations: { createOne: {} } } as never);
     await expect(crud.deleteOne(1)).rejects.toMatchObject({
       code: "KAVO_OPERATION_DISABLED",
       messageParams: { operation: "deleteOne", entity: "User" },
@@ -197,6 +197,7 @@ describe("KavoEngine pipeline", () => {
     const { crud } = makeCrud({
       operations: {
         findOne: {
+          enabled: true,
           handler: {
             async execute() {
               return Object.assign(new User(), { id: 42, name: "override" });
@@ -249,7 +250,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     }
     const { crud } = makeCrud({
       dto: { create: RootCreateDto },
-      operations: { createOne: { dto: { input: CreateUserRequestDto } } },
+      operations: { createOne: { enabled: true, dto: { input: CreateUserRequestDto } } },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(created).toMatchObject({ name: "Ada", email: "a@x.io" });
@@ -266,8 +267,8 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     }
     const { crud } = makeCrud({
       operations: {
-        findOne: { dto: { output: UserProfileDto } },
-        createOne: { dto: { output: UserCreatedDto } },
+        findOne: { enabled: true, dto: { output: UserProfileDto } },
+        createOne: { enabled: true, dto: { output: UserCreatedDto } },
       },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
@@ -282,7 +283,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       id = 0;
     }
     const { crud } = makeCrud({
-      operations: { findMany: { dto: { output: UserListItemDto } } },
+      operations: { createOne: true, findMany: { enabled: true, dto: { output: UserListItemDto } } },
     } as never);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     const list = await crud.findMany();
@@ -297,7 +298,13 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     const adapter = new InMemoryAccountAdapter();
     const crud = createKavo().createCrud(
       Account,
-      { operations: { restoreOne: { enabled: true, dto: { output: AccountProfileDto } } } } as never,
+      {
+        operations: {
+          createOne: true,
+          deleteOne: true,
+          restoreOne: { enabled: true, dto: { output: AccountProfileDto } },
+        },
+      } as never,
       { adapter, metadata: accountMetadata },
     );
     await crud.createOne({ name: "Acme" } as never);
@@ -317,7 +324,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     }
     const { crud } = makeCrud({
       dto: { item: UserItemDto },
-      operations: { createOne: { dto: { output: UserCreatedDto } } },
+      operations: { findOne: true, createOne: { enabled: true, dto: { output: UserCreatedDto } } },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(Object.keys(created as object)).toEqual(["id", "email"]);
@@ -396,6 +403,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
   ) {
     const { crud, adapter } = makeCrud({
       operations: {
+        createOne: true,
         promoteOne: {
           handler: {
             async execute(input: unknown, context: KavoContext<User>) {
@@ -630,6 +638,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
       const { crud } = makeCrud({
         operations: {
           findOne: {
+            enabled: true,
             handler: {
               async execute() {
                 return { unrelated: true } as never;
@@ -711,6 +720,7 @@ describe("KavoEngine — the per-call config view", () => {
     const { crud } = makeCrud({
       operations: {
         findMany: {
+          enabled: true,
           handler: {
             async execute(
               _input: unknown,

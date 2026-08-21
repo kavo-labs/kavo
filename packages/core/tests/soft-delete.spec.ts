@@ -158,7 +158,7 @@ describe("soft delete lifecycle", () => {
     await disabled.crud.createOne({ name: "acme" } as never);
     await expect(disabled.crud.purgeOne(1)).rejects.toMatchObject({ code: "KAVO_OPERATION_DISABLED" });
 
-    const { crud, adapter } = makeAccountCrud({ operations: { purgeOne: true } });
+    const { crud, adapter } = makeAccountCrud({ operations: { createOne: {}, deleteOne: {}, purgeOne: {} } });
     await crud.createOne({ name: "acme" } as never);
     await expect(crud.purgeOne(1)).rejects.toBeInstanceOf(NotDeletedException);
 
@@ -177,7 +177,7 @@ describe("soft delete lifecycle", () => {
 
   it("applies a per-operation strategy override", async () => {
     const { crud, adapter } = makeAccountCrud({
-      operations: { deleteOne: { softDelete: { strategy: "hard" } } },
+      operations: { createOne: {}, deleteOne: { softDelete: { strategy: "hard" } } },
     });
     await crud.createOne({ name: "acme" } as never);
     await crud.deleteOne(1);
@@ -213,7 +213,7 @@ describe("soft-delete operation enablement (ADR-0013)", () => {
   });
 
   it("fails at bootstrap when a soft-delete operation is enabled on a hard-delete entity", () => {
-    expect(() => makeAccountCrud({ operations: { purgeOne: true } }, accountMetadataWithoutMarker)).toThrow(
+    expect(() => makeAccountCrud({ operations: { purgeOne: {} } }, accountMetadataWithoutMarker)).toThrow(
       ConfigurationException,
     );
   });

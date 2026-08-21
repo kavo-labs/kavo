@@ -52,6 +52,8 @@ class TransactionRecordingAdapter extends InMemoryUserAdapter {
 /** The motivating shape from issue #145: load one row, write one field. */
 const banConfig = {
   operations: {
+    createOne: true,
+    findOne: true,
     banOne: {
       dto: { input: BanUserDto },
       handler: {
@@ -124,6 +126,7 @@ describe("KavoContext.repository — a custom handler's data access", () => {
   it("hands a read the writer half too — kind decides the request's shape, not the handler's reach", async () => {
     const { crud, adapter } = makeCrud({
       operations: {
+        createOne: true,
         touchMany: {
           kind: "read",
           cardinality: "many",
@@ -185,6 +188,8 @@ describe("KavoContext.repository — a custom handler's data access", () => {
     // context that lost the per-call view fails here.
     const archiveConfig = {
       operations: {
+        createOne: true,
+        findMany: true,
         archiveOne: {
           handler: {
             // `{ id, body }` is what the engine assembles for an
@@ -224,6 +229,7 @@ describe("builtInHandlers — with and without an adapter argument", () => {
    */
   const listMetaConfig = {
     operations: {
+      createOne: true,
       findMany: {
         handler: withListMeta(builtInHandlers<User>()("findMany"), (result: FindManyResult<User>) => ({
           banned: result.entities.filter((row) => row.status === "banned").length,
@@ -249,6 +255,7 @@ describe("builtInHandlers — with and without an adapter argument", () => {
     await replica.create({ name: "Grace", email: "grace@example.com", age: 45, status: "active" });
     const { crud, adapter } = makeCrud({
       operations: {
+        createOne: true,
         findMany: { handler: builtInHandlers<User>(replica)("findMany") },
       },
     });
@@ -268,6 +275,7 @@ describe("builtInHandlers — with and without an adapter argument", () => {
     await replica.create({ name: "Grace", email: "grace@example.com", age: 45, status: "active" });
     const { crud, adapter } = makeCrud({
       operations: {
+        createOne: true,
         patchOne: { handler: builtInHandlers<User>(replica)("patchOne") },
       },
     });
