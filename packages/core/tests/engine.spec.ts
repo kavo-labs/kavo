@@ -144,12 +144,12 @@ describe("KavoEngine pipeline", () => {
   });
 
   it("raises OperationDisabledException for config-disabled operations", async () => {
-    const { crud } = makeCrud({ operations: { createOne: {} } } as never);
+    const { crud } = makeCrud({ operations: { createOne: true } } as never);
     await expect(crud.deleteOne(1)).rejects.toBeInstanceOf(OperationDisabledException);
   });
 
   it("names the config key that would switch a disabled operation back on", async () => {
-    const { crud } = makeCrud({ operations: { createOne: {} } } as never);
+    const { crud } = makeCrud({ operations: { createOne: true } } as never);
     await expect(crud.deleteOne(1)).rejects.toMatchObject({
       code: "KAVO_OPERATION_DISABLED",
       messageParams: { operation: "deleteOne", entity: "User" },

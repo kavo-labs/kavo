@@ -222,10 +222,9 @@ describe("createOperationRegistry — the control surface", () => {
   it("makes `operations` an exclusive whitelist the moment it's declared (issue #257)", () => {
     // Naming createOne/updateOne no longer just sets those two — every
     // standard id this config doesn't mention is forced off, regardless of
-    // its built-in default. Presence is what enables a named id; there is
-    // no boolean shorthand and no `enabled` field on a standard entry.
+    // its built-in default.
     const registry = createOperationRegistry<User>(
-      { operations: { createOne: {}, updateOne: {} } } as UserConfig,
+      { operations: { createOne: true, updateOne: true } } as UserConfig,
       standardHandlers,
     );
     expect(registry.get("createOne")?.enabled).toBe(true);
@@ -242,8 +241,18 @@ describe("createOperationRegistry — the control surface", () => {
     }
   });
 
-  it("enables an off-by-default operation just by naming it, no shorthand needed (issue #257)", () => {
-    const registry = createOperationRegistry<User>({ operations: { purgeOne: {} } } as UserConfig, standardHandlers);
+  it("disables an operation with the `false` shorthand, keeping its entry", () => {
+    const registry = createOperationRegistry<User>(
+      { operations: { createOne: true, patchOne: false } } as UserConfig,
+      standardHandlers,
+    );
+    expect(ids(registry)).toEqual(Object.keys(STANDARD_OPERATIONS));
+    expect(registry.get("patchOne")).toMatchObject({ enabled: false });
+    expect(registry.get("patchOne")?.handler).toBeDefined();
+  });
+
+  it("enables an off-by-default operation with the `true` shorthand", () => {
+    const registry = createOperationRegistry<User>({ operations: { purgeOne: true } } as UserConfig, standardHandlers);
     expect(registry.get("purgeOne")?.enabled).toBe(true);
   });
 
@@ -258,9 +267,10 @@ describe("createOperationRegistry — the control surface", () => {
     await expect(entry?.handler.execute({}, contextStub())).resolves.toBe("custom-update");
   });
 
-  it("enables an off-by-default operation by naming it with an override too", () => {
-    // Naming an operation is what enables it, whatever it carries — a
-    // handler override is no different from a bare `{}` in that respect.
+  it("enables an off-by-default operation by naming it with settings too, no boolean needed", () => {
+    // Naming an operation with an object is what enables it, whatever it
+    // carries — a handler override is no different from `true` in that
+    // respect, since there's no `enabled` field to check instead.
     const registry = createOperationRegistry<User>(
       { operations: { purgeOne: { handler: handlerNamed("custom-purge") } } } as UserConfig,
       standardHandlers,
@@ -668,10 +678,14 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
     expect(registry.get("createOne")?.enabled).toBe(true);
   });
 
-  it("lets an entity that names an operation override a global disable, by presence alone", () => {
-    const registry = createOperationRegistry<User>({ operations: { deleteOne: {} } } as UserConfig, standardHandlers, {
-      deleteOne: false,
-    });
+  it("lets an entity boolean shorthand override a global disable", () => {
+    const registry = createOperationRegistry<User>(
+      { operations: { deleteOne: true } } as UserConfig,
+      standardHandlers,
+      {
+        deleteOne: false,
+      },
+    );
     expect(registry.get("deleteOne")?.enabled).toBe(true);
   });
 

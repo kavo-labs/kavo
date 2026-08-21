@@ -105,7 +105,7 @@ describe("ETag generation", () => {
   });
 
   it("tags a restoreOne response too", async () => {
-    const { crud } = makeAccountCrud({ operations: { createOne: {}, deleteOne: {}, restoreOne: {} } });
+    const { crud } = makeAccountCrud({ operations: { createOne: true, deleteOne: true, restoreOne: true } });
     await crud.createOne({ name: "a" } as never);
     await crud.deleteOne(1);
 
@@ -641,7 +641,7 @@ describe("If-Match the engine cannot evaluate is refused, never dropped", () => 
   });
 
   it("refuses it when findOne is disabled, rather than leaking a tag the API never serves", async () => {
-    const { crud, adapter } = makeCrud({ operations: { createOne: {}, patchOne: {} } } as never); // findOne left off, so it's disabled
+    const { crud, adapter } = makeCrud({ operations: { createOne: true, patchOne: true } } as never); // findOne left off, so it's disabled
     await execute(crud, { operation: "createOne", body: ADA as never });
 
     const attempt = execute(crud, {
