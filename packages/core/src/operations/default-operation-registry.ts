@@ -207,7 +207,7 @@ const unboundHandler = (id: OperationId, entityName: string): OperationHandler<u
  * (override, on an entry that carries settings — default scaffolding stays).
  *
  * **`operations` is an explicit whitelist once the entity declares it at
- * all (issue #257).** An entity config with no `operations` key resolves
+ * all (ADR-0038, issue #257).** An entity config with no `operations` key resolves
  * every standard id from the global/built-in defaults, same as always. The
  * moment `operations` is present: `true`/`false` says so explicitly, in
  * either direction; an object carrying settings (no boolean, no `enabled`
@@ -285,12 +285,16 @@ export function createOperationRegistry<Entity extends object>(
     const settings = typeof operationConfig === "object" ? operationConfig : undefined;
     rejectCustomOperationKeys(scope, id, settings as Readonly<Record<string, unknown>> | undefined);
     const byDefault = shape.enabled || (id === "restoreOne" && softDeleteDeclared);
-    // No `enabled` field on a standard id (issue #257) — enablement is
+    // No `enabled` field on a standard id (ADR-0038, issue #257) — enablement is
     // either the `true`/`false` shorthand, explicit either way, or (for an
     // entry that carries settings and needs no shorthand) naming the id at
     // all. Once `operations` is declared, an unnamed id is off regardless
     // of what it would otherwise default to.
-    const isListed = Object.prototype.hasOwnProperty.call(operations, id);
+    // `!== undefined` rather than `hasOwnProperty`: a key present with an
+    // `undefined` value (`{ purgeOne: cond ? true : undefined }`, a spread
+    // of a partial config) means "nothing to say here," the same as the
+    // key being absent — not "listed."
+    const isListed = operationConfig !== undefined;
     const enabled = operationsDeclared
       ? typeof operationConfig === "boolean"
         ? operationConfig

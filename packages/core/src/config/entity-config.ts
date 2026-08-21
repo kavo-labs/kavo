@@ -123,9 +123,10 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
 /**
  * Per-operation configuration.
  * Naming a standard id in the parent `operations` record — this object, or
- * the `true`/`false` shorthand — is what enables or disables it (issue
- * #257); there is no `enabled` field here, since `true`/`false` already
- * says so explicitly and this object's own presence says so implicitly.
+ * the `true`/`false` shorthand — is what enables or disables it (ADR-0038,
+ * issue #257); there is no `enabled` field here, since `true`/`false`
+ * already says so explicitly and this object's own presence says so
+ * implicitly.
  *
  * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
  * `OperationDtoOverride` — only the fields that operation actually
@@ -172,7 +173,7 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
  * `output`/`query`, and `deleteOne`/`purgeOne` (void results, no query)
  * get neither, so setting `dto` on them is a type error before it is ever
  * a bootstrap one. The `true`/`false` shorthand is still accepted at every
- * id (issue #257), for a plain enable/disable with no settings attached.
+ * id (ADR-0038, issue #257), for a plain enable/disable with no settings attached.
  *
  * Unlike the root `dto` map, a per-operation override is **not** narrowed
  * against the entity's own `CreateDto`/`ItemDto`/etc. — those generics are
