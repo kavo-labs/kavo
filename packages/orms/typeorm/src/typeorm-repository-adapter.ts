@@ -340,12 +340,24 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * *currently loaded* relation state on `existing`, which is exactly what
    * the extra preload would otherwise fetch.
    */
-  private async mergeAndSave(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async mergeAndSave(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
       // Scoped to live rows: a soft-deleted row is invisible to updates,
       // exactly as it is to reads. Reviving one is `restore`'s job.
       const existing = await this.byId(id, context, false).getOne();
       if (existing === null) throw this.notFound(id, context);
+      // Defence in depth, mirroring the deserializer's own exclusion: even
+      // an explicit write DTO that legitimately names the id (to assign a
+      // natural key on `create`) must not be allowed to reassign an
+      // *existing* row's identity, and the soft-delete marker is
+      // `deleteOne`/`restoreOne`'s state machine to change, not an
+      // ordinary column an update/patch body happens to include.
+      const data = stripImmutableKeys(rawData, this.idField, context.config.softDelete.field);
+      // Everything the body carried may have been the id and/or the marker
+      // — TypeORM's `update` rejects an empty value set outright, and there
+      // is nothing left to change: the current row, unmodified, is the
+      // correct answer.
+      if (Object.keys(data).length === 0) return existing;
       this.repository.merge(existing, data as never);
       const touchesRelation = Object.keys(data).some((key) => this.relationProperties.has(key));
       if (touchesRelation) {
@@ -771,6 +783,23 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       context: errorContext(context),
     });
   }
+}
+
+/**
+ * `mergeAndSave`'s defence-in-depth strip: a shallow copy of `data` with
+ * the id field and (when soft-deletable) the resolved marker field
+ * removed, so neither reaches `merge`/`update` regardless of what a write
+ * DTO declared.
+ */
+function stripImmutableKeys<Entity>(
+  data: Partial<Entity>,
+  idField: string,
+  softDeleteField: string | null,
+): Partial<Entity> {
+  const copy = { ...(data as Record<string, unknown>) };
+  delete copy[idField];
+  if (softDeleteField !== null) delete copy[softDeleteField];
+  return copy as Partial<Entity>;
 }
 
 /** The loaded rows on one relation of a set of parents, flattened. */

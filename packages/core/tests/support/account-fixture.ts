@@ -33,6 +33,42 @@ export const accountMetadataWithoutMarker: EntityMetadata<Account> = {
 };
 
 /**
+ * The same metadata, but as `@kavo/prisma`/`@kavo/mongoose`/`@kavo/mikroorm`
+ * always report it: no `@DeleteDateColumn` equivalent exists, so the marker
+ * is an ordinary `generated: false` column and `softDeleteField` is `null` —
+ * only the entity-scope `softDelete.field` name resolves it.
+ */
+export const accountMetadataWithWritableMarker: EntityMetadata<Account> = {
+  ...accountMetadata,
+  fields: accountMetadata.fields.map((field) => (field.name === "deletedAt" ? { ...field, generated: false } : field)),
+  softDeleteField: null,
+};
+
+/** The same metadata, but with an app-assigned (non-generated) primary key. */
+export const accountMetadataWithNaturalKey: EntityMetadata<Account> = {
+  ...accountMetadata,
+  fields: accountMetadata.fields.map((field) => (field.name === "id" ? { ...field, generated: false } : field)),
+};
+
+/**
+ * A second candidate marker column (`archivedAt`), alongside the usual
+ * `deletedAt` — both ordinary `generated: false` columns, `softDeleteField`
+ * unset. Exists to prove `softDelete.field` is excluded at the scope it is
+ * actually *resolved* at (entity, operation, or per-call — ADR-0013), not a
+ * value fixed once when the deserializer was built: an entity-scope default
+ * of `deletedAt` with a per-operation override renaming the marker to
+ * `archivedAt` must still exclude `archivedAt`, not the stale entity-scope
+ * name.
+ */
+export const accountMetadataWithTwoMarkerCandidates: EntityMetadata<Account> = {
+  ...accountMetadataWithWritableMarker,
+  fields: [
+    ...accountMetadataWithWritableMarker.fields,
+    { name: "archivedAt", kind: "date", nullable: true, generated: false },
+  ],
+};
+
+/**
  * In-memory adapter that honors the resolved strategy the same way a real
  * one does: it reads `context.config.softDelete` rather than deciding for
  * itself, so these tests exercise the engine's resolution, not a mock's

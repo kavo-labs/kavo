@@ -256,8 +256,9 @@ whose `@DeleteDateColumn` the seam reports.
 `resolveSoftDelete` matches the configured _name_ against the entity's own
 columns before falling back to `softDeleteField`. So an entity carrying a
 plain `deletedAt` property is soft-deletable with no config whatsoever. What
-reporting `null` actually costs is narrower and sharper: the adapter cannot
-mark the marker column generated, so it stays **client-writable** — see §7.
+reporting `null` used to cost is narrower and sharper: the adapter cannot
+mark the marker column generated, so `DefaultDeserializer` excludes it from
+the derived writable projection by name instead — see §7.
 
 There is consequently one marker shape to handle rather than TypeORM's two:
 the marker is always an ordinary property, so the `IS NULL` /
@@ -307,34 +308,28 @@ character, so `filter[name][like]=100\%` matches the literal text `100\`
 followed by anything rather than the string `100%`. `@kavo/typeorm` emits
 `ESCAPE '\'` explicitly and does not have this gap.
 
-**The soft-delete marker is writable, and it is enabled by default.**
-Because nothing declares it, the marker is an ordinary non-generated
-property, so it joins the derived writable projection: a plain `PATCH` of it
-soft-deletes a row, bypassing `deleteOne`'s already-deleted check, any
-per-operation override on `deleteOne`, and even
-`operations: { deleteOne: false }`. With `purgeOne` enabled that is a
-two-request permanent delete through the update route. It cannot _revive_ a
-row — writes are scoped to the live set, so a soft-deleted row 404s on
-`PUT`/`PATCH`.
+**The soft-delete marker and the primary key are excluded from the derived
+writable projection by name, not just by `generated`.** Because nothing
+declares the marker column, it is an ordinary non-generated property, and
+`@PrimaryKey() id: string = v4()` — the idiomatic UUID spelling — carries
+none of MikroORM's generated flags either. `DefaultDeserializer` excludes
+`metadata.idField` and the resolved `softDelete.field` from its derived
+default regardless of `generated`, so a client cannot rewrite a row's
+identity or soft-delete/revive it through a plain `PATCH`/`PUT` when the
+entity has no explicit write DTO. `mergeAndFlush` additionally strips both
+keys from the payload before `assign`, as defence in depth against an
+explicit write DTO that names either field: `create` may still assign a
+caller-chosen id (a legitimate use for a non-auto-increment key), but an
+`update`/`patch` against an _existing_ row never reassigns its id or its
+soft-delete state, whatever the registered DTO declares. The one thing this
+does not do is let a `PATCH` revive a soft-deleted row even if a DTO wanted
+to — writes stay scoped to the live set, so a soft-deleted row 404s on
+`PUT`/`PATCH` regardless.
 
-Read that together with §5: because `strategy: "auto"` matches the column
-_name_, this surface is live on any entity with a `deletedAt` property and
-no `dto` block — nobody has to opt in. This is the shared hole
-`@kavo/prisma` and `@kavo/mongoose` have (only `@kavo/typeorm` escapes it,
-because `@DeleteDateColumn` is detectable and therefore markable), and the
-real fix — subtracting the resolved `softDelete.field` from
-`DefaultDeserializer`'s writable projection — belongs in core. Until then,
-register an explicit `update`/`patch` DTO that omits the marker, as
-`examples/nest-mikroorm`'s `OwnerController` does.
-
-**A primary key that is not auto-increment is client-writable.**
-`isGenerated` reads MikroORM's own flags, and `@PrimaryKey() id: string =
-v4()` — the idiomatic UUID spelling — carries none of them, so the key lands
-in the writable projection and a `PATCH` can rewrite a row's identity. A
-numeric `@PrimaryKey()` gets `autoincrement: true` and is safe.
-`@kavo/typeorm` has the same gap for `@PrimaryColumn`, so this is parity
-rather than a regression, but the risky spelling is the common one here.
-Name the write DTOs explicitly for any entity with a caller-assigned key.
+`@kavo/prisma` and `@kavo/mongoose` are in the same position for the same
+reason (`@kavo/typeorm` escapes the marker half only because
+`@DeleteDateColumn` is detectable and therefore markable) and get the same
+fix, since the derivation lives once in `@kavo/core`.
 
 **A `hidden` or `lazy` property is dropped from the seam entirely.** Not
 just from responses: excluding it from `fields` is what keeps it off the

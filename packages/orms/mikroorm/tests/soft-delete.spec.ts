@@ -46,12 +46,35 @@ class Invoice {
   archivedAt: Date | null = null;
 }
 
+/** An app-assigned (non-auto-increment) primary key — `isGenerated` reads
+ * none of MikroORM's generated flags for this shape. */
+@Entity()
+class Coupon {
+  @PrimaryKey({ type: "string" })
+  code!: string;
+
+  @Property({ type: "string" })
+  label!: string;
+
+  @Property({ type: "Date", nullable: true })
+  retiredAt: Date | null = null;
+}
+
+/** Names the id and the configured marker explicitly — the opt-in an
+ * explicit write DTO is still allowed to make. */
+class UpdateCouponDto {
+  code = "";
+  label = "";
+  retiredAt: Date | null = null;
+}
+
 let orm: MikroORM;
 let tickets: DefaultKavoService<Ticket>;
 let invoices: DefaultKavoService<Invoice>;
+let coupons: DefaultKavoService<Coupon>;
 
 beforeAll(async () => {
-  orm = await newTestOrm([Ticket, Invoice]);
+  orm = await newTestOrm([Ticket, Invoice, Coupon]);
   const kavo = createMikroOrmKavo(orm);
   tickets = kavo.createCrud(Ticket, {
     softDelete: { strategy: "soft", field: "deletedAt" },
@@ -60,6 +83,10 @@ beforeAll(async () => {
   invoices = kavo.createCrud(Invoice, {
     softDelete: { strategy: "soft", field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
+  coupons = kavo.createCrud(Coupon, {
+    softDelete: { strategy: "soft", field: "retiredAt" },
+    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+  }) as DefaultKavoService<Coupon>;
 });
 
 afterAll(async () => {
@@ -91,9 +118,7 @@ describe("zero-config soft delete", () => {
     // `resolveSoftDelete` matches that name against the entity's own columns.
     // So an adapter reporting `softDeleteField: null` does NOT mean "soft
     // delete is off until configured" — the conventional column name turns it
-    // on by itself. That matters because the marker stays *writable* (nothing
-    // declares it, so it cannot be marked generated), which is what makes the
-    // DTO hardening in the note below load-bearing rather than optional.
+    // on by itself.
     const zeroConfig = createMikroOrmKavo(orm).createCrud(Ticket) as DefaultKavoService<Ticket>;
     const created = (await zeroConfig.createOne({ reference: "T-zero", title: "x" } as never)) as Ticket;
 
@@ -105,18 +130,16 @@ describe("zero-config soft delete", () => {
     expect((await zeroConfig.findMany()).total).toBe(0);
   });
 
-  it("leaves the marker client-writable under derived DTOs", async () => {
-    // The consequence of the above, stated as a test so it cannot regress
-    // silently: with no `dto` block, `deletedAt` is an ordinary non-generated
-    // column and therefore in the writable projection. A plain patch stamps
-    // it, bypassing `deleteOne`'s already-deleted check. The mitigation is an
-    // explicit write DTO (see `examples/nest-mikroorm`'s OwnerController);
-    // the real fix belongs in core — see doc 17 §7.
+  it("keeps the marker out of the derived writable projection with no config at all", async () => {
+    // With no `dto` block, `deletedAt` is an ordinary non-generated column —
+    // `DefaultDeserializer` excludes it by name (the resolved
+    // `softDelete.field`), not just by `generated`, so a plain patch cannot
+    // stamp it and bypass `deleteOne`'s already-deleted check.
     const zeroConfig = createMikroOrmKavo(orm).createCrud(Ticket) as DefaultKavoService<Ticket>;
     const created = (await zeroConfig.createOne({ reference: "T-writable", title: "x" } as never)) as Ticket;
 
     await zeroConfig.patchOne(created.id, { deletedAt: new Date() } as never);
-    expect((await zeroConfig.findMany()).total).toBe(0);
+    expect((await zeroConfig.findMany()).total).toBe(1);
   });
 });
 
@@ -335,5 +358,28 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
     await adapter.purge(created.id, hardContext as never);
     expect(await orm.em.fork().count(Invoice, {})).toBe(0);
     await expect(adapter.purge(created.id, hardContext as never)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("MikroOrmRepositoryAdapter — id and soft-delete marker mass assignment", () => {
+  it("never reassigns an existing row's id through update/patch, even when a write DTO names it", async () => {
+    await coupons.createOne({ code: "SAVE10", label: "10% off", retiredAt: null } as never);
+
+    const patched = await coupons.patchOne("SAVE10", { code: "STOLEN", label: "hijacked" } as never);
+    expect(patched).toMatchObject({ code: "SAVE10", label: "hijacked" });
+
+    await expect(coupons.findOne("STOLEN")).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("never soft-deletes or revives through update/patch, even when a write DTO names the marker", async () => {
+    const created = await coupons.createOne({ code: "WELCOME", label: "welcome", retiredAt: null } as never);
+    expect(created).toMatchObject({ retiredAt: null });
+
+    const patched = await coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never);
+    expect(patched).toMatchObject({ retiredAt: null });
+    expect((await coupons.findMany()).items).toHaveLength(1);
+
+    await coupons.deleteOne("WELCOME");
+    expect((await coupons.findMany()).items).toHaveLength(0);
   });
 });

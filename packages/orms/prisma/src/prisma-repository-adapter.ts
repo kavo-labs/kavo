@@ -246,10 +246,20 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
    * exactly as it is to reads — reviving one is `restore`'s job, so
    * existence is checked against the live scope before the write.
    */
-  private async writeExisting(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async writeExisting(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
       const existing = await this.byId(id, context, false);
       if (existing === null) throw this.notFound(id, context);
+      // Defence in depth, mirroring the deserializer's own exclusion: even
+      // an explicit write DTO that legitimately names the id (to assign a
+      // natural key on `create`) must not be allowed to reassign an
+      // *existing* row's identity, and the soft-delete marker is
+      // `deleteOne`/`restoreOne`'s state machine to change, not an
+      // ordinary column an update/patch body happens to include.
+      const softDeleteField = context.config.softDelete.field;
+      const data = { ...(rawData as Record<string, unknown>) };
+      delete data[this.idField];
+      if (softDeleteField !== null) delete data[softDeleteField];
       return (await this.delegate.update({ where: { [this.idField]: id }, data })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));

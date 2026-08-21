@@ -39,10 +39,14 @@ is _always_ explicit `softDelete.field` configuration (ADR-0017,
 ADR-0018, doc 17 §5). MikroORM comes closest — it has a soft-delete
 pattern — but it is a user-defined `@Filter`, a query concern rather than
 a column declaration, and nothing in it is detectable as "this column is
-the marker". One consequence is worth naming: because those adapters
-cannot mark the marker column generated the way `@kavo/typeorm` does, it
-stays writable through an ordinary update unless a DTO excludes it — see
-doc 15 §7.
+the marker". This is not a TypeORM-exclusive concern, though: any adapter's
+`softDelete.field` — including `@kavo/typeorm`'s, when it names an ordinary
+column rather than a `@DeleteDateColumn` — is excluded from the derived
+`create`/`update`/`patch` writable projection by name, not by `generated`,
+precisely because the marker column cannot always be marked generated
+(`DefaultDeserializer`, doc 04 §3). Adapter write paths additionally strip
+the resolved marker (and the id field) from an `update`/`patch` payload as
+defence in depth, so it survives even a write DTO that names it explicitly.
 
 Resolution runs at every settings scope, so an operation or a single call
 may narrow it (`operations: { deleteOne: { softDelete: { strategy: "hard" } } }`),
