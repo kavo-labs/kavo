@@ -89,11 +89,11 @@ import {
     edges: { tags: { write: true }, photos: { write: { strategy: "resource" } } },
   },
   operations: {
-    createOne: {},
-    findOne: {},
-    findMany: {},
-    updateOne: {},
-    deleteOne: {},
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    deleteOne: true,
     // patchOne is deliberately not named here, so it stays off.
   },
 })

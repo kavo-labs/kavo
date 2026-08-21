@@ -43,14 +43,14 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     includable: ["pets", "address"],
   },
   operations: {
-    createOne: {},
-    findOne: {},
-    findMany: {},
-    updateOne: {},
-    patchOne: {},
-    deleteOne: {},
-    purgeOne: {},
-    restoreOne: {},
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    patchOne: true,
+    deleteOne: true,
+    purgeOne: true,
+    restoreOne: true,
   },
 })
 @Controller("owners")

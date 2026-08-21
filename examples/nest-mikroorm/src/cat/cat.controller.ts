@@ -33,11 +33,11 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
     includable: ["owner", "tags"],
   },
   operations: {
-    createOne: {},
-    findOne: {},
-    findMany: {},
-    updateOne: {},
-    deleteOne: {},
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    deleteOne: true,
     // patchOne is deliberately not named here, so it stays off.
   },
 })
