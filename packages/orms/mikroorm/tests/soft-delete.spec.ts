@@ -79,13 +79,13 @@ beforeAll(async () => {
   tickets = kavo.createCrud(Ticket, {
     softDelete: { strategy: "soft", field: "deletedAt" },
     operations: {
-      createOne: {},
-      deleteOne: {},
-      findMany: {},
-      findOne: {},
-      patchOne: {},
-      restoreOne: {},
-      purgeOne: {},
+      createOne: true,
+      deleteOne: true,
+      findMany: true,
+      findOne: true,
+      patchOne: true,
+      restoreOne: true,
+      purgeOne: true,
     },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
@@ -317,7 +317,7 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
     try {
       createMikroOrmKavo(orm).createCrud(Invoice, {
         softDelete: { strategy: "hard" },
-        operations: { restoreOne: {} },
+        operations: { restoreOne: true },
       });
     } catch (error) {
       thrown = error;

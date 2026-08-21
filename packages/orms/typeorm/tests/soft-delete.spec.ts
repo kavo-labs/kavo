@@ -92,13 +92,13 @@ beforeAll(async () => {
   tickets = kavo.createCrud(Ticket, {
     softDelete: { strategy: "soft" },
     operations: {
-      createOne: {},
-      deleteOne: {},
-      findMany: {},
-      findOne: {},
-      patchOne: {},
-      restoreOne: {},
-      purgeOne: {},
+      createOne: true,
+      deleteOne: true,
+      findMany: true,
+      findOne: true,
+      patchOne: true,
+      restoreOne: true,
+      purgeOne: true,
     },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
