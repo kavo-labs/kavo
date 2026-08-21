@@ -45,7 +45,6 @@ const complete: OperationHandler<Todo> = {
   dto: { create: CreateTodoDto, item: TodoItemDto },
   allowlists: { filterable: ["title", "done"], sortable: ["title"] },
   operations: {
-    deleteOne: false,
     patchOne: { handler: complete, meta: { routes: { method: "POST", path: ":id/complete" } } },
   },
 })

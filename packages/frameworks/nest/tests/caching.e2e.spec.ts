@@ -75,7 +75,18 @@ async function seed(title = "write docs"): Promise<string> {
   return created.headers["etag"] as string;
 }
 
-@Kavo(Todo, { operations: { restoreOne: true, purgeOne: true } })
+@Kavo(Todo, {
+  operations: {
+    createOne: {},
+    findOne: {},
+    findMany: {},
+    updateOne: {},
+    patchOne: {},
+    deleteOne: {},
+    restoreOne: {},
+    purgeOne: {},
+  },
+})
 @Controller("todos")
 class CachedTodoController {}
 
@@ -547,7 +558,7 @@ describe("If-Match through a replaced controller method", () => {
     // `settingsFor` falls back to entity settings, so configuring the
     // entity would pass even if per-operation resolution were bypassed.
     // One operation off and its sibling on is what actually pins it.
-    @Kavo(Todo, { operations: { updateOne: { cache: { etag: false } } } })
+    @Kavo(Todo, { operations: { createOne: {}, patchOne: {}, updateOne: { cache: { etag: false } } } })
     @Controller("todos")
     class MixedTodoController {
       constructor(@Inject(getKavoServiceToken(Todo)) private readonly base: DefaultKavoService<Todo>) {}
@@ -658,7 +669,7 @@ describe("cache.etag: false", () => {
   });
 
   it("can be switched off for one operation only", async () => {
-    @Kavo(Todo, { operations: { findOne: { cache: { etag: false } } } })
+    @Kavo(Todo, { operations: { createOne: {}, findOne: { cache: { etag: false } } } })
     @Controller("todos")
     class PartiallyCachedTodoController {}
     await bootstrap(PartiallyCachedTodoController);

@@ -420,7 +420,7 @@ describe("@Kavo query-parser agnosticism", () => {
 
 describe("@Kavo operation control surface", () => {
   it("generates no route for a disabled operation", async () => {
-    @Kavo(Todo, { operations: { deleteOne: false } })
+    @Kavo(Todo, { operations: { createOne: {} } }) // deleteOne stays off by not naming it
     @Controller("todos")
     class NoDeleteController {}
 
@@ -449,7 +449,7 @@ describe("@Kavo operation control surface", () => {
   });
 
   it("an entity-level override still wins over a global operations default", async () => {
-    @Kavo(Todo, { operations: { deleteOne: true } })
+    @Kavo(Todo, { operations: { createOne: {}, deleteOne: {} } })
     @Controller("todos")
     class ReenabledController {}
 
@@ -519,9 +519,8 @@ describe("@Kavo operation control surface", () => {
             },
           },
         },
-        // Disabled alongside a full override set — a control surface that
-        // otherwise touches every id must not confuse the disable path.
-        findMany: false,
+        // findMany is deliberately not named here — a control surface that
+        // otherwise touches every id must still leave an unnamed one off.
       },
     })
     @Controller("todos")
@@ -550,7 +549,7 @@ describe("@Kavo operation control surface", () => {
 
     await request(server()).delete("/todos/1").expect(204);
 
-    // Disabled alongside five overrides: still no route.
+    // Unnamed alongside four overrides: still no route.
     await request(server()).get("/todos").expect(404);
 
     expect(seen).toEqual(["createOne", "updateOne", "patchOne", "deleteOne"]);
@@ -574,6 +573,8 @@ describe("@Kavo custom operations (issue #145)", () => {
 
     @Kavo(Todo, {
       operations: {
+        createOne: {},
+        findOne: {},
         publishOne: {
           handler: publishHandler(seen),
           meta: { routes: { method: "POST", path: ":id/publish" } },
@@ -595,12 +596,13 @@ describe("@Kavo custom operations (issue #145)", () => {
     // ETag, like any other single-row response (ADR-0020).
     expect(response.body).toMatchObject({ id: 1, title: "published", done: true });
     expect(response.headers.etag).toMatch(/^"[0-9a-f]{64}"$/);
-    // The standard routes are untouched by its presence.
+    // A standard route the config also names stays untouched by the
+    // custom operation's presence (issue #257: unlisted ones would not).
     await request(server()).get("/todos/1").expect(200);
   });
 
   it("falls back to POST /<id> when the operation declares no meta.routes", async () => {
-    @Kavo(Todo, { operations: { publishOne: { handler: publishHandler([]) } } })
+    @Kavo(Todo, { operations: { createOne: {}, publishOne: { handler: publishHandler([]) } } })
     @Controller("todos")
     class DefaultRouteController {}
 
@@ -613,6 +615,7 @@ describe("@Kavo custom operations (issue #145)", () => {
 
     @Kavo(Todo, {
       operations: {
+        createOne: {},
         publishOne: { handler: publishHandler(seen), meta: { routes: { enabled: false } } },
       },
     })
@@ -803,6 +806,8 @@ describe("@Kavo custom operations reaching data (issue #152)", () => {
   /** Load the row, write a field: the shape issue #145 was written for. */
   @Kavo(Todo, {
     operations: {
+      createOne: {},
+      findOne: {},
       publishOne: {
         handler: {
           async execute(input: { id: number }, context: KavoContext<Todo>) {
@@ -859,6 +864,7 @@ describe("@Kavo custom operations reaching data (issue #152)", () => {
    */
   @Kavo(Todo, {
     operations: {
+      createOne: {},
       findMany: {
         handler: withListMeta(builtInHandlers<Todo>()("findMany"), (result: FindManyResult<Todo>) => ({
           done: result.entities.filter((todo) => todo.done).length,
@@ -1022,6 +1028,7 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
   it("keeps an overridden operation's own custom meta.routes shape (id-bearing route)", async () => {
     @Kavo(Todo, {
       operations: {
+        createOne: {},
         updateOne: { meta: { routes: { method: "POST", path: ":id/activate" } } },
       },
     })
@@ -1310,7 +1317,16 @@ describe("KavoExceptionFilter — errors that never reach KavoEngine.execute", (
 describe("@Kavo soft-delete routes", () => {
   @Kavo(Todo, {
     softDelete: { strategy: "soft" },
-    operations: { purgeOne: true },
+    operations: {
+      createOne: {},
+      findOne: {},
+      findMany: {},
+      updateOne: {},
+      patchOne: {},
+      deleteOne: {},
+      restoreOne: {},
+      purgeOne: {},
+    },
   })
   @Controller("todos")
   class SoftDeleteController {}
@@ -1896,7 +1912,11 @@ describe("@Kavo Swagger — per-operation DTO overrides are what gets documented
 
   @Kavo(Todo, {
     dto: { create: RootCreateDto, update: RootUpdateDto, item: RootItemDto },
-    operations: { createOne: { dto: { input: OverrideCreateDto, output: OverrideCreatedDto } } },
+    operations: {
+      findOne: {},
+      updateOne: {},
+      createOne: { dto: { input: OverrideCreateDto, output: OverrideCreatedDto } },
+    },
   })
   @Controller("todos")
   class OverriddenDtoController {}
