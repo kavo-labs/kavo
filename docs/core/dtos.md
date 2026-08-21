@@ -61,6 +61,9 @@ The six slots above are entity-wide: every operation that reads `create` reads t
 @Kavo(Book, {
   dto: { item: BookItemDto }, // entity-wide default for every read
   operations: {
+    // Naming any operation makes `operations` an exclusive whitelist (see
+    // [Operations](/guides/configuration/operations#operations)) — narrowing
+    // findOne alone only if every other standard operation is also named.
     findOne: { dto: { output: BookDetailDto } }, // findOne only
   },
 })
