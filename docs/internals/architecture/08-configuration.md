@@ -43,8 +43,9 @@ Implemented in `mergeSettings` (`merge-settings.ts`):
 - Scalars and objects-as-values: nearer scope **replaces** farther scope,
   key by key — an override supplies only what it changes.
 - `false` disables an inheritable feature where the schema allows it
-  (`softDelete: false`, `operations.patchOne: false`); a nearer object
-  re-enables.
+  (`softDelete: false`, the global `operations.<id>: false` boolean map);
+  a nearer object re-enables. The entity-scope `operations` map is the one
+  exception — it takes no boolean at all; see below.
 - Arrays replace wholesale. `undefined` scopes are skipped.
 
 `cache` is not a special case (ADR-0031): it merges with exactly the
@@ -93,11 +94,15 @@ a structurally richer, per-entity-typed shape (it also carries
 `SETTINGS_KEYS` merge (`resolve-entity-config.ts`) — folding it in would
 feed a `handler` function through the boolean-shaped global merge.
 Instead, `createOperationRegistry` resolves `enabled` for each operation
-directly, in one precedence chain: the unconditional/soft-delete-declared
-default, then the global `operations.<id>` boolean (if the entity didn't
-say anything), then the entity's own `operations.<id>` (boolean
-shorthand or `{ enabled }` long form) — which always wins. See
-ADR-0015 for what this global default can and cannot reach in
+directly. When the entity declares no `operations` key at all, the chain is
+the unconditional/soft-delete-declared default, then the global
+`operations.<id>` boolean. The moment the entity _does_ declare `operations`
+(issue #257), that key becomes an explicit whitelist keyed by presence
+alone: an id it names — `{}`, or an object carrying settings — is enabled
+regardless of its unconditional/soft-delete/global default; an id it
+doesn't name is disabled. There is no boolean shorthand and no `enabled`
+field on a standard entry — naming an id is the only signal, in either
+direction. See ADR-0015 for what the global default can and cannot reach in
 `@kavo/nest`.
 
 The entity-scope map also holds keys the global one cannot: an

@@ -4,24 +4,32 @@ Per-operation overrides and fully custom operations on `@Kavo(Entity, config)`, 
 
 ## operations
 
-Per-operation overrides, keyed by operation id. A key that names one of the eight standard operations configures it; any other key [declares a custom operation](#custom-operations). Each standard entry is either a boolean shorthand or a full `OperationConfig` object:
+Per-operation overrides, keyed by operation id. A key that names one of the eight standard operations configures it; any other key [declares a custom operation](#custom-operations).
+
+**`operations` is an explicit whitelist once it's declared at all — naming a standard id is what enables it.** An entity with no `operations` key gets every standard operation at its global/built-in default (`createOne`/`findOne`/`findMany`/`updateOne`/`patchOne`/`deleteOne` on, `restoreOne`/`purgeOne` off unless soft delete is declared). The moment `operations` is present, every standard id it doesn't name is off, and every id it does name — `{}`, or an object carrying settings — is on, whatever it would otherwise default to. There's no boolean shorthand and no `enabled` field: presence is the only signal.
 
 ```ts
 @Kavo(Book, {
   operations: {
-    patchOne: false, // shorthand: disable outright
-    restoreOne: { enabled: true, meta: { routes: { path: ":id/undelete" } } },
+    createOne: {},
+    findOne: {},
+    findMany: {},
+    updateOne: {},
+    deleteOne: {},
+    restoreOne: { meta: { routes: { path: ":id/undelete" } } },
+    // patchOne isn't named, so it's off — no boolean needed to say so.
   },
 })
 ```
 
+A bare `{}` is enough to keep an operation at its own default — it doesn't need repeating any settings, only naming.
+
 An `OperationConfig` object accepts:
 
-- **`enabled`** (`boolean`): the long form of the `true`/`false` shorthand, for when the entry also carries settings or `meta`. Turns the operation on or off explicitly.
 - **`handler`** (`OperationHandler<Entity>`): a replacement handler function, keeping the default DTO/serialization scaffolding around it.
 - **`meta`** (`OperationMetadata`): an opaque bag consumed by the framework layer; in `@kavo/nest` this is `{ routes: KavoRouteOptions }`.
 - **`dto`** (`{ input?, output?, query? }`): overrides the entity's root `dto` slot for this operation only, see below.
-- **any settings key** (same shape as global `KavoSettings`): overrides that apply to this operation only, one level above the entity's own settings.
+- **any settings key** (same shape as global `KavoSettings`): overrides that apply to this operation only, one level above the entity's own settings — merged with, not replacing, the entity/global settings it doesn't mention.
 
 **`operations.<id>.dto`** narrows one operation's request body, response, or query contract independently of the entity's root `dto` slots (§`dto` on [Entity config](/guides/configuration/entity-config#dto)). Only the fields a given operation actually has are accepted: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne` (void results).
 
@@ -49,6 +57,8 @@ See [NestJS integration](/internals/architecture/10-nestjs-integration) for how 
 ## Custom operations
 
 An `operations` key that is not one of the eight standard ids declares an operation of your own. It's an ordinary registry entry, so it gets the same pipeline every built-in route gets: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `principal`.
+
+A custom id is exempt from the whitelist rule above — it's always registered when present — but declaring one still counts as declaring `operations`, so it still silences every standard operation you don't also name. The example below is deliberately CRUD-only-plus-one: if `Order` also needs `findOne`/`findMany`/etc., they need naming here too.
 
 ```ts
 @Kavo(Order, {
@@ -150,6 +160,13 @@ const findMany = builtInHandlers<Book>()("findMany");
 
 @Kavo(Book, {
   operations: {
+    // Every other standard operation, named to keep it at its own default —
+    // declaring `operations` at all makes it a whitelist (see above).
+    createOne: {},
+    findOne: {},
+    updateOne: {},
+    patchOne: {},
+    deleteOne: {},
     findMany: {
       handler: withListMeta(findMany, (result) => ({
         inStock: result.entities.filter((book) => book.stock > 0).length,
