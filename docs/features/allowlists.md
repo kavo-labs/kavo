@@ -1,6 +1,6 @@
 # Allowlists
 
-What a request may filter, sort, select, and include, including relation paths. Anything outside an allowlist is rejected with a 400, never silently dropped:
+What a request may filter, sort, select, include, and write, including relation paths. Anything outside a query-side allowlist is rejected with a 400, never silently dropped; a write-side allowlist (`creatable`/`updatable`) narrows silently, the same way an unknown body key already does:
 
 ```ts
 @Kavo(Book, {
@@ -10,6 +10,8 @@ What a request may filter, sort, select, and include, including relation paths. 
     selectable: ["id", "title", "author"],
     includable: ["author"],
     searchable: ["title", "author"],
+    creatable: ["title", "author"],
+    updatable: ["title"],
   },
 })
 ```
@@ -19,8 +21,12 @@ What a request may filter, sort, select, and include, including relation paths. 
 - `selectable` (same shape): fields usable in `fields=`, and what a response carries.
 - `includable` (`readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }`): relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 - `searchable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`): fields `search[query]`/`search[fields]` may search. Relation paths are permitted here, unlike `filterable`/`sortable`. Default: every own string-kind column, not every own column. Also gated by `query.search.enabled` (off by default); see [Search](/querying/search).
+- `creatable` (`readonly FieldPath<Entity, 1>[]` \| `{ exclude: readonly FieldPath<Entity, 1>[] }`): fields `createOne` may write. Default: every non-generated own column except the primary key, plus every relation (associable by id). Capped to one path segment — a write body addresses the entity's own fields and relations, never a dotted path into a relation's own fields.
+- `updatable` (same shape as `creatable`): fields `updateOne`/`patchOne` may write. `update` (PUT) and `patch` (PATCH) share this one list, since both mutate an existing row.
 
-`{ exclude: [...] }` means "every own column except these" (plus, for `selectable`, every selectable computed field; for `includable`, every own relation; for `searchable`, every own string-kind column). It resolves at bootstrap against exactly the base set that key's plain default uses.
+`{ exclude: [...] }` means "every own column except these" (plus, for `selectable`, every selectable computed field; for `includable`, every own relation; for `searchable`, every own string-kind column; for `creatable`/`updatable`, every relation too). It resolves at bootstrap against exactly the base set that key's plain default uses.
+
+**`creatable`/`updatable` only narrow — they never widen.** They intersect with the writable projection [`DefaultDeserializer` already derives](/internals/architecture/04-dto-system#_3-runtime-derivation-rules): naming the primary key or the soft-delete marker there has no effect, since neither is in that base set to begin with. A registered `create`/`update`/`patch` DTO with a runtime shape replaces the projection outright rather than intersecting with it — exactly as a registered `item`/`list` DTO outranks `selectable` below — so register the DTO as the narrowing statement where you use one.
 
 **`includable` is the one key here that does not default to "everything".** Omit `filterable`/`sortable`/`selectable` and it derives from the `query` DTO or entity metadata, every own column. Omit `includable` and it resolves to `[]`, no relation is includable, the same opt-in posture `relations.edges` had before this key existed. Write `{ exclude: [] }` to opt every own relation in at once; that is the one spelling that crosses the fail-closed default rather than narrowing a fail-open one.
 
@@ -39,12 +45,12 @@ When `@nestjs/swagger` is installed, an explicit array here also names the gener
 ::: danger `selectable` alone is not a credential control
 It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
 
-| Door                      | Still open after `selectable`                                                                                                        | Close it with                                                       |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| `filter[apiKey][like]=a%` | Yes. `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                      | Name `filterable` explicitly, without the column                    |
-| `sort=apiKey`             | Yes. `sortable` defaults to every column, and ordering leaks the column across pages                                                 | Name `sortable` explicitly, without the column                      |
-| `PATCH {"apiKey":"…"}`    | Yes. Writable columns are derived separately, and after this change the write is invisible, because the response no longer echoes it | Register `dto.update` (`patch` falls back to it) without the column |
-| response body             | No                                                                                                                                   | `selectable`                                                        |
+| Door                      | Still open after `selectable`                                                                                                        | Close it with                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `filter[apiKey][like]=a%` | Yes. `filterable` defaults to every column, and `LIKE`/`GT`/`LT` binary-search the value in `O(log n)` requests                      | Name `filterable` explicitly, without the column                                                      |
+| `sort=apiKey`             | Yes. `sortable` defaults to every column, and ordering leaks the column across pages                                                 | Name `sortable` explicitly, without the column                                                        |
+| `PATCH {"apiKey":"…"}`    | Yes. Writable columns are derived separately, and after this change the write is invisible, because the response no longer echoes it | Narrow `updatable` without the column, or register `dto.update` (`patch` falls back to it) without it |
+| response body             | No                                                                                                                                   | `selectable`                                                                                          |
 
 The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write DTO.
 :::

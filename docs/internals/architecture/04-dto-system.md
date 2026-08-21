@@ -54,25 +54,40 @@ the defaults derive from:
   A registered DTO wins outright over the allowlist rather than
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
-  scalar column with `generated: false`, minus the primary key and the
-  soft-delete marker field, which are excluded **regardless of**
-  `generated` — an app-assigned id or a marker column that isn't the ORM's
-  own delete-date column would otherwise be an ordinary writable field with
-  no other guard. The id is fixed metadata, so its exclusion is resolved
-  once; the marker is an ordinary settings key (entity → operation →
-  per-call, like any other), so `DefaultDeserializer` reads it off
-  `context.config.softDelete.field` **at deserialize time**, per call —
-  the same scope the request's own soft-delete strategy resolves at — not
-  a value baked in once at bootstrap, so a per-operation or per-call
-  override that renames the marker stays covered. Generated columns (auto
-  ids, `@CreateDateColumn`, versions) can never be written from a request
-  body either — the default deserializer silently strips all of these,
-  which is the safe posture in a system with no validation stage. An
-  explicit write DTO can still name the id or the marker field (a
+  scalar column with `generated: false`, plus every relation (associable
+  by id, [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes)),
+  minus the primary key and the soft-delete marker field, which are
+  excluded **regardless of** `generated` — an app-assigned id or a marker
+  column that isn't the ORM's own delete-date column would otherwise be an
+  ordinary writable field with no other guard. The id is fixed metadata,
+  so its exclusion is resolved once; the marker is an ordinary settings key
+  (entity → operation → per-call, like any other), so `DefaultDeserializer`
+  reads it off `context.config.softDelete.field` **at deserialize time**,
+  per call — the same scope the request's own soft-delete strategy
+  resolves at — not a value baked in once at bootstrap, so a per-operation
+  or per-call override that renames the marker stays covered. Generated
+  columns (auto ids, `@CreateDateColumn`, versions) can never be written
+  from a request body either — the default deserializer silently strips
+  all of these, which is the safe posture in a system with no validation
+  stage. An explicit write DTO can still name the id or the marker field (a
   legitimate opt-in for a caller-assigned key); `update`/`patch` write
   paths additionally strip both from the payload before persisting, as
   defence in depth against reassigning an _existing_ row's identity or
   soft-delete state that way.
+
+  This default projection can be narrowed further, without registering a
+  DTO at all, by `allowlists.creatable` (for `createOne`) and
+  `allowlists.updatable` (for `updateOne`/`patchOne` — the two share one
+  list, since both mutate an existing row) — the write-side counterpart to
+  `allowlists.selectable` above, and subject to the same rules: it can only
+  narrow the derived projection, never widen it, so naming the id or the
+  soft-delete marker there has no effect; and a registered write DTO with a
+  runtime shape wins outright, exactly as a registered `item`/`list` DTO
+  wins over `selectable` — where you register one, it, not the allowlist,
+  is the narrowing statement. Unconfigured, both default to the same base
+  described above, so an entity that never sets either sees no change
+  (issue #259).
+
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.
 

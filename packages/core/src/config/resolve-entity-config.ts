@@ -1,7 +1,7 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
-import type { EntityConfig, OperationConfig, QueryFieldSelector, RelationFieldSelector } from "./entity-config.js";
+import type { EntityConfig, OperationConfig, RelationFieldSelector } from "./entity-config.js";
 import type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./resolved-entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
@@ -362,6 +362,18 @@ function resolveAllowlists<Entity extends object>(
     Entity,
     1
   >[];
+  // The same base `DefaultDeserializer`'s derived writable projection uses:
+  // every non-generated scalar column except the primary key, plus every
+  // relation (associable by id, ADR-0014). Kept in lockstep with that
+  // constructor deliberately — `creatable`/`updatable` narrow the same set
+  // the deserializer falls back to when no DTO is registered.
+  const writableColumns = metadata.fields
+    .filter((field) => !field.generated && field.name !== metadata.idField)
+    .map((field) => field.name);
+  const writableBase = [...writableColumns, ...(relationNames as readonly string[])] as unknown as readonly FieldPath<
+    Entity,
+    1
+  >[];
   const configured = entityConfig?.allowlists;
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
@@ -372,6 +384,8 @@ function resolveAllowlists<Entity extends object>(
     // than "every own column" — a non-string column has nothing an `ILIKE`
     // fragment can usefully match (doc 05 §4).
     searchable: resolveFieldSelector(stringColumns, configured?.searchable),
+    creatable: resolveFieldSelector(writableBase, configured?.creatable),
+    updatable: resolveFieldSelector(writableBase, configured?.updatable),
   };
   const COMPUTED_REJECTION = {
     filterable: { verb: "filtered on", clause: "WHERE" },
@@ -387,6 +401,21 @@ function resolveAllowlists<Entity extends object>(
         `allowlists.${key}`,
         `'${field}' is a computed field on '${metadata.name}', which can never be ${verb} — ` +
           `it has no column to translate to ${clause}`,
+      );
+    }
+  }
+  // Computed fields have no column behind them, so they can never be
+  // written (ADR-0019) — `creatable`/`updatable` reject one by name at
+  // bootstrap for the same reason `rejectComputedWriteDtoKeys` rejects one
+  // named in a write DTO, rather than letting it fall out silently later.
+  for (const key of ["creatable", "updatable"] as const) {
+    for (const field of allowlists[key] as readonly string[]) {
+      if (!Object.prototype.hasOwnProperty.call(computed, field)) continue;
+      throw new ConfigurationException(
+        metadata.name,
+        `allowlists.${key}`,
+        `'${field}' is a computed field on '${metadata.name}', which is never writable (ADR-0019) — ` +
+          `it has no column behind it`,
       );
     }
   }
@@ -572,10 +601,15 @@ function resolveProjection<Entity extends object>(
   return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
 }
 
-function resolveFieldSelector<Entity>(
-  base: readonly FieldPath<Entity>[],
-  selector: QueryFieldSelector<Entity> | undefined,
-): readonly FieldPath<Entity>[] {
+/**
+ * Generic over the path type so it serves both `QueryFieldSelector`
+ * (depth-capped-3 `FieldPath`) and `WritableFieldSelector` (depth-1) — the
+ * array-or-`{ exclude }` resolution logic is identical either way.
+ */
+function resolveFieldSelector<Path extends string>(
+  base: readonly Path[],
+  selector: readonly Path[] | { readonly exclude: readonly Path[] } | undefined,
+): readonly Path[] {
   if (selector === undefined) return base;
   if (!("exclude" in selector)) return selector;
   const excluded = new Set(selector.exclude);

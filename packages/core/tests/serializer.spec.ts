@@ -323,6 +323,125 @@ describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
   });
 });
 
+describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", () => {
+  /** A context carrying a resolved config's allowlists, for one operation. */
+  function writeContext(
+    operation: "createOne" | "updateOne" | "patchOne",
+    config: ResolvedEntityConfig<User>,
+  ): KavoContext<User> {
+    return { operation, config } as KavoContext<User>;
+  }
+
+  it("is a no-op intersection when neither list is configured", () => {
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      null,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
+  });
+
+  it("narrows createOne's derived projection to the creatable allowlist", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      null,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({ name: "Ada" });
+  });
+
+  it("leaves updateOne/patchOne unaffected by a creatable-only restriction", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const updatePayload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      null,
+      writeContext("updateOne", config),
+    );
+    expect(updatePayload).toEqual({ name: "Ada", email: "ada@example.com" });
+  });
+
+  it("narrows both updateOne and patchOne to the same updatable allowlist", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { updatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const body = { name: "Ada", email: "ada@example.com" };
+    expect(deserializer.deserialize(body, null, writeContext("updateOne", config))).toEqual({ name: "Ada" });
+    expect(deserializer.deserialize(body, null, writeContext("patchOne", config))).toEqual({ name: "Ada" });
+  });
+
+  it("leaves createOne unaffected by an updatable-only restriction", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { updatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      null,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
+  });
+
+  it("keeps the primary key excluded even when explicitly named in creatable", () => {
+    // `creatable: ["id", "name"]` is used verbatim by `resolveEntityConfig`,
+    // but `id` was never in the derived writable projection this class
+    // intersects against — the exclusion holds because a list can only
+    // narrow that base, never add a name back to it (commit 8aa8d65).
+    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["id" as never, "name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize({ id: 5, name: "Ada" }, null, writeContext("createOne", config));
+    expect(payload).toEqual({ name: "Ada" });
+  });
+
+  it("keeps the soft-delete marker excluded even when explicitly named in updatable", () => {
+    const withMarker = {
+      ...userMetadata,
+      fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
+    };
+    const config = resolveEntityConfig(
+      withMarker,
+      { softDelete: { field: "deletedAt" }, allowlists: { updatable: ["deletedAt" as never, "name"] } },
+      undefined,
+    );
+    const deserializer = new DefaultDeserializer<User>(withMarker);
+    const payload = deserializer.deserialize(
+      { deletedAt: new Date(0), name: "Ada" },
+      null,
+      writeContext("updateOne", config),
+    );
+    expect(payload).toEqual({ name: "Ada" });
+  });
+
+  it("leaves an explicitly registered write DTO's key set untouched by creatable/updatable", () => {
+    // ADR-0026's `selectable`-vs-`dto.item` precedent: a registered DTO
+    // replaces the projection outright, so it wins even where the
+    // allowlist would have narrowed it further.
+    class CreateUserDto {
+      email = "";
+    }
+    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      CreateUserDto,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({ email: "ada@example.com" });
+  });
+
+  it("does not narrow a custom write operation, which neither list names", () => {
+    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, null, {
+      operation: "archiveUser",
+      config,
+    } as KavoContext<User>);
+    expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
+  });
+});
+
 describe("DefaultDtoResolver — slot resolution", () => {
   class CreateUserDto {}
   class UpdateUserDto {}

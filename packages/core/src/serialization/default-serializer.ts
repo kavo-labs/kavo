@@ -307,7 +307,12 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       return {} as Shape;
     }
     const explicit = dtoShapeKeys(dto);
-    const allowed = explicit ?? this.writableProjection;
+    // Only the derived default is narrowed by `creatable`/`updatable` — an
+    // explicit DTO's own key set is deliberately left alone, exactly as it
+    // already is for the id and the soft-delete marker below: a registered
+    // DTO *replaces* the projection rather than intersecting with it
+    // (ADR-0026's `selectable`-vs-`dto.item` precedent).
+    const allowed = explicit ?? this.narrowToWritableAllowlist(context);
     // Only the derived default excludes the marker — an explicit DTO's own
     // key set is deliberately left alone, same as the id (see class doc).
     // Optional chaining: this class is exported and constructible directly
@@ -333,6 +338,33 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       result[key] = idField === undefined ? source[key] : associate(source[key], idField);
     }
     return result as Shape;
+  }
+
+  /**
+   * Narrows {@link writableProjection} by `allowlists.creatable`/
+   * `updatable` (issue #259) for the operation the call is actually
+   * making — `createOne` reads `creatable`, `updateOne`/`patchOne` read
+   * `updatable`, and every other operation (a custom write) is left
+   * unnarrowed, since neither key names it. Both lists already default to
+   * the same base this class derives on its own, so an entity that never
+   * configured either sees no change: the filter is a no-op intersection.
+   *
+   * Optional chaining on `context.config`, same reason as the soft-delete
+   * lookup above: this class is constructible directly against a context
+   * that never went through the engine.
+   */
+  private narrowToWritableAllowlist(context: KavoContext<Entity>): readonly string[] {
+    const allowlists = context.config?.allowlists;
+    if (allowlists === undefined) return this.writableProjection;
+    let allowlist: readonly string[] | undefined;
+    if (context.operation === "createOne") {
+      allowlist = allowlists.creatable as readonly string[];
+    } else if (context.operation === "updateOne" || context.operation === "patchOne") {
+      allowlist = allowlists.updatable as readonly string[];
+    }
+    if (allowlist === undefined) return this.writableProjection;
+    const allowed = new Set(allowlist);
+    return this.writableProjection.filter((key) => allowed.has(key));
   }
 }
 

@@ -26,6 +26,17 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
   readonly (FieldPath<Entity> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity> | Extra)[] };
 
 /**
+ * One writable-field allowlist key's raw configuration — the same array-or-
+ * `{ exclude }` shape as {@link QueryFieldSelector}, but capped to depth 1
+ * ({@link FieldPath} with `MaxDepth` 1): a write body addresses the
+ * entity's own scalar columns and its relations by association (ADR-0014),
+ * never a dotted path into a relation's own fields, so `creatable`/
+ * `updatable` have nothing to grant past one segment.
+ */
+export type WritableFieldSelector<Entity> =
+  readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
+
+/**
  * One relation allowlist key's raw configuration — the same array-or-
  * `{ exclude }` shape as {@link QueryFieldSelector}, but typed against the
  * entity's own top-level relation names ({@link IncludePath} capped to
@@ -118,6 +129,31 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * (`KavoSettings`), off by default — see doc 05 §4.
    */
   readonly searchable?: QueryFieldSelector<Entity>;
+  /**
+   * What `createOne` (and `createMany`, once #137 lands) may write. Same
+   * default posture as `filterable`/`sortable`: unconfigured, every own
+   * writable field — every non-generated scalar column except the primary
+   * key, plus every relation, by association (ADR-0014) — the same base
+   * `DefaultDeserializer`'s derived writable projection already uses.
+   *
+   * Narrows that derived projection; it never widens it; the primary key
+   * and the resolved soft-delete marker stay excluded even if named here
+   * (commit 8aa8d65's exclusion is unconditional). A registered `create`
+   * DTO with a runtime shape **replaces** the projection rather than
+   * intersecting with it, exactly as a registered `dto.item`/`dto.list`
+   * outranks `selectable` (ADR-0026) — where you register one, it, not
+   * this key, is the narrowing statement.
+   */
+  readonly creatable?: WritableFieldSelector<Entity>;
+  /**
+   * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
+   * may write. `update` (PUT) and `patch` (PATCH) share this one list
+   * rather than each getting its own — both mutate an existing row, so the
+   * set of fields open to being overwritten is the same question either
+   * way. Same default posture, narrowing behaviour, and DTO precedence as
+   * {@link QueryAllowlists.creatable} — see its note.
+   */
+  readonly updatable?: WritableFieldSelector<Entity>;
 }
 
 /**
