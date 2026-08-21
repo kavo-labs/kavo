@@ -122,10 +122,10 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
 
 /**
  * Per-operation configuration.
- * Naming a standard id in the parent `operations` record is what enables
- * it — this is the entry that configures it once named (issue #257); there
- * is no `enabled` field here, because presence already says so and absence
- * already means off.
+ * Naming a standard id in the parent `operations` record — this object, or
+ * the `true`/`false` shorthand — is what enables or disables it (issue
+ * #257); there is no `enabled` field here, since `true`/`false` already
+ * says so explicitly and this object's own presence says so implicitly.
  *
  * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
  * `OperationDtoOverride` — only the fields that operation actually
@@ -171,8 +171,8 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
  * actually has — a write op gets `input`/`output`, a read gets
  * `output`/`query`, and `deleteOne`/`purgeOne` (void results, no query)
  * get neither, so setting `dto` on them is a type error before it is ever
- * a bootstrap one. There is no boolean shorthand at any id (issue #257):
- * naming a standard id at all is what enables it.
+ * a bootstrap one. The `true`/`false` shorthand is still accepted at every
+ * id (issue #257), for a plain enable/disable with no settings attached.
  *
  * Unlike the root `dto` map, a per-operation override is **not** narrowed
  * against the entity's own `CreateDto`/`ItemDto`/etc. — those generics are
@@ -199,16 +199,16 @@ export interface StandardOperationsConfig<
   ItemDto = Entity,
   _ListDto = ItemDto,
 > {
-  readonly createOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">>;
-  readonly findOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">>;
-  readonly findMany?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">>;
-  readonly updateOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">>;
-  readonly patchOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">>;
+  readonly createOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
+  readonly findOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">> | boolean;
+  readonly findMany?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">> | boolean;
+  readonly updateOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
+  readonly patchOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
   /** Void result, no query — no `dto` override is representable. */
-  readonly deleteOne?: OperationConfig<Entity, never>;
-  readonly restoreOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output">>;
+  readonly deleteOne?: OperationConfig<Entity, never> | boolean;
+  readonly restoreOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output">> | boolean;
   /** Void result, no query — no `dto` override is representable. */
-  readonly purgeOne?: OperationConfig<Entity, never>;
+  readonly purgeOne?: OperationConfig<Entity, never> | boolean;
 }
 
 /**
@@ -283,10 +283,11 @@ export interface CustomOperationConfig<Entity = unknown> extends Omit<DeepPartia
  * The index signature's union is a genuine upper bound rather than
  * `CustomOperationConfig` alone, and it has to be: every declared property
  * is checked against it too, so it must be wide enough for an override
- * entry (`OperationConfig`, whose `handler` is optional). So this type says
- * only "a custom key holds *some* operation entry"; {@link CustomOperationsOf}
- * is what holds it to `CustomOperationConfig`, applied where `Ops` is
- * already known rather than inside its own constraint.
+ * entry (`OperationConfig`, whose `handler` is optional) and for the
+ * boolean shorthand. So this type says only "a custom key holds *some*
+ * operation entry"; {@link CustomOperationsOf} is what holds it to
+ * `CustomOperationConfig`, applied where `Ops` is already known rather than
+ * inside its own constraint.
  */
 export type OperationsConfig<
   Entity,
@@ -297,7 +298,7 @@ export type OperationsConfig<
   ItemDto = Entity,
   ListDto = ItemDto,
 > = StandardOperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> & {
-  readonly [id: string]: OperationConfig<Entity> | CustomOperationConfig<Entity> | undefined;
+  readonly [id: string]: OperationConfig<Entity> | CustomOperationConfig<Entity> | boolean | undefined;
 };
 
 /**
