@@ -56,7 +56,15 @@ beforeAll(() => {
   });
   tickets = kavo.createCrud(Ticket, {
     softDelete: { field: "deletedAt" },
-    operations: { purgeOne: true },
+    operations: {
+      createOne: {},
+      deleteOne: {},
+      findMany: {},
+      findOne: {},
+      patchOne: {},
+      restoreOne: {},
+      purgeOne: {},
+    },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
     softDelete: { field: "archivedAt" },
