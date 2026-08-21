@@ -247,12 +247,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
           resolved.computed,
           resolved.projection as readonly string[] | null,
         ),
-        deserializer: new DefaultDeserializer(
-          metadata as EntityMetadata<Entity>,
-          catalog,
-          resolved.computed,
-          resolved.softDelete.field,
-        ),
+        deserializer: new DefaultDeserializer(metadata as EntityMetadata<Entity>, catalog, resolved.computed),
         normalizer: new QueryNormalizer(
           metadata as EntityMetadata<Entity>,
           options.paginationStrategies ?? [],

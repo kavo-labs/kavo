@@ -51,6 +51,24 @@ export const accountMetadataWithNaturalKey: EntityMetadata<Account> = {
 };
 
 /**
+ * A second candidate marker column (`archivedAt`), alongside the usual
+ * `deletedAt` — both ordinary `generated: false` columns, `softDeleteField`
+ * unset. Exists to prove `softDelete.field` is excluded at the scope it is
+ * actually *resolved* at (entity, operation, or per-call — ADR-0013), not a
+ * value fixed once when the deserializer was built: an entity-scope default
+ * of `deletedAt` with a per-operation override renaming the marker to
+ * `archivedAt` must still exclude `archivedAt`, not the stale entity-scope
+ * name.
+ */
+export const accountMetadataWithTwoMarkerCandidates: EntityMetadata<Account> = {
+  ...accountMetadataWithWritableMarker,
+  fields: [
+    ...accountMetadataWithWritableMarker.fields,
+    { name: "archivedAt", kind: "date", nullable: true, generated: false },
+  ],
+};
+
+/**
  * In-memory adapter that honors the resolved strategy the same way a real
  * one does: it reads `context.config.softDelete` rather than deciding for
  * itself, so these tests exercise the engine's resolution, not a mock's

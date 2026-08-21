@@ -242,29 +242,83 @@ describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
     expect(payload).toEqual({ id: "chosen-id", name: "Ada" });
   });
 
-  it("drops the resolved soft-delete marker field from the derived default", () => {
+  const withMarker = {
+    ...userMetadata,
+    fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
+  };
+
+  /**
+   * A context carrying only what `deserialize` reads off it: the resolved
+   * soft-delete field for *this call*. Deliberately not a full
+   * `resolveEntityConfig` output — the field this class must track is
+   * `context.config.softDelete.field` specifically, resolved fresh per
+   * request/operation/call (ADR-0013's precedence chain), never a value
+   * baked into the deserializer at construction.
+   */
+  function contextWithMarker(field: string | null): KavoContext<User> {
+    return {
+      config: { softDelete: field === null ? { strategy: "hard", field: null } : { strategy: "soft", field } },
+    } as KavoContext<User>;
+  }
+
+  it("drops the soft-delete marker field the call context resolves, from the derived default", () => {
     // The marker is an ordinary, non-generated column whenever the ORM
     // cannot declare a delete-date column (Prisma/Mongoose/MikroORM, and
     // `@kavo/typeorm` too when `softDelete.field` names a plain column) —
     // exactly the shape a `generated`-only check cannot see.
-    const withMarker = {
-      ...userMetadata,
-      fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
-    };
-    const deserializer = new DefaultDeserializer(withMarker, undefined, {}, "deletedAt");
-    const payload = deserializer.deserialize({ deletedAt: new Date(0), name: "Ada" }, null, contextStub());
+    const deserializer = new DefaultDeserializer(withMarker);
+    const payload = deserializer.deserialize(
+      { deletedAt: new Date(0), name: "Ada" },
+      null,
+      contextWithMarker("deletedAt"),
+    );
     expect(payload).toEqual({ name: "Ada" });
   });
 
-  it("leaves an ordinary column named 'deletedAt' writable when the entity has no soft-delete marker", () => {
-    // `softDeleteField` argument is `null` by default — no marker resolved,
-    // no exclusion.
-    const withMarker = {
-      ...userMetadata,
-      fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
-    };
+  it("leaves an ordinary column named 'deletedAt' writable when the call resolves no soft-delete marker", () => {
     const deserializer = new DefaultDeserializer(withMarker);
-    const payload = deserializer.deserialize({ deletedAt: new Date(0), name: "Ada" }, null, contextStub());
+    const payload = deserializer.deserialize({ deletedAt: new Date(0), name: "Ada" }, null, contextWithMarker(null));
+    expect(payload).toEqual({ deletedAt: new Date(0), name: "Ada" });
+  });
+
+  it("tracks a per-call marker override, not a value fixed at construction — the same deserializer excludes a different field for a different call", () => {
+    // The regression this pins: an entity-scope-only exclusion (baked in
+    // once, at bootstrap) would miss an operation or per-call
+    // `softDelete.field` override that renames the marker — reopening the
+    // exact mass-assignment gap this class exists to close, for that one
+    // config shape. One `DefaultDeserializer` instance is shared across
+    // every call for an entity, so tracking the override has to happen at
+    // `deserialize` time, against that call's own resolved context.
+    const renamed = {
+      ...userMetadata,
+      fields: [...userMetadata.fields, { name: "archivedAt", kind: "date" as const, nullable: true, generated: false }],
+    };
+    const deserializer = new DefaultDeserializer(renamed);
+    const defaultScope = deserializer.deserialize(
+      { archivedAt: new Date(0), name: "Ada" },
+      null,
+      contextWithMarker(null),
+    );
+    expect(defaultScope).toEqual({ archivedAt: new Date(0), name: "Ada" });
+    const overriddenScope = deserializer.deserialize(
+      { archivedAt: new Date(0), name: "Ada" },
+      null,
+      contextWithMarker("archivedAt"),
+    );
+    expect(overriddenScope).toEqual({ name: "Ada" });
+  });
+
+  it("still lets an explicit write DTO name the soft-delete marker, even when the call resolves one", () => {
+    class UpdateUserDto {
+      deletedAt: Date | null = null;
+      name = "";
+    }
+    const deserializer = new DefaultDeserializer(withMarker);
+    const payload = deserializer.deserialize(
+      { deletedAt: new Date(0), name: "Ada" },
+      UpdateUserDto,
+      contextWithMarker("deletedAt"),
+    );
     expect(payload).toEqual({ deletedAt: new Date(0), name: "Ada" });
   });
 });

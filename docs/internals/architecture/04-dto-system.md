@@ -55,17 +55,24 @@ the defaults derive from:
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
   scalar column with `generated: false`, minus the primary key and the
-  resolved soft-delete marker field, which are excluded **regardless of**
+  soft-delete marker field, which are excluded **regardless of**
   `generated` — an app-assigned id or a marker column that isn't the ORM's
   own delete-date column would otherwise be an ordinary writable field with
-  no other guard. Generated columns (auto ids, `@CreateDateColumn`,
-  versions) can never be written from a request body either — the default
-  deserializer silently strips all of these, which is the safe posture in a
-  system with no validation stage. An explicit write DTO can still name the
-  id or the marker field (a legitimate opt-in for a caller-assigned key);
-  `update`/`patch` write paths additionally strip both from the payload
-  before persisting, as defence in depth against reassigning an _existing_
-  row's identity or soft-delete state that way.
+  no other guard. The id is fixed metadata, so its exclusion is resolved
+  once; the marker is an ordinary settings key (entity → operation →
+  per-call, like any other), so `DefaultDeserializer` reads it off
+  `context.config.softDelete.field` **at deserialize time**, per call —
+  the same scope the request's own soft-delete strategy resolves at — not
+  a value baked in once at bootstrap, so a per-operation or per-call
+  override that renames the marker stays covered. Generated columns (auto
+  ids, `@CreateDateColumn`, versions) can never be written from a request
+  body either — the default deserializer silently strips all of these,
+  which is the safe posture in a system with no validation stage. An
+  explicit write DTO can still name the id or the marker field (a
+  legitimate opt-in for a caller-assigned key); `update`/`patch` write
+  paths additionally strip both from the payload before persisting, as
+  defence in depth against reassigning an _existing_ row's identity or
+  soft-delete state that way.
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.
 

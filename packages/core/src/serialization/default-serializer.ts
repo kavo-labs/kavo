@@ -255,34 +255,41 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * constructed directly — it is exported, and its contract is "computed
  * names never reach the adapter", not "the config resolver checked first".
  *
- * The primary key and the soft-delete marker field are excluded from the
- * derived default **regardless of `generated`**: an app-assigned id (a
- * natural key, a `@BeforeInsert`-populated UUID) is not driver-generated
- * but must not be reassignable by an ordinary write, and a soft-delete
- * marker that isn't the ORM's own delete-date column is an ordinary
- * writable column with no special exclusion otherwise — either would let a
- * client rewrite a row's identity or its deleted state through the generic
- * write route instead of `create`'s intentional choice of id or
- * `deleteOne`/`restoreOne`'s state machine. Unlike computed
- * fields, this is a deliberately narrower guarantee: an explicit write DTO
- * naming the id or marker field still reaches it, because both are real
- * columns with legitimate opt-in uses (assigning a natural key on
- * `create`) that a computed field never has.
+ * The primary key is excluded from the derived default **regardless of
+ * `generated`**: an app-assigned id (a natural key, a
+ * `@BeforeInsert`-populated UUID) is not driver-generated but must not be
+ * reassignable by an ordinary write. It has no per-call scope — an entity's
+ * identifier is fixed metadata — so it is excluded once, at construction.
+ *
+ * The soft-delete marker gets the same exclusion, but resolved **per call**
+ * from `context.config.softDelete.field` rather than baked in at
+ * construction: `softDelete` is an ordinary settings key (entity → operation
+ * → per-call, ADR-0013), so the field an operation actually writes through
+ * can differ from the entity's own default — an `update`/`patch` this class
+ * cannot see through `context` is exactly what the per-adapter strip in each
+ * `RepositoryAdapter.update`/`patch` already covers as defence in depth, but
+ * `create` has no such backstop (an explicit DTO may legitimately assign a
+ * natural key there), so the marker exclusion has to track the same scope
+ * `context.config` resolves it at, not the scope this class was built in.
+ * A marker that isn't the ORM's own delete-date column is an ordinary
+ * writable column with no special exclusion otherwise — either gap would
+ * let a client rewrite a row's identity or its deleted state through the
+ * generic write route instead of `create`'s intentional choice of id or
+ * `deleteOne`/`restoreOne`'s state machine. Unlike computed fields, both are
+ * a deliberately narrower guarantee: an explicit write DTO naming the id or
+ * marker field still reaches it, because both are real columns with
+ * legitimate opt-in uses (assigning a natural key on `create`) that a
+ * computed field never has.
  */
 export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entity> {
   private readonly writableProjection: readonly string[];
   private readonly relationIdFields: ReadonlyMap<string, () => string | undefined>;
   private readonly computedNames: ReadonlySet<string>;
 
-  constructor(
-    metadata: EntityMetadata<Entity>,
-    catalog?: EntityCatalog,
-    computed: ComputedFieldMap<Entity> = {},
-    softDeleteField: string | null = null,
-  ) {
+  constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
     this.computedNames = new Set(Object.keys(computed));
     const columns = metadata.fields
-      .filter((field) => !field.generated && field.name !== metadata.idField && field.name !== softDeleteField)
+      .filter((field) => !field.generated && field.name !== metadata.idField)
       .map((field) => field.name);
     const relations = new Map<string, () => string | undefined>();
     for (const relation of metadata.relations) {
@@ -295,17 +302,26 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     this.writableProjection = [...columns, ...relations.keys()];
   }
 
-  deserialize<Shape>(raw: unknown, dto: DtoClass<Shape & object> | null, _context: KavoContext<Entity>): Shape {
+  deserialize<Shape>(raw: unknown, dto: DtoClass<Shape & object> | null, context: KavoContext<Entity>): Shape {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return {} as Shape;
     }
-    const allowed = dtoShapeKeys(dto) ?? this.writableProjection;
+    const explicit = dtoShapeKeys(dto);
+    const allowed = explicit ?? this.writableProjection;
+    // Only the derived default excludes the marker — an explicit DTO's own
+    // key set is deliberately left alone, same as the id (see class doc).
+    // Optional chaining: this class is exported and constructible directly
+    // against a context that never went through the engine (a test stub,
+    // say), and the exclusion degrading to "none" there is the same
+    // graceful fallback the id/computed-field guards already make.
+    const softDeleteField = explicit === null ? (context.config?.softDelete?.field ?? null) : null;
     const source = raw as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const key of allowed) {
       // A computed field has no column behind it, so a value for it could
       // only ever reach the adapter as an unknown write (ADR-0019).
       if (this.computedNames.has(key)) continue;
+      if (key === softDeleteField) continue;
       // Own properties only. `raw` is a wire body, so an inherited key is
       // never something the client sent — but it *is* something a polluted
       // `Object.prototype` would supply, silently adding a writable field to

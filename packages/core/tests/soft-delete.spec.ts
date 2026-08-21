@@ -18,6 +18,7 @@ import {
   accountMetadata,
   accountMetadataWithNaturalKey,
   accountMetadataWithoutMarker,
+  accountMetadataWithTwoMarkerCandidates,
   accountMetadataWithWritableMarker,
 } from "./support/account-fixture.js";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
@@ -249,5 +250,31 @@ describe("the soft-delete marker and primary key are not mass-assignable", () =>
     await crud.patchOne(1, { id: 999, name: "acme corp" } as never);
 
     expect(adapter.rows).toMatchObject([{ id: 1, name: "acme corp" }]);
+  });
+
+  it("excludes the marker a per-operation override actually resolves, not the entity-scope default", async () => {
+    // The regression this pins: the entity declares `deletedAt` as its
+    // soft-delete field, but `createOne` is configured to resolve a
+    // *different* marker (`archivedAt`) — an ordinary, legal per-operation
+    // override (ADR-0013's precedence chain). A `DefaultDeserializer` that
+    // excluded only the entity-scope name would let `archivedAt` straight
+    // through on `createOne`, reopening exactly the bug this file otherwise
+    // covers — for the one config shape where "the marker" isn't fixed at
+    // bootstrap.
+    const adapter = new InMemoryAccountAdapter();
+    const crud = createKavo().createCrud(
+      Account,
+      {
+        softDelete: { field: "deletedAt" },
+        operations: { createOne: { softDelete: { field: "archivedAt" } } },
+      } as never,
+      { adapter, metadata: accountMetadataWithTwoMarkerCandidates },
+    );
+
+    const created = (await crud.createOne({ name: "acme", archivedAt: new Date(0) } as never)) as Account & {
+      archivedAt?: unknown;
+    };
+
+    expect(created.archivedAt).toBeUndefined();
   });
 });
