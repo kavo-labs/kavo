@@ -78,10 +78,12 @@ class HeaderPrincipalGuard implements CanActivate {
       policy: (args: PolicyArgs<Post>) =>
         hasRole<Post>("admin")(args) || (hasPermission<Post>("post:update")(args) && isOwner<Post>("authorId")(args)),
     },
+    patchOne: true,
     deleteOne: { policy: hasPermission<Post>("post:delete") },
     findOne: { policy: isOwner<Post>("authorId") },
+    findMany: true,
     restoreOne: { policy: isOwner<Post>("authorId") },
-    purgeOne: { enabled: true, policy: isOwner<Post>("authorId") },
+    purgeOne: { policy: isOwner<Post>("authorId") },
   },
 } as never)
 @Controller("posts")
