@@ -206,6 +206,18 @@ const unboundHandler = (id: OperationId, entityName: string): OperationHandler<u
  * (disable), `operations.<id>: true` / `{ enabled: true }` (enable), and
  * `operations.<id>.handler` (override — default scaffolding stays).
  *
+ * **`operations` is an explicit whitelist once the entity declares it at
+ * all (issue #257).** An entity config with no `operations` key resolves
+ * every standard id from the global/built-in defaults, same as always. The
+ * moment `operations` is present, presence of a key is what enables it —
+ * `true`, `{}`, or an object carrying settings all count — whatever the
+ * operation would otherwise default to; an id the config doesn't name
+ * resolves to disabled outright. `settings.enabled`/the boolean shorthand
+ * can still override that explicitly in either direction. This is a
+ * breaking change from the prior per-key-merge behavior: a config that
+ * names one operation to tweak a setting (`operations: { updateOne: { cache:
+ * {...} } } }`) now also silences every operation it didn't name.
+ *
  * **Custom entries come first, and that order is a routing decision.**
  * Registration order is route-generation order (ADR-0012), and an HTTP
  * router matches in the order routes were declared: registered after
@@ -221,11 +233,15 @@ const unboundHandler = (id: OperationId, entityName: string): OperationHandler<u
  * loop skips those keys outright — so `operations.deleteOne` is an override
  * of the standard entry, never a redefinition of it, whatever it carries.
  *
- * The soft-delete operations default from the config alone, never
- * from ORM metadata: `restoreOne` turns on when the entity config
- * declares soft delete (`softDelete.strategy: "soft"` or an explicit
- * `softDelete.field`), `purgeOne` only when named outright. Route
- * generation runs at decoration time, where no ORM metadata exists
+ * The soft-delete operations default from the config alone, never from ORM
+ * metadata — and only when `operations` isn't declared at all: `restoreOne`
+ * turns on when the entity config declares soft delete (`softDelete.strategy:
+ * "soft"` or an explicit `softDelete.field`), `purgeOne` only when named
+ * outright. Once `operations` is declared, naming an id is what enables it
+ * regardless of that unconditional default — `restoreOne: {}` enables it
+ * the same as `restoreOne: true` would, soft-deletable or not (the
+ * soft-delete-strategy check below still applies to whatever it resolves
+ * to). Route generation runs at decoration time, where no ORM metadata exists
  * (ADR-0012), so both registry builds — engine and `@kavo/nest` — must
  * reach the same answer from the same input (ADR-0013). Enabling either
  * on an entity that does not resolve to a soft delete strategy is a
@@ -256,6 +272,7 @@ export function createOperationRegistry<Entity extends object>(
   const registry = new DefaultOperationRegistry<Entity>(entityName);
   const scope = entityName ?? "entity";
   const operations = config?.operations ?? {};
+  const operationsDeclared = config?.operations !== undefined;
   const softDeleteDeclared = declaresSoftDelete(config);
 
   for (const [id, entry] of Object.entries(operations as unknown as Readonly<Record<string, unknown>>)) {
@@ -264,17 +281,21 @@ export function createOperationRegistry<Entity extends object>(
   }
 
   for (const [id, shape] of Object.entries(STANDARD_OPERATIONS) as [StandardOperationId, StandardOperationShape][]) {
-    const operationConfig = operations[id];
-    const settings = typeof operationConfig === "object" ? operationConfig : undefined;
+    const settings = operations[id];
     rejectCustomOperationKeys(scope, id, settings as Readonly<Record<string, unknown>> | undefined);
     const byDefault = shape.enabled || (id === "restoreOne" && softDeleteDeclared);
-    const defaultForEntity = globalOperations?.[id] ?? byDefault;
+    // No boolean shorthand and no `enabled` field for a standard id (issue
+    // #257) — once `operations` is declared, naming an id at all is what
+    // enables it, whatever it would otherwise default to; not naming it
+    // disables it.
+    const isListed = Object.prototype.hasOwnProperty.call(operations, id);
+    const enabled = operationsDeclared ? isListed : (globalOperations?.[id] ?? byDefault);
     const dtoOverride = resolveDtoOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     registry.register({
       id,
       kind: shape.kind,
       cardinality: shape.cardinality,
-      enabled: typeof operationConfig === "boolean" ? operationConfig : (settings?.enabled ?? defaultForEntity),
+      enabled,
       handler:
         settings?.handler ??
         handlers?.(id) ??
