@@ -6,23 +6,21 @@ Per-operation overrides and fully custom operations on `@Kavo(Entity, config)`, 
 
 Per-operation overrides, keyed by operation id. A key that names one of the eight standard operations configures it; any other key [declares a custom operation](#custom-operations).
 
-**`operations` is an explicit whitelist once it's declared at all — naming a standard id is what enables it.** An entity with no `operations` key gets every standard operation at its global/built-in default (`createOne`/`findOne`/`findMany`/`updateOne`/`patchOne`/`deleteOne` on, `restoreOne`/`purgeOne` off unless soft delete is declared). The moment `operations` is present, every standard id it doesn't name is off, and every id it does name — `{}`, or an object carrying settings — is on, whatever it would otherwise default to. There's no boolean shorthand and no `enabled` field: presence is the only signal.
+**`operations` is an explicit whitelist once it's declared at all.** An entity with no `operations` key gets every standard operation at its global/built-in default (`createOne`/`findOne`/`findMany`/`updateOne`/`patchOne`/`deleteOne` on, `restoreOne`/`purgeOne` off unless soft delete is declared). The moment `operations` is present, every standard id it doesn't name is off. `true`/`false` names one explicitly, in either direction, with no settings attached; an object carrying settings enables by being named — there's no `enabled` field, since a settings object's own presence already says so.
 
 ```ts
 @Kavo(Book, {
   operations: {
-    createOne: {},
-    findOne: {},
-    findMany: {},
-    updateOne: {},
-    deleteOne: {},
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    deleteOne: true,
     restoreOne: { meta: { routes: { path: ":id/undelete" } } },
-    // patchOne isn't named, so it's off — no boolean needed to say so.
+    // patchOne isn't named, so it's off.
   },
 })
 ```
-
-A bare `{}` is enough to keep an operation at its own default — it doesn't need repeating any settings, only naming.
 
 An `OperationConfig` object accepts:
 
@@ -162,11 +160,11 @@ const findMany = builtInHandlers<Book>()("findMany");
   operations: {
     // Every other standard operation, named to keep it at its own default —
     // declaring `operations` at all makes it a whitelist (see above).
-    createOne: {},
-    findOne: {},
-    updateOne: {},
-    patchOne: {},
-    deleteOne: {},
+    createOne: true,
+    findOne: true,
+    updateOne: true,
+    patchOne: true,
+    deleteOne: true,
     findMany: {
       handler: withListMeta(findMany, (result) => ({
         inStock: result.entities.filter((book) => book.stock > 0).length,
