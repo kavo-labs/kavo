@@ -212,8 +212,53 @@ describe("createOperationRegistry — inspection-only mode (ADR-0012)", () => {
 });
 
 describe("createOperationRegistry — the control surface", () => {
+  it("leaves every default untouched when the config declares no `operations` key at all", () => {
+    const registry = createOperationRegistry<User>(undefined, standardHandlers);
+    for (const id of Object.keys(STANDARD_OPERATIONS) as StandardOperationId[]) {
+      expect(registry.get(id)?.enabled).toBe(STANDARD_OPERATIONS[id].enabled);
+    }
+  });
+
+  it("makes `operations` an exclusive whitelist the moment it's declared (issue #257)", () => {
+    // Naming createOne/updateOne no longer just sets those two — every
+    // standard id this config doesn't mention is forced off, regardless of
+    // its built-in default.
+    const registry = createOperationRegistry<User>(
+      { operations: { createOne: true, updateOne: true } } as UserConfig,
+      standardHandlers,
+    );
+    expect(registry.get("createOne")?.enabled).toBe(true);
+    expect(registry.get("updateOne")?.enabled).toBe(true);
+    for (const id of ["findOne", "findMany", "patchOne", "deleteOne"] as const) {
+      expect(registry.get(id)?.enabled).toBe(false);
+    }
+  });
+
+  it("treats a bare `{}` operations object as declaring zero standard operations", () => {
+    const registry = createOperationRegistry<User>({ operations: {} } as UserConfig, standardHandlers);
+    for (const id of Object.keys(STANDARD_OPERATIONS) as StandardOperationId[]) {
+      expect(registry.get(id)?.enabled).toBe(false);
+    }
+  });
+
+  it("treats a key present with an `undefined` value as unlisted, not as naming the id", () => {
+    // A conditionally-built config (`{ purgeOne: cond ? true : undefined }`,
+    // or a spread of a partial object) can leave a key present with
+    // `undefined` rather than absent. That must stay off, the same as
+    // omitting the key outright — `hasOwnProperty` alone would say
+    // otherwise and silently enable a destructive operation.
+    const registry = createOperationRegistry<User>(
+      { operations: { createOne: true, purgeOne: undefined } } as UserConfig,
+      standardHandlers,
+    );
+    expect(registry.get("purgeOne")?.enabled).toBe(false);
+  });
+
   it("disables an operation with the `false` shorthand, keeping its entry", () => {
-    const registry = createOperationRegistry<User>({ operations: { patchOne: false } } as UserConfig, standardHandlers);
+    const registry = createOperationRegistry<User>(
+      { operations: { createOne: true, patchOne: false } } as UserConfig,
+      standardHandlers,
+    );
     expect(ids(registry)).toEqual(Object.keys(STANDARD_OPERATIONS));
     expect(registry.get("patchOne")).toMatchObject({ enabled: false });
     expect(registry.get("patchOne")?.handler).toBeDefined();
@@ -222,15 +267,6 @@ describe("createOperationRegistry — the control surface", () => {
   it("enables an off-by-default operation with the `true` shorthand", () => {
     const registry = createOperationRegistry<User>({ operations: { purgeOne: true } } as UserConfig, standardHandlers);
     expect(registry.get("purgeOne")?.enabled).toBe(true);
-  });
-
-  it("accepts the long `{ enabled }` form for both directions", () => {
-    const registry = createOperationRegistry<User>(
-      { operations: { restoreOne: { enabled: true }, deleteOne: { enabled: false } } } as UserConfig,
-      standardHandlers,
-    );
-    expect(registry.get("restoreOne")?.enabled).toBe(true);
-    expect(registry.get("deleteOne")?.enabled).toBe(false);
   });
 
   it("swaps the handler of an overridden operation, keeping its scaffolding", async () => {
@@ -244,12 +280,15 @@ describe("createOperationRegistry — the control surface", () => {
     await expect(entry?.handler.execute({}, contextStub())).resolves.toBe("custom-update");
   });
 
-  it("does not enable an off-by-default operation just because it was overridden", () => {
+  it("enables an off-by-default operation by naming it with settings too, no boolean needed", () => {
+    // Naming an operation with an object is what enables it, whatever it
+    // carries — a handler override is no different from `true` in that
+    // respect, since there's no `enabled` field to check instead.
     const registry = createOperationRegistry<User>(
       { operations: { purgeOne: { handler: handlerNamed("custom-purge") } } } as UserConfig,
       standardHandlers,
     );
-    expect(registry.get("purgeOne")?.enabled).toBe(false);
+    expect(registry.get("purgeOne")?.enabled).toBe(true);
   });
 
   it("stores per-operation meta verbatim for the framework layer", () => {
@@ -656,16 +695,9 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
     const registry = createOperationRegistry<User>(
       { operations: { deleteOne: true } } as UserConfig,
       standardHandlers,
-      { deleteOne: false },
-    );
-    expect(registry.get("deleteOne")?.enabled).toBe(true);
-  });
-
-  it("lets an entity long-form `{ enabled }` override a global disable", () => {
-    const registry = createOperationRegistry<User>(
-      { operations: { deleteOne: { enabled: true } } } as UserConfig,
-      standardHandlers,
-      { deleteOne: false },
+      {
+        deleteOne: false,
+      },
     );
     expect(registry.get("deleteOne")?.enabled).toBe(true);
   });
@@ -686,6 +718,31 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
       { restoreOne: false },
     );
     expect(registry.get("restoreOne")?.enabled).toBe(false);
+  });
+
+  it("suppresses the soft-delete auto-enable of restoreOne once operations is declared (issue #257)", () => {
+    // softDelete alone would auto-enable restoreOne (the test above this
+    // block, with no `operations` key at all). Once `operations` is
+    // declared, that auto-enable no longer applies on its own — restoreOne
+    // still needs naming, soft-deletable or not.
+    const registry = createOperationRegistry<User>(
+      { softDelete: { strategy: "soft", field: "deletedAt" }, operations: { createOne: true } } as UserConfig,
+      standardHandlers,
+    );
+    expect(registry.get("restoreOne")?.enabled).toBe(false);
+  });
+
+  it("bypasses the global operations default for an id the entity's whitelist doesn't name", () => {
+    // The global map still fills in for an entity with no `operations` key
+    // at all (tested above). Once the entity declares `operations`, an
+    // unnamed id is off regardless of what the global default says about
+    // it — the global default never gets consulted for it.
+    const registry = createOperationRegistry<User>(
+      { operations: { deleteOne: true } } as UserConfig,
+      standardHandlers,
+      { patchOne: true },
+    );
+    expect(registry.get("patchOne")?.enabled).toBe(false);
   });
 
   it("reproduces today's STANDARD_OPERATIONS behavior byte-for-byte when unset", () => {

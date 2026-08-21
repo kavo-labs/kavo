@@ -61,6 +61,12 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
     list: AddressListDto,
   },
   operations: {
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    patchOne: true,
+    deleteOne: true,
     normalizePostalCodeOne: {
       handler: {
         /**

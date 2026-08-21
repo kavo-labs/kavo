@@ -243,7 +243,10 @@ describe("@Kavo per-operation settings override — scoped to that operation onl
 
 describe("@Kavo custom meta.routes on a standard, non-@Override'd operation", () => {
   @Kavo(Todo, {
-    operations: { deleteOne: { meta: { routes: { path: ":id/remove", successStatus: 200 } } } },
+    operations: {
+      createOne: true,
+      deleteOne: { meta: { routes: { path: ":id/remove", successStatus: 200 } } },
+    },
   })
   @Controller("todos")
   class ReshapedDeleteController {}
@@ -268,7 +271,13 @@ describe("@Kavo meta.routes.enabled: false — service-only operations", () => {
   // still callable in code. Testing only the 404 would pass just as well
   // if the operation had been disabled outright, which is a different
   // feature with a different meaning.
-  @Kavo(Todo, { operations: { deleteOne: { meta: { routes: { enabled: false } } } } })
+  @Kavo(Todo, {
+    operations: {
+      createOne: true,
+      findOne: true,
+      deleteOne: { meta: { routes: { enabled: false } } },
+    },
+  })
   @Controller("todos")
   class ServiceOnlyDeleteController {}
 

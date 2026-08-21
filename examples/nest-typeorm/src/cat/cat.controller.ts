@@ -36,8 +36,9 @@ import {
  * Validation: `createOne`/`updateOne` are `@Override()`'d purely to give
  * their body parameter a concrete, `class-validator`-decorated type — see
  * `owner.controller.ts`'s own validation note for why. No `patchOne`
- * override: the operation is disabled below (`operations.patchOne: false`),
- * so there is no route to give a body type to. Each override also strips
+ * override: `operations` below is an exclusive whitelist and `patchOne`
+ * is deliberately not named in it, so it's off and there is no route to
+ * give a body type to. Each override also strips
  * `size` back off the DTO when it's still `cat.dtos.ts`'s own sentinel
  * default — that marker object only exists for Swagger's benefit
  * (`cat.dtos.ts`'s own comment) and is never a real `PetSizeEnum` value the
@@ -88,7 +89,12 @@ import {
     edges: { tags: { write: true }, photos: { write: { strategy: "resource" } } },
   },
   operations: {
-    patchOne: false,
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    deleteOne: true,
+    // patchOne is deliberately not named here, so it stays off.
   },
 })
 @Controller("cats")

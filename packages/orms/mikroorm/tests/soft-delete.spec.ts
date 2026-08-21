@@ -78,7 +78,15 @@ beforeAll(async () => {
   const kavo = createMikroOrmKavo(orm);
   tickets = kavo.createCrud(Ticket, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    operations: { purgeOne: true },
+    operations: {
+      createOne: true,
+      deleteOne: true,
+      findMany: true,
+      findOne: true,
+      patchOne: true,
+      restoreOne: true,
+      purgeOne: true,
+    },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
     softDelete: { strategy: "soft", field: "archivedAt" },

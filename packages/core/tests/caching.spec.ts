@@ -105,7 +105,7 @@ describe("ETag generation", () => {
   });
 
   it("tags a restoreOne response too", async () => {
-    const { crud } = makeAccountCrud({ operations: { restoreOne: true } });
+    const { crud } = makeAccountCrud({ operations: { createOne: true, deleteOne: true, restoreOne: true } });
     await crud.createOne({ name: "a" } as never);
     await crud.deleteOne(1);
 
@@ -292,7 +292,9 @@ describe("If-Match on a write", () => {
     const adapter = new InMemoryUserAdapter();
     const crud = createKavo().createCrud(
       User,
-      { operations: { findOne: { dto: { output: UserProfileDto } } } } as never,
+      {
+        operations: { createOne: true, updateOne: true, findOne: { enabled: true, dto: { output: UserProfileDto } } },
+      } as never,
       { adapter, metadata: userMetadata },
     );
     await execute(crud, { operation: "createOne", body: ADA as never });
@@ -454,7 +456,23 @@ describe("If-Match on a write", () => {
 describe("If-Match on a soft-deleted row", () => {
   /** A soft-deleted account plus the tag its `withDeleted` read serves. */
   async function trashed(config: EntityConfigArg) {
-    const made = makeAccountCrud(config);
+    // createOne/deleteOne/findOne are what the fixture itself needs to run,
+    // independent of whichever operation the caller is actually testing —
+    // declaring `operations` at all makes it an exclusive whitelist
+    // (issue #257), so they have to be named here too.
+    const withFixtureOps =
+      config === undefined
+        ? config
+        : {
+            ...config,
+            operations: {
+              createOne: true,
+              deleteOne: true,
+              findOne: true,
+              ...(config as { operations?: object }).operations,
+            },
+          };
+    const made = makeAccountCrud(withFixtureOps as EntityConfigArg);
     await execute(made.crud as never, { operation: "createOne", body: { name: "a" } as never });
     await execute(made.crud as never, { operation: "deleteOne", id: 1 });
     const found = await execute(made.crud as never, {
@@ -623,7 +641,7 @@ describe("If-Match the engine cannot evaluate is refused, never dropped", () => 
   });
 
   it("refuses it when findOne is disabled, rather than leaking a tag the API never serves", async () => {
-    const { crud, adapter } = makeCrud({ operations: { findOne: false } } as never);
+    const { crud, adapter } = makeCrud({ operations: { createOne: true, patchOne: true } } as never); // findOne left off, so it's disabled
     await execute(crud, { operation: "createOne", body: ADA as never });
 
     const attempt = execute(crud, {
@@ -656,7 +674,11 @@ describe("cache.etag: false disables both halves", () => {
       "operation",
       () =>
         makeCrud({
-          operations: { findOne: { cache: { etag: false } }, patchOne: { cache: { etag: false } } },
+          operations: {
+            createOne: true,
+            findOne: { enabled: true, cache: { etag: false } },
+            patchOne: { enabled: true, cache: { etag: false } },
+          },
         } as never),
       null,
     ],

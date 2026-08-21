@@ -30,8 +30,10 @@ the one input both registry builds share:
   cannot see.
 - `purgeOne` is off until named: `operations: { purgeOne: true }`.
   Permanently destroying data is not a default.
-- Either may also be switched with `operations.<id>: true | false` or
-  `{ enabled }`.
+- Either may also be switched with the `operations.<id>: true | false`
+  shorthand, or enabled by naming it with an object carrying settings
+  (issue #257 — declaring `operations` at all makes it an exclusive
+  whitelist; see ADR-0015 for what that means for the global default).
 
 `createCrud` — the first moment config and metadata are both known —
 rejects the mismatch: enabling a soft-delete operation on an entity that

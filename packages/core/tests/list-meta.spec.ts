@@ -30,9 +30,9 @@ function fixedHandler(result: FindManyResult<User>): OperationHandler<User, unkn
   };
 }
 
-/** Config that swaps in `handler` for `findMany`, nothing else. */
+/** Config that swaps in `handler` for `findMany`, plus createOne for fixture setup. */
 function findManyHandler(handler: OperationHandler<User, unknown, unknown>) {
-  return { operations: { findMany: { handler } } } as never;
+  return { operations: { createOne: true, findMany: { enabled: true, handler } } } as never;
 }
 
 const ADA = { name: "Ada", email: "ada@example.com", age: 36 };
@@ -141,7 +141,9 @@ describe("ListResultDto.meta — the handler's contribution reaches the envelope
       {
         pagination: { count: false },
         operations: {
+          createOne: true,
           findMany: {
+            enabled: true,
             handler: withListMeta<User>(builtInHandlers<User>(adapter)("findMany"), (result) => ({
               approximate: true,
               rows: result.entities.length,

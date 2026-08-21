@@ -191,7 +191,9 @@ describe("policy — a plain function per operation", () => {
 
   it("runs an arbitrary predicate against context and the loaded entity", async () => {
     const { crud, adapter } = makeCrud({
-      operations: { updateOne: { policy: (({ entity }) => entity?.title !== "locked") as Policy<Post> } },
+      operations: {
+        updateOne: { policy: (({ entity }) => entity?.title !== "locked") as Policy<Post> },
+      },
     } as never);
     adapter.rows.push({ id: 1, title: "locked", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
@@ -371,7 +373,7 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
   it("operations.<id>.policy overrides an inherited entity-level default with a different rule", async () => {
     const { crud, adapter } = makeCrud({
       policy: isAuthenticated<Post>(),
-      operations: { updateOne: { policy: hasPermission<Post>("post:update") } },
+      operations: { findMany: true, updateOne: { policy: hasPermission<Post>("post:update") } },
     } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
 
@@ -389,7 +391,7 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
   it("operations.<id>.policy: false opts one operation out of an inherited entity-level default", async () => {
     const { crud } = makeCrud({
       policy: isAuthenticated<Post>(),
-      operations: { findMany: { policy: false } },
+      operations: { createOne: true, findMany: { policy: false } },
     } as never);
     await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
     await expect(crud.createOne({ title: "x", authorId: "u-1" } as never)).rejects.toBeInstanceOf(ForbiddenException);
@@ -405,7 +407,7 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
   });
 
   it("operations.<id>.policy: false opts an operation out of an inherited global default", async () => {
-    const { crud } = makeCrud({ operations: { findMany: { policy: false } } } as never, {
+    const { crud } = makeCrud({ operations: { createOne: true, findMany: { policy: false } } } as never, {
       policy: isAuthenticated(),
     });
     await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
@@ -416,7 +418,7 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
     const { crud, adapter } = makeCrud(
       {
         policy: hasPermission<Post>("entity:default"),
-        operations: { updateOne: { policy: hasPermission<Post>("operation:override") } },
+        operations: { findMany: true, updateOne: { policy: hasPermission<Post>("operation:override") } },
       } as never,
       { policy: hasPermission("global:default") },
     );
@@ -484,7 +486,9 @@ describe("policy — findOne: the deny branch on an existing row", () => {
 
 describe("policy — findMany and patchOne runtime coverage", () => {
   it("evaluates a context-only policy on findMany", async () => {
-    const { crud } = makeCrud({ operations: { findMany: { policy: hasPermission("post:list") } } } as never);
+    const { crud } = makeCrud({
+      operations: { findMany: { policy: hasPermission("post:list") } },
+    } as never);
     await expect(crud.findMany(undefined, { principal: { permissions: [] } })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -562,7 +566,7 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
   it("evaluates an owner-style check on restoreOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
       softDelete: { strategy: "soft" },
-      operations: { restoreOne: { policy: isOwner<Account>("name") } },
+      operations: { createOne: true, deleteOne: true, restoreOne: { policy: isOwner<Account>("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
@@ -575,7 +579,7 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
   it("evaluates an owner-style check on purgeOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
       softDelete: { strategy: "soft" },
-      operations: { purgeOne: { enabled: true, policy: isOwner<Account>("name") } },
+      operations: { createOne: true, deleteOne: true, purgeOne: { policy: isOwner<Account>("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
@@ -694,7 +698,7 @@ describe("policy — authorization.required default-deny switch (ADR-0035)", () 
   it("operations.<id>.authorization overrides the entity-level default per operation", async () => {
     const { crud } = makeCrud({
       authorization: { required: true },
-      operations: { findMany: { authorization: { required: false } } },
+      operations: { findOne: true, findMany: { authorization: { required: false } } },
     } as never);
     await expect(crud.findMany(undefined)).resolves.toMatchObject({ items: [] });
     await expect(crud.findOne(1)).rejects.toBeInstanceOf(ForbiddenException);
@@ -774,12 +778,16 @@ describe("policy — a required query filter, expressed inside the function", ()
   };
 
   it("denies findMany when the required filter is absent", async () => {
-    const { crud } = makeCrud({ operations: { findMany: { policy: requiresFilter("authorId") } } } as never);
+    const { crud } = makeCrud({
+      operations: { findMany: { policy: requiresFilter("authorId") } },
+    } as never);
     await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("allows findMany when the filter is present, anywhere in the AST", async () => {
-    const { crud } = makeCrud({ operations: { findMany: { policy: requiresFilter("authorId") } } } as never);
+    const { crud } = makeCrud({
+      operations: { findMany: { policy: requiresFilter("authorId") } },
+    } as never);
     await expect(
       crud.findMany({ filter: { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" } } as never),
     ).resolves.toMatchObject({ items: [] });
@@ -799,7 +807,9 @@ describe("policy — a required query filter, expressed inside the function", ()
   });
 
   it("denies unconditionally on writes, where context.query is null", async () => {
-    const { crud, adapter } = makeCrud({ operations: { updateOne: { policy: requiresFilter("authorId") } } } as never);
+    const { crud, adapter } = makeCrud({
+      operations: { updateOne: { policy: requiresFilter("authorId") } },
+    } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "x" } as never)).rejects.toBeInstanceOf(ForbiddenException);
   });

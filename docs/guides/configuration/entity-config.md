@@ -51,6 +51,10 @@ const isOwner: Policy<Post> = ({ context, entity }) => {
 @Kavo(Post, {
   policy: hasPermission("post:read"), // default for every operation on this entity
   operations: {
+    // Naming any operation here makes `operations` an exclusive whitelist
+    // (see [Operations](/guides/configuration/operations)) — a real config
+    // would also name createOne/findOne/patchOne/restoreOne/purgeOne to
+    // keep them on.
     updateOne: { policy: (args) => hasPermission("post:update")(args) && isOwner(args) }, // overrides the default
     deleteOne: { policy: (args) => hasPermission("post:delete")(args) && hasPermission("admin")(args) }, // every name required
     findMany: { policy: false }, // explicitly public, opts out of the entity-level default

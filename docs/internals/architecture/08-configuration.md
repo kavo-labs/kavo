@@ -43,8 +43,8 @@ Implemented in `mergeSettings` (`merge-settings.ts`):
 - Scalars and objects-as-values: nearer scope **replaces** farther scope,
   key by key — an override supplies only what it changes.
 - `false` disables an inheritable feature where the schema allows it
-  (`softDelete: false`, `operations.patchOne: false`); a nearer object
-  re-enables.
+  (`softDelete: false`, `operations.<id>: false` at either the global
+  boolean map or the entity scope); a nearer object re-enables.
 - Arrays replace wholesale. `undefined` scopes are skipped.
 
 `cache` is not a special case (ADR-0031): it merges with exactly the
@@ -93,12 +93,16 @@ a structurally richer, per-entity-typed shape (it also carries
 `SETTINGS_KEYS` merge (`resolve-entity-config.ts`) — folding it in would
 feed a `handler` function through the boolean-shaped global merge.
 Instead, `createOperationRegistry` resolves `enabled` for each operation
-directly, in one precedence chain: the unconditional/soft-delete-declared
-default, then the global `operations.<id>` boolean (if the entity didn't
-say anything), then the entity's own `operations.<id>` (boolean
-shorthand or `{ enabled }` long form) — which always wins. See
-ADR-0015 for what this global default can and cannot reach in
-`@kavo/nest`.
+directly. When the entity declares no `operations` key at all, the chain is
+the unconditional/soft-delete-declared default, then the global
+`operations.<id>` boolean. The moment the entity _does_ declare `operations`
+(ADR-0038, issue #257), that key becomes an explicit whitelist: an id the config
+doesn't name at all resolves to disabled, regardless of its
+unconditional/soft-delete/global default. `true`/`false` names an id
+explicitly, in either direction; an object carrying settings enables by
+being named — there's no `enabled` field, since the object's own presence
+already says so. See ADR-0015 for what the global default can and cannot
+reach in `@kavo/nest`.
 
 The entity-scope map also holds keys the global one cannot: an
 `operations` key outside the eight standard ids declares a **custom**

@@ -12,11 +12,11 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * this is the one config line that turns `deletedAt` into the marker *and*
  * puts `PATCH /owners/:id/restore` on the router (ADR-0013: route generation
  * runs before any ORM metadata exists, so config is what it can read).
- * `restoreOne: true` is explicit rather than relying on the soft-delete
- * auto-enable, because `AppModule` sets a global
- * `defaults.operations.restoreOne: false` — this entity opts back in, which
- * is the point of the precedence chain: entity config wins over the global
- * default.
+ * Naming `restoreOne` below is required regardless of the soft-delete
+ * auto-enable, because `operations` is an exclusive whitelist here (issue
+ * #257) — and it also opts back in from `AppModule`'s global
+ * `defaults.operations.restoreOne: false`, since entity config wins over
+ * the global default.
  *
  * `deletedAt` is excluded from every allowlist *and* absent from all four
  * DTO slots. Both matter: the allowlists keep it un-queryable, and the write
@@ -43,6 +43,12 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     includable: ["pets", "address"],
   },
   operations: {
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    patchOne: true,
+    deleteOne: true,
     purgeOne: true,
     restoreOne: true,
   },

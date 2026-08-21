@@ -146,7 +146,7 @@ describe("realtime — engine emit hook", () => {
     const crud = createKavo({ realtimeTransports: [transport] }).createCrud(
       Account,
       {
-        operations: { restoreOne: true, purgeOne: true },
+        operations: { createOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
         realtime: { events: {} },
       } as never,
       { adapter, metadata: accountMetadata },

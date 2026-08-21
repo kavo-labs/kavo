@@ -132,7 +132,10 @@ describe("cache settings resolution", () => {
 
   it("applies at operation scope: an operation that opts in is cached, its sibling is not", async () => {
     const store = createMemoryCacheStore();
-    const { crud, adapter } = makeCrud({ operations: { findOne: { cache: { ttl: 30 } } } } as never, store);
+    const { crud, adapter } = makeCrud(
+      { operations: { createOne: true, findMany: true, findOne: { enabled: true, cache: { ttl: 30 } } } } as never,
+      store,
+    );
     await execute(crud, { operation: "createOne", body: ADA });
     await execute(crud, { operation: "findMany" });
     const readsAfterMiss = adapter.reads;

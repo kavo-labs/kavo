@@ -28,14 +28,21 @@ Any operation can be turned off, globally or per entity, or the reverse: on by d
 ```ts
 @Kavo(Book, {
   operations: {
-    patchOne: false, // shorthand: disable outright
+    createOne: true,
+    findOne: true,
+    findMany: true,
+    updateOne: true,
+    deleteOne: true,
+    // patchOne isn't named here, so it's off.
   },
 })
 ```
 
 A disabled operation gets **no route**: `@kavo/nest`'s generator only emits a route for an enabled entry. Calling it programmatically (`service.patchOne(...)`, or `service.run(...)` for a custom id) raises `OperationDisabledException`, answered as `405 KAVO_OPERATION_DISABLED` over HTTP. That is deliberate. A caller that hits the disabled route gets a clear "this exists but isn't turned on." It never gets a bare 404 that would suggest the route was never mapped, and never a silent success.
 
-`restoreOne`/`purgeOne` follow a different default, because there's nothing to restore or purge until soft delete is declared. `restoreOne` turns on automatically the moment an entity's `softDelete` config resolves to `"soft"` ([ADR-0013](/internals/adr/0013-config-declared-soft-delete-operations)). `purgeOne` stays off until you opt in explicitly (`operations: { purgeOne: true }`), because permanently deleting a row is worth stating on purpose. See [Soft delete](/features/soft-delete) for the full walkthrough.
+**`operations` is an explicit whitelist the moment it's declared.** Omitting `patchOne` above doesn't just leave it unconfigured — it disables it, because every standard operation the config doesn't name (`createOne`, `findOne`, `findMany`, `updateOne`, `deleteOne` here) has to be named to stay on. Omit `operations` entirely and every standard operation keeps its global/built-in default; declare it and only the operations you name exist. See [Guides/Configuration/Operations](/guides/configuration/operations) for the full rule.
+
+`restoreOne`/`purgeOne` follow a different default, because there's nothing to restore or purge until soft delete is declared. `restoreOne` turns on automatically the moment an entity's `softDelete` config resolves to `"soft"` ([ADR-0013](/internals/adr/0013-config-declared-soft-delete-operations)) — but once `operations` is declared, naming it is what enables it regardless. `purgeOne` stays off until named explicitly (`operations: { purgeOne: true }`), because permanently deleting a row is worth stating on purpose. See [Soft delete](/features/soft-delete) for the full walkthrough.
 
 The batch counterparts (`createMany`, `updateMany`, …) are reserved in the registry but registered **disabled**. Calling one raises `OperationDisabledException` and no route generates. Bulk operations aren't implemented yet.
 
@@ -46,7 +53,12 @@ Beyond enable/disable, any standard operation accepts a full override object: a 
 ```ts
 @Kavo(Book, {
   operations: {
-    restoreOne: { enabled: true, meta: { routes: { path: ":id/undelete" } } },
+    createOne: true,
+    findOne: true,
+    updateOne: true,
+    patchOne: true,
+    deleteOne: true,
+    restoreOne: { meta: { routes: { path: ":id/undelete" } } },
     findMany: { pagination: { defaultLimit: 50 } },
   },
 })

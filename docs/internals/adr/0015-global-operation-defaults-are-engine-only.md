@@ -1,6 +1,8 @@
 # ADR-0015 — Global operation defaults are enforced by the engine, not decoration-time routing
 
-**Status:** accepted (issue #38)
+**Status:** accepted (issue #38); the precedence described below applies
+only when the entity's own `operations` key is absent — see the
+issue #257 note at the end.
 
 ## Context
 
@@ -70,3 +72,17 @@ nothing about entity-level disabling changes.
   bootstrap-time registration (ADR-0012's reserved option), this gap
   closes for free — nothing about the config shape here needs to change,
   only where `createOperationRegistry` is called from.
+
+## Update (issue #257)
+
+Declaring an entity's `operations` key at all now makes it an exclusive
+whitelist: every standard id the entity doesn't name is off, regardless
+of what the global default says about it. The "ahead of the
+unconditional/soft-delete default and behind the entity's own
+`operations.<id>`" precedence in Context, and "an entity that doesn't
+override a globally-disabled operation still gets the route" in
+Decision, hold only for an entity whose `operations` key is absent
+entirely. The moment it's present, the global default is bypassed for
+every id the entity doesn't name, not merely overridden for the ids it
+does — see `docs/internals/architecture/08-configuration.md` §"operations
+is a special case" for the current resolution rule.

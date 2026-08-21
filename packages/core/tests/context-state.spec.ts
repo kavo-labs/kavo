@@ -105,6 +105,7 @@ describe("KavoContext.state through the engine", () => {
     const { crud } = makeCrud({
       operations: {
         findOne: {
+          enabled: true,
           handler: {
             async execute(_input: unknown, context: KavoContext<User>) {
               context.state.set(Attempts, 1);
@@ -128,6 +129,7 @@ describe("KavoContext.state through the engine", () => {
     const { crud } = makeCrud({
       operations: {
         findOne: {
+          enabled: true,
           handler: {
             async execute(_input: unknown, context: KavoContext<User>) {
               seen.push(context.state.has(Attempts));
@@ -152,6 +154,7 @@ describe("KavoContext.state through the engine", () => {
     const { crud } = makeCrud({
       operations: {
         createOne: {
+          enabled: true,
           handler: {
             async execute(input: unknown, context: KavoContext<User>) {
               context.state.set(StartedAt, new Date(0));

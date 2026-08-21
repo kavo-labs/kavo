@@ -122,8 +122,11 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
 
 /**
  * Per-operation configuration.
- * Settings keys override entity scope for this operation only; `false` in
- * the parent `operations` record disables the operation outright.
+ * Naming a standard id in the parent `operations` record — this object, or
+ * the `true`/`false` shorthand — is what enables or disables it (ADR-0038,
+ * issue #257); there is no `enabled` field here, since `true`/`false`
+ * already says so explicitly and this object's own presence says so
+ * implicitly.
  *
  * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
  * `OperationDtoOverride` — only the fields that operation actually
@@ -135,13 +138,6 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
   DeepPartial<KavoSettings>,
   "operations"
 > {
-  /**
-   * Turn the operation on or off explicitly, overriding its default. The
-   * long form of the `false` / `true` shorthands in the parent
-   * `operations` record — spell it out when the entry also carries
-   * settings or `meta`.
-   */
-  readonly enabled?: boolean;
   /** Replacement handler — keeps the default DTO/serialization scaffolding. */
   readonly handler?: OperationHandler<Entity>;
   /** Opaque metadata consumed by the framework layer (route options). */
@@ -176,8 +172,8 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
  * actually has — a write op gets `input`/`output`, a read gets
  * `output`/`query`, and `deleteOne`/`purgeOne` (void results, no query)
  * get neither, so setting `dto` on them is a type error before it is ever
- * a bootstrap one. `false`/`true` (the enable/disable shorthand) is still
- * accepted at every id, unchanged.
+ * a bootstrap one. The `true`/`false` shorthand is still accepted at every
+ * id (ADR-0038, issue #257), for a plain enable/disable with no settings attached.
  *
  * Unlike the root `dto` map, a per-operation override is **not** narrowed
  * against the entity's own `CreateDto`/`ItemDto`/etc. — those generics are

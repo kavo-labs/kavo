@@ -13,6 +13,9 @@ produces the standard table from [CRUD operations](/core/crud-operations) with n
 ```ts
 @Kavo(Book, {
   operations: {
+    // Naming any operation makes `operations` an exclusive whitelist (see
+    // [Operations](/guides/configuration/operations)) — this reshapes
+    // findMany alone only if every other standard operation is also named.
     findMany: { meta: { routes: { path: "search" } } },
   },
 })

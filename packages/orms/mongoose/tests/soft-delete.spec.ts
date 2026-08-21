@@ -83,7 +83,15 @@ beforeAll(async () => {
   // returns, which is what these tests assert.
   tickets = kavo.createCrud(models.Ticket, {
     softDelete: { field: "deletedAt" },
-    operations: { purgeOne: true },
+    operations: {
+      createOne: true,
+      deleteOne: true,
+      findMany: true,
+      findOne: true,
+      patchOne: true,
+      restoreOne: true,
+      purgeOne: true,
+    },
   }) as unknown as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(models.Invoice, {
     softDelete: { field: "archivedAt" },

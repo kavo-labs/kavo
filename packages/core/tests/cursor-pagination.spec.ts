@@ -920,7 +920,9 @@ describe("cursor pagination end to end", () => {
       User,
       {
         operations: {
+          createOne: true,
           findMany: {
+            enabled: true,
             handler: {
               async execute(_input: unknown, context: { query: { pagination: { limit: number } } }) {
                 return { entities: adapter.rows.slice(0, context.query.pagination.limit), total: adapter.rows.length };
