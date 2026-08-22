@@ -31,6 +31,8 @@ The key columns are creatable but not updatable by default: `createOne` accepts 
 
 Offset, page, cursor, and since pagination all work. Association by id ([ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes)) works in both directions: a composite entity can be a relation's source (`include=` from its owner) or its target. A write body names it as either an object keyed by each column (`{ owner: { userId: "u1", topic: "billing" } }`) or the same `~`-delimited scalar a route id uses.
 
+`examples/nest-typeorm`'s `PetTag` (`petId`/`tagId`, no surrogate `id`) is a runnable instance of this shape, served over `GET/PUT/PATCH/DELETE /pet-tags/:petId~:tagId`: [`examples/nest-typeorm/src/pet-tag`](https://github.com/kavo-labs/kavo/tree/main/examples/nest-typeorm/src/pet-tag).
+
 ## Limitations
 
 | Area                                               | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

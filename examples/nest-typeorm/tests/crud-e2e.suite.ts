@@ -1574,5 +1574,79 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(patched.body.url).toBe("patched.png");
       await request(server()).patch(`/photos/${id}`).send({ url: "" }).expect(400);
     });
+
+    it("addresses a composite-key entity by its ~-joined route id (issue #267, ADR-0039)", async () => {
+      const cat = await request(server())
+        .post("/cats")
+        .send({ name: "Composite", age: 2, size: "small", indoor: true, livesLeft: 9 })
+        .expect(201);
+      const tag = await request(server()).post("/tags").send({ name: "composite-key-demo" }).expect(201);
+      const petId = cat.body.id as number;
+      const tagId = tag.body.id as number;
+
+      const created = await request(server()).post("/pet-tags").send({ petId, tagId, note: "  first!  " }).expect(201);
+      // `note` is trimmed by `PetTagController`'s `createOne` override.
+      expect(created.body).toEqual({ petId, tagId, note: "first!" });
+
+      const routeId = `${petId}~${tagId}`;
+      const fetched = await request(server()).get(`/pet-tags/${routeId}`).expect(200);
+      expect(fetched.body).toEqual({ petId, tagId, note: "first!" });
+
+      // `petId`/`tagId` are creatable but not updatable (ADR-0039's
+      // default) — PUT only carries `note`.
+      const updated = await request(server()).put(`/pet-tags/${routeId}`).send({ note: "renamed" }).expect(200);
+      expect(updated.body).toEqual({ petId, tagId, note: "renamed" });
+
+      const patched = await request(server()).patch(`/pet-tags/${routeId}`).send({ note: "  patched  " }).expect(200);
+      expect(patched.body.note).toBe("patched");
+      await request(server()).patch(`/pet-tags/${routeId}`).send({ note: "" }).expect(400);
+
+      await request(server()).delete(`/pet-tags/${routeId}`).expect(204);
+      await request(server()).get(`/pet-tags/${routeId}`).expect(404);
+    });
+
+    it("rejects an empty note on POST /pet-tags", async () => {
+      const cat = await request(server())
+        .post("/cats")
+        .send({ name: "EmptyNote", age: 1, size: "small", indoor: true, livesLeft: 9 })
+        .expect(201);
+      const tag = await request(server()).post("/tags").send({ name: "empty-note-demo" }).expect(201);
+
+      const response = await request(server())
+        .post("/pet-tags")
+        .send({ petId: cat.body.id, tagId: tag.body.id, note: "   " })
+        .expect(400);
+      expect(response.body.errors).toEqual([
+        expect.objectContaining({ field: "note", code: "KAVO_QUERY_INVALID_VALUE" }),
+      ]);
+    });
+
+    it("addresses a shared-primary-key one-to-one by its owner's own id (issue #267)", async () => {
+      const owner = await request(server())
+        .post("/owners")
+        .send({ name: "Settings Owner", email: "settings@x.io" })
+        .expect(201);
+      const ownerId = owner.body.id as number;
+
+      const created = await request(server())
+        .post("/owner-settings")
+        .send({ owner: ownerId, theme: "dark", emailNotifications: false })
+        .expect(201);
+      // `owner_id` — this entity's sole primary column — comes from the
+      // `owner` relation's join column, never a raw field on the body.
+      expect(created.body).toEqual({ owner_id: ownerId, theme: "dark", emailNotifications: false });
+
+      const fetched = await request(server()).get(`/owner-settings/${ownerId}`).expect(200);
+      expect(fetched.body).toEqual({ owner_id: ownerId, theme: "dark", emailNotifications: false });
+
+      const patched = await request(server())
+        .patch(`/owner-settings/${ownerId}`)
+        .send({ emailNotifications: true })
+        .expect(200);
+      expect(patched.body).toEqual({ owner_id: ownerId, theme: "dark", emailNotifications: true });
+
+      await request(server()).delete(`/owner-settings/${ownerId}`).expect(204);
+      await request(server()).get(`/owner-settings/${ownerId}`).expect(404);
+    });
   });
 }
