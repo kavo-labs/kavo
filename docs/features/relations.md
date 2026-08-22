@@ -79,6 +79,8 @@ class BookController {}
 
 `replaceRelation`/`readRelation`/`addRelationMember`/`removeRelationMember` are all optional adapter methods. `@kavo/typeorm` implements every one of them today; an app on an adapter that doesn't yet is told so at bootstrap (`ConfigurationException`), the moment a relation opts in, rather than failing on the first request.
 
+One narrower case gets the same bootstrap treatment: opting a **composite-key** entity's own **many-to-many** relation into array-mutation writes. TypeORM's `RelationQueryBuilder.add`/`.set` validate the member value's shape against the _owning_ side's join-column count, which is 2+ for a composite-key owner and unsatisfiable by any bare member id on the related entity's side — an upstream TypeORM limitation, not a Kavo restriction. A composite-key entity's **one-to-many** relations are unaffected. See [Composite primary keys](/features/composite-primary-keys) and [ADR-0039](/internals/adr/0039-composite-primary-keys-are-typeorm-only) for the full detail.
+
 `jsonPatch` reuses `patchOne`'s existing `PATCH /<entity>/:id` route instead of adding a new one: an array body is parsed as an RFC 6902 patch document, while an object body keeps `patchOne`'s ordinary contract unchanged.
 
 See [ADR-0029](/internals/adr/0029-array-relations-may-opt-into-replace-writes) and [doc 12 §5](/internals/architecture/12-relations-and-includes#array-relation-mutation-arraymutation-adr-0029) for the full design and the follow-up issues tracking the remaining ORM adapters.
