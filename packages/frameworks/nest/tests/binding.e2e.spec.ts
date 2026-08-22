@@ -6,10 +6,13 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
 import type {
   DefaultKavoService,
+  EntityMetadata,
   FindManyResult,
   KavoContext,
+  KavoInfrastructure,
   NormalizedQueryContext,
   OperationHandler,
+  RepositoryAdapter,
 } from "@kavo/core";
 import {
   ConfigurationException,
@@ -2243,6 +2246,257 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect((get?.parameters ?? []).filter((p) => p.in === "header").map((p) => p.name)).toContain("If-None-Match");
     expect(get?.responses?.["304"]).toBeDefined();
     expect(get?.responses?.["200"]?.headers).toHaveProperty("ETag");
+  });
+});
+
+describe("@Kavo Swagger fallback request-body schema when no DTO is configured (issue #264)", () => {
+  type Schema = {
+    type?: string;
+    properties?: Record<string, Schema>;
+    additionalProperties?: boolean;
+    description?: string;
+  };
+
+  const bodySchema = (path: string, verb: string): Schema | undefined =>
+    (document.paths[path] as Record<string, { requestBody?: { content?: Record<string, { schema?: Schema }> } }>)?.[
+      verb
+    ]?.requestBody?.content?.["application/json"]?.schema;
+
+  let document: ReturnType<typeof SwaggerModule.createDocument>;
+
+  it("documents create/update/patch bodies from creatable/updatable when no DTO is registered", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class NoDtoController {}
+    await bootstrap(NoDtoController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `id` (the primary key) and `deletedAt` (generated) are excluded —
+    // `creatable`'s/`updatable`'s own unconfigured default already excludes
+    // them (`resolve-entity-config.ts`'s `writableBase`), and this schema
+    // must document exactly that set, not every column on the entity.
+    for (const [verb, path] of [
+      ["post", "/todos"],
+      ["put", "/todos/{id}"],
+      ["patch", "/todos/{id}"],
+    ] as const) {
+      const schema = bodySchema(path, verb);
+      expect(Object.keys(schema?.properties ?? {})).toEqual(["title", "done", "priority"]);
+      expect(schema?.properties?.title).toEqual({ type: "string" });
+      expect(schema?.properties?.done).toEqual({ type: "boolean" });
+      expect(schema?.properties?.priority).toEqual({ type: "number" });
+      // `creatable`/`updatable` narrow silently (an unknown body key is
+      // dropped, not rejected), so the synthesized schema must not declare
+      // itself closed — that would tell a validating client a body Kavo
+      // actually accepts is invalid.
+      expect(schema?.additionalProperties).toBeUndefined();
+    }
+  });
+
+  it("documents an explicit empty creatable/updatable allowlist as closed via description, not silence", async () => {
+    @Kavo(Todo, { allowlists: { creatable: [], updatable: [] } })
+    @Controller("todos")
+    class ClosedController {}
+    await bootstrap(ClosedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const schema = bodySchema("/todos", "post");
+    expect(schema?.properties).toEqual({});
+    expect(schema?.description).toBe("No field is writable.");
+  });
+
+  it("narrows the documented body to an explicit creatable/updatable allowlist", async () => {
+    @Kavo(Todo, { allowlists: { creatable: ["title"], updatable: ["done"] } })
+    @Controller("todos")
+    class NarrowedController {}
+    await bootstrap(NarrowedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title"]);
+    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["done"]);
+    expect(Object.keys(bodySchema("/todos/{id}", "patch")?.properties ?? {})).toEqual(["done"]);
+  });
+
+  it("leaves a configured DTO's own documented body untouched", async () => {
+    class CreateTodoDto {
+      title = "";
+    }
+    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Controller("todos")
+    class DtoController {}
+    await bootstrap(DtoController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // The create body comes from the DTO alone; the fallback must not also
+    // run and, say, widen it back out to every writable column.
+    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title"]);
+    // No DTO is registered for update/patch, so those still fall back.
+    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["title", "done", "priority"]);
+  });
+
+  it("stays idempotent across repeated bootstraps of the same controller", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class RepeatedController {}
+    await bootstrap(RepeatedController);
+    await app.close();
+    await bootstrap(RepeatedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // A second `ApiBody` application would overwrite rather than duplicate
+    // properties here, so this mainly documents that no crash/duplicate
+    // registration happens across repeated `onModuleInit` runs.
+    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "priority"]);
+  });
+});
+
+describe("@Kavo Swagger fallback success-response schema when no item/list DTO is configured (issue #264)", () => {
+  type Schema = { type?: string; properties?: Record<string, Schema>; items?: Schema };
+
+  const itemBody = (path: string, verb: string, status: string): Schema | undefined =>
+    (
+      document.paths[path] as Record<
+        string,
+        { responses?: Record<string, { content?: Record<string, { schema?: Schema }> }> }
+      >
+    )?.[verb]?.responses?.[status]?.content?.["application/json"]?.schema;
+
+  let document: ReturnType<typeof SwaggerModule.createDocument>;
+
+  it("narrows the item response to selectable when no item DTO is registered", async () => {
+    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Controller("todos")
+    class NarrowedController {}
+    await bootstrap(NarrowedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    for (const [verb, path, status] of [
+      ["post", "/todos", "201"],
+      ["put", "/todos/{id}", "200"],
+      ["patch", "/todos/{id}", "200"],
+      ["get", "/todos/{id}", "200"],
+    ] as const) {
+      expect(Object.keys(itemBody(path, verb, status)?.properties ?? {})).toEqual(["id", "title"]);
+    }
+  });
+
+  it("narrows the list envelope's element to selectable when no list/item DTO is registered", async () => {
+    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Controller("todos")
+    class NarrowedController {}
+    await bootstrap(NarrowedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const items = itemBody("/todos", "get", "200")?.properties?.items;
+    expect(Object.keys(items?.items?.properties ?? {})).toEqual(["id", "title"]);
+  });
+
+  it("documents every own column when selectable is left unconfigured, relations excluded", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class UnconfiguredController {}
+    await bootstrap(UnconfiguredController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `selectable`'s own unconfigured default is every own column
+    // (`resolve-entity-config.ts`), and `list` (the to-one relation) isn't
+    // one of `EntityMetadata.fields` — item/list schemas never document
+    // relations, the same way a real `item`/`list` DTO never carries one.
+    expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual([
+      "id",
+      "title",
+      "done",
+      "priority",
+      "deletedAt",
+    ]);
+  });
+
+  it("leaves a configured item DTO's own documented response untouched", async () => {
+    class TodoItemDto {
+      id = 0;
+      title = "";
+    }
+    @Kavo(Todo, { dto: { item: TodoItemDto }, allowlists: { selectable: ["id"] } })
+    @Controller("todos")
+    class DtoController {}
+    await bootstrap(DtoController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // The item DTO's own runtime shape wins over `selectable` entirely —
+    // narrower or not — the same precedence `bodyDtoFor` already gives a
+    // registered write DTO.
+    expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
+  });
+
+  it("wins over decoration time's { type } fallback for an entity with no own enumerable properties", async () => {
+    // A real ORM entity typically declares columns without initializers
+    // (`title!: string`), so `new Entity()` has no own properties and
+    // `successBodyFor` documents `{ type: entity }` at decoration time, not
+    // `{ schema }`. `applyResponseSchemaDocs` must still win: a lingering
+    // `type` on the merged response entry would make `@nestjs/swagger`
+    // ignore the narrowed `schema` outright and emit a `$ref` instead
+    // (`ResponseObjectFactory.create` branches on `type` truthiness).
+    class DeclaredOnlyEntity {
+      id!: number;
+      title!: string;
+      secret!: string;
+    }
+    const declaredMetadata: EntityMetadata<DeclaredOnlyEntity> = {
+      entity: DeclaredOnlyEntity,
+      name: "DeclaredOnlyEntity",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "title", kind: "string", nullable: false, generated: false },
+        { name: "secret", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [],
+    };
+    const declaredAdapter: RepositoryAdapter<DeclaredOnlyEntity> = {
+      findOneById: async () => null,
+      findOne: async () => null,
+      findMany: async () => [],
+      count: async () => 0,
+      create: async (data) => data as DeclaredOnlyEntity,
+      update: async (_id, data) => data as DeclaredOnlyEntity,
+      patch: async (_id, data) => data as DeclaredOnlyEntity,
+      delete: async () => {},
+      restore: async () => {
+        throw new Error("not exercised");
+      },
+      purge: async () => {},
+    };
+    const declaredInfrastructure: KavoInfrastructure = {
+      metadataFor: () => declaredMetadata as never,
+      adapterFor: () => declaredAdapter as never,
+    };
+
+    @Kavo(DeclaredOnlyEntity, { allowlists: { selectable: ["id", "title"] } })
+    @Controller("declared")
+    class DeclaredOnlyController {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: declaredInfrastructure }),
+        KavoModule.forFeature([DeclaredOnlyController]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    const declaredDocument = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("t").setVersion("0").build(),
+    );
+
+    const schema = (
+      declaredDocument.paths["/declared/{id}"] as Record<
+        string,
+        { responses?: Record<string, { content?: Record<string, { schema?: Schema & { $ref?: string } }> }> }
+      >
+    )?.["get"]?.responses?.["200"]?.content?.["application/json"]?.schema;
+
+    expect(schema?.$ref).toBeUndefined();
+    expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title"]);
   });
 });
 

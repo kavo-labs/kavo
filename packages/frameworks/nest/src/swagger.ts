@@ -3,6 +3,8 @@ import type {
   ClassRef,
   DtoResolver,
   EntityConfig,
+  EntityMetadata,
+  FieldMetadata,
   OperationDescriptor,
   OperationDtoMap,
   QueryFieldSelector,
@@ -533,6 +535,125 @@ export function applyPaginationDocs(
   );
 }
 
+const alreadyBodySchemaDocumented = new WeakSet<object>();
+
+/**
+ * Fallback request-body schema for `createOne`/`updateOne`/`patchOne` when
+ * the entity has no `dto.create`/`dto.update`/`dto.patch` (or
+ * `descriptor.input` override) configured — `applySwaggerMetadata`'s own
+ * `bodyDtoFor` then resolves to `null` and applies no `@ApiBody` at all,
+ * leaving a route that genuinely validates and accepts a specific field set
+ * undocumented (issue #264). Deferred to bind time for the same reason as
+ * `applyConditionalRequestDocs`/`applySearchQueryDocs`/`applyPaginationDocs`:
+ * the entity's own columns (`EntityMetadata.fields`) don't exist yet at
+ * `@Kavo` decoration time (ADR-0012), and `allowlists.creatable`/`updatable`
+ * need the full precedence chain to be final.
+ *
+ * `KavoBinder.onModuleInit` calls this only when it re-derives that
+ * `bodyDtoFor` resolved `null` at decoration time — so a route documented
+ * from a real DTO is never touched here, and an app with no
+ * `KavoModule.forRoot`/`forRootAsync` in its graph keeps today's
+ * no-body-schema behavior, the same limitation the other three deferred doc
+ * functions already carry.
+ *
+ * The synthesized schema names exactly the columns `creatable`/`updatable`
+ * actually allow — generated columns excluded the same way the default
+ * deserializer already strips them from write payloads — but deliberately
+ * carries no `additionalProperties: false`: `creatable`/`updatable` narrow
+ * *silently* (`docs/features/allowlists.md`'s opening line), the same way an
+ * unknown body key already does, so declaring the schema closed would tell a
+ * validating client/gateway that a body Kavo actually accepts is invalid.
+ * An empty allowlist still has to read as "no field is allowed" rather than
+ * fall through to no documentation at all, so that case gets a `description`
+ * saying so instead of a schema constraint — the same distinction
+ * `allowedFieldsDescription` draws for an explicit empty selector.
+ *
+ * Relation names in `creatable`/`updatable` (associable by id, ADR-0014) are
+ * not documented here: `metadata.fields` lists scalar columns only, so an
+ * entity whose default allowlist includes a relation gets that one write
+ * path silently left off the synthesized schema — the same "known gap, not
+ * a lie" tradeoff `includableRelations`'s own doc comment accepts elsewhere
+ * in this file.
+ */
+export function applyBodySchemaDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  metadata: EntityMetadata<object>,
+  allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
+): void {
+  const allowed = allowedFieldsFor(descriptor.id, allowlists);
+  if (allowed === null) return;
+  const swagger = loadSwagger();
+  if (swagger === null) return;
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyBodySchemaDocumented.has(method)) return;
+  alreadyBodySchemaDocumented.add(method);
+
+  const properties: Record<string, object> = {};
+  for (const field of metadata.fields) {
+    if (field.generated || !allowed.includes(field.name)) continue;
+    properties[field.name] = fieldSchema(field);
+  }
+  swagger.ApiBody({
+    schema: {
+      title: `${metadata.name}${titleForBodyOperation(descriptor.id)}`,
+      type: "object",
+      properties,
+      ...(allowed.length === 0 ? { description: "No field is writable." } : {}),
+    },
+  })(prototype, methodName, propertyDescriptor);
+}
+
+function allowedFieldsFor(
+  id: string,
+  allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
+): readonly string[] | null {
+  switch (id) {
+    case "createOne":
+      return allowlists.creatable;
+    case "updateOne":
+    case "patchOne":
+      return allowlists.updatable;
+    default:
+      return null;
+  }
+}
+
+function titleForBodyOperation(id: string): string {
+  switch (id) {
+    case "createOne":
+      return "Create";
+    case "updateOne":
+      return "Update";
+    default:
+      return "Patch";
+  }
+}
+
+/** Map one ORM-independent column description to its OpenAPI fragment. */
+function fieldSchema(field: FieldMetadata): object {
+  const base = ((): object => {
+    switch (field.kind) {
+      case "string":
+        return { type: "string" };
+      case "number":
+        return { type: "number" };
+      case "boolean":
+        return { type: "boolean" };
+      case "date":
+        return { type: "string", format: "date-time" };
+      case "enum":
+        return { type: "string", ...(field.enumValues !== undefined ? { enum: [...field.enumValues] } : {}) };
+      case "json":
+        return { type: "object" };
+    }
+  })();
+  return field.nullable ? { ...base, nullable: true } : base;
+}
+
 /**
  * Choose how `@ApiBody` documents a DTO. Kavo DTOs carry their shape in
  * runtime field initializers (no `@ApiProperty` decorators, by design), and
@@ -633,6 +754,80 @@ function listEnvelopeSchema(
   };
 }
 
+const alreadyResponseSchemaDocumented = new WeakSet<object>();
+
+/**
+ * Fallback success-response schema, narrowed to `selectable`, for a route
+ * whose `item`/`list` DTO `successBodyFor` had nothing but the entity itself
+ * to fall back to (issue #264's response-side counterpart to
+ * `applyBodySchemaDocs`). Without this, `successBodyFor`'s `schemaFromDto`
+ * reads the entity's own runtime shape unfiltered — every own column,
+ * regardless of `selectable` — even though the response the engine actually
+ * serializes is projected through `selectable` at request time.
+ *
+ * `descriptor.output !== null` or a real `item`/`list` DTO (`dtoResolver`
+ * resolves non-`null`, following the same `list`→`item` internal fallback
+ * `successBodyFor` already relies on) means decoration time already
+ * documented a shape that has nothing to do with `selectable`, so this
+ * leaves it alone. Deferred to bind time for the same reason as
+ * `applyBodySchemaDocs`: both `metadata.fields` and the fully resolved
+ * `allowlists.selectable` only exist once `KavoBinder.onModuleInit` runs.
+ *
+ * A second `ApiResponse({ status, schema })` call for the same status
+ * *replaces* the existing entry's `schema` while preserving its
+ * `description` (`mergeResponseEntry`'s own merge rules — see
+ * `applyConditionalRequestDocs`'s doc comment for why that merge is safe to
+ * rely on here), so this can override what `applySwaggerMetadata` already
+ * applied at decoration time rather than needing to intercept it there.
+ *
+ * That decoration-time entry carries `type: itemDto`, not `schema`, exactly
+ * when `schemaFromDto` found no own enumerable properties on a fresh
+ * instance (`successBodyFor`'s `{ type }` fallback — the common shape for a
+ * real ORM entity, whose columns are declared without initializers).
+ * `mergeResponseEntry`'s `Object.assign` only ever *adds* keys, so leaving
+ * `type` alone here would merge it alongside our `schema` — and
+ * `@nestjs/swagger`'s own `ResponseObjectFactory.create` picks the branch on
+ * `type` truthiness, so a lingering `type` wins outright and the narrowed
+ * `schema` this function just built would be silently discarded. `type:
+ * undefined` clears that key in the merge (an explicit `undefined` is still
+ * an own property `Object.assign` copies over), so the narrowed `schema`
+ * is what the document actually emits.
+ */
+export function applyResponseSchemaDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  route: RouteShape,
+  metadata: EntityMetadata<object>,
+  selectable: readonly string[],
+  dtoResolver: DtoResolver<object>,
+): void {
+  if (route.status === 204) return;
+  const isList = descriptor.cardinality === "many";
+  const slot: "item" | "list" = isList ? "list" : "item";
+  if (descriptor.output !== null || dtoResolver.resolve(slot, descriptor.id) !== null) return;
+
+  const swagger = loadSwagger();
+  if (swagger === null) return;
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyResponseSchemaDocumented.has(method)) return;
+  alreadyResponseSchemaDocumented.add(method);
+
+  const properties: Record<string, object> = {};
+  for (const field of metadata.fields) {
+    if (!selectable.includes(field.name)) continue;
+    properties[field.name] = fieldSchema(field);
+  }
+  const element = { type: "object" as const, properties };
+  const schema = isList ? listEnvelopeSchema(element, metadata.name) : { title: metadata.name, ...element };
+  // `type: undefined` clears whatever `type` decoration time's `{ type:
+  // itemDto }` fallback left on this status's response entry — see this
+  // function's doc comment for why a lingering `type` would otherwise win
+  // outright over the `schema` set here.
+  swagger.ApiResponse({ status: route.status, schema, type: undefined })(prototype, methodName, propertyDescriptor);
+}
+
 function schemaFromDto(bodyDto: ClassRef): { type: "object"; properties: Record<string, object> } | null {
   let instance: Record<string, unknown>;
   try {
@@ -714,7 +909,7 @@ function includableRelations(config: EntityConfig<object> | undefined): readonly
   return selector;
 }
 
-function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
+export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
   if (descriptor.input !== null) return descriptor.input as ClassRef;
   const resolve = (slot: "create" | "update" | "patch"): ClassRef | null =>
     dtoResolver.resolve(slot, descriptor.id) as ClassRef | null;
