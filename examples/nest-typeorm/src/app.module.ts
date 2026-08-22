@@ -11,6 +11,8 @@ import { DogController } from "./dog/dog.controller.js";
 import { TagController } from "./tag/tag.controller.js";
 import { PhotoController } from "./photo/photo.controller.js";
 import { AddressController } from "./address/address.controller.js";
+import { PetTagController } from "./pet-tag/pet-tag.controller.js";
+import { OwnerSettingController } from "./owner-setting/owner-setting.controller.js";
 
 /**
  * Reference wiring: the app hands `@kavo/nest` its infrastructure (here
@@ -74,7 +76,16 @@ export class AppModule {
           }),
         }),
       ],
-      controllers: [OwnerController, CatController, DogController, TagController, PhotoController, AddressController],
+      controllers: [
+        OwnerController,
+        CatController,
+        DogController,
+        TagController,
+        PhotoController,
+        AddressController,
+        PetTagController,
+        OwnerSettingController,
+      ],
       providers: [
         {
           provide: APP_PIPE,

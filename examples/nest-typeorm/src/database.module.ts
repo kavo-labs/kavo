@@ -7,10 +7,12 @@ import { Dog } from "./dog/dog.entity.js";
 import { Tag } from "./tag/tag.entity.js";
 import { Photo } from "./photo/photo.entity.js";
 import { Address } from "./address/address.entity.js";
+import { PetTag } from "./pet-tag/pet-tag.entity.js";
+import { OwnerSetting } from "./owner-setting/owner-setting.entity.js";
 
 export const DATA_SOURCE = Symbol("DATA_SOURCE");
 
-const entities = [Owner, Pet, Cat, Dog, Tag, Photo, Address];
+const entities = [Owner, Pet, Cat, Dog, Tag, Photo, Address, PetTag, OwnerSetting];
 
 interface ConnectionOptions {
   host: string;
