@@ -10,6 +10,8 @@ That rules out a real, common shape: a join-table-style entity whose natural key
 
 This is `@kavo/typeorm`-only. The other three ORM adapters (`@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm`) keep the single-key requirement — a separate, larger effort tracked only if it's ever needed.
 
+> **Scope update:** [ADR-0040](./0040-composite-primary-keys-extend-to-prisma.md) extends this to `@kavo/prisma` (issue #266). `@kavo/mongoose` and `@kavo/mikroorm` remain out of scope, undecided.
+
 ## Decision
 
 `EntityMetadata` gains an optional `compositeIdFields?: readonly string[]`, populated only by `@kavo/typeorm`'s `buildEntityMetadata` when an entity declares more than one `@PrimaryColumn`/`@PrimaryGeneratedColumn`. `idField` is untouched and stays required — a single-key entity behaves exactly as it did before this field existed, and the other three adapters never populate `compositeIdFields`.
