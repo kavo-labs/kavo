@@ -1,8 +1,14 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, KavoInstance } from "@kavo/core";
-import { ConfigurationException, createKavo, isEtagEnabled, writeOptedInRelationNames } from "@kavo/core";
+import type { ClassRef, KavoInstance, OperationDtoMap } from "@kavo/core";
+import {
+  ConfigurationException,
+  DefaultDtoResolver,
+  createKavo,
+  isEtagEnabled,
+  writeOptedInRelationNames,
+} from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
 import type { KavoConditionalDocEntry, KavoControllerMetadata } from "./kavo.decorator.js";
 import {
@@ -14,7 +20,14 @@ import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
 import { resolvePrincipalExtractor } from "./principal.js";
-import { applyConditionalRequestDocs, applyPaginationDocs, applySearchQueryDocs } from "./swagger.js";
+import {
+  applyBodySchemaDocs,
+  applyConditionalRequestDocs,
+  applyPaginationDocs,
+  applyResponseSchemaDocs,
+  applySearchQueryDocs,
+  bodyDtoFor,
+} from "./swagger.js";
 import {
   KAVO_INSTANCE,
   KAVO_MODULE_OPTIONS,
@@ -387,9 +400,34 @@ class KavoBinder implements OnModuleInit {
         readonly KavoConditionalDocEntry[] | undefined;
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
+        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined);
         for (const { methodName, descriptor, route } of conditionalDocs) {
           const settings = service.engine.config.settingsFor(descriptor.id);
           applyConditionalRequestDocs(prototype, methodName, descriptor, route, isEtagEnabled(settings.cache));
+          // Fallback request-body schema (issue #264) — only when decoration
+          // time had no DTO to document (`bodyDtoFor` resolved `null`
+          // there too, from the same decoration-time config); re-derived
+          // rather than stashed, since it's a pure function of the
+          // decoration-time config already sitting in `metadata.config`.
+          if (bodyDtoFor(descriptor, dtoResolver) === null) {
+            applyBodySchemaDocs(prototype, methodName, descriptor, service.engine.metadata, {
+              creatable: service.engine.config.allowlists.creatable as readonly string[],
+              updatable: service.engine.config.allowlists.updatable as readonly string[],
+            });
+          }
+          // Fallback success-response schema, narrowed to `selectable`
+          // (issue #264's response-side counterpart) — `applyResponseSchemaDocs`
+          // itself no-ops when a real `item`/`list` DTO or `descriptor.output`
+          // already documented this route at decoration time.
+          applyResponseSchemaDocs(
+            prototype,
+            methodName,
+            descriptor,
+            route,
+            service.engine.metadata,
+            service.engine.config.allowlists.selectable as readonly string[],
+            dtoResolver,
+          );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
           // doc comment in swagger.ts): `query.search.enabled` needs the
