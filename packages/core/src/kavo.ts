@@ -510,7 +510,7 @@ function requireAssociationTargetsNotComposite<Entity extends object>(
       `relations.edges.${relation.name}`,
       `'${relation.name}' targets '${target.metadata.name}', a composite-key entity — association by id ` +
         `(ADR-0014) has no meaning for a target with no single 'idField', so composite-key relation targets ` +
-        `are not yet supported (issue #262)`,
+        `are not yet supported (issue #263)`,
     );
   }
 }

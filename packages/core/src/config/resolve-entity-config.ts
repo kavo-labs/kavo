@@ -530,7 +530,7 @@ function validateIncludableRelations<Entity>(
  * Composite-key entities (issue #261) don't yet extend the forced-sort
  * tiebreaker or the cursor/since keyset predicate past a single field —
  * that generalization (an N-column row-value comparison) is tracked
- * separately (issue #262). Rejected here, at bootstrap, rather than left to
+ * separately (issue #263). Rejected here, at bootstrap, rather than left to
  * misbehave the first time a request actually pages: both `resolveKeyset`
  * (cursor, per request) and `resolveSince`/`validateSincePagination` (since,
  * config-known) read `metadata.idField` as if it always named the whole
