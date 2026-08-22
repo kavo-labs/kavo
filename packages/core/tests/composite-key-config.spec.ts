@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ConfigurationException, createKavo, resolveEntityConfig } from "@kavo/core";
+import type { EntityId, KavoContext } from "@kavo/core";
+import { createKavo, resolveEntityConfig } from "@kavo/core";
 import { SeededAdapter } from "./support/blog-fixture.js";
 import { User, userMetadata } from "./support/user-fixture.js";
 import {
@@ -8,6 +9,24 @@ import {
   OwnerOfComposite,
   ownerOfCompositeMetadata,
 } from "./support/composite-fixture.js";
+
+/** A `replaceRelation`-capable adapter, the array-mutation counterpart of `array-mutation.spec.ts`'s `ReplaceCapableAdapter`. */
+class ReplaceCapableCompositeAdapter extends SeededAdapter<CompositeEntity> {
+  readonly calls: { id: EntityId; relation: string; memberIds: readonly EntityId[] | null }[] = [];
+
+  async replaceRelation(
+    id: EntityId,
+    relation: string,
+    memberIds: readonly EntityId[] | null,
+    _context: KavoContext<CompositeEntity>,
+  ): Promise<CompositeEntity> {
+    this.calls.push({ id, relation, memberIds });
+    const row = await this.findOneById(id, null);
+    if (row === null) throw new Error("fixture: row not found");
+    (row as unknown as Record<string, unknown>)[relation] = memberIds;
+    return row;
+  }
+}
 
 describe("resolveEntityConfig — composite-key allowlist defaults (issue #261)", () => {
   it("keeps the composite key columns in creatable's default", () => {
@@ -28,23 +47,33 @@ describe("resolveEntityConfig — composite-key allowlist defaults (issue #261)"
     expect(config.allowlists.updatable).not.toEqual(expect.arrayContaining(["id"]));
   });
 
-  it("rejects cursor pagination configured on a composite-key entity, at bootstrap", () => {
+  it("allows cursor pagination on a composite-key entity (issue #263)", () => {
     expect(() =>
       resolveEntityConfig(compositeMetadata, { pagination: { strategy: "cursor" } } as never, undefined),
-    ).toThrow(ConfigurationException);
-    expect(() =>
-      resolveEntityConfig(compositeMetadata, { pagination: { strategy: "cursor" } } as never, undefined),
-    ).toThrow(/not yet supported.*composite-key entity/);
+    ).not.toThrow();
   });
 
-  it("rejects since pagination configured on a composite-key entity, at bootstrap", () => {
+  it("allows since pagination on a composite-key entity and keeps every key column on filterable/selectable (issue #263)", () => {
+    const config = resolveEntityConfig(
+      compositeMetadata,
+      { pagination: { strategy: "since", since: { field: "key" } } } as never,
+      undefined,
+    );
+    expect(config.allowlists.filterable).toEqual(expect.arrayContaining(["userId", "topic"]));
+    expect(config.allowlists.selectable).toEqual(expect.arrayContaining(["userId", "topic"]));
+  });
+
+  it("still rejects since pagination whose forced tiebreaker column is missing from filterable, on a composite-key entity", () => {
     expect(() =>
       resolveEntityConfig(
         compositeMetadata,
-        { pagination: { strategy: "since", since: { field: "key" } } } as never,
+        {
+          pagination: { strategy: "since", since: { field: "key" } },
+          allowlists: { filterable: ["key", "topic"] }, // userId narrowed out
+        } as never,
         undefined,
       ),
-    ).toThrow(ConfigurationException);
+    ).toThrow(/forced tiebreaker column 'userId'/);
   });
 
   it("leaves offset/page pagination on a composite-key entity unaffected", () => {
@@ -56,30 +85,20 @@ describe("resolveEntityConfig — composite-key allowlist defaults (issue #261)"
 });
 
 describe("createCrud — composite-key bootstrap rejections (issue #261)", () => {
-  it("rejects a relation that opts into array-mutation writes on a composite-key entity", () => {
+  it("allows a composite-key entity's own relation to opt into array-mutation writes (issue #263)", () => {
+    const kavo = createKavo();
+    kavo.createCrud(User, undefined, { adapter: new SeededAdapter<User>(), metadata: userMetadata });
+    const adapter = new ReplaceCapableCompositeAdapter();
     expect(() =>
-      createKavo().createCrud(
+      kavo.createCrud(
         CompositeEntity,
         { relations: { edges: { tags: { write: { strategy: "replace" } } } } } as never,
-        {
-          adapter: new SeededAdapter<CompositeEntity>(),
-          metadata: compositeMetadata,
-        },
+        { adapter, metadata: compositeMetadata },
       ),
-    ).toThrow(ConfigurationException);
-    expect(() =>
-      createKavo().createCrud(
-        CompositeEntity,
-        { relations: { edges: { tags: { write: { strategy: "replace" } } } } } as never,
-        {
-          adapter: new SeededAdapter<CompositeEntity>(),
-          metadata: compositeMetadata,
-        },
-      ),
-    ).toThrow(/array-mutation writes are not yet supported for composite-key entities/);
+    ).not.toThrow();
   });
 
-  it("rejects a relation whose target is a composite-key entity, once the target is registered", () => {
+  it("allows a relation whose target is a composite-key entity (issue #263)", () => {
     const kavo = createKavo();
     kavo.createCrud(CompositeEntity, undefined, {
       adapter: new SeededAdapter<CompositeEntity>(),
@@ -90,13 +109,7 @@ describe("createCrud — composite-key bootstrap rejections (issue #261)", () =>
         adapter: new SeededAdapter<OwnerOfComposite>(),
         metadata: ownerOfCompositeMetadata,
       }),
-    ).toThrow(ConfigurationException);
-    expect(() =>
-      kavo.createCrud(OwnerOfComposite, undefined, {
-        adapter: new SeededAdapter<OwnerOfComposite>(),
-        metadata: ownerOfCompositeMetadata,
-      }),
-    ).toThrow(/composite-key relation targets are not yet supported/);
+    ).not.toThrow();
   });
 
   it("does not reject an ordinary relation to a single-key target", () => {

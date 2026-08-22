@@ -1424,7 +1424,10 @@ export class KavoEngine<Entity extends object> {
   ): ListMetaDto | undefined {
     const sinceFieldName = context.config.settings.pagination.since.field;
     const sinceField = this.entityFields.get(sinceFieldName);
-    const idField = this.entityFields.get(this.deps.metadata.idField);
+    const { compositeIdFields } = this.deps.metadata;
+    const idFieldNames = compositeIdFields ?? [this.deps.metadata.idField];
+    const idFieldsMeta = idFieldNames.map((name) => this.entityFields.get(name));
+    const idField = idFieldsMeta.every((field) => field !== undefined) ? (idFieldsMeta as FieldMetadata[]) : undefined;
     const last = result.entities[result.entities.length - 1];
     const nextSince =
       last === undefined || sinceField === undefined || idField === undefined

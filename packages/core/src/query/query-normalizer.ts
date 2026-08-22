@@ -1,5 +1,5 @@
 import type { FieldSelection, FieldSelectionInput } from "./field-selection.js";
-import type { Filter, FilterCondition, FilterExpression } from "./filter.js";
+import type { Filter, FilterCondition, FilterExpression, FilterScalar } from "./filter.js";
 import type { NormalizedQueryContext, QueryContext } from "./query-context.js";
 import type { CursorPagination, Pagination, PaginationStrategy, SincePagination } from "./pagination.js";
 import type { Sort } from "./sort.js";
@@ -16,6 +16,7 @@ import { DefaultFilterParser } from "./default-filter-parser.js";
 import { NONE_PAGINATION_LIMIT, builtInPaginationStrategies } from "./pagination-strategies.js";
 import { isCursorPagination, isSincePagination } from "./pagination.js";
 import { decodeCursor, keysetExpression } from "./cursor.js";
+import { decodeCompositeId } from "../metadata/composite-id.js";
 import { coerceScalar, isIssue } from "./value-coercion.js";
 import { parseBracketKey } from "./bracket-notation.js";
 
@@ -287,7 +288,14 @@ export class QueryNormalizer<Entity = unknown> {
     config: ResolvedEntityConfig<Entity>,
     issues: QueryIssueDto[],
   ): CursorPagination<Entity> {
-    const { idField } = this.metadata;
+    // A composite key (issue #263) has no single unique field to end the
+    // sort in — its full `compositeIdFields` tuple, in declaration order,
+    // is the tiebreaker instead. `keysetExpression`/`decodeCursor` already
+    // operate over the whole effective sort generically (an N-column
+    // row-value comparison, not a single-field special case), so the only
+    // thing this method has to generalize is what "ends in the tiebreaker"
+    // means.
+    const tiebreaker = this.metadata.compositeIdFields ?? [this.metadata.idField];
     const before = issues.length;
     for (const entry of sort) {
       const field = this.fields.get(entry.field as string);
@@ -305,13 +313,16 @@ export class QueryNormalizer<Entity = unknown> {
         requireAllowlisted(field.name, config, "selection", issues);
       }
     }
-    if (sort.length === 0 || sort[sort.length - 1]!.field !== idField) {
+    const tail = sort.slice(sort.length - tiebreaker.length).map((entry) => entry.field as string);
+    if (sort.length < tiebreaker.length || !tiebreaker.every((name, index) => tail[index] === name)) {
+      const tiebreakerText = tiebreaker.join(",");
       issues.push({
         field: "sort",
         code: "KAVO_QUERY_CONFLICTING_PARAMS",
         detail:
-          `Cursor pagination needs a total order, so the effective sort must end in the unique field ` +
-          `'${idField}' — e.g. 'sort=-createdAt,${idField}'. ` +
+          `Cursor pagination needs a total order, so the effective sort must end in the unique ` +
+          `${tiebreaker.length === 1 ? "field" : "fields, in this order,"} '${tiebreakerText}' — ` +
+          `e.g. 'sort=-createdAt,${tiebreakerText}'. ` +
           (sort.length === 0
             ? `This request has no sort and ${config.entityName} declares no 'query.defaultSort'.`
             : `This request sorts by '${sort.map((entry) => entry.field as string).join(", ")}'.`),
@@ -370,11 +381,16 @@ export class QueryNormalizer<Entity = unknown> {
     config: ResolvedEntityConfig<Entity>,
     issues: QueryIssueDto[],
   ): { sort: readonly Sort<Entity>[]; pagination: SincePagination<Entity> } {
-    const { idField } = this.metadata;
+    // A composite key (issue #263) forces the tiebreaker to its full
+    // `compositeIdFields` tuple instead of a single `idField` — the token's
+    // id half then reuses `encodeCompositeId`/`decodeCompositeId`, the same
+    // wire format a route id already uses (`sinceValueOf`, `since.ts`).
+    const tiebreaker = this.metadata.compositeIdFields ?? [this.metadata.idField];
+    const tiebreakerText = tiebreaker.join(",");
     const sinceFieldName = config.settings.pagination.since.field;
     const forcedSort: readonly Sort<Entity>[] = [
       { field: sinceFieldName as FieldPath<Entity>, direction: "asc" },
-      { field: idField as FieldPath<Entity>, direction: "asc" },
+      ...tiebreaker.map((name) => ({ field: name as FieldPath<Entity>, direction: "asc" as const })),
     ];
 
     if (clientSort.length > 0) {
@@ -382,17 +398,17 @@ export class QueryNormalizer<Entity = unknown> {
         field: "sort",
         code: "KAVO_QUERY_CONFLICTING_PARAMS",
         detail:
-          `Cannot page by 'since': the effective sort is forced to '${sinceFieldName},${idField}' ascending, ` +
-          `so requests may not supply their own 'sort'.`,
+          `Cannot page by 'since': the effective sort is forced to '${sinceFieldName},${tiebreakerText}' ` +
+          `ascending, so requests may not supply their own 'sort'.`,
       });
     }
 
     const sinceField = this.fields.get(sinceFieldName);
-    const idFieldMeta = this.fields.get(idField);
+    const tiebreakerMeta = tiebreaker.map((name) => this.fields.get(name));
     if (
       sinceField === undefined ||
       (sinceField.kind !== "date" && sinceField.kind !== "string") ||
-      idFieldMeta === undefined
+      tiebreakerMeta.some((field) => field === undefined)
     ) {
       issues.push({
         field: "pagination.since.field",
@@ -402,7 +418,7 @@ export class QueryNormalizer<Entity = unknown> {
       return { sort: forcedSort, pagination };
     }
     const before = issues.length;
-    for (const name of [sinceFieldName, idField]) {
+    for (const name of [sinceFieldName, ...tiebreaker]) {
       if (requireAllowlisted(name, config, "filtering", issues)) {
         requireAllowlisted(name, config, "selection", issues);
       }
@@ -433,17 +449,36 @@ export class QueryNormalizer<Entity = unknown> {
       return { sort: forcedSort, pagination };
     }
 
-    const id = coerceScalar(idText, "since", idFieldMeta);
-    if (isIssue(id)) {
-      issues.push(id);
-      return { sort: forcedSort, pagination };
-    }
-    if (id === null) {
-      issues.push(invalidSince(`its id half is null, which cannot happen for a real row's primary key`));
-      return { sort: forcedSort, pagination };
+    const idFieldsMeta = tiebreakerMeta as FieldMetadata[];
+    let idParts: readonly string[];
+    if (idFieldsMeta.length === 1) {
+      idParts = [idText];
+    } else {
+      const decoded = decodeCompositeId(idText, idFieldsMeta.length);
+      if (decoded === null) {
+        issues.push(
+          invalidSince(`its id half does not decode into ${idFieldsMeta.length} key columns (${tiebreakerText})`),
+        );
+        return { sort: forcedSort, pagination };
+      }
+      idParts = decoded;
     }
 
-    return { sort: forcedSort, pagination: { ...pagination, keyset: keysetExpression(forcedSort, [value, id]) } };
+    const ids: FilterScalar[] = [];
+    for (const [index, meta] of idFieldsMeta.entries()) {
+      const idValue = coerceScalar(idParts[index]!, "since", meta);
+      if (isIssue(idValue)) {
+        issues.push(idValue);
+        return { sort: forcedSort, pagination };
+      }
+      if (idValue === null) {
+        issues.push(invalidSince(`its id half is null, which cannot happen for a real row's primary key`));
+        return { sort: forcedSort, pagination };
+      }
+      ids.push(idValue);
+    }
+
+    return { sort: forcedSort, pagination: { ...pagination, keyset: keysetExpression(forcedSort, [value, ...ids]) } };
   }
 
   /**

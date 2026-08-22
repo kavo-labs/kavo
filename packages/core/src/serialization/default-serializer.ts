@@ -6,6 +6,7 @@ import type { EntityCatalog } from "../metadata/entity-catalog.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
+import { decodeCompositeId } from "../metadata/composite-id.js";
 
 /**
  * Computed fields as the projector consumes them: entity type erased,
@@ -281,9 +282,16 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * legitimate opt-in uses (assigning a natural key on `create`) that a
  * computed field never has.
  */
+/**
+ * What `associate()` needs to know about a relation's target, resolved
+ * lazily off the catalog: its single `idField`, or — for a composite-key
+ * target (issue #263) — the full ordered `compositeIdFields` tuple.
+ */
+type RelationIdSpec = { readonly idField: string } | { readonly compositeIdFields: readonly string[] };
+
 export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entity> {
   private readonly writableProjection: readonly string[];
-  private readonly relationIdFields: ReadonlyMap<string, () => string | undefined>;
+  private readonly relationIdFields: ReadonlyMap<string, () => RelationIdSpec | undefined>;
   private readonly computedNames: ReadonlySet<string>;
 
   constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
@@ -298,14 +306,16 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
         (field) => !field.generated && (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
       )
       .map((field) => field.name);
-    const relations = new Map<string, () => string | undefined>();
+    const relations = new Map<string, () => RelationIdSpec | undefined>();
     for (const relation of metadata.relations) {
       // Lazily: the target may enter the catalog after this entity does.
-      // A composite-key target is rejected up front at `createCrud`
-      // bootstrap (`requireAssociationTargetsNotComposite`, issue #261),
-      // so by the time this runs the only targets reachable here have a
-      // real single `idField`.
-      relations.set(relation.name, () => catalog?.get(relation.target())?.metadata.idField);
+      relations.set(relation.name, () => {
+        const target = catalog?.get(relation.target())?.metadata;
+        if (target === undefined) return undefined;
+        return target.compositeIdFields !== undefined
+          ? { compositeIdFields: target.compositeIdFields }
+          : { idField: target.idField };
+      });
     }
     this.relationIdFields = relations;
     // Relations join the derived default — associating by id is ordinary
@@ -345,8 +355,8 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       // longer offers a way to pollute (see `emptyNode` there), and this
       // keeps a pollution introduced anywhere else out of writes.
       if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
-      const idField = this.relationIdFields.get(key)?.();
-      result[key] = idField === undefined ? source[key] : associate(source[key], idField);
+      const spec = this.relationIdFields.get(key)?.();
+      result[key] = spec === undefined ? source[key] : associate(source[key], spec);
     }
     return result as Shape;
   }
@@ -379,15 +389,49 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
   }
 }
 
-/** `5` → `{ id: 5 }`; `{ id: 5, … }` → `{ id: 5 }`; arrays element-wise. */
-function associate(value: unknown, idField: string): unknown {
+/**
+ * `5` → `{ id: 5 }`; `{ id: 5, … }` → `{ id: 5 }`; arrays element-wise.
+ *
+ * A composite-key target (issue #263) has no single `idField` to key a
+ * reference object by, so it accepts two shapes instead: an object naming
+ * each of the target's `compositeIdFields` directly (`{owner: {userId:
+ * "u1", topic: "billing"}}`), or a bare scalar carrying the same
+ * `~`-delimited wire id a route already uses (`{owner: "u1~billing"}`,
+ * `encodeCompositeId`/`decodeCompositeId`) — the same two forms
+ * (reference object / bare scalar) a single-key target already accepts,
+ * just with a composite id on one side of each. Either narrows to the
+ * target's real column names before it ever reaches the adapter, so a
+ * TypeORM partial-entity write associates by composite key the same way
+ * it does by a single one.
+ */
+function associate(value: unknown, spec: RelationIdSpec): unknown {
   if (value === null || value === undefined) return null;
   if (Array.isArray(value)) {
-    return value.map((element) => associate(element, idField)).filter((element) => element !== null);
+    return value.map((element) => associate(element, spec)).filter((element) => element !== null);
   }
+  if ("idField" in spec) {
+    const { idField } = spec;
+    if (typeof value === "object") {
+      const id = (value as Record<string, unknown>)[idField];
+      return id === undefined ? null : { [idField]: id };
+    }
+    return { [idField]: value };
+  }
+  const { compositeIdFields } = spec;
   if (typeof value === "object") {
-    const id = (value as Record<string, unknown>)[idField];
-    return id === undefined ? null : { [idField]: id };
+    const record = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const field of compositeIdFields) {
+      const fieldValue = record[field];
+      if (fieldValue === undefined) return null;
+      result[field] = fieldValue;
+    }
+    return result;
   }
-  return { [idField]: value };
+  if (typeof value === "string") {
+    const parts = decodeCompositeId(value, compositeIdFields.length);
+    if (parts === null) return null;
+    return Object.fromEntries(compositeIdFields.map((field, index) => [field, parts[index]]));
+  }
+  return null;
 }

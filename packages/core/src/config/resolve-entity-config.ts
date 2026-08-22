@@ -88,7 +88,6 @@ export function resolveEntityConfig<Entity extends object>(
   );
   validateSettings(entityName, entitySettings);
   validateDefaultSort(entityName, entitySettings, allowlists);
-  validateCompositeKeyPagination(entityName, metadata, entitySettings);
   validateSincePagination(entityName, metadata, entitySettings, allowlists);
   validateIncludableRelations(entityName, entitySettings, allowlists);
   const relations = new DefaultRelationRegistry<Entity>(
@@ -115,7 +114,6 @@ export function resolveEntityConfig<Entity extends object>(
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
     validateDefaultSort(scope, merged, allowlists);
-    validateCompositeKeyPagination(scope, metadata, merged);
     validateSincePagination(scope, metadata, merged, allowlists);
     validateIncludableRelations(scope, merged, allowlists);
     // Resolve for its validation side effect: a per-operation scope that
@@ -526,33 +524,6 @@ function validateIncludableRelations<Entity>(
  * `"since"` by name coincidence — that misconfiguration surfaces instead
  * as a normal per-request query issue once `QueryNormalizer` runs.
  */
-/**
- * Composite-key entities (issue #261) don't yet extend the forced-sort
- * tiebreaker or the cursor/since keyset predicate past a single field —
- * that generalization (an N-column row-value comparison) is tracked
- * separately (issue #263). Rejected here, at bootstrap, rather than left to
- * misbehave the first time a request actually pages: both `resolveKeyset`
- * (cursor, per request) and `resolveSince`/`validateSincePagination` (since,
- * config-known) read `metadata.idField` as if it always named the whole
- * key, which for a composite entity it does not.
- */
-function validateCompositeKeyPagination<Entity extends object>(
-  scope: string,
-  metadata: EntityMetadata<Entity>,
-  settings: KavoSettings,
-): void {
-  if (metadata.compositeIdFields === undefined) return;
-  const { strategy } = settings.pagination;
-  if (strategy !== "cursor" && strategy !== "since") return;
-  throw new ConfigurationException(
-    scope,
-    "pagination.strategy",
-    `'${strategy}' pagination is not yet supported for '${metadata.name}', a composite-key entity — ` +
-      `it forces a sort tiebreaker on the (single-column) primary key, which this entity does not have. ` +
-      `Use 'offset' or 'page' pagination instead.`,
-  );
-}
-
 function validateSincePagination<Entity extends object>(
   scope: string,
   metadata: EntityMetadata<Entity>,
@@ -579,10 +550,20 @@ function validateSincePagination<Entity extends object>(
       `'${field}' must be a 'date'- or 'string'-kind column to page by, got '${sinceColumn.kind}'`,
     );
   }
-  for (const [column, reason] of [
-    [field, "'pagination.since.field'"],
-    [metadata.idField, "the forced tiebreaker 'idField'"],
-  ] as const) {
+  const tiebreaker = metadata.compositeIdFields ?? [metadata.idField];
+  const columnsToCheck: Array<{ column: string; reason: string }> = [
+    { column: field, reason: "'pagination.since.field'" },
+  ];
+  for (const name of tiebreaker) {
+    columnsToCheck.push({
+      column: name,
+      reason:
+        metadata.compositeIdFields === undefined
+          ? "the forced tiebreaker 'idField'"
+          : `the forced tiebreaker column '${name}' (compositeIdFields)`,
+    });
+  }
+  for (const { column, reason } of columnsToCheck) {
     if (!filterable.includes(column)) {
       throw new ConfigurationException(
         scope,

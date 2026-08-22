@@ -168,24 +168,8 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
       // strategy needs.
       const writeOptedRelations = resolved.relations.all().filter((relation) => relation.write !== undefined);
       if (writeOptedRelations.length > 0) {
-        // Array-mutation writes (`replaceRelation`/`patchRelation`/the
-        // `resource` strategy's four primitives) all key off *this*
-        // entity's own id — `RepositoryAdapter.replaceRelation(id, …)` and
-        // its siblings take the parent's id, not the related row's. None
-        // of `@kavo/typeorm`'s implementations decode a composite one yet
-        // (issue #261 scoped that decode to plain CRUD only), so a
-        // composite-key entity opting a relation into `write` fails here,
-        // at bootstrap, rather than the first time a request reaches an
-        // adapter method that would silently address the wrong row.
-        if (metadata.compositeIdFields !== undefined) {
-          throw new ConfigurationException(
-            resolved.entityName,
-            `relations.edges.${writeOptedRelations[0]!.name}.write`,
-            `'${writeOptedRelations[0]!.name}' opts into array-mutation writes, but '${resolved.entityName}' is a ` +
-              `composite-key entity — array-mutation writes are not yet supported for composite-key entities`,
-          );
-        }
         const names = writeOptedRelations.map((relation) => relation.name);
+        requireArrayMutationCapable(resolved, names, adapter as unknown as RepositoryAdapter<Entity>);
         requireArrayMutationTargetsResolvable(resolved, names, catalog);
         const byStrategy = (strategy: "replace" | "resource" | "jsonPatch"): readonly string[] =>
           writeOptedRelations.filter((relation) => relation.write === strategy).map((relation) => relation.name);
@@ -248,8 +232,6 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
           });
         }
       }
-
-      requireAssociationTargetsNotComposite(resolved, catalog);
 
       catalog.register(entity as ClassRef, {
         metadata: metadata as EntityMetadata<object>,
@@ -452,6 +434,32 @@ function requireJsonPatchSupport<Entity extends object>(
 }
 
 /**
+ * Fails fast at `createCrud` when the adapter itself knows, ahead of any
+ * request, that a specific write-opted relation can't actually be
+ * array-mutated (`RepositoryAdapter.supportsArrayMutation`) — a composite-key
+ * entity's many-to-many junction-table relation in `@kavo/typeorm` is the
+ * one case today (issue #263). Unimplemented (`undefined`) is read as "no
+ * adapter-known reason to refuse", the same optional-capability default the
+ * method itself documents.
+ */
+function requireArrayMutationCapable<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  for (const name of relationNames) {
+    if (adapter.supportsArrayMutation?.(name) === false) {
+      throw new ConfigurationException(
+        config.entityName,
+        `relations.edges.${name}.write`,
+        `'${name}' opts into array-mutation writes, but this entity's repository adapter cannot support them ` +
+          `for '${name}' specifically — see the adapter's 'supportsArrayMutation' for why`,
+      );
+    }
+  }
+}
+
+/**
  * Fails fast at `createCrud` when a write-opted relation's target entity
  * can't be resolved through the entity catalog — the same lookup
  * `resolveArrayMutationMemberIds` (`kavo-engine.ts`) needs at request time to
@@ -479,38 +487,6 @@ function requireArrayMutationTargetsResolvable<Entity extends object>(
       `'${name}' opts into array-mutation writes, but its target entity has no metadata this root can ` +
         `resolve — pass it through 'createCrud', or an 'infrastructure' that can derive its metadata, ` +
         `on the same root as '${config.entityName}'`,
-    );
-  }
-}
-
-/**
- * Fails fast at `createCrud` when a relation's target is a composite-key
- * entity (issue #261) — `DefaultDeserializer.associate()` narrows any
- * relation reference in a write body to `{ [idField]: id }` (ADR-0014),
- * which has no meaning for a target with no single `idField`. Unlike
- * {@link requireArrayMutationTargetsResolvable}, this runs for *every*
- * relation, not only array-mutation-opted ones — plain association by id
- * applies to any relation a write body can name.
- *
- * Same ordering caveat as that check: it can only see targets already
- * registered on this catalog by the time this entity's `createCrud` runs.
- * A target that registers afterward is not retroactively checked — the
- * same gap `DefaultDeserializer`'s own class doc already names for an
- * unresolvable target in general.
- */
-function requireAssociationTargetsNotComposite<Entity extends object>(
-  config: ResolvedEntityConfig<Entity>,
-  catalog: EntityCatalog,
-): void {
-  for (const relation of config.relations.all()) {
-    const target = catalog.get(relation.target());
-    if (target === undefined || target.metadata.compositeIdFields === undefined) continue;
-    throw new ConfigurationException(
-      config.entityName,
-      `relations.edges.${relation.name}`,
-      `'${relation.name}' targets '${target.metadata.name}', a composite-key entity — association by id ` +
-        `(ADR-0014) has no meaning for a target with no single 'idField', so composite-key relation targets ` +
-        `are not yet supported (issue #263)`,
     );
   }
 }

@@ -346,6 +346,18 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     return this.compositeIdFields === null ? id : this.compositeCriteria(id);
   }
 
+  /**
+   * A `findOne({ where: … })` criteria object — always a plain object,
+   * unlike {@link updateCriteria} above, whose bare-scalar single-key form
+   * is only valid as a `Repository.update`/`.delete`/`RelationQueryBuilder.of`
+   * argument. `findOne`'s `where` is never a bare scalar for either case:
+   * `{ [idField]: id }` for a single-key entity (unchanged from before this
+   * field existed), `compositeCriteria(id)`'s decoded record otherwise.
+   */
+  private findOneCriteria(id: EntityId): Record<string, unknown> {
+    return this.compositeIdFields === null ? { [this.idField]: id } : this.compositeCriteria(id);
+  }
+
   private byId(
     id: EntityId,
     context: KavoContext<Entity>,
@@ -530,6 +542,25 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   /**
+   * `false` only for a composite-key entity's (issue #263) many-to-many
+   * relation — `@JoinTable()`'s junction columns pointing back at the
+   * owning side make `relation.joinColumns.length` 2+, and TypeORM's own
+   * `RelationQueryBuilder.add`/`.set` validate the *member* value's shape
+   * against that count (`relation.joinColumns.length > 1` in
+   * `node_modules/typeorm/query-builder/RelationQueryBuilder.js`), which no
+   * bare member id — Tag, Topic, whatever the target's own single-column
+   * id is — ever satisfies. A one-to-many relation's FK lives on the child
+   * row instead, so `joinColumns` there is empty and this never refuses it.
+   */
+  supportsArrayMutation(relation: string): boolean {
+    if (this.compositeIdFields === null) return true;
+    const relationMetadata = this.dataSource
+      .getMetadata(this.entity)
+      .relations.find((candidate) => candidate.propertyName === relation);
+    return (relationMetadata?.joinColumns.length ?? 0) <= 1;
+  }
+
+  /**
    * `arrayMutation`'s `replace` strategy (ADR-0014): whole-array replace of
    * a to-many relation, computed as an add/remove diff against the
    * currently persisted membership so TypeORM's `RelationQueryBuilder`
@@ -562,7 +593,10 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
       const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
 
-      const relationBuilder = this.dataSource.createQueryBuilder().relation(this.entity, relation).of(id);
+      const relationBuilder = this.dataSource
+        .createQueryBuilder()
+        .relation(this.entity, relation)
+        .of(this.updateCriteria(id));
       const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
       const currentIds = new Set(current.map((row) => row[relatedIdField] as EntityId));
       const desiredIds = new Set(memberIds ?? []);
@@ -596,7 +630,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
 
       const reloaded = await this.repository.findOne({
-        where: { [this.idField]: id } as never,
+        where: this.findOneCriteria(id) as never,
         relations: { [relation]: true } as never,
       });
       if (reloaded === null) throw this.notFound(id, context);
@@ -624,7 +658,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   ): Promise<Entity> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const existing = await manager.getRepository(this.entity).findOne({ where: { [this.idField]: id } as never });
+        const existing = await manager.getRepository(this.entity).findOne({ where: this.findOneCriteria(id) as never });
         if (existing === null) throw this.notFound(id, context);
 
         const relationMetadata = manager.connection
@@ -640,7 +674,10 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
         const relatedEntityName = relationMetadata.inverseEntityMetadata.name;
 
-        const relationBuilder = manager.createQueryBuilder().relation(this.entity, relation).of(id);
+        const relationBuilder = manager
+          .createQueryBuilder()
+          .relation(this.entity, relation)
+          .of(this.updateCriteria(id));
         const current = (await relationBuilder.loadMany()) as ObjectLiteral[];
         const currentIds = new Set(current.map((row) => row[relatedIdField] as EntityId));
 
@@ -685,7 +722,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         }
 
         const reloaded = await manager.getRepository(this.entity).findOne({
-          where: { [this.idField]: id } as never,
+          where: this.findOneCriteria(id) as never,
           relations: { [relation]: true } as never,
         });
         if (reloaded === null) throw this.notFound(id, context);
@@ -713,7 +750,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       const existing = await this.byId(id, context, false).getOne();
       if (existing === null) throw this.notFound(id, context);
       const reloaded = await this.repository.findOne({
-        where: { [this.idField]: id } as never,
+        where: this.findOneCriteria(id) as never,
         relations: { [relation]: true } as never,
       });
       if (reloaded === null) throw this.notFound(id, context);
@@ -771,10 +808,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // Soft-delete-scoped, the same as `replaceRelation`'s own existence
         // check (`byId`) — a soft-deleted parent must 404 here too, not
         // stay reachable through `add`/`removeRelationMember`.
-        const existingQb = manager
-          .getRepository(this.entity)
-          .createQueryBuilder(this.alias)
-          .where(`${this.alias}.${this.idField} = :id`, { id });
+        const existingQb = manager.getRepository(this.entity).createQueryBuilder(this.alias);
+        if (this.compositeIdFields === null) {
+          existingQb.where(`${this.alias}.${this.idField} = :id`, { id });
+        } else {
+          existingQb.where(this.compositeCriteria(id) as ObjectLiteral);
+        }
         this.scopeToLive(existingQb, context, false, false);
         const existing = await existingQb.getOne();
         if (existing === null) throw this.notFound(id, context);
@@ -783,17 +822,24 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
         const relatedEntityName = relationMetadata.inverseEntityMetadata.name;
 
-        const relationBuilder = manager.createQueryBuilder().relation(this.entity, relation).of(id);
+        const relationBuilder = manager
+          .createQueryBuilder()
+          .relation(this.entity, relation)
+          .of(this.updateCriteria(id));
         // A targeted existence check rather than `relationBuilder.loadMany()`
         // — this only ever needs "is *this one* id currently a member?",
         // not the full current membership `patchRelation`'s batch diff
         // genuinely needs, so it stays O(1) against the join regardless of
         // how large the relation is.
-        const isMember = await manager
+        const memberCheckQb = manager
           .createQueryBuilder(this.entity, this.alias)
-          .innerJoin(`${this.alias}.${relation}`, "member", `member.${relatedIdField} = :memberId`, { memberId })
-          .where(`${this.alias}.${this.idField} = :id`, { id })
-          .getExists();
+          .innerJoin(`${this.alias}.${relation}`, "member", `member.${relatedIdField} = :memberId`, { memberId });
+        if (this.compositeIdFields === null) {
+          memberCheckQb.where(`${this.alias}.${this.idField} = :id`, { id });
+        } else {
+          memberCheckQb.andWhere(this.compositeCriteria(id) as ObjectLiteral);
+        }
+        const isMember = await memberCheckQb.getExists();
 
         if (action === "remove") {
           if (!isMember) {
@@ -819,7 +865,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         }
 
         const reloaded = await manager.getRepository(this.entity).findOne({
-          where: { [this.idField]: id } as never,
+          where: this.findOneCriteria(id) as never,
           relations: { [relation]: true } as never,
         });
         if (reloaded === null) throw this.notFound(id, context);
