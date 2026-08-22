@@ -33,6 +33,23 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
    */
   purge(id: Id, context: KavoContext<Entity>): Promise<void>;
   /**
+   * Bootstrap-time capability query for one specific relation, checked
+   * before any of `replaceRelation`/`patchRelation`/`readRelation`/
+   * `add`/`removeRelationMember` — an adapter that implements those methods
+   * in general can still know, from its own ORM's shape for *this*
+   * relation, that a particular one can't actually be array-mutated. The
+   * one caller today is a composite-key parent's many-to-many junction-table
+   * relation in `@kavo/typeorm`: TypeORM's own `RelationQueryBuilder.add`/
+   * `.set` validate the member value's shape against the *owning* side's
+   * join-column count, which is 2+ for a composite-key owner — an upstream
+   * limitation no amount of id-decoding on Kavo's side works around.
+   *
+   * Optional and defaults to `true` (unimplemented means "no adapter-known
+   * reason to refuse") — an adapter only overrides this to refuse a
+   * relation it would otherwise accept via the methods below.
+   */
+  supportsArrayMutation?(relation: string): boolean;
+  /**
    * `arrayMutation`'s `replace` strategy (ADR-0014's named extension
    * point): whole-array replace of a to-many relation, still id-only —
    * `memberIds` names the complete desired membership, `null`/`[]`

@@ -35,8 +35,23 @@ export interface EntityMetadata<Entity = unknown> {
   readonly entity: ClassRef<Entity>;
   /** Entity name used in errors and debug output (`"User"`). */
   readonly name: string;
-  /** Property name of the single primary identifier (composite keys are out of scope in v6). */
+  /**
+   * Property name of the primary identifier. For a composite-key entity
+   * (`compositeIdFields` set) this is the first declared key column —
+   * kept for adapters/debug output that still want a single name, but
+   * every seam that has to address the row's real identity reads
+   * `compositeIdFields` instead when it is present.
+   */
   readonly idField: string;
+  /**
+   * The full ordered list of primary-key columns for a composite-key
+   * entity (issue #261, `@kavo/typeorm` only as of v6.1) — `undefined`
+   * for the single-key case, which is unaffected by this field's
+   * existence. Declaration order is significant: it is the order route
+   * ids encode/decode in (`encodeCompositeId`/`decodeCompositeId`) and the
+   * order the forced sort tiebreaker composes.
+   */
+  readonly compositeIdFields?: readonly string[];
   readonly fields: readonly FieldMetadata[];
   readonly relations: readonly RelationDescriptor[];
   /**

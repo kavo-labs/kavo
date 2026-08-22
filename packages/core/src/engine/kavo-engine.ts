@@ -38,6 +38,7 @@ import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
 import { cursorValuesOf, encodeCursor } from "../query/cursor.js";
 import { sinceValueOf } from "../query/since.js";
+import { decodeCompositeId, encodeCompositeId } from "../metadata/composite-id.js";
 import { WILDCARD, canonicalize, computeEtag, isEtagEnabled, strongMatch, weakMatch } from "../caching/etag.js";
 import { createKavoContext, randomUuid } from "../context/default-kavo-context.js";
 import { mergeSettings } from "../config/merge-settings.js";
@@ -688,7 +689,14 @@ export class KavoEngine<Entity extends object> {
     result: unknown,
   ): string | number | undefined {
     if (operationId === "createOne") {
-      const value = (result as Record<string, unknown> | null)?.[this.deps.metadata.idField];
+      const { compositeIdFields } = this.deps.metadata;
+      const row = result as Record<string, unknown> | null;
+      if (compositeIdFields !== undefined) {
+        const values = compositeIdFields.map((field) => row?.[field]);
+        if (values.some((value) => typeof value !== "string" && typeof value !== "number")) return undefined;
+        return encodeCompositeId(values as readonly (string | number)[]);
+      }
+      const value = row?.[this.deps.metadata.idField];
       return typeof value === "string" || typeof value === "number" ? value : undefined;
     }
     const id = this.coerceId(request.id);
@@ -1102,9 +1110,29 @@ export class KavoEngine<Entity extends object> {
    * URL path ids arrive as strings; coerce against the id column's kind so
    * adapters always compare with the right type (and a non-numeric id on a
    * numeric column is a clean 400, not a driver error).
+   *
+   * A composite-key entity's id is one delimited string
+   * (`encodeCompositeId`/`decodeCompositeId`, issue #261) — the only check
+   * made here is that it actually decodes into the right number of parts,
+   * for a clean 400 on a malformed route id; per-field kind coercion is
+   * the adapter's job (`@kavo/typeorm` is the only one that decodes one),
+   * since core never re-encodes what it already validated.
    */
   private coerceId(id: unknown): unknown {
     const { metadata } = this.deps;
+    const { compositeIdFields } = metadata;
+    if (compositeIdFields !== undefined) {
+      if (typeof id === "string" && decodeCompositeId(id, compositeIdFields.length) === null) {
+        throw QueryValidationException.single({
+          field: "id",
+          code: "KAVO_QUERY_INVALID_VALUE",
+          detail:
+            `Id '${id}' does not decode into ${metadata.name}'s ${compositeIdFields.length} key columns ` +
+            `(${compositeIdFields.join(", ")}).`,
+        });
+      }
+      return id;
+    }
     const idField = metadata.fields.find((field) => field.name === metadata.idField);
     if (idField?.kind !== "number" || typeof id !== "string") return id;
     const value = Number(id);
@@ -1396,7 +1424,10 @@ export class KavoEngine<Entity extends object> {
   ): ListMetaDto | undefined {
     const sinceFieldName = context.config.settings.pagination.since.field;
     const sinceField = this.entityFields.get(sinceFieldName);
-    const idField = this.entityFields.get(this.deps.metadata.idField);
+    const { compositeIdFields } = this.deps.metadata;
+    const idFieldNames = compositeIdFields ?? [this.deps.metadata.idField];
+    const idFieldsMeta = idFieldNames.map((name) => this.entityFields.get(name));
+    const idField = idFieldsMeta.every((field) => field !== undefined) ? (idFieldsMeta as FieldMetadata[]) : undefined;
     const last = result.entities[result.entities.length - 1];
     const nextSince =
       last === undefined || sinceField === undefined || idField === undefined

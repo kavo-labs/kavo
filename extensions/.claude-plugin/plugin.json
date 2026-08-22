@@ -1,8 +1,8 @@
 {
   "name": "kavo-skills",
   "displayName": "Kavo Developer Skills",
-  "description": "Reference skills for building apps with Kavo — quick start, @Kavo() config, global config, query grammar, DTOs, error handling, soft delete, policy authorization, Swagger, and the GraphQL and MCP bindings, plus per-ORM wiring for TypeORM, Prisma, Mongoose, and MikroORM.",
-  "version": "1.2.0",
+  "description": "Reference skills for building apps with Kavo — quick start, @Kavo() config, global config, query grammar, DTOs, error handling, soft delete, policy authorization, composite primary keys, Swagger, and the GraphQL and MCP bindings, plus per-ORM wiring for TypeORM, Prisma, Mongoose, and MikroORM.",
+  "version": "1.3.0",
   "author": {
     "name": "Kavo Labs",
     "url": "https://github.com/kavo-labs/kavo"

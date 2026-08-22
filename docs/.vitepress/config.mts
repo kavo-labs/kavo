@@ -158,6 +158,7 @@ const config = defineConfig({
           { text: "Allowlists", link: "/features/allowlists" },
           { text: "Computed Fields", link: "/features/computed-fields" },
           { text: "Policy", link: "/features/policy" },
+          { text: "Composite Primary Keys", link: "/features/composite-primary-keys" },
         ],
       },
       {
@@ -384,6 +385,14 @@ const config = defineConfig({
               {
                 text: "0037 — policy collapses to a single predicate function, at three scopes",
                 link: "/internals/adr/0037-policy-collapses-to-a-single-predicate",
+              },
+              {
+                text: "0038 — Declaring operations at all makes it an exclusive whitelist",
+                link: "/internals/adr/0038-declared-operations-is-an-exclusive-whitelist",
+              },
+              {
+                text: "0039 — Composite primary keys, @kavo/typeorm only",
+                link: "/internals/adr/0039-composite-primary-keys-are-typeorm-only",
               },
             ],
           },

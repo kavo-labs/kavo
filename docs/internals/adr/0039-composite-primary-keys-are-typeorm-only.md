@@ -1,0 +1,34 @@
+# ADR-0039 — Composite primary keys, `@kavo/typeorm` only
+
+**Status:** accepted (issues #261, #263)
+
+## Context
+
+Every prior version of Kavo required exactly one primary column: `EntityMetadata.idField: string` is a scalar, and the request pipeline reads it as one — the forced sort tiebreaker, cursor/since pagination's keyset, the default writable-projection exclusion, association-by-id (ADR-0014), and the route `:id` param all assume a single scalar identity.
+
+That rules out a real, common shape: a join-table-style entity whose natural key is composite and has no surrogate id (`UserSentence { userId, topic }`, the motivating report — issue #261). Forcing a surrogate `id` column onto such an entity just to use Kavo is a real adopter cost for something plenty of schemas legitimately do without one.
+
+This is `@kavo/typeorm`-only. The other three ORM adapters (`@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm`) keep the single-key requirement — a separate, larger effort tracked only if it's ever needed.
+
+## Decision
+
+`EntityMetadata` gains an optional `compositeIdFields?: readonly string[]`, populated only by `@kavo/typeorm`'s `buildEntityMetadata` when an entity declares more than one `@PrimaryColumn`/`@PrimaryGeneratedColumn`. `idField` is untouched and stays required — a single-key entity behaves exactly as it did before this field existed, and the other three adapters never populate `compositeIdFields`.
+
+A composite-key entity's route id is one path segment: its key columns, in declaration order, joined by `~` (`encodeCompositeId`/`decodeCompositeId`, `@kavo/core`'s public barrel). A literal `~` inside a value is escaped by doubling it (`~~`) — chosen because the id has already passed through URL decoding by the time core sees it, so percent-escaping the separator would be silently invisible. The engine only shape-validates a composite id (it decodes into the right number of parts, or the request is a clean 400); the per-field `string`/`number` decode and the `WHERE` clause it turns into is `@kavo/typeorm`'s own job, since it is the only adapter that ever sees one.
+
+Composite key columns are **creatable but not updatable** by default: a natural key is something the client legitimately supplies on `createOne` (the same reason association-by-id's `{owner: {id}}` can name an id on create), but immutable on every write after that — the one place `creatable`'s and `updatable`'s shared default diverges.
+
+**Cursor and since pagination work on a composite-key entity** (issue #263). `keysetExpression`/`decodeCursor` (`packages/core/src/query/cursor.ts`) already operate over the whole effective sort generically — an N-column row-value comparison, not a single-field special case — so the only change needed was what "ends in the tiebreaker" means: the effective sort must end in the entity's full `compositeIdFields` tuple, in declaration order, instead of a single `idField`. Since pagination's `<value>|<id>` token reuses the same `~`-delimited encoding a route id already uses for its id half, so `resolveSince`'s `lastIndexOf("|")` split still finds exactly one boundary.
+
+**Association-by-id works against a composite-key relation target** (issue #263, ADR-0014). A single-key target accepts a bare scalar (`{owner: 7}`) or a reference object keyed by its `idField` (`{owner: {id: 7}}`); a composite target has no single field to key a reference object by, so it accepts an object naming each of `compositeIdFields` directly (`{owner: {userId: "u1", topic: "billing"}}`), or the same `~`-delimited scalar a route id uses (`{owner: "u1~billing"}`). Either narrows to the target's real column names before it reaches the adapter, so a TypeORM partial-entity write associates by composite key the same way it does by a single one.
+
+**Array-mutation relation writes on a composite-key entity work for a one-to-many relation, but not for a many-to-many one** (issue #263) — an upstream TypeORM limitation, not a Kavo scope decision. `RelationQueryBuilder.add`/`.set` (`node_modules/typeorm/query-builder/RelationQueryBuilder.js`) validate the _member_ value's shape against `relation.joinColumns.length`, which for a many-to-many relation is the junction table's columns pointing back at the _owning_ side. A composite-key owner makes that length 2+, and the check then demands the member value (a plain id on the _other_ entity, which is never composite here) carry that many keys too — unsatisfiable regardless of how the parent id decodes. A one-to-many relation's foreign key lives on the child row instead, so `joinColumns` on the parent's side of that relation is empty and the check never fires.
+
+`RepositoryAdapter`/`EntityWriter` gains an optional capability query for this: `supportsArrayMutation?(relation: string): boolean`, checked once at `createCrud` bootstrap for every relation opted into `write` — unimplemented (`undefined`) means "no adapter-known reason to refuse." `@kavo/typeorm` implements it: `false` exactly when the entity is composite-keyed and the named relation's TypeORM metadata reports more than one join column. This turns TypeORM's own confusing runtime error (`"Value to be set into the relation must be a map of relation ids"`) into a named `ConfigurationException` at bootstrap, and — unlike a blanket "composite entities can't array-mutate" rule — does not block the one-to-many case, which works.
+
+## Consequences
+
+- A composite-key entity is fully usable for plain CRUD, offset/page/cursor/since pagination, association-by-id in both directions (as a relation's source and as a write body's target), and one-to-many array-mutation writes.
+- Many-to-many array-mutation writes on a composite-key entity are refused at bootstrap, not silently broken — a real gap, not a scope cut, and one only an upstream TypeORM fix (or Kavo hand-rolling the junction-table SQL itself, deliberately not pursued here) closes.
+- `@kavo/typeorm`'s `TypeOrmRepositoryAdapter` decodes a composite id into TypeORM's own native composite-key criteria shape (a `{ column: value }` record) wherever it addresses one row by id — `Repository.update`/`.delete`/`RelationQueryBuilder.of` and `SelectQueryBuilder.where` all accept that shape natively, so no bespoke `WHERE`-building was needed beyond the decode. A `findOne({ where })` criteria object is a distinct helper (`findOneCriteria`) from the update/delete one (`updateCriteria`), since the former must always be an object and the latter's bare-scalar single-key form is only valid for the methods that accept a bare id.
+- Batched relation includes (`batchLoad`, the `whereInIds` reload behind a to-many `include=`) were generalized to key on the full primary-key tuple rather than assuming one column, since a composite-key entity can appear as the _parent_ side of its own to-many include, not only as the entity the route-id work targets directly.

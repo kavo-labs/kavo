@@ -1,5 +1,6 @@
 import type { FieldMetadata } from "../metadata/entity-metadata.js";
 import { ConfigurationException } from "../errors/exceptions.js";
+import { encodeCompositeId } from "../metadata/composite-id.js";
 
 /**
  * Since (seek-by-timestamp) pagination, in one module (ADR-0022).
@@ -29,11 +30,19 @@ import { ConfigurationException } from "../errors/exceptions.js";
 export function sinceValueOf<Entity>(
   entity: Entity,
   sinceField: FieldMetadata,
-  idField: FieldMetadata,
+  idField: FieldMetadata | readonly FieldMetadata[],
   entityName: string,
 ): string {
   const value = encodeScalar(entity, sinceField, entityName);
-  const id = encodeScalar(entity, idField, entityName);
+  const idFields = Array.isArray(idField) ? idField : [idField as FieldMetadata];
+  // A composite key (issue #263) encodes its id half the same way a route
+  // id does — `encodeCompositeId`'s `~`-delimited, `~~`-escaped join — so
+  // `resolveSince`'s `lastIndexOf("|")` split still finds exactly one
+  // boundary between the since value and the (possibly composite) id.
+  const id =
+    idFields.length === 1
+      ? encodeScalar(entity, idFields[0]!, entityName)
+      : encodeCompositeId(idFields.map((field) => encodeScalar(entity, field, entityName)));
   return `${value}|${id}`;
 }
 

@@ -169,6 +169,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
       const writeOptedRelations = resolved.relations.all().filter((relation) => relation.write !== undefined);
       if (writeOptedRelations.length > 0) {
         const names = writeOptedRelations.map((relation) => relation.name);
+        requireArrayMutationCapable(resolved, names, adapter as unknown as RepositoryAdapter<Entity>);
         requireArrayMutationTargetsResolvable(resolved, names, catalog);
         const byStrategy = (strategy: "replace" | "resource" | "jsonPatch"): readonly string[] =>
           writeOptedRelations.filter((relation) => relation.write === strategy).map((relation) => relation.name);
@@ -430,6 +431,32 @@ function requireJsonPatchSupport<Entity extends object>(
       `entity's repository adapter does not implement 'patchRelation' — jsonPatch array-mutation writes are not ` +
       `supported by this adapter yet`,
   );
+}
+
+/**
+ * Fails fast at `createCrud` when the adapter itself knows, ahead of any
+ * request, that a specific write-opted relation can't actually be
+ * array-mutated (`RepositoryAdapter.supportsArrayMutation`) — a composite-key
+ * entity's many-to-many junction-table relation in `@kavo/typeorm` is the
+ * one case today (issue #263). Unimplemented (`undefined`) is read as "no
+ * adapter-known reason to refuse", the same optional-capability default the
+ * method itself documents.
+ */
+function requireArrayMutationCapable<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  relationNames: readonly string[],
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  for (const name of relationNames) {
+    if (adapter.supportsArrayMutation?.(name) === false) {
+      throw new ConfigurationException(
+        config.entityName,
+        `relations.edges.${name}.write`,
+        `'${name}' opts into array-mutation writes, but this entity's repository adapter cannot support them ` +
+          `for '${name}' specifically — see the adapter's 'supportsArrayMutation' for why`,
+      );
+    }
+  }
 }
 
 /**

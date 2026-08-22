@@ -367,13 +367,27 @@ function resolveAllowlists<Entity extends object>(
   // relation (associable by id, ADR-0014). Kept in lockstep with that
   // constructor deliberately — `creatable`/`updatable` narrow the same set
   // the deserializer falls back to when no DTO is registered.
+  //
+  // A composite-key entity (issue #261) has no single `idField` to exclude
+  // — its key columns are a *natural* key the client supplies on
+  // `createOne`, so they stay in the writable base and `creatable`'s
+  // default. They are immutable afterward, so `updatable`'s default
+  // excludes them explicitly instead — the one place `creatable` and
+  // `updatable` genuinely diverge from their shared `writableBase`.
+  const compositeIdFields = metadata.compositeIdFields;
   const writableColumns = metadata.fields
-    .filter((field) => !field.generated && field.name !== metadata.idField)
+    .filter((field) => !field.generated && (compositeIdFields !== undefined || field.name !== metadata.idField))
     .map((field) => field.name);
   const writableBase = [...writableColumns, ...(relationNames as readonly string[])] as unknown as readonly FieldPath<
     Entity,
     1
   >[];
+  const updatableBase =
+    compositeIdFields === undefined
+      ? writableBase
+      : ((writableBase as readonly string[]).filter(
+          (name) => !compositeIdFields.includes(name),
+        ) as unknown as readonly FieldPath<Entity, 1>[]);
   const configured = entityConfig?.allowlists;
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
@@ -385,7 +399,7 @@ function resolveAllowlists<Entity extends object>(
     // fragment can usefully match (doc 05 §4).
     searchable: resolveFieldSelector(stringColumns, configured?.searchable),
     creatable: resolveFieldSelector(writableBase, configured?.creatable),
-    updatable: resolveFieldSelector(writableBase, configured?.updatable),
+    updatable: resolveFieldSelector(updatableBase, configured?.updatable),
   };
   const COMPUTED_REJECTION = {
     filterable: { verb: "filtered on", clause: "WHERE" },
@@ -536,10 +550,20 @@ function validateSincePagination<Entity extends object>(
       `'${field}' must be a 'date'- or 'string'-kind column to page by, got '${sinceColumn.kind}'`,
     );
   }
-  for (const [column, reason] of [
-    [field, "'pagination.since.field'"],
-    [metadata.idField, "the forced tiebreaker 'idField'"],
-  ] as const) {
+  const tiebreaker = metadata.compositeIdFields ?? [metadata.idField];
+  const columnsToCheck: Array<{ column: string; reason: string }> = [
+    { column: field, reason: "'pagination.since.field'" },
+  ];
+  for (const name of tiebreaker) {
+    columnsToCheck.push({
+      column: name,
+      reason:
+        metadata.compositeIdFields === undefined
+          ? "the forced tiebreaker 'idField'"
+          : `the forced tiebreaker column '${name}' (compositeIdFields)`,
+    });
+  }
+  for (const { column, reason } of columnsToCheck) {
     if (!filterable.includes(column)) {
       throw new ConfigurationException(
         scope,
