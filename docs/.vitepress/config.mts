@@ -394,6 +394,10 @@ const config = defineConfig({
                 text: "0039 — Composite primary keys, @kavo/typeorm only",
                 link: "/internals/adr/0039-composite-primary-keys-are-typeorm-only",
               },
+              {
+                text: "0040 — Composite primary keys extend to @kavo/prisma",
+                link: "/internals/adr/0040-composite-primary-keys-extend-to-prisma",
+              },
             ],
           },
         ],
