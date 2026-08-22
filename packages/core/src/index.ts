@@ -207,6 +207,7 @@ export {
   type EntityRuntimeInfo,
   type MetadataSource,
 } from "./metadata/entity-catalog.js";
+export { encodeCompositeId, decodeCompositeId } from "./metadata/composite-id.js";
 
 // ── Errors ────────────────────────────────────────────────────────────
 export {

@@ -3,7 +3,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DataSource } from "typeorm";
 import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryColumn, PrimaryGeneratedColumn } from "typeorm";
 import {
-  ConfigurationException,
   ConflictException,
   NotFoundException,
   PersistenceException,
@@ -75,7 +74,7 @@ class Widget {
   payload!: unknown;
 }
 
-/** Two primary columns: the shape Kavo refuses rather than half-supports. */
+/** Two primary columns — a composite key (issue #261). */
 @Entity()
 class CompositeKey {
   @PrimaryColumn("int")
@@ -153,12 +152,25 @@ describe("metadata derivation seam", () => {
     expect(byName["payload"]).toMatchObject({ kind: "json", nullable: true });
   });
 
-  it("refuses a composite primary key at metadata time, naming the count it found", () => {
-    // Failing here rather than later is the point: a two-column key would
-    // otherwise surface as a wrong-row read on the first `findOne`.
-    expect(() => buildEntityMetadata(dataSource, CompositeKey)).toThrow(ConfigurationException);
-    expect(() => buildEntityMetadata(dataSource, CompositeKey)).toThrow(/exactly one primary column; found 2/);
+  it("populates compositeIdFields (declaration order) for a two-column primary key, issue #261", () => {
+    const metadata = buildEntityMetadata(dataSource, CompositeKey);
+    expect(metadata.compositeIdFields).toEqual(["left", "right"]);
+    // `idField` still names a single column — the first declared one —
+    // for callers that only ever need a name, but nothing that addresses
+    // this row's real identity may rely on it alone.
+    expect(metadata.idField).toBe("left");
   });
+
+  it("leaves compositeIdFields undefined for a single-column primary key", () => {
+    expect(buildEntityMetadata(dataSource, Author).compositeIdFields).toBeUndefined();
+  });
+
+  // TypeORM itself refuses to build metadata for an entity with zero
+  // primary columns (`MissingPrimaryColumnError`, thrown at
+  // `DataSource.initialize`), so `buildEntityMetadata`'s own "found 0"
+  // branch is unreachable through a real DataSource — defense in depth
+  // for a metadata source that skipped TypeORM's own validation, not a
+  // path this suite can exercise end-to-end.
 });
 
 describe("TypeOrmRepositoryAdapter — CRUD", () => {

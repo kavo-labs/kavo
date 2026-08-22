@@ -9,7 +9,7 @@ import type { ColumnMetadata } from "typeorm/metadata/ColumnMetadata.js";
  * driver strings degrade to `string` — comparison still works, coercion
  * just doesn't narrow.
  */
-function fieldKindOf(column: ColumnMetadata): FieldKind {
+export function fieldKindOf(column: ColumnMetadata): FieldKind {
   if (column.type === Number) return "number";
   if (column.type === String) return "string";
   if (column.type === Boolean) return "boolean";
@@ -40,14 +40,22 @@ export function buildEntityMetadata<Entity extends object>(
 ): EntityMetadata<Entity> {
   const metadata = dataSource.getMetadata(entity);
 
-  if (metadata.primaryColumns.length !== 1) {
+  if (metadata.primaryColumns.length === 0) {
     throw new ConfigurationException(
       metadata.name,
       "primaryColumns",
-      `Kavo v6 requires exactly one primary column; found ${metadata.primaryColumns.length}`,
+      `Kavo requires at least one primary column; found 0`,
     );
   }
   const primary = metadata.primaryColumns[0]!;
+  // A composite key (issue #261) still names `idField` as its first
+  // declared column — kept for the callers that only ever need a single
+  // name (debug output, `notFound`'s error message) — but every seam that
+  // has to address the row's real identity reads `compositeIdFields`
+  // instead, whose presence is what actually signals "this entity is
+  // composite-keyed" to core.
+  const compositeIdFields =
+    metadata.primaryColumns.length > 1 ? metadata.primaryColumns.map((column) => column.propertyName) : undefined;
 
   const fields: FieldMetadata[] = metadata.columns
     .filter((column) => column.relationMetadata === undefined)
@@ -80,6 +88,7 @@ export function buildEntityMetadata<Entity extends object>(
     entity,
     name: metadata.name,
     idField: primary.propertyName,
+    ...(compositeIdFields !== undefined && { compositeIdFields }),
     fields,
     relations,
     // `@DeleteDateColumn` detection: the ORM's own declaration

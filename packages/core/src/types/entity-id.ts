@@ -1,7 +1,11 @@
 /**
  * Identifier types Kavo accepts for entity primary keys.
  *
- * Composite keys are out of scope for v6; an entity exposes exactly one
- * primary identifier, of one of these types.
+ * A single-column key is a bare `string`/`number`, unchanged. A
+ * composite-key entity (`EntityMetadata.compositeIdFields`, `@kavo/typeorm`
+ * only as of v6.1) still travels as one opaque `string` — its columns
+ * joined by `encodeCompositeId`/split by `decodeCompositeId` — so this
+ * type itself never widens; only the adapter that declared
+ * `compositeIdFields` knows how to read what's inside the string.
  */
 export type EntityId = string | number;

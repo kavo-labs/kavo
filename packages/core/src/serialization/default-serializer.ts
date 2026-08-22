@@ -288,12 +288,23 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
 
   constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
     this.computedNames = new Set(Object.keys(computed));
+    // A composite-key entity (issue #261) has no single `idField` to
+    // exclude — its key columns are a natural key the client legitimately
+    // supplies on `createOne`, so the derived default keeps them (narrowed
+    // back out of `updatable`'s default in `resolveAllowlists`, which is
+    // what actually keeps them immutable after creation).
     const columns = metadata.fields
-      .filter((field) => !field.generated && field.name !== metadata.idField)
+      .filter(
+        (field) => !field.generated && (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
+      )
       .map((field) => field.name);
     const relations = new Map<string, () => string | undefined>();
     for (const relation of metadata.relations) {
       // Lazily: the target may enter the catalog after this entity does.
+      // A composite-key target is rejected up front at `createCrud`
+      // bootstrap (`requireAssociationTargetsNotComposite`, issue #261),
+      // so by the time this runs the only targets reachable here have a
+      // real single `idField`.
       relations.set(relation.name, () => catalog?.get(relation.target())?.metadata.idField);
     }
     this.relationIdFields = relations;

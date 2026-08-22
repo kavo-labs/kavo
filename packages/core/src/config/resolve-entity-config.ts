@@ -88,6 +88,7 @@ export function resolveEntityConfig<Entity extends object>(
   );
   validateSettings(entityName, entitySettings);
   validateDefaultSort(entityName, entitySettings, allowlists);
+  validateCompositeKeyPagination(entityName, metadata, entitySettings);
   validateSincePagination(entityName, metadata, entitySettings, allowlists);
   validateIncludableRelations(entityName, entitySettings, allowlists);
   const relations = new DefaultRelationRegistry<Entity>(
@@ -114,6 +115,7 @@ export function resolveEntityConfig<Entity extends object>(
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
     validateDefaultSort(scope, merged, allowlists);
+    validateCompositeKeyPagination(scope, metadata, merged);
     validateSincePagination(scope, metadata, merged, allowlists);
     validateIncludableRelations(scope, merged, allowlists);
     // Resolve for its validation side effect: a per-operation scope that
@@ -367,13 +369,27 @@ function resolveAllowlists<Entity extends object>(
   // relation (associable by id, ADR-0014). Kept in lockstep with that
   // constructor deliberately — `creatable`/`updatable` narrow the same set
   // the deserializer falls back to when no DTO is registered.
+  //
+  // A composite-key entity (issue #261) has no single `idField` to exclude
+  // — its key columns are a *natural* key the client supplies on
+  // `createOne`, so they stay in the writable base and `creatable`'s
+  // default. They are immutable afterward, so `updatable`'s default
+  // excludes them explicitly instead — the one place `creatable` and
+  // `updatable` genuinely diverge from their shared `writableBase`.
+  const compositeIdFields = metadata.compositeIdFields;
   const writableColumns = metadata.fields
-    .filter((field) => !field.generated && field.name !== metadata.idField)
+    .filter((field) => !field.generated && (compositeIdFields !== undefined || field.name !== metadata.idField))
     .map((field) => field.name);
   const writableBase = [...writableColumns, ...(relationNames as readonly string[])] as unknown as readonly FieldPath<
     Entity,
     1
   >[];
+  const updatableBase =
+    compositeIdFields === undefined
+      ? writableBase
+      : ((writableBase as readonly string[]).filter(
+          (name) => !compositeIdFields.includes(name),
+        ) as unknown as readonly FieldPath<Entity, 1>[]);
   const configured = entityConfig?.allowlists;
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
@@ -385,7 +401,7 @@ function resolveAllowlists<Entity extends object>(
     // fragment can usefully match (doc 05 §4).
     searchable: resolveFieldSelector(stringColumns, configured?.searchable),
     creatable: resolveFieldSelector(writableBase, configured?.creatable),
-    updatable: resolveFieldSelector(writableBase, configured?.updatable),
+    updatable: resolveFieldSelector(updatableBase, configured?.updatable),
   };
   const COMPUTED_REJECTION = {
     filterable: { verb: "filtered on", clause: "WHERE" },
@@ -510,6 +526,33 @@ function validateIncludableRelations<Entity>(
  * `"since"` by name coincidence — that misconfiguration surfaces instead
  * as a normal per-request query issue once `QueryNormalizer` runs.
  */
+/**
+ * Composite-key entities (issue #261) don't yet extend the forced-sort
+ * tiebreaker or the cursor/since keyset predicate past a single field —
+ * that generalization (an N-column row-value comparison) is tracked
+ * separately (issue #262). Rejected here, at bootstrap, rather than left to
+ * misbehave the first time a request actually pages: both `resolveKeyset`
+ * (cursor, per request) and `resolveSince`/`validateSincePagination` (since,
+ * config-known) read `metadata.idField` as if it always named the whole
+ * key, which for a composite entity it does not.
+ */
+function validateCompositeKeyPagination<Entity extends object>(
+  scope: string,
+  metadata: EntityMetadata<Entity>,
+  settings: KavoSettings,
+): void {
+  if (metadata.compositeIdFields === undefined) return;
+  const { strategy } = settings.pagination;
+  if (strategy !== "cursor" && strategy !== "since") return;
+  throw new ConfigurationException(
+    scope,
+    "pagination.strategy",
+    `'${strategy}' pagination is not yet supported for '${metadata.name}', a composite-key entity — ` +
+      `it forces a sort tiebreaker on the (single-column) primary key, which this entity does not have. ` +
+      `Use 'offset' or 'page' pagination instead.`,
+  );
+}
+
 function validateSincePagination<Entity extends object>(
   scope: string,
   metadata: EntityMetadata<Entity>,

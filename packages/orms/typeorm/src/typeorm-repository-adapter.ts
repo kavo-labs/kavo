@@ -16,6 +16,7 @@ import {
   JsonPatchTargetNotFoundException,
   NotDeletedException,
   NotFoundException,
+  decodeCompositeId,
   hasKeyset,
   readFilter,
 } from "@kavo/core";
@@ -23,6 +24,7 @@ import type { DataSource, DeepPartial, ObjectLiteral, Repository, SelectQueryBui
 import { In } from "typeorm";
 import { FilterTranslator } from "./filter-translator.js";
 import { mapDriverError } from "./error-mapping.js";
+import { fieldKindOf } from "./metadata.js";
 
 /**
  * `RepositoryAdapter` over a TypeORM `Repository`: CRUD with hard *or*
@@ -44,6 +46,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   private readonly repository: Repository<Entity>;
   private readonly alias: string;
   private readonly idField: string;
+  /**
+   * The full ordered primary-key column list for a composite-key entity
+   * (issue #261), `null` for the single-key case, which every method
+   * below keeps behaving exactly as it did before this field existed.
+   */
+  private readonly compositeIdFields: readonly string[] | null;
   /**
    * The `@DeleteDateColumn` property, when the entity declares one. It is
    * what decides *how* a soft delete is written: TypeORM's own
@@ -70,6 +78,8 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     const metadata = dataSource.getMetadata(entity);
     this.alias = metadata.name;
     this.idField = metadata.primaryColumns[0]!.propertyName;
+    this.compositeIdFields =
+      metadata.primaryColumns.length > 1 ? metadata.primaryColumns.map((column) => column.propertyName) : null;
     this.deleteDateColumn = metadata.deleteDateColumn?.propertyName ?? null;
     this.entity = entity;
     this.relationProperties = new Set(metadata.relations.map((relation) => relation.propertyName));
@@ -223,8 +233,23 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
 
   private async batchLoad(parents: readonly ObjectLiteral[], entity: ClassRef, node: IncludeNode): Promise<void> {
     const metadata = this.dataSource.getMetadata(entity);
-    const idField = metadata.primaryColumns[0]!.propertyName;
-    const ids = [...new Set(parents.map((parent) => parent[idField] as unknown))];
+    const pkFields = metadata.primaryColumns.map((column) => column.propertyName);
+    // `entity` here is whichever entity is the *parent* being re-loaded by
+    // id — for a composite-key parent (issue #261) `whereInIds` already
+    // accepts an array of `{ column: value }` objects natively, so the
+    // only generalization needed is a canonical map key wider than a bare
+    // column value; `pkFields.length === 1` keeps the single-key case
+    // identical to before this method knew composite keys existed.
+    const rowId = (row: ObjectLiteral): unknown =>
+      pkFields.length === 1 ? row[pkFields[0]!] : Object.fromEntries(pkFields.map((field) => [field, row[field]]));
+    const rowKey = (row: ObjectLiteral): unknown =>
+      pkFields.length === 1 ? row[pkFields[0]!] : JSON.stringify(pkFields.map((field) => row[field]));
+    const seen = new Map<unknown, unknown>();
+    for (const parent of parents) {
+      const key = rowKey(parent);
+      if (!seen.has(key)) seen.set(key, rowId(parent));
+    }
+    const ids = [...seen.values()];
     const alias = metadata.name;
 
     const qb = this.dataSource
@@ -237,10 +262,10 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     this.joinNode(qb, node, alias);
 
     const loaded = await qb.getMany();
-    const byId = new Map(loaded.map((row) => [row[idField], row[node.relation.name]]));
+    const byId = new Map(loaded.map((row) => [rowKey(row), row[node.relation.name]]));
     const empty = node.relation.cardinality === "many" ? [] : null;
     for (const parent of parents) {
-      parent[node.relation.name] = byId.get(parent[idField]) ?? empty;
+      parent[node.relation.name] = byId.get(rowKey(parent)) ?? empty;
     }
     await this.loadBatches(relatedRows(parents, node.relation.name), node.relation.target(), node.children);
   }
@@ -279,13 +304,60 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     if (!withDeleted) qb.andWhere(`${this.alias}.${softDelete.field} IS NULL`);
   }
 
+  /**
+   * `id: EntityId` (one delimited string, `encodeCompositeId`/
+   * `decodeCompositeId`, issue #261) decoded into the `{ column: value }`
+   * record TypeORM's own composite-key criteria shape already is —
+   * `FindOptionsWhere<Entity>`, which `Repository.update`/`.delete` and
+   * `SelectQueryBuilder.where` all accept natively, so no bespoke WHERE
+   * building is needed beyond this decode. Only ever called when
+   * `compositeIdFields` is set; the engine has already shape-validated
+   * `id` (`KavoEngine.coerceId`), so a decode failure here means an id
+   * reached the adapter some other way (a direct `RepositoryAdapter` call,
+   * bypassing the engine) — worth a clear configuration-shaped error, not
+   * a driver-level one.
+   */
+  private compositeCriteria(id: EntityId): Record<string, unknown> {
+    const fields = this.compositeIdFields!;
+    const parts = decodeCompositeId(String(id), fields.length);
+    if (parts === null) {
+      throw new ConfigurationException(
+        this.alias,
+        "id",
+        `id '${String(id)}' does not decode into ${fields.length} key columns (${fields.join(", ")})`,
+      );
+    }
+    const metadata = this.dataSource.getMetadata(this.entity);
+    const criteria: Record<string, unknown> = {};
+    for (const [index, field] of fields.entries()) {
+      const column = metadata.primaryColumns.find((candidate) => candidate.propertyName === field)!;
+      criteria[field] = fieldKindOf(column) === "number" ? Number(parts[index]) : parts[index];
+    }
+    return criteria;
+  }
+
+  /**
+   * The criteria argument every `Repository.update`/`.delete` call below
+   * passes: the bare `id` for a single-key entity (unchanged from before
+   * this field existed), `compositeCriteria(id)`'s decoded record
+   * otherwise — both are shapes TypeORM's own criteria parameter accepts.
+   */
+  private updateCriteria(id: EntityId): unknown {
+    return this.compositeIdFields === null ? id : this.compositeCriteria(id);
+  }
+
   private byId(
     id: EntityId,
     context: KavoContext<Entity>,
     withDeleted: boolean,
     onlyDeleted = false,
   ): SelectQueryBuilder<Entity> {
-    const qb = this.repository.createQueryBuilder(this.alias).where(`${this.alias}.${this.idField} = :id`, { id });
+    const qb = this.repository.createQueryBuilder(this.alias);
+    if (this.compositeIdFields === null) {
+      qb.where(`${this.alias}.${this.idField} = :id`, { id });
+    } else {
+      qb.where(this.compositeCriteria(id) as ObjectLiteral);
+    }
     this.scopeToLive(qb, context, withDeleted, onlyDeleted);
     return qb;
   }
@@ -352,7 +424,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       // *existing* row's identity, and the soft-delete marker is
       // `deleteOne`/`restoreOne`'s state machine to change, not an
       // ordinary column an update/patch body happens to include.
-      const data = stripImmutableKeys(rawData, this.idField, context.config.softDelete.field);
+      const data = stripImmutableKeys(
+        rawData,
+        this.compositeIdFields ?? [this.idField],
+        context.config.softDelete.field,
+      );
       // Everything the body carried may have been the id and/or the marker
       // — TypeORM's `update` rejects an empty value set outright, and there
       // is nothing left to change: the current row, unmodified, is the
@@ -363,7 +439,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       if (touchesRelation) {
         return await this.repository.save(existing);
       }
-      await this.repository.update(id, data as never);
+      if (this.compositeIdFields === null) {
+        await this.repository.update(id, data as never);
+      } else {
+        await this.repository.update(this.compositeCriteria(id) as never, data as never);
+      }
       return existing;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -374,7 +454,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     const softDelete = context.config.softDelete;
     try {
       if (softDelete.strategy === "hard") {
-        const result = await this.repository.delete(id);
+        const result = await this.repository.delete(this.updateCriteria(id) as never);
         if (result.affected === 0) throw this.notFound(id, context);
         return;
       }
@@ -394,7 +474,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // matching restore's `recover` counterpart below.
         await this.repository.softRemove(existing);
       } else {
-        await this.repository.update(id, { [field]: new Date() } as never);
+        await this.repository.update(this.updateCriteria(id) as never, { [field]: new Date() } as never);
       }
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -419,7 +499,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
       // A plain marker column is a single-field write with no relation
       // involvement: mutate the already-loaded row instead of re-reading it.
-      await this.repository.update(id, { [field]: null } as never);
+      await this.repository.update(this.updateCriteria(id) as never, { [field]: null } as never);
       existing[field as keyof Entity] = null as never;
       return existing;
     } catch (error) {
@@ -442,7 +522,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
           });
         }
       }
-      const result = await this.repository.delete(id);
+      const result = await this.repository.delete(this.updateCriteria(id) as never);
       if (result.affected === 0) throw this.notFound(id, context);
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -793,11 +873,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
  */
 function stripImmutableKeys<Entity>(
   data: Partial<Entity>,
-  idField: string,
+  idFields: readonly string[],
   softDeleteField: string | null,
 ): Partial<Entity> {
   const copy = { ...(data as Record<string, unknown>) };
-  delete copy[idField];
+  for (const idField of idFields) delete copy[idField];
   if (softDeleteField !== null) delete copy[softDeleteField];
   return copy as Partial<Entity>;
 }

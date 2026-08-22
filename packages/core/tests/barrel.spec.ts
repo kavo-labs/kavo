@@ -90,6 +90,8 @@ const PUBLIC_SURFACE: readonly string[] = [
   "DtoQueryOf",
   "DtoResolver",
   "DtoSlot",
+  "decodeCompositeId",
+  "encodeCompositeId",
   "ERROR_CATALOG",
   "EntityCatalog",
   "EntityConfig",
