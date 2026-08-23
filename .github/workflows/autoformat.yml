@@ -1,0 +1,57 @@
+name: Autoformat
+
+# Separate from ci.yml on purpose: that workflow's header declares every job
+# there only reads the checkout — nothing comments, pushes, or deploys. This
+# workflow pushes commits, so it needs its own file and its own `contents:
+# write` grant rather than widening ci.yml's permissions.
+#
+# Runs on pull_request only, and only for branches in this repository (never
+# a fork): GITHUB_TOKEN can push to same-repo PR branches but has no write
+# access to a fork's branch, so a fork PR just falls through to ci.yml's
+# `format` job (check-only) instead of failing here.
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autoformat-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  autoformat:
+    name: autoformat
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm prettify
+
+      # No-op (and no commit) when prettify made no changes. `[skip ci]` in
+      # the commit message stops GitHub from re-running workflows on this
+      # push, so the fix commit itself doesn't trigger a redundant second
+      # CI pass.
+      - name: Commit formatting fixes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: autoformat [skip ci]"
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
