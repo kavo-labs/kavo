@@ -37,7 +37,7 @@
     "debug": "^4.4.3",
     "dependency-cruiser": "^18.2.0",
     "mermaid": "^11.16.1",
-    "oxlint": "^1.78.0",
+    "oxlint": "^1.79.0",
     "prettier": "^3.9.6",
     "typescript": "^5.9.3",
     "unplugin-swc": "^1.5.11",
