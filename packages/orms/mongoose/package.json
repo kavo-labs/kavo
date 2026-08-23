@@ -36,7 +36,7 @@
     "mongoose": "^7.0.0 || ^8.0.0"
   },
   "devDependencies": {
-    "mongodb-memory-server": "^10.4.3",
+    "mongodb-memory-server": "^11.2.0",
     "mongoose": "^8.24.3"
   }
 }
