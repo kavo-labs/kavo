@@ -10,6 +10,8 @@ import {
 } from "@nestjs/common";
 import { APP_PIPE } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
+import { IsString } from "class-validator";
+import type { EntityMetadata, KavoInfrastructure } from "@kavo/core";
 import { Kavo, KavoModule, Override, boundKavoService } from "@kavo/nest";
 import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
@@ -100,7 +102,7 @@ describe("generated route body metatype (issue #281)", () => {
     expect(RecordingPipe.metatypes).toEqual([UpdateTodoDto]);
   });
 
-  it("leaves the metatype unresolved when no dto.create is registered", async () => {
+  it("leaves the metatype unresolved when no dto.create is registered and the entity carries no validation decorators", async () => {
     @Kavo(Todo)
     @Controller("todos")
     class TodosController {}
@@ -125,5 +127,93 @@ describe("generated route body metatype (issue #281)", () => {
     await request(server()).post("/todos").send({ title: "x" }).expect(201);
 
     expect(RecordingPipe.metatypes).toEqual([CreateTodoDto]);
+  });
+});
+
+/**
+ * Issue #283: an unregistered `dto.create`/`dto.update`/`dto.patch` slot
+ * falls back to the entity class itself, but only when it actually carries
+ * `class-validator` decorators — gated in `entityFallbackDto`
+ * (`kavo.decorator.ts`) via `entityHasValidationMetadata`
+ * (`load-class-validator.ts`). The gate matters: under
+ * `ValidationPipe({ whitelist: true })` (this repo's own example config),
+ * naming an *undecorated* class as the body metatype would strip every
+ * property instead of validating them — the case the previous describe
+ * block's "leaves the metatype unresolved" test guards.
+ */
+class ValidatedTodo {
+  id = 0;
+  @IsString()
+  title = "";
+}
+
+function validatedTodoInfrastructure(adapter: InMemoryTodoAdapter): KavoInfrastructure {
+  const metadata: EntityMetadata<ValidatedTodo> = {
+    entity: ValidatedTodo,
+    name: "ValidatedTodo",
+    idField: "id",
+    fields: [
+      { name: "id", kind: "number", nullable: false, generated: true },
+      { name: "title", kind: "string", nullable: false, generated: false },
+    ],
+    relations: [],
+  };
+  return {
+    metadataFor: <Entity extends object>() => metadata as unknown as EntityMetadata<Entity>,
+    adapterFor: <Entity extends object>() => ({
+      findOneById: () => Promise.reject(new Error("unused")),
+      findOne: () => Promise.reject(new Error("unused")),
+      findMany: () => Promise.resolve([]),
+      count: () => Promise.resolve(0),
+      create: (data: Partial<Entity>) =>
+        Promise.resolve({ ...new ValidatedTodo(), ...data, id: adapter.rows.length + 1 } as unknown as Entity),
+      update: () => Promise.reject(new Error("unused")),
+      patch: () => Promise.reject(new Error("unused")),
+      delete: () => Promise.reject(new Error("unused")),
+      restore: () => Promise.reject(new Error("unused")),
+      purge: () => Promise.reject(new Error("unused")),
+    }),
+  };
+}
+
+describe("entity-class DTO fallback (issue #283)", () => {
+  it("exposes the entity class as the body metatype when it carries validation decorators", async () => {
+    @Kavo(ValidatedTodo)
+    @Controller("validated-todos")
+    class ValidatedTodosController {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: validatedTodoInfrastructure(new InMemoryTodoAdapter()) }),
+        KavoModule.forFeature([ValidatedTodosController] as never),
+      ],
+      providers: [{ provide: APP_PIPE, useClass: GlobalRecordingPipe }],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
+    await request(server()).post("/validated-todos").send({ title: "x" }).expect(201);
+
+    expect(RecordingPipe.metatypes).toEqual([ValidatedTodo]);
+  });
+
+  it("rejects a body that fails the entity's own validation decorators, through a real ValidationPipe", async () => {
+    @Kavo(ValidatedTodo)
+    @Controller("validated-todos")
+    class ValidatedTodosController {}
+
+    const { ValidationPipe } = await import("@nestjs/common");
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: validatedTodoInfrastructure(new InMemoryTodoAdapter()) }),
+        KavoModule.forFeature([ValidatedTodosController] as never),
+      ],
+      providers: [{ provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) }],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
+    // `title` must be a string — a number fails `@IsString()`.
+    await request(server()).post("/validated-todos").send({ title: 42 }).expect(400);
   });
 });

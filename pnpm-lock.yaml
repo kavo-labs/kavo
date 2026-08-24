@@ -278,6 +278,9 @@ importers:
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
+      class-validator:
+        specifier: ^0.15.1
+        version: 0.15.1
       graphql:
         specifier: ^17.0.2
         version: 17.0.2
