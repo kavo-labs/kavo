@@ -156,6 +156,18 @@ describe("PrismaRepositoryAdapter — CRUD", () => {
     const error = await authors.patchOne(id, { id } as never).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PatchNoChangesException);
   });
+
+  it("rejects a patch with KAVO_PATCH_NO_CHANGES when every field is present but `undefined` (issue #289)", async () => {
+    // Reproduces the entity-subclass DTO fallback under `useDefineForClassFields`:
+    // fields are *own* properties initialized to `undefined`, not absent, so a
+    // naive `Object.keys(...).length === 0` check must not be fooled by them.
+    const created = await authors.createOne({ email: "phantom@x.io", name: "Phantom", age: 5 } as never);
+    const id = (created as Author).id;
+    const phantomBody = { id: undefined, email: undefined, name: undefined, age: undefined };
+    const error = await authors.patchOne(id, phantomBody as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect((error as PatchNoChangesException).code).toBe("KAVO_PATCH_NO_CHANGES");
+  });
 });
 
 /**

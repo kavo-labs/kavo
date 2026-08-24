@@ -229,6 +229,26 @@ describe("TypeOrmRepositoryAdapter — CRUD", () => {
     const id = (created as Author).id;
     await expect(authors.updateOne(id, { id } as never)).resolves.toMatchObject({ name: "Put" });
   });
+
+  it("rejects a patch with KAVO_PATCH_NO_CHANGES when every field is present but `undefined` (issue #289)", async () => {
+    // Reproduces the entity-subclass DTO fallback under `useDefineForClassFields`:
+    // fields are *own* properties initialized to `undefined`, not absent, so a
+    // naive `Object.keys(...).length === 0` check must not be fooled by them.
+    const created = await authors.createOne({ email: "phantom@x.io", name: "Phantom", age: 5 } as never);
+    const id = (created as Author).id;
+    const phantomBody = { id: undefined, email: undefined, name: undefined, age: undefined };
+    expect(Object.keys(phantomBody)).not.toHaveLength(0);
+    const error = await authors.patchOne(id, phantomBody as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect((error as PatchNoChangesException).code).toBe("KAVO_PATCH_NO_CHANGES");
+  });
+
+  it("still applies a real field change carried alongside phantom `undefined` fields", async () => {
+    const created = await authors.createOne({ email: "mixed@x.io", name: "Mixed", age: 5 } as never);
+    const id = (created as Author).id;
+    const mixedBody = { id: undefined, email: undefined, name: "Renamed", age: undefined };
+    await expect(authors.patchOne(id, mixedBody as never)).resolves.toMatchObject({ name: "Renamed" });
+  });
 });
 
 describe("TypeOrmRepositoryAdapter — query translation", () => {
