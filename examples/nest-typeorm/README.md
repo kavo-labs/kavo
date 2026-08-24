@@ -22,7 +22,11 @@ and `Cat` additionally `@Override()` their `createOne`/`updateOne`/`patchOne`
 (see `owner.controller.ts`) to give the body a concrete compile-time type
 inside the method — since issue #281, that override is no longer required
 for the validation itself, which now also runs on a generated route.
-`Dog` is left unvalidated on purpose, as the contrast.
+`Dog` is left unvalidated on purpose, as the contrast: it registers no
+`dto.create`/`update`/`patch` _and_ carries no `class-validator` decorators
+of its own, so issue #283's entity-class fallback (`@kavo/nest` falls an
+unregistered write slot back to the entity class, but only when the entity
+itself is `class-validator`-decorated) has nothing to fall back to either.
 
 ## SQLite (default)
 

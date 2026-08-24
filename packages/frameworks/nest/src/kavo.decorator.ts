@@ -53,6 +53,7 @@ import {
 } from "./tokens.js";
 import { WireQueryPipe } from "./wire-query.pipe.js";
 import { applySwaggerMetadata, bodyDtoFor } from "./swagger.js";
+import { entityHasValidationMetadata } from "./load-class-validator.js";
 
 /**
  * One route whose conditional-request Swagger docs (ADR-0020) `@Kavo`
@@ -365,7 +366,7 @@ export function Kavo<
         if (Object.prototype.hasOwnProperty.call(controller.prototype, methodName)) {
           continue; // manual-method-wins
         }
-        defineRoute(controller.prototype, methodName, descriptor, route, erasedConfig);
+        defineRoute(controller.prototype, methodName, descriptor, route, erasedConfig, entity);
         applySwaggerMetadata(controller.prototype, methodName, descriptor, route, entity, erasedConfig);
         conditionalDocs.push({ methodName, descriptor, route });
       } else {
@@ -594,6 +595,7 @@ function defineRoute(
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
   config: EntityConfig<object> | undefined,
+  entity: ClassRef<object>,
 ): void {
   const handler = makeHandler(descriptor, route);
   Object.defineProperty(handler, "name", { value: methodName });
@@ -603,7 +605,7 @@ function defineRoute(
     configurable: true,
   });
   const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined);
-  applyRouteDecorators(prototype, methodName, descriptor, route, dtoResolver);
+  applyRouteDecorators(prototype, methodName, descriptor, route, dtoResolver, entity);
 }
 
 /**
@@ -619,9 +621,10 @@ function applyRouteDecorators(
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
   dtoResolver?: DtoResolver<object>,
+  entity?: ClassRef<object>,
 ): void {
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
-  applyParamDecorators(prototype, methodName, descriptor, route, dtoResolver);
+  applyParamDecorators(prototype, methodName, descriptor, route, dtoResolver, entity);
   // Route identity for `getResource`/`getOperation` (issue #238), written
   // on the handler function itself — the same target Nest's method
   // decorators write to — so Nest's `Reflector` can read it off
@@ -687,6 +690,7 @@ function applyParamDecorators(
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
   dtoResolver?: DtoResolver<object>,
+  entity?: ClassRef<object>,
 ): void {
   let index = 0;
   let bodyIndex = -1;
@@ -703,11 +707,26 @@ function applyParamDecorators(
   Req()(prototype, methodName, index++);
 
   if (bodyIndex === -1 || dtoResolver === undefined) return;
-  const bodyDto = bodyDtoFor(descriptor, dtoResolver);
+  const bodyDto = bodyDtoFor(descriptor, dtoResolver) ?? entityFallbackDto(descriptor, entity);
   if (bodyDto === null) return;
   const paramTypes: unknown[] = Array.from({ length: index });
   paramTypes[bodyIndex] = bodyDto;
   Reflect.defineMetadata("design:paramtypes", paramTypes, prototype, methodName);
+}
+
+/**
+ * Issue #283: when no `dto.create`/`dto.update`/`dto.patch` is registered,
+ * fall back to the entity class itself — but only when it actually carries
+ * `class-validator` decorators. An undecorated entity has no validation
+ * rules to gain, and under `ValidationPipe({ whitelist: true })` (this
+ * repo's own example config) naming an undecorated class as the body's
+ * metatype would strip every property instead of validating them, trading
+ * the silent-no-validation gap #283 closes for a silent data-loss one.
+ */
+function entityFallbackDto(descriptor: OperationDescriptor<object>, entity?: ClassRef<object>): ClassRef | null {
+  if (entity === undefined) return null;
+  if (descriptor.id !== "createOne" && descriptor.id !== "updateOne" && descriptor.id !== "patchOne") return null;
+  return entityHasValidationMetadata(entity) ? entity : null;
 }
 
 /**
