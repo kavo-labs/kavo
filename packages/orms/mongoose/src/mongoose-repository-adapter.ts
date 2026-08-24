@@ -269,12 +269,21 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    * so a body naming only the id and/or the soft-delete marker is treated
    * the same as a genuinely empty one. Raised before the document is even
    * loaded: this is a client-input problem, not a state one.
+   *
+   * Also drops any key whose value is `undefined` — a DTO instance can
+   * carry these as *own* properties (e.g. a class-fields subclass under
+   * `useDefineForClassFields`, issue #289) even though the client never
+   * sent that key, and `undefined` never means "set this to nothing" in
+   * JSON.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
     const softDeleteField = context.config.softDelete.field;
     const changes = { ...(rawData as Record<string, unknown>) };
     delete changes[this.idField];
     if (softDeleteField !== null) delete changes[softDeleteField];
+    for (const key of Object.keys(changes)) {
+      if (changes[key] === undefined) delete changes[key];
+    }
     if (Object.keys(changes).length === 0) {
       throw new PatchNoChangesException({
         messageParams: { entity: context.entityName, id: String(id) },

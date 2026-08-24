@@ -203,6 +203,17 @@ describe("MongooseRepositoryAdapter — CRUD", () => {
     expect(error.code).toBe("KAVO_PATCH_NO_CHANGES");
   });
 
+  it("rejects a patch with KAVO_PATCH_NO_CHANGES when every field is present but `undefined` (issue #289)", async () => {
+    // Reproduces the entity-subclass DTO fallback under `useDefineForClassFields`:
+    // fields are *own* properties initialized to `undefined`, not absent, so a
+    // naive `Object.keys(...).length === 0` check must not be fooled by them.
+    const created = (await authors.createOne({ email: "phantom@x.io", name: "Phantom", age: 5 } as never)) as Author;
+    const phantomBody = { _id: undefined, email: undefined, name: undefined, age: undefined };
+    const error = await rejectionOf(authors.patchOne(created._id, phantomBody as never));
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect(error.code).toBe("KAVO_PATCH_NO_CHANGES");
+  });
+
   it("rejects an empty patch before checking whether the document exists", async () => {
     // The emptiness check is client-input validation, so it fires ahead of
     // any existence check — an absent id gets the same 400 a present one

@@ -934,7 +934,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
  * `mergeAndSave`'s defence-in-depth strip: a shallow copy of `data` with
  * the id field and (when soft-deletable) the resolved marker field
  * removed, so neither reaches `merge`/`update` regardless of what a write
- * DTO declared.
+ * DTO declared. Also drops any key whose value is `undefined` — a DTO
+ * instance can carry these as *own* properties (e.g. a class-fields
+ * subclass under `useDefineForClassFields`, issue #289) even though the
+ * client never sent that key, and `undefined` never means "set this to
+ * nothing" in JSON. Leaving them in would make an effectively-empty patch
+ * look non-empty to both this function's caller and `requirePatchChanges`.
  */
 function stripImmutableKeys<Entity>(
   data: Partial<Entity>,
@@ -944,6 +949,9 @@ function stripImmutableKeys<Entity>(
   const copy = { ...(data as Record<string, unknown>) };
   for (const idField of idFields) delete copy[idField];
   if (softDeleteField !== null) delete copy[softDeleteField];
+  for (const key of Object.keys(copy)) {
+    if (copy[key] === undefined) delete copy[key];
+  }
   return copy as Partial<Entity>;
 }
 

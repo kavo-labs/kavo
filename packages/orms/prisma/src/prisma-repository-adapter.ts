@@ -247,12 +247,21 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
    * so a body naming only the id and/or the soft-delete marker is treated
    * the same as a genuinely empty one. Raised before the row is even
    * loaded: this is a client-input problem, not a state one.
+   *
+   * Also drops any key whose value is `undefined` — a DTO instance can
+   * carry these as *own* properties (e.g. a class-fields subclass under
+   * `useDefineForClassFields`, issue #289) even though the client never
+   * sent that key, and `undefined` never means "set this to nothing" in
+   * JSON.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
     const softDeleteField = context.config.softDelete.field;
     const data = { ...(rawData as Record<string, unknown>) };
     delete data[this.idField];
     if (softDeleteField !== null) delete data[softDeleteField];
+    for (const key of Object.keys(data)) {
+      if (data[key] === undefined) delete data[key];
+    }
     if (Object.keys(data).length === 0) {
       throw new PatchNoChangesException({
         messageParams: { entity: context.entityName, id: String(id) },
