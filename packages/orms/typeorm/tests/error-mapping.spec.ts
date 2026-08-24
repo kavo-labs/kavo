@@ -119,6 +119,29 @@ describe("mapDriverError — serialization failures and deadlocks", () => {
   });
 });
 
+describe("mapDriverError — invalid input syntax", () => {
+  it("maps Postgres invalid_text_representation (22P02) to a query-validation 400", () => {
+    const mapped = mapDriverError(
+      queryFailed({ code: "22P02", message: 'invalid input syntax for type uuid: "not-a-uuid"' }),
+      context,
+    );
+    expect(mapped).toBeInstanceOf(QueryValidationException);
+    expect(mapped).toMatchObject({ code: "KAVO_QUERY_INVALID", status: 400 });
+    expect((mapped as QueryValidationException).issues).toEqual([
+      {
+        field: "id",
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: 'invalid input syntax for type uuid: "not-a-uuid"',
+      },
+    ]);
+  });
+
+  it("keeps the original driver error as cause", () => {
+    const error = queryFailed({ code: "22P02" });
+    expect(mapDriverError(error, context).cause).toBe(error);
+  });
+});
+
 describe("mapDriverError — the fallback row", () => {
   it("maps an unrecognized driver code to a persistence failure", () => {
     const mapped = mapDriverError(queryFailed({ code: "42P01" }), context);
@@ -168,6 +191,7 @@ describe("mapDriverError — cause and context propagation", () => {
     ...uniqueViolations,
     ...foreignKeyViolations,
     ...retryableFailures,
+    ["Postgres invalid_text_representation", { code: "22P02" }],
     ["unknown", { code: "42P01" }],
   ] as const;
 
