@@ -14,6 +14,7 @@ import {
   ConfigurationException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   hasKeyset,
   readFilter,
 } from "@kavo/core";
@@ -287,7 +288,28 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+    this.requirePatchChanges(id, data, context);
     return this.mergeAndFlush(id, data, context);
+  }
+
+  /**
+   * `patch` (unlike `update`) rejects a body that carries no field changes
+   * — checked against the same immutable-key strip `mergeAndFlush` applies,
+   * so a body naming only the id and/or the soft-delete marker is treated
+   * the same as a genuinely empty one. Raised before the row is even
+   * loaded: this is a client-input problem, not a state one.
+   */
+  private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
+    const softDeleteField = context.config.softDelete.field;
+    const data = { ...(rawData as Record<string, unknown>) };
+    delete data[this.idField];
+    if (softDeleteField !== null) delete data[softDeleteField];
+    if (Object.keys(data).length === 0) {
+      throw new PatchNoChangesException({
+        messageParams: { entity: context.entityName, id: String(id) },
+        context: errorContext(context),
+      });
+    }
   }
 
   /**

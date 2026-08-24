@@ -178,6 +178,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "PaginationSettings",
   "PaginationStrategy",
   "PaginationStrategyName",
+  "PatchNoChangesException",
   "PersistenceException",
   "PreconditionFailedException",
   "PreconditionUnsupportedException",

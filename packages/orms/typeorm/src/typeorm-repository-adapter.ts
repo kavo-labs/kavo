@@ -16,6 +16,7 @@ import {
   JsonPatchTargetNotFoundException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   decodeCompositeId,
   hasKeyset,
   readFilter,
@@ -408,7 +409,25 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+    this.requirePatchChanges(id, data, context);
     return this.mergeAndSave(id, data, context);
+  }
+
+  /**
+   * `patch` (unlike `update`) rejects a body that carries no field changes
+   * — checked against the same immutable-key strip `mergeAndSave` applies,
+   * so a body naming only the id and/or the soft-delete marker is treated
+   * the same as a genuinely empty one. Raised before the row is even
+   * loaded: this is a client-input problem, not a state one.
+   */
+  private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
+    const data = stripImmutableKeys(rawData, this.compositeIdFields ?? [this.idField], context.config.softDelete.field);
+    if (Object.keys(data).length === 0) {
+      throw new PatchNoChangesException({
+        messageParams: { entity: context.entityName, id: String(id) },
+        context: errorContext(context),
+      });
+    }
   }
 
   /**

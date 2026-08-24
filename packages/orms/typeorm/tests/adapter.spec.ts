@@ -5,6 +5,7 @@ import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryColumn, 
 import {
   ConflictException,
   NotFoundException,
+  PatchNoChangesException,
   PersistenceException,
   QueryValidationException,
   type KavoInstance,
@@ -204,6 +205,29 @@ describe("TypeOrmRepositoryAdapter — CRUD", () => {
     await expect(authors.createOne({ email: "dup@x.io", name: "B", age: 2 } as never)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it("rejects a patch that carries no field changes with KAVO_PATCH_NO_CHANGES", async () => {
+    const created = await authors.createOne({ email: "noop@x.io", name: "Noop", age: 5 } as never);
+    const id = (created as Author).id;
+    const error = await authors.patchOne(id, {} as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect((error as PatchNoChangesException).code).toBe("KAVO_PATCH_NO_CHANGES");
+    expect((error as PatchNoChangesException).status).toBe(400);
+  });
+
+  it("rejects a patch whose only field is the immutable id", async () => {
+    const created = await authors.createOne({ email: "id-only@x.io", name: "IdOnly", age: 5 } as never);
+    const id = (created as Author).id;
+    const error = await authors.patchOne(id, { id } as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+  });
+
+  it("does not reject `updateOne` (full replace) for the same shape of body", async () => {
+    // Out of scope by design: PATCH-specific, PUT is unaffected.
+    const created = await authors.createOne({ email: "put@x.io", name: "Put", age: 5 } as never);
+    const id = (created as Author).id;
+    await expect(authors.updateOne(id, { id } as never)).resolves.toMatchObject({ name: "Put" });
   });
 });
 

@@ -203,8 +203,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       expect(created.body).not.toHaveProperty("species");
       expect(created.body).toMatchObject({ name: "Rex", breed: "lab", goodBoy: true });
 
-      // And it stays a Dog: writing `species` on update is ignored too.
-      await request(server()).patch(`/dogs/${created.body.id}`).send({ species: "cat" }).expect(200);
+      // And it stays a Dog: writing `species` on update is ignored too — the
+      // discriminator is stripped as generated, leaving no field changes,
+      // so the write is rejected rather than silently no-opped (issue #287).
+      await request(server()).patch(`/dogs/${created.body.id}`).send({ species: "cat" }).expect(400);
       expect((await request(server()).get("/dogs").expect(200)).body.items).toHaveLength(1);
     });
 
@@ -396,8 +398,11 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       // DTOs are what keep it unwritable (doc 17 §7). With `purgeOne`
       // enabled, a stampable marker would be an unauthenticated path to a
       // permanent delete.
+      // The write DTO excludes the marker, leaving no field changes — a
+      // patch body naming only it is rejected, not silently no-opped
+      // (issue #287).
       const id = await newOwner();
-      await request(server()).patch(`/owners/${id}`).send({ deletedAt: "2020-01-01T00:00:00.000Z" }).expect(200);
+      await request(server()).patch(`/owners/${id}`).send({ deletedAt: "2020-01-01T00:00:00.000Z" }).expect(400);
 
       // Still live, and still not purgeable.
       expect((await request(server()).get("/owners").expect(200)).body.total).toBe(1);
