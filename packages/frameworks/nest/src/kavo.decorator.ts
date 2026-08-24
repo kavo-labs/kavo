@@ -16,11 +16,13 @@ import { isObservable } from "rxjs";
 import type {
   ClassRef,
   DefaultKavoService,
+  DtoResolver,
   EntityConfig,
   EntityInput,
   KavoCallOptions,
   KavoResponse,
   OperationDescriptor,
+  OperationDtoMap,
   OperationId,
   OperationsConfig,
   QueryContext,
@@ -32,6 +34,7 @@ import {
   ConfigurationException,
   computeEtag,
   createOperationRegistry,
+  DefaultDtoResolver,
   isEtagEnabled,
   registerArrayMutationOperations,
 } from "@kavo/core";
@@ -49,7 +52,7 @@ import {
   KAVO_SERVICE_PROPERTY,
 } from "./tokens.js";
 import { WireQueryPipe } from "./wire-query.pipe.js";
-import { applySwaggerMetadata } from "./swagger.js";
+import { applySwaggerMetadata, bodyDtoFor } from "./swagger.js";
 
 /**
  * One route whose conditional-request Swagger docs (ADR-0020) `@Kavo`
@@ -362,7 +365,7 @@ export function Kavo<
         if (Object.prototype.hasOwnProperty.call(controller.prototype, methodName)) {
           continue; // manual-method-wins
         }
-        defineRoute(controller.prototype, methodName, descriptor, route);
+        defineRoute(controller.prototype, methodName, descriptor, route, erasedConfig);
         applySwaggerMetadata(controller.prototype, methodName, descriptor, route, entity, erasedConfig);
         conditionalDocs.push({ methodName, descriptor, route });
       } else {
@@ -590,6 +593,7 @@ function defineRoute(
   methodName: string,
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
+  config: EntityConfig<object> | undefined,
 ): void {
   const handler = makeHandler(descriptor, route);
   Object.defineProperty(handler, "name", { value: methodName });
@@ -598,7 +602,8 @@ function defineRoute(
     writable: true,
     configurable: true,
   });
-  applyRouteDecorators(prototype, methodName, descriptor, route);
+  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined);
+  applyRouteDecorators(prototype, methodName, descriptor, route, dtoResolver);
 }
 
 /**
@@ -613,9 +618,10 @@ function applyRouteDecorators(
   methodName: string,
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
+  dtoResolver?: DtoResolver<object>,
 ): void {
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
-  applyParamDecorators(prototype, methodName, descriptor, route);
+  applyParamDecorators(prototype, methodName, descriptor, route, dtoResolver);
   // Route identity for `getResource`/`getOperation` (issue #238), written
   // on the handler function itself — the same target Nest's method
   // decorators write to — so Nest's `Reflector` can read it off
@@ -660,14 +666,30 @@ function applyRouteDecorators(
  * cannot be baked into the generated method — the handler resolves it per
  * request from the controller instance instead, and needs the request to
  * run it against.
+ *
+ * `dtoResolver`, when given, is issue #281's fix: a generated method has no
+ * source-level parameter declaration, so TypeScript's `emitDecoratorMetadata`
+ * never writes `design:paramtypes` for it, and Nest's global `ValidationPipe`
+ * resolves its `metatype` off exactly that metadata — so a registered
+ * `dto.create`/`dto.update`/`dto.patch` class was silently never validated on
+ * a generated route, however it's decorated (`class-validator`, `zod`, or
+ * anything else hooking Nest's pipe system; the gap is generic, not tied to
+ * one validation library). Writing the same metadata by hand here, at the
+ * body parameter's position, is enough to make the existing global pipe
+ * validate it, with no change to how the pipe itself resolves a metatype.
+ * `undefined` (the override path, which already carries real
+ * `design:paramtypes` from its own compiled source) leaves that metadata
+ * untouched rather than clobbering it.
  */
 function applyParamDecorators(
   prototype: Record<string, unknown>,
   methodName: string,
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
+  dtoResolver?: DtoResolver<object>,
 ): void {
   let index = 0;
+  let bodyIndex = -1;
   if (route.hasIdParam) {
     Param("id")(prototype, methodName, index++);
   }
@@ -675,9 +697,17 @@ function applyParamDecorators(
     Query(new WireQueryPipe())(prototype, methodName, index++);
   } else if (takesBody(descriptor, route)) {
     Body()(prototype, methodName, index++);
+    bodyIndex = index - 1;
   }
   ConditionalRequest()(prototype, methodName, index++);
   Req()(prototype, methodName, index++);
+
+  if (bodyIndex === -1 || dtoResolver === undefined) return;
+  const bodyDto = bodyDtoFor(descriptor, dtoResolver);
+  if (bodyDto === null) return;
+  const paramTypes: unknown[] = Array.from({ length: index });
+  paramTypes[bodyIndex] = bodyDto;
+  Reflect.defineMetadata("design:paramtypes", paramTypes, prototype, methodName);
 }
 
 /**
