@@ -37,10 +37,12 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  *
  * `createOne`/`updateOne`/`patchOne` below are typed with the concrete,
  * `class-validator`-decorated DTO classes (`address.dtos.ts`) rather than
- * `Partial<Address>` — the app's global `ValidationPipe` (`app.module.ts`)
- * only validates a body param whose declared type it can resolve via
- * `emitDecoratorMetadata`, which only exists for a type written directly in
- * this class's own source (see `owner.controller.ts`'s validation note).
+ * `Partial<Address>` purely for a concrete compile-time type inside each
+ * method body — since issue #281, the app's global `ValidationPipe`
+ * (`app.module.ts`) validates a registered `dto.create`/`update`/`patch`
+ * class on a generated route as well (see `owner.controller.ts`'s
+ * validation note), so these overrides exist here for the cross-entity
+ * write and the other custom behavior above, not for validation.
  * `postalCode`'s exact-5-digit format stays a procedural check
  * (`assertValidPostalCode`) run after that generic shape validation passes
  * — a business rule with its own normalization step, not a `class-validator`
