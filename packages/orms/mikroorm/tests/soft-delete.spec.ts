@@ -8,6 +8,7 @@ import {
   ConflictException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   type DefaultKavoService,
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createMikroOrmKavo } from "@kavo/mikroorm";
@@ -146,7 +147,12 @@ describe("zero-config soft delete", () => {
     const zeroConfig = createMikroOrmKavo(orm).createCrud(Ticket) as DefaultKavoService<Ticket>;
     const created = (await zeroConfig.createOne({ reference: "T-writable", title: "x" } as never)) as Ticket;
 
-    await zeroConfig.patchOne(created.id, { deletedAt: new Date() } as never);
+    // The deserializer excludes the marker, leaving no field changes — a
+    // patch body naming only it is KAVO_PATCH_NO_CHANGES, not a silent
+    // no-op (issue #287).
+    await expect(zeroConfig.patchOne(created.id, { deletedAt: new Date() } as never)).rejects.toBeInstanceOf(
+      PatchNoChangesException,
+    );
     expect((await zeroConfig.findMany()).total).toBe(1);
   });
 });
@@ -383,8 +389,13 @@ describe("MikroOrmRepositoryAdapter — id and soft-delete marker mass assignmen
     const created = await coupons.createOne({ code: "WELCOME", label: "welcome", retiredAt: null } as never);
     expect(created).toMatchObject({ retiredAt: null });
 
-    const patched = await coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never);
-    expect(patched).toMatchObject({ retiredAt: null });
+    // The marker is stripped as immutable, leaving no field changes — a
+    // patch body naming only it is KAVO_PATCH_NO_CHANGES, not a silent
+    // no-op (issue #287).
+    await expect(coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never)).rejects.toBeInstanceOf(
+      PatchNoChangesException,
+    );
+    expect(await coupons.findOne("WELCOME")).toMatchObject({ retiredAt: null });
     expect((await coupons.findMany()).items).toHaveLength(1);
 
     await coupons.deleteOne("WELCOME");

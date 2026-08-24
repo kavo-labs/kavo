@@ -13,6 +13,7 @@ import {
   ConfigurationException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   hasKeyset,
   readFilter,
 } from "@kavo/core";
@@ -258,7 +259,28 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+    this.requirePatchChanges(id, data, context);
     return this.writeExisting(id, data, context);
+  }
+
+  /**
+   * `patch` (unlike `update`) rejects a body that carries no field changes
+   * — checked against the same immutable-key strip `writeExisting` applies,
+   * so a body naming only the id and/or the soft-delete marker is treated
+   * the same as a genuinely empty one. Raised before the document is even
+   * loaded: this is a client-input problem, not a state one.
+   */
+  private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
+    const softDeleteField = context.config.softDelete.field;
+    const changes = { ...(rawData as Record<string, unknown>) };
+    delete changes[this.idField];
+    if (softDeleteField !== null) delete changes[softDeleteField];
+    if (Object.keys(changes).length === 0) {
+      throw new PatchNoChangesException({
+        messageParams: { entity: context.entityName, id: String(id) },
+        context: errorContext(context),
+      });
+    }
   }
 
   /**

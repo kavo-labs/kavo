@@ -7,6 +7,7 @@ import {
   ConflictException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   type DefaultKavoService,
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createTypeOrmKavo } from "@kavo/typeorm";
@@ -309,8 +310,13 @@ describe("TypeOrmRepositoryAdapter — id and soft-delete marker mass assignment
     const created = await coupons.createOne({ code: "WELCOME", label: "welcome", retiredAt: null } as never);
     expect(created).toMatchObject({ retiredAt: null });
 
-    const patched = await coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never);
-    expect(patched).toMatchObject({ retiredAt: null });
+    // The marker is stripped as immutable, leaving no field changes — a
+    // patch body naming only it is KAVO_PATCH_NO_CHANGES, not a silent
+    // no-op (issue #287).
+    await expect(coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never)).rejects.toBeInstanceOf(
+      PatchNoChangesException,
+    );
+    expect((await coupons.findOne("WELCOME"))).toMatchObject({ retiredAt: null });
     expect((await coupons.findMany()).items).toHaveLength(1);
 
     // The dedicated operation is unaffected — this closes a bypass, not the

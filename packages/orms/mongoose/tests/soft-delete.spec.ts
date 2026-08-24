@@ -6,6 +6,7 @@ import {
   ConflictException,
   NotDeletedException,
   NotFoundException,
+  PatchNoChangesException,
   type DefaultKavoService,
   type RepositoryAdapter,
 } from "@kavo/core";
@@ -280,8 +281,13 @@ describe("MongooseRepositoryAdapter — id and soft-delete marker mass assignmen
   it("never soft-deletes or revives through update/patch, even when a write DTO names the marker", async () => {
     const created = (await coupons.createOne({ label: "welcome", retiredAt: null } as never)) as Coupon;
 
-    const patched = await coupons.patchOne(created._id, { retiredAt: new Date(0) } as never);
-    expect(patched).toMatchObject({ retiredAt: null });
+    // The marker is stripped as immutable, leaving no field changes — a
+    // patch body naming only it is KAVO_PATCH_NO_CHANGES, not a silent
+    // no-op (issue #287).
+    await expect(coupons.patchOne(created._id, { retiredAt: new Date(0) } as never)).rejects.toBeInstanceOf(
+      PatchNoChangesException,
+    );
+    expect(await coupons.findOne(created._id)).toMatchObject({ retiredAt: null });
     expect((await coupons.findMany()).items).toHaveLength(1);
 
     await coupons.deleteOne(created._id);

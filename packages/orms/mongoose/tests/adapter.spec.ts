@@ -3,6 +3,7 @@ import { Schema } from "mongoose";
 import {
   ConflictException,
   NotFoundException,
+  PatchNoChangesException,
   PersistenceException,
   QueryValidationException,
   type DefaultKavoService,
@@ -188,21 +189,27 @@ describe("MongooseRepositoryAdapter — CRUD", () => {
     expect(error.code).toBe("KAVO_CONFLICT");
   });
 
-  it("returns the document unchanged when a patch carries no fields", async () => {
-    // MongoDB rejects an empty `$set`; nothing to write is not an error.
+  it("rejects a patch that carries no fields with KAVO_PATCH_NO_CHANGES", async () => {
     const created = (await authors.createOne({ email: "noop@x.io", name: "Noop", age: 5 } as never)) as Author;
-    const patched = (await authors.patchOne(created._id, {} as never)) as Author;
-    expect(patched).toMatchObject({ _id: created._id, name: "Noop", age: 5 });
+    const error = await rejectionOf(authors.patchOne(created._id, {} as never));
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect(error.code).toBe("KAVO_PATCH_NO_CHANGES");
   });
 
-  it("still answers 404 when a patch carrying no fields addresses an absent document", async () => {
-    // The empty-body path above skips the write entirely, so it also skips
-    // the "matched nothing" signal every other write is 404'd by — it reads
-    // instead, and that read coming back empty is the only thing left to
-    // tell a missing document from an unchanged one.
+  it("rejects a patch whose only field is the immutable id", async () => {
+    const created = (await authors.createOne({ email: "id-only@x.io", name: "IdOnly", age: 5 } as never)) as Author;
+    const error = await rejectionOf(authors.patchOne(created._id, { _id: created._id } as never));
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect(error.code).toBe("KAVO_PATCH_NO_CHANGES");
+  });
+
+  it("rejects an empty patch before checking whether the document exists", async () => {
+    // The emptiness check is client-input validation, so it fires ahead of
+    // any existence check — an absent id gets the same 400 a present one
+    // would, not a 404.
     const error = await rejectionOf(authors.patchOne(ABSENT_ID, {} as never));
-    expect(error).toBeInstanceOf(NotFoundException);
-    expect(error.code).toBe("KAVO_NOT_FOUND");
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect(error.code).toBe("KAVO_PATCH_NO_CHANGES");
   });
 });
 

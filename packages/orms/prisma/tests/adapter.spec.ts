@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import {
   ConflictException,
   NotFoundException,
+  PatchNoChangesException,
   PersistenceException,
   QueryValidationException,
   type KavoInstance,
@@ -138,6 +139,22 @@ describe("PrismaRepositoryAdapter — CRUD", () => {
     await expect(authors.createOne({ email: "dup@x.io", name: "B", age: 2 } as never)).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  it("rejects a patch that carries no field changes with KAVO_PATCH_NO_CHANGES", async () => {
+    const created = await authors.createOne({ email: "noop@x.io", name: "Noop", age: 5 } as never);
+    const id = (created as Author).id;
+    const error = await authors.patchOne(id, {} as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
+    expect((error as PatchNoChangesException).code).toBe("KAVO_PATCH_NO_CHANGES");
+    expect((error as PatchNoChangesException).status).toBe(400);
+  });
+
+  it("rejects a patch whose only field is the immutable id", async () => {
+    const created = await authors.createOne({ email: "id-only@x.io", name: "IdOnly", age: 5 } as never);
+    const id = (created as Author).id;
+    const error = await authors.patchOne(id, { id } as never).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PatchNoChangesException);
   });
 });
 
