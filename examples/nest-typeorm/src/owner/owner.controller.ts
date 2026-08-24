@@ -34,15 +34,16 @@ import { hasPermission } from "./owner.policy.js";
  * left unconfigured here (contrast Cat's explicit array): the zero-config
  * default. `search[fields]=name` narrows a given request to just one.
  *
- * Validation: `createOne`/`updateOne`/`patchOne` are `@Override()`'d purely
- * to give their body parameter a concrete, `class-validator`-decorated
- * type (`CreateOwnerDto`/`UpdateOwnerDto`/`PatchOwnerDto`) rather than the
- * generated route's untyped one — Kavo's own DTOs are shapes only (doc 04),
- * so nothing validates a generated route's body. Nest's global
- * `ValidationPipe` (`app.module.ts`) reads a body param's declared type off
- * `emitDecoratorMetadata`, which only exists for a param written directly
- * in this class's own source — a generated method has no such metadata,
- * `@Override()` recovers it. Each override otherwise just delegates.
+ * Validation: `createOne`/`updateOne`/`patchOne` are `@Override()`'d to give
+ * their body parameter a concrete, `class-validator`-decorated type
+ * (`CreateOwnerDto`/`UpdateOwnerDto`/`PatchOwnerDto`) — Kavo's own DTOs are
+ * shapes only (doc 04); teams wire NestJS's own `ValidationPipe`
+ * (`app.module.ts`) for actual validation. As of issue #281, a registered
+ * `dto.create`/`update`/`patch` class validates on a *generated* route too
+ * (`@Kavo` writes the `design:paramtypes` metadata `ValidationPipe` needs),
+ * so these overrides are no longer required for validation to run; each
+ * override still exists here purely to give the body a concrete compile-time
+ * type inside the method body, and otherwise just delegates.
  *
  * Authorization: `DELETE /owners/:id` additionally requires the
  * `owner:delete` permission (ADR-0037) — `hasPermission('owner:delete')`

@@ -15,10 +15,14 @@ databases below unchanged.
 Every entity but `Dog` also validates its write bodies with `class-validator`
 — Kavo's own DTOs are shapes only, with no validation subsystem of their
 own (see `docs/internals/architecture/04-dto-system.md`), so this app's own
-`ValidationPipe` (`app.module.ts`) plus each `createOne`/`updateOne`/
-`patchOne` override (see `owner.controller.ts`) is what a validation layer
-looks like bolted onto Kavo from application code, with no framework
-changes. `Dog` is left unvalidated on purpose, as the contrast.
+`ValidationPipe` (`app.module.ts`) plus each entity's registered
+`dto.create`/`update`/`patch` class is what a validation layer looks like
+bolted onto Kavo from application code, with no framework changes. `Owner`
+and `Cat` additionally `@Override()` their `createOne`/`updateOne`/`patchOne`
+(see `owner.controller.ts`) to give the body a concrete compile-time type
+inside the method — since issue #281, that override is no longer required
+for the validation itself, which now also runs on a generated route.
+`Dog` is left unvalidated on purpose, as the contrast.
 
 ## SQLite (default)
 
