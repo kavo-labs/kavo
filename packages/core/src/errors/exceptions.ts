@@ -152,6 +152,19 @@ export class ArrayMutationMemberNotFoundException extends KavoException {
   }
 }
 
+/**
+ * `patchOne`'s body carried no field changes to apply — either the raw
+ * body was empty, or every key it did carry (id, the soft-delete marker)
+ * is stripped as immutable before it would reach the write. `updateOne`
+ * (full replace) is unaffected: this is patch-specific, raised only by the
+ * partial-write path, never the PUT one.
+ */
+export class PatchNoChangesException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_PATCH_NO_CHANGES", options);
+  }
+}
+
 export class PersistenceException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_PERSISTENCE_FAILED", options);

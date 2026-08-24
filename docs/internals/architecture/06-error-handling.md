@@ -15,6 +15,7 @@ KavoException (abstract; implements the KavoExceptionShape contract)
 ├─ NotDeletedException          restore/purge of a live row → 409
 ├─ OperationDisabledException
 ├─ OperationNotRegisteredException   registry miss, never "disabled"
+├─ PatchNoChangesException      patchOne body carries no field changes
 ├─ BulkOperationException       carries items[] (reserved)
 ├─ PersistenceException
 ├─ TransactionException         carries retryable: boolean
@@ -44,6 +45,7 @@ policy). Source of truth: `ERROR_CATALOG` in
 | `KAVO_QUERY_CONFLICTING_PARAMS`        | 400  | `withDeleted=true` and `onlyDeleted=true` set together                                                                                                                                                                | issue-level                       |
 | `KAVO_ARRAY_MUTATION_INVALID_SHAPE`    | 400  | `replace<Relation>` body is not an array of ids/`{id}` refs, or `null`; a `resource`-strategy `add`/`remove<Relation>` body is not a single id/`{id}` ref (arrayMutation's `replace`/`resource` strategies, ADR-0029) | —                                 |
 | `KAVO_JSON_PATCH_INVALID_DOCUMENT`     | 400  | `patchOne` array body is not a well-formed RFC 6902 document within Kavo's subset (arrayMutation's `jsonPatch` strategy, ADR-0029)                                                                                    | —                                 |
+| `KAVO_PATCH_NO_CHANGES`                | 400  | `patchOne` body carries no field changes — empty, or only the id/soft-delete marker, after immutable-key stripping; `updateOne` is unaffected                                                                         | —                                 |
 | `KAVO_NOT_FOUND`                       | 404  | Target row missing on findOne/update/patch/delete; also a `jsonPatch`/`resource` `add` naming an id with no matching row                                                                                              | —                                 |
 | `KAVO_FORBIDDEN`                       | 403  | A resolved `policy` function evaluated to `false` for the current principal (ADR-0037); available to a custom operation's own handler for the same purpose                                                            | —                                 |
 | `KAVO_JSON_PATCH_TARGET_NOT_FOUND`     | 404  | `jsonPatch` `remove` op names a relation member id that is not currently associated (ADR-0029)                                                                                                                        | —                                 |

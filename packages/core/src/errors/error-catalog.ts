@@ -96,6 +96,11 @@ export const ERROR_CATALOG = {
     title: "Array-mutation member not found",
     message: "Cannot remove '{id}' from '{relation}' on {entity}: it is not currently a member.",
   },
+  KAVO_PATCH_NO_CHANGES: {
+    status: 400,
+    title: "Patch has no changes",
+    message: "The PATCH body for {entity} with id '{id}' contains no field changes.",
+  },
   KAVO_ALREADY_DELETED: {
     status: 409,
     title: "Already deleted",

@@ -230,6 +230,7 @@ export {
   NotFoundException,
   OperationDisabledException,
   OperationNotRegisteredException,
+  PatchNoChangesException,
   PersistenceException,
   PreconditionFailedException,
   PreconditionUnsupportedException,
