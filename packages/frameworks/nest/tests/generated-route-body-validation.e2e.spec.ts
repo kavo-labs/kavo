@@ -11,7 +11,7 @@ import {
 import { APP_PIPE } from "@nestjs/core";
 import { Test } from "@nestjs/testing";
 import { IsString } from "class-validator";
-import type { EntityMetadata, KavoInfrastructure } from "@kavo/core";
+import type { EntityId, EntityMetadata, KavoInfrastructure } from "@kavo/core";
 import { Kavo, KavoModule, Override, boundKavoService } from "@kavo/nest";
 import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
@@ -158,17 +158,26 @@ function validatedTodoInfrastructure(adapter: InMemoryTodoAdapter): KavoInfrastr
     ],
     relations: [],
   };
+  const rows = new Map<number, ValidatedTodo>();
   return {
     metadataFor: <Entity extends object>() => metadata as unknown as EntityMetadata<Entity>,
     adapterFor: <Entity extends object>() => ({
-      findOneById: () => Promise.reject(new Error("unused")),
+      findOneById: (id: EntityId) => Promise.resolve((rows.get(Number(id)) ?? null) as unknown as Entity | null),
       findOne: () => Promise.reject(new Error("unused")),
       findMany: () => Promise.resolve([]),
       count: () => Promise.resolve(0),
-      create: (data: Partial<Entity>) =>
-        Promise.resolve({ ...new ValidatedTodo(), ...data, id: adapter.rows.length + 1 } as unknown as Entity),
+      create: (data: Partial<Entity>) => {
+        const row = { ...new ValidatedTodo(), ...data, id: adapter.rows.length + rows.size + 1 } as ValidatedTodo;
+        rows.set(row.id, row);
+        return Promise.resolve(row as unknown as Entity);
+      },
       update: () => Promise.reject(new Error("unused")),
-      patch: () => Promise.reject(new Error("unused")),
+      patch: (id: EntityId, data: Partial<Entity>) => {
+        const row = rows.get(Number(id));
+        if (row === undefined) return Promise.reject(new Error("not found"));
+        Object.assign(row, data);
+        return Promise.resolve(row as unknown as Entity);
+      },
       delete: () => Promise.reject(new Error("unused")),
       restore: () => Promise.reject(new Error("unused")),
       purge: () => Promise.reject(new Error("unused")),
@@ -215,5 +224,53 @@ describe("entity-class DTO fallback (issue #283)", () => {
 
     // `title` must be a string — a number fails `@IsString()`.
     await request(server()).post("/validated-todos").send({ title: 42 }).expect(400);
+  });
+
+  /**
+   * Issue #285: `patchOne`'s fallback used to name `ValidatedTodo` itself as
+   * the body metatype, so `@IsString() title` — required on the entity —
+   * rejected any `PATCH` body that omitted `title`. It must accept a partial
+   * body, and still reject a `title` that's present but the wrong type.
+   */
+  it("accepts a PATCH body omitting a field the entity itself requires", async () => {
+    @Kavo(ValidatedTodo)
+    @Controller("validated-todos")
+    class ValidatedTodosController {}
+
+    const { ValidationPipe } = await import("@nestjs/common");
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: validatedTodoInfrastructure(new InMemoryTodoAdapter()) }),
+        KavoModule.forFeature([ValidatedTodosController] as never),
+      ],
+      providers: [{ provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) }],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
+    const created = await request(server()).post("/validated-todos").send({ title: "x" }).expect(201);
+
+    await request(server()).patch(`/validated-todos/${created.body.id}`).send({}).expect(200);
+  });
+
+  it("still rejects a PATCH body whose present field fails the entity's own validator", async () => {
+    @Kavo(ValidatedTodo)
+    @Controller("validated-todos")
+    class ValidatedTodosController {}
+
+    const { ValidationPipe } = await import("@nestjs/common");
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: validatedTodoInfrastructure(new InMemoryTodoAdapter()) }),
+        KavoModule.forFeature([ValidatedTodosController] as never),
+      ],
+      providers: [{ provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) }],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
+    const created = await request(server()).post("/validated-todos").send({ title: "x" }).expect(201);
+
+    await request(server()).patch(`/validated-todos/${created.body.id}`).send({ title: 42 }).expect(400);
   });
 });

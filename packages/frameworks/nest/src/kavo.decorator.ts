@@ -53,7 +53,7 @@ import {
 } from "./tokens.js";
 import { WireQueryPipe } from "./wire-query.pipe.js";
 import { applySwaggerMetadata, bodyDtoFor } from "./swagger.js";
-import { entityHasValidationMetadata } from "./load-class-validator.js";
+import { entityHasValidationMetadata, entityPartialValidationClass } from "./load-class-validator.js";
 
 /**
  * One route whose conditional-request Swagger docs (ADR-0020) `@Kavo`
@@ -722,10 +722,17 @@ function applyParamDecorators(
  * repo's own example config) naming an undecorated class as the body's
  * metatype would strip every property instead of validating them, trading
  * the silent-no-validation gap #283 closes for a silent data-loss one.
+ *
+ * Issue #285: `patchOne` cannot reuse the entity class as-is — the entity's
+ * own decorators require every field, so the same fallback would reject any
+ * partial `PATCH` body. It gets `entityPartialValidationClass`'s subclass
+ * instead, which inherits those decorators but relaxes every one of them to
+ * optional, matching a `PATCH`'s actual semantics.
  */
 function entityFallbackDto(descriptor: OperationDescriptor<object>, entity?: ClassRef<object>): ClassRef | null {
   if (entity === undefined) return null;
-  if (descriptor.id !== "createOne" && descriptor.id !== "updateOne" && descriptor.id !== "patchOne") return null;
+  if (descriptor.id === "patchOne") return entityPartialValidationClass(entity);
+  if (descriptor.id !== "createOne" && descriptor.id !== "updateOne") return null;
   return entityHasValidationMetadata(entity) ? entity : null;
 }
 
