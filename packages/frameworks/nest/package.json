@@ -1,6 +1,6 @@
 {
   "name": "@kavo/nest",
-  "version": "0.14.4",
+  "version": "0.14.5",
   "description": "Kavo NestJS binding — @Kavo decorator, registry-driven route generation, problem-details exception filter, Swagger integration.",
   "license": "Apache-2.0",
   "engines": {
