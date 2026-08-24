@@ -316,7 +316,7 @@ describe("TypeOrmRepositoryAdapter — id and soft-delete marker mass assignment
     await expect(coupons.patchOne("WELCOME", { retiredAt: new Date(0) } as never)).rejects.toBeInstanceOf(
       PatchNoChangesException,
     );
-    expect((await coupons.findOne("WELCOME"))).toMatchObject({ retiredAt: null });
+    expect(await coupons.findOne("WELCOME")).toMatchObject({ retiredAt: null });
     expect((await coupons.findMany()).items).toHaveLength(1);
 
     // The dedicated operation is unaffected — this closes a bypass, not the
