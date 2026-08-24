@@ -1,5 +1,11 @@
 import type { ErrorContext } from "@kavo/core";
-import { ConflictException, KavoException, PersistenceException, TransactionException } from "@kavo/core";
+import {
+  ConflictException,
+  KavoException,
+  PersistenceException,
+  QueryValidationException,
+  TransactionException,
+} from "@kavo/core";
 import { QueryFailedError } from "typeorm";
 
 /**
@@ -9,12 +15,24 @@ import { QueryFailedError } from "typeorm";
  * | --------------------------------- | ---------------------------------- |
  * | unique violation                  | ConflictException                  |
  * | foreign-key violation             | ConflictException                  |
+ * | invalid input syntax (bad value)  | QueryValidationException           |
  * | serialization failure / deadlock  | TransactionException (retryable)   |
  * | anything else                     | PersistenceException with `cause`  |
  *
  * Codes covered: Postgres SQLSTATE, MySQL errno, SQLite extended codes.
  * Unknown drivers fall through to `PersistenceException` — the original
  * error always travels as `cause`, never swallowed.
+ *
+ * **Invalid input syntax.** A malformed id/filter value that a driver
+ * itself rejects for not matching a column's storage format (e.g. a
+ * non-UUID string against a `uuid` column) is a 400, not a 500: the
+ * request was bad, not the connection to the database (issue #279). This
+ * covers only what a driver actually errors on — `coerceId`
+ * (`kavo-engine.ts`) already gives a clean 400 for a numeric-column id
+ * pre-query; core has no generic "string ids must match a format" concept,
+ * so this is the adapter's own catch for the formats it knows about.
+ * Scoped to Postgres's `22P02` for now (issue #279); MySQL/SQLite
+ * equivalents are a follow-up if reported.
  *
  * **Soft delete and unique indexes.** A soft-deleted row still
  * occupies its unique indexes, so re-creating "the same" row after a soft
@@ -62,6 +80,18 @@ export function mapDriverError(error: unknown, context: ErrorContext): KavoExcep
       code === "SQLITE_BUSY";
     if (retryable) {
       return new TransactionException({ retryable: true, context, cause: error });
+    }
+
+    const invalidInput = code === "22P02"; // Postgres invalid_text_representation
+    if (invalidInput) {
+      return QueryValidationException.single(
+        {
+          field: "id",
+          code: "KAVO_QUERY_INVALID_VALUE",
+          detail: message,
+        },
+        { context, cause: error },
+      );
     }
   }
 

@@ -87,6 +87,7 @@ is true, so `total: null` costs zero extra queries.
 | ---------------------------------------------------------------------------- | ------------------------------------------ |
 | unique violation (`23505` / 1062 / `SQLITE_CONSTRAINT_UNIQUE`·`_PRIMARYKEY`) | `ConflictException`                        |
 | FK violation (`23503` / 1451·1452 / `SQLITE_CONSTRAINT_FOREIGNKEY`)          | `ConflictException`                        |
+| invalid input syntax (PG `22P02`, e.g. a non-UUID id)                        | `QueryValidationException` (400)           |
 | serialization/deadlock (`40001`·`40P01` / 1213 / `SQLITE_BUSY`)              | `TransactionException` (`retryable: true`) |
 | anything else                                                                | `PersistenceException` with `cause`        |
 
