@@ -616,8 +616,8 @@ describe("MongooseRepositoryAdapter — relation paths are refused, not silently
   it("exposes the reference id to filtering, and writes it by association", async () => {
     const books = kavo.createCrud(models.Book) as unknown as DefaultKavoService<Book>;
     const author = (await authors.createOne({ email: "ref@x.io", name: "Ref", age: 1 } as never)) as Author;
-    await books.createOne({ title: "Owned", author: author._id } as never);
-    await books.createOne({ title: "Other", author: ABSENT_ID } as never);
+    await books.createOne({ title: "Owned", author: { _id: author._id } } as never);
+    await books.createOne({ title: "Other", author: { _id: ABSENT_ID } } as never);
 
     // A Mongoose ref path is the foreign key, so filtering by it is the
     // equivalent of `?filter[authorId][eq]=…` under the other adapters.
