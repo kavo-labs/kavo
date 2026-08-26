@@ -5,12 +5,20 @@ name: Autoformat
 # workflow pushes commits, so it needs its own file and its own `contents:
 # write` grant rather than widening ci.yml's permissions.
 #
-# Runs on pull_request only, and only for branches in this repository (never
-# a fork): GITHUB_TOKEN can push to same-repo PR branches but has no write
+# Runs on pull_request, and only for branches in this repository (never a
+# fork): GITHUB_TOKEN can push to same-repo PR branches but has no write
 # access to a fork's branch, so a fork PR just falls through to ci.yml's
 # `format` job (check-only) instead of failing here.
+#
+# Also runs on push to main, so a commit landed on main some other way
+# (an admin merge bypassing this workflow, a direct push) still gets
+# formatted. `[skip ci]` in the commit message keeps that fix commit from
+# retriggering this same workflow.
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -22,12 +30,12 @@ concurrency:
 jobs:
   autoformat:
     name: autoformat
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
