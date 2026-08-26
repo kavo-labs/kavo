@@ -35,12 +35,16 @@ afterAll(async () => {
   // Same reason as the container spec: an `app.close()` rejection must not
   // strand the connection or the `mongod` process behind it.
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
     try {
       await mongoose.disconnect();
     } finally {
-      if (server !== undefined) await server.stop();
+      if (server !== undefined) {
+        await server.stop();
+      }
     }
   }
 });

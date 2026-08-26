@@ -12,7 +12,9 @@ function rejectionOf(override: unknown): ConfigurationException {
   try {
     validateSettings("User", mergeSettings(BUILT_IN_DEFAULTS, override as DeepPartial<KavoSettings>));
   } catch (error) {
-    if (error instanceof ConfigurationException) return error;
+    if (error instanceof ConfigurationException) {
+      return error;
+    }
     throw error;
   }
   throw new Error("expected ConfigurationException");

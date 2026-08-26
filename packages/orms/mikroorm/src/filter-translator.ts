@@ -68,7 +68,9 @@ export function translateFilter<Entity>(
   options: FilterTranslatorOptions,
 ): MikroWhere | undefined {
   const root = filter.root;
-  if (root === null) return undefined;
+  if (root === null) {
+    return undefined;
+  }
   return translateExpression(root, options);
 }
 
@@ -84,7 +86,9 @@ function translateExpression(expression: FilterExpression, options: FilterTransl
     // than one child is conjoined first rather than having everything past
     // `children[0]` dropped. Core's wire parser only ever builds the unary
     // shape; this guards a hand-built AST.
-    if (children.length === 0) return matchesNothing(options.idField);
+    if (children.length === 0) {
+      return matchesNothing(options.idField);
+    }
     return { $not: children.length === 1 ? children[0]! : { $and: children } };
   }
 

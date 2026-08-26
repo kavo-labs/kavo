@@ -9,13 +9,19 @@
  * the JSON escape hatch; `fields` alone is the root fieldset).
  */
 export function parseBracketKey(key: string, prefix: string): readonly string[] | null {
-  if (!key.startsWith(prefix + "[") || !key.endsWith("]")) return null;
+  if (!key.startsWith(prefix + "[") || !key.endsWith("]")) {
+    return null;
+  }
   const segments: string[] = [];
   let position = prefix.length;
   while (position < key.length) {
-    if (key[position] !== "[") return null;
+    if (key[position] !== "[") {
+      return null;
+    }
     const close = key.indexOf("]", position);
-    if (close === -1) return null;
+    if (close === -1) {
+      return null;
+    }
     segments.push(key.slice(position + 1, close));
     position = close + 1;
   }

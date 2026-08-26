@@ -67,7 +67,9 @@ export class InMemoryUserAdapter implements RepositoryAdapter<User> {
     // makes, so the keyset predicate is applied here too.
     const matched = this.match(readFilter(query).root).sort(comparatorFor(query.sort));
     const { pagination } = query;
-    if (hasKeyset(pagination)) return matched.slice(0, pagination.limit);
+    if (hasKeyset(pagination)) {
+      return matched.slice(0, pagination.limit);
+    }
     return matched.slice(pagination.offset, pagination.offset + pagination.limit);
   }
 
@@ -159,16 +161,22 @@ function comparatorFor(sort: readonly Sort<User>[]): (left: User, right: User) =
   return (left, right) => {
     for (const entry of sort) {
       const sign = compare(valueOf(left, entry.field as string), valueOf(right, entry.field as string));
-      if (sign !== 0) return entry.direction === "desc" ? -sign : sign;
+      if (sign !== 0) {
+        return entry.direction === "desc" ? -sign : sign;
+      }
     }
     return 0;
   };
 }
 
 function matches(row: User, node: FilterExpression<User> | null): boolean {
-  if (node === null) return true;
+  if (node === null) {
+    return true;
+  }
   if (node.kind === "group") {
-    if (node.operator === "NOT") return !matches(row, node.children[0]!);
+    if (node.operator === "NOT") {
+      return !matches(row, node.children[0]!);
+    }
     const test = (child: FilterExpression<User>): boolean => matches(row, child);
     return node.operator === "AND" ? node.children.every(test) : node.children.some(test);
   }
@@ -199,6 +207,8 @@ function valueOf(row: User, field: string): number | string | boolean | Date | n
 function compare(left: unknown, right: unknown): number {
   const a = left instanceof Date ? left.getTime() : left;
   const b = right instanceof Date ? right.getTime() : right;
-  if (a === b) return 0;
+  if (a === b) {
+    return 0;
+  }
   return (a as never) < (b as never) ? -1 : 1;
 }

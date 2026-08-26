@@ -150,8 +150,12 @@ export function declaredRelationArrayMutationStrategy(
   write: boolean | { readonly strategy?: ArrayMutationStrategy } | undefined,
   entityDeclared: "replace" | "jsonPatch" | "resource" | false | undefined,
 ): ArrayMutationStrategy | undefined {
-  if (typeof write === "object" && write !== null) return write.strategy;
-  if (write !== true) return undefined;
+  if (typeof write === "object" && write !== null) {
+    return write.strategy;
+  }
+  if (write !== true) {
+    return undefined;
+  }
   return entityDeclared === false ? undefined : entityDeclared;
 }
 
@@ -347,7 +351,9 @@ export function Kavo<
     const conditionalDocs: KavoConditionalDocEntry[] = [];
 
     for (const descriptor of registry.all()) {
-      if (!descriptor.enabled) continue;
+      if (!descriptor.enabled) {
+        continue;
+      }
       const route = resolveRoute(descriptor);
       const overrideMethodName = overrides.get(descriptor.id);
       if (route === null) {
@@ -395,9 +401,13 @@ function collectOverrides(
 ): ReadonlyMap<OperationId, string> {
   const overrides = new Map<OperationId, string>();
   for (const methodName of Object.getOwnPropertyNames(prototype)) {
-    if (methodName === "constructor") continue;
+    if (methodName === "constructor") {
+      continue;
+    }
     const metadata = Reflect.getMetadata(KAVO_OVERRIDE_METADATA, prototype, methodName) as OverrideMetadata | undefined;
-    if (metadata === undefined) continue;
+    if (metadata === undefined) {
+      continue;
+    }
     const existing = overrides.get(metadata.operationId);
     if (existing !== undefined) {
       throw new ConfigurationException(
@@ -457,13 +467,17 @@ function applyOverrideEtag(
 ): void {
   // A collection response has no tag to give: a list's identity spans
   // pagination, sort and filter, which ADR-0020 leaves out of scope.
-  if (descriptor.cardinality === "many") return;
+  if (descriptor.cardinality === "many") {
+    return;
+  }
   const original = prototype[methodName] as (this: unknown, ...args: unknown[]) => unknown;
   async function promoted(this: Partial<BoundController>, ...args: unknown[]): Promise<unknown> {
     const result = (await original.apply(this, args)) as unknown;
     // An envelope is already tagged; `null`/`undefined` is a void operation
     // (`deleteOne`), which has no representation to hash.
-    if (result === null || result === undefined || isKavoResponse(result)) return result;
+    if (result === null || result === undefined || isKavoResponse(result)) {
+      return result;
+    }
     // Values Nest resolves *after* the handler returns. Wrapping an
     // Observable in an envelope is the one way this function can break a
     // working route outright: `InterceptorsConsumer.transformDeferred`
@@ -473,13 +487,19 @@ function applyOverrideEtag(
     // survives the round trip but would be hashed, which is meaningless work
     // over a file handle's internals and a plausible cycle for
     // `canonicalize`. Neither is a representation, so neither is tagged.
-    if (isObservable(result) || result instanceof StreamableFile) return result;
+    if (isObservable(result) || result instanceof StreamableFile) {
+      return result;
+    }
     const service = this[KAVO_SERVICE_PROPERTY];
     // Unbound (a controller outside `KavoModule`'s discovery) means there
     // is no config to consult, and guessing `etag: true` would add a header
     // the app may have turned off. Leave it exactly as the override wrote it.
-    if (service === undefined) return result;
-    if (!isEtagEnabled(service.engine.config.settingsFor(descriptor.id).cache)) return result;
+    if (service === undefined) {
+      return result;
+    }
+    if (!isEtagEnabled(service.engine.config.settingsFor(descriptor.id).cache)) {
+      return result;
+    }
     return {
       operation: descriptor.id,
       item: result,
@@ -560,7 +580,9 @@ const ARRAY_MUTATION_METHODS: Readonly<Record<"replace" | "list" | "add" | "remo
 
 function resolveRoute(descriptor: OperationDescriptor<object>): ResolvedRoute | null {
   const options: KavoRouteOptions = descriptor.meta.routes ?? {};
-  if (options.enabled === false) return null; // service-only
+  if (options.enabled === false) {
+    return null;
+  } // service-only
   // A `replace`/`list`/`add`/`remove<Relation>` operation Kavo itself
   // synthesized (`registerArrayMutationOperations`, ADR-0014's `replace`
   // strategy and ADR-0029's resource amendment) has no entry in
@@ -706,9 +728,13 @@ function applyParamDecorators(
   ConditionalRequest()(prototype, methodName, index++);
   Req()(prototype, methodName, index++);
 
-  if (bodyIndex === -1 || dtoResolver === undefined) return;
+  if (bodyIndex === -1 || dtoResolver === undefined) {
+    return;
+  }
   const bodyDto = bodyDtoFor(descriptor, dtoResolver) ?? entityFallbackDto(descriptor, entity);
-  if (bodyDto === null) return;
+  if (bodyDto === null) {
+    return;
+  }
   const paramTypes: unknown[] = Array.from({ length: index });
   paramTypes[bodyIndex] = bodyDto;
   Reflect.defineMetadata("design:paramtypes", paramTypes, prototype, methodName);
@@ -730,9 +756,15 @@ function applyParamDecorators(
  * optional, matching a `PATCH`'s actual semantics.
  */
 function entityFallbackDto(descriptor: OperationDescriptor<object>, entity?: ClassRef<object>): ClassRef | null {
-  if (entity === undefined) return null;
-  if (descriptor.id === "patchOne") return entityPartialValidationClass(entity);
-  if (descriptor.id !== "createOne" && descriptor.id !== "updateOne") return null;
+  if (entity === undefined) {
+    return null;
+  }
+  if (descriptor.id === "patchOne") {
+    return entityPartialValidationClass(entity);
+  }
+  if (descriptor.id !== "createOne" && descriptor.id !== "updateOne") {
+    return null;
+  }
   return entityHasValidationMetadata(entity) ? entity : null;
 }
 
@@ -747,7 +779,9 @@ function entityFallbackDto(descriptor: OperationDescriptor<object>, entity?: Cla
  * bodyless because the path segment already names everything they need.
  */
 function takesBody(descriptor: OperationDescriptor<object>, route: ResolvedRoute): boolean {
-  if (descriptor.meta.arrayMutation?.action === "remove") return true;
+  if (descriptor.meta.arrayMutation?.action === "remove") {
+    return true;
+  }
   return usesBody(route.method) && !BODYLESS_WRITES.has(descriptor.id as StandardOperationId);
 }
 
@@ -823,6 +857,8 @@ function callOptionsFor(
   request: KavoPrincipalRequest | undefined,
 ): KavoCallOptions | null {
   const extractPrincipal = controller[KAVO_PRINCIPAL_PROPERTY];
-  if (extractPrincipal === undefined || request === undefined) return null;
+  if (extractPrincipal === undefined || request === undefined) {
+    return null;
+  }
   return { principal: extractPrincipal(request) };
 }

@@ -42,9 +42,15 @@ function errorName(error: unknown): string | undefined {
  */
 function castValueOf(error: unknown): string {
   const { value, stringValue } = (error ?? {}) as MongoErrorLike;
-  if (typeof value === "string") return value;
-  if (value !== undefined && value !== null) return String(value);
-  if (typeof stringValue === "string") return stringValue.replace(/^"|"$/g, "");
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value !== undefined && value !== null) {
+    return String(value);
+  }
+  if (typeof stringValue === "string") {
+    return stringValue.replace(/^"|"$/g, "");
+  }
   return "";
 }
 
@@ -97,7 +103,9 @@ function serverErrorCode(error: unknown): number | undefined {
  * live documents (`{ deletedAt: null }` as a `partialFilterExpression`).
  */
 export function mapDriverError(error: unknown, context: ErrorContext, idField?: string): KavoException {
-  if (error instanceof KavoException) return error;
+  if (error instanceof KavoException) {
+    return error;
+  }
 
   const entity = context.entityName ?? "entity";
 

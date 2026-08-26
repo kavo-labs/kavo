@@ -76,12 +76,18 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
     // asked for nothing — but only where they are reachable, so they obey
     // the same depth budget as anything else.
     for (const relation of owner.relations.all()) {
-      if (relation.defaultInclude !== true || !relation.includable) continue;
-      if (drafts.has(relation.name)) continue;
+      if (relation.defaultInclude !== true || !relation.includable) {
+        continue;
+      }
+      if (drafts.has(relation.name)) {
+        continue;
+      }
       const path = parentPath === "" ? relation.name : `${parentPath}.${relation.name}`;
       drafts.set(relation.name, { name: relation.name, path, children: new Map() });
     }
-    if (drafts.size === 0) return {};
+    if (drafts.size === 0) {
+      return {};
+    }
 
     const tree: Record<string, IncludeNode> = {};
     for (const draft of drafts.values()) {
@@ -130,7 +136,9 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       }
 
       const target = this.targetOf(relation, draft, issues);
-      if (target === undefined) continue;
+      if (target === undefined) {
+        continue;
+      }
       nodeBudget.remaining -= 1;
 
       tree[draft.name] = {
@@ -186,7 +194,9 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
     issues: QueryIssueDto[],
   ): readonly string[] | null {
     const requested = request.fields[draft.path];
-    if (requested === undefined) return null;
+    if (requested === undefined) {
+      return null;
+    }
     // `IncludeRequest.fields` types this as `readonly string[]`, but the
     // programmatic `QueryContext.fields` entry point can hand a caller's
     // malformed value straight through — the wire path (`parseFields`)

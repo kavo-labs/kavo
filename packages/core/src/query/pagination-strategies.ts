@@ -139,9 +139,15 @@ export class NonePaginationStrategy implements PaginationStrategy {
   // unused here — the whole point of "none" is that neither applies.
   normalize(rawParams: Readonly<Record<string, unknown>>, _limits: PaginationLimits): OffsetPagination {
     const issues: QueryIssueDto[] = [];
-    if (hasValue(rawParams["limit"])) issues.push(noneParamUnsupportedIssue("limit"));
-    if (hasValue(rawParams["offset"])) issues.push(noneParamUnsupportedIssue("offset"));
-    if (issues.length > 0) throw new QueryValidationException(issues);
+    if (hasValue(rawParams["limit"])) {
+      issues.push(noneParamUnsupportedIssue("limit"));
+    }
+    if (hasValue(rawParams["offset"])) {
+      issues.push(noneParamUnsupportedIssue("offset"));
+    }
+    if (issues.length > 0) {
+      throw new QueryValidationException(issues);
+    }
     return { limit: NONE_PAGINATION_LIMIT, offset: 0 };
   }
 }
@@ -179,7 +185,9 @@ export function builtInPaginationStrategies(): ReadonlyMap<string, PaginationStr
  * an arbitrary place.
  */
 function readToken(raw: unknown, param: "cursor" | "since"): string | null {
-  if (raw === undefined || raw === null || raw === "") return null;
+  if (raw === undefined || raw === null || raw === "") {
+    return null;
+  }
   if (typeof raw !== "string") {
     throw QueryValidationException.single({
       field: param,
@@ -194,7 +202,9 @@ function readToken(raw: unknown, param: "cursor" | "since"): string | null {
 }
 
 function readBoundedInt(raw: unknown, param: string, minimum: number): number | null {
-  if (raw === undefined || raw === null || raw === "") return null;
+  if (raw === undefined || raw === null || raw === "") {
+    return null;
+  }
   const value = Number(String(raw));
   if (!Number.isInteger(value) || value < minimum) {
     throw QueryValidationException.single({

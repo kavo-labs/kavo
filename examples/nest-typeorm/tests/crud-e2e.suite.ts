@@ -1335,7 +1335,9 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(response.body.total).toBeGreaterThan(20);
       expect(response.body.items.length).toBe(response.body.total);
       const ids = response.body.items.map((tag: { id: number }) => tag.id);
-      for (const id of created) expect(ids).toContain(id);
+      for (const id of created) {
+        expect(ids).toContain(id);
+      }
     });
 
     it("rejects an explicit limit as unsupported, rather than silently paginating anyway", async () => {

@@ -44,7 +44,9 @@ import { QueryFailedError } from "typeorm";
  * (SQLite supports the same form; MySQL needs a generated column).
  */
 export function mapDriverError(error: unknown, context: ErrorContext): KavoException {
-  if (error instanceof KavoException) return error;
+  if (error instanceof KavoException) {
+    return error;
+  }
 
   const entity = context.entityName ?? "entity";
   if (error instanceof QueryFailedError) {

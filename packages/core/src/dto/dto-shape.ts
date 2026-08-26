@@ -15,9 +15,13 @@ const shapeCache = new WeakMap<DtoClass, readonly string[] | null>();
  * decorators or a reflection library.
  */
 export function dtoShapeKeys(dto: DtoClass | null): readonly string[] | null {
-  if (dto === null) return null;
+  if (dto === null) {
+    return null;
+  }
   const cached = shapeCache.get(dto);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   let keys: readonly string[] | null;
   try {
     const instance = new dto();

@@ -296,19 +296,25 @@ export class KavoEngine<Entity extends object> {
         : null;
     if (cacheKey !== null) {
       const cached = await this.readCache(cacheKey, configView, preconditions);
-      if (cached !== null) return cached;
+      if (cached !== null) {
+        return cached;
+      }
     }
 
     const input = this.resolveInput(request, descriptor, context);
 
     const result = await descriptor.handler.execute(input, context);
-    if (descriptor.id === "findOne") await this.checkFindOnePolicy(request, configView, context, result as Entity);
+    if (descriptor.id === "findOne") {
+      await this.checkFindOnePolicy(request, configView, context, result as Entity);
+    }
 
     // The one write-driven thing the cache needs, and the whole
     // invalidation strategy: every entry for the entity is dropped after a
     // successful write, because nothing about the write's payload tells the
     // engine which cached queries it could have changed (ADR-0031).
-    if (descriptor.kind === "write") await this.invalidateCache(configView);
+    if (descriptor.kind === "write") {
+      await this.invalidateCache(configView);
+    }
 
     const response = await this.mapResponse(descriptor, result, context, preconditions);
     if (cacheKey !== null) {
@@ -383,7 +389,9 @@ export class KavoEngine<Entity extends object> {
       }
       return;
     }
-    if (descriptor.id === "findOne") return; // deferred to checkFindOnePolicy
+    if (descriptor.id === "findOne") {
+      return;
+    } // deferred to checkFindOnePolicy
 
     // Coerced against the id column's kind, same as every other consumer of
     // `request.id` below — a policy comparing `params.id` to a numeric
@@ -418,7 +426,9 @@ export class KavoEngine<Entity extends object> {
     entity: Entity,
   ): Promise<void> {
     const policy = configView.policy.findOne;
-    if (policy === undefined) return;
+    if (policy === undefined) {
+      return;
+    }
     const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
     await this.assertPolicyAllows(policy, "findOne", configView, context, entity, { id });
   }
@@ -432,7 +442,9 @@ export class KavoEngine<Entity extends object> {
     params: WhenParams<Entity>,
   ): Promise<void> {
     const allowed = await policy({ context, entity, resource: context.entityName, operation, params });
-    if (!allowed) this.denyForbidden(operation, configView, context);
+    if (!allowed) {
+      this.denyForbidden(operation, configView, context);
+    }
   }
 
   /** The policy stage's one denial shape — a configured rule that failed, or (ADR-0035) no rule where one is required. */
@@ -490,16 +502,26 @@ export class KavoEngine<Entity extends object> {
     context: KavoContext<Entity>,
   ): Promise<void> {
     const eventId = REALTIME_EVENT_BY_OPERATION[descriptor.id as StandardOperationId];
-    if (eventId === undefined) return;
+    if (eventId === undefined) {
+      return;
+    }
 
     const realtime = context.config.settings.realtime;
-    if (realtime === false) return;
+    if (realtime === false) {
+      return;
+    }
     const transports = context.config.realtimeTransports;
-    if (transports.length === 0) return;
-    if (realtime.events?.[eventId] === false) return;
+    if (transports.length === 0) {
+      return;
+    }
+    if (realtime.events?.[eventId] === false) {
+      return;
+    }
 
     const id = this.realtimeEntityId(descriptor.id as StandardOperationId, request, result);
-    if (id === undefined) return;
+    if (id === undefined) {
+      return;
+    }
 
     const event: RealtimeEventDto = {
       event: eventId,
@@ -548,8 +570,12 @@ export class KavoEngine<Entity extends object> {
    * verdict outlive the request it was computed for.
    */
   private isCacheableRead(descriptor: OperationDescriptor<Entity>, config: ResolvedEntityConfig<Entity>): boolean {
-    if (descriptor.id !== "findOne" && descriptor.id !== "findMany") return false;
-    if (descriptor.id === "findOne" && config.policy.findOne !== undefined) return false;
+    if (descriptor.id !== "findOne" && descriptor.id !== "findMany") {
+      return false;
+    }
+    if (descriptor.id === "findOne" && config.policy.findOne !== undefined) {
+      return false;
+    }
     return this.cacheSettings(config) !== null;
   }
 
@@ -574,7 +600,9 @@ export class KavoEngine<Entity extends object> {
   ): Promise<KavoResponse | null> {
     try {
       const cached = await config.cacheStore.get(config.entityName, key);
-      if (cached === null) return null;
+      if (cached === null) {
+        return null;
+      }
       return await this.responseFromCache(cached, config, preconditions);
     } catch {
       return null;
@@ -615,7 +643,9 @@ export class KavoEngine<Entity extends object> {
   /** The store half of a read, keyed by `cacheKey`'s result: the response the pipeline just produced. */
   private async storeCache(key: string, config: ResolvedEntityConfig<Entity>, response: KavoResponse): Promise<void> {
     const settings = this.cacheSettings(config);
-    if (settings === null) return;
+    if (settings === null) {
+      return;
+    }
     try {
       await config.cacheStore.set(
         config.entityName,
@@ -693,7 +723,9 @@ export class KavoEngine<Entity extends object> {
       const row = result as Record<string, unknown> | null;
       if (compositeIdFields !== undefined) {
         const values = compositeIdFields.map((field) => row?.[field]);
-        if (values.some((value) => typeof value !== "string" && typeof value !== "number")) return undefined;
+        if (values.some((value) => typeof value !== "string" && typeof value !== "number")) {
+          return undefined;
+        }
         return encodeCompositeId(values as readonly (string | number)[]);
       }
       const value = row?.[this.deps.metadata.idField];
@@ -710,7 +742,9 @@ export class KavoEngine<Entity extends object> {
    */
   private changedFields(input: unknown): readonly string[] {
     const data = (input as { data?: unknown } | null)?.data;
-    if (typeof data !== "object" || data === null) return [];
+    if (typeof data !== "object" || data === null) {
+      return [];
+    }
     return Object.keys(data);
   }
 
@@ -743,8 +777,12 @@ export class KavoEngine<Entity extends object> {
     correlationId: string,
   ): Promise<void> {
     const ifMatch = preconditions?.ifMatch;
-    if (ifMatch === undefined) return;
-    if (descriptor.kind === "read") return;
+    if (ifMatch === undefined) {
+      return;
+    }
+    if (descriptor.kind === "read") {
+      return;
+    }
 
     const refuse = (reason: string): never => {
       throw new PreconditionUnsupportedException({
@@ -752,29 +790,41 @@ export class KavoEngine<Entity extends object> {
         context: { entityName: config.entityName, operation: descriptor.id, correlationId },
       });
     };
-    if (!PRECONDITION_TARGETS.has(descriptor.id as StandardOperationId)) refuse(UNEVALUABLE.notTargeted);
-    if (!isEtagEnabled(config.settings.cache)) refuse(UNEVALUABLE.cachingOff);
+    if (!PRECONDITION_TARGETS.has(descriptor.id as StandardOperationId)) {
+      refuse(UNEVALUABLE.notTargeted);
+    }
+    if (!isEtagEnabled(config.settings.cache)) {
+      refuse(UNEVALUABLE.cachingOff);
+    }
     // The 412 below names the current tag, which is only safe to disclose
     // when the client could have read it for itself. No enabled `findOne`
     // means no canonical representation to read — and an unconditional
     // hash in an error message would be an offline oracle over a
     // low-entropy row.
-    if (this.deps.registry.get("findOne")?.enabled !== true) refuse(UNEVALUABLE.noCanonicalRead);
+    if (this.deps.registry.get("findOne")?.enabled !== true) {
+      refuse(UNEVALUABLE.noCanonicalRead);
+    }
 
     // `*` is "only if it exists", which the pre-read cannot make more or
     // less true — `strongMatch` returns on the wildcard without looking at
     // the tag. Short-circuiting here spares a read, a serialization and a
     // SHA-256 whose answer was a constant, and a target that turns out not
     // to exist still raises from the handler.
-    if (ifMatch.includes(WILDCARD)) return;
+    if (ifMatch.includes(WILDCARD)) {
+      return;
+    }
 
     const id = this.coerceId(request.id) as EntityId;
     const etag = await this.canonicalEtag(id, request, config, correlationId);
     // No current representation: the row is gone, or an adapter would
     // refuse this write for a reason of its own. Either way the handler
     // owns the answer.
-    if (etag === null) return;
-    if (strongMatch(ifMatch, etag)) return;
+    if (etag === null) {
+      return;
+    }
+    if (strongMatch(ifMatch, etag)) {
+      return;
+    }
     throw new PreconditionFailedException({
       messageParams: { entity: config.entityName, id: String(id), etag },
       context: { entityName: config.entityName, operation: descriptor.id, correlationId },
@@ -820,7 +870,9 @@ export class KavoEngine<Entity extends object> {
       correlationId,
     });
     const entity = await repository.findOneById(id, query, context);
-    if (entity === null) return null;
+    if (entity === null) {
+      return null;
+    }
     // Same fallback `mapResponse` uses for a served `findOne` response
     // (descriptor override first): "what `findOne` on that id ... would
     // return" (ADR-0020) means the representation `findOne`'s own
@@ -852,7 +904,9 @@ export class KavoEngine<Entity extends object> {
       validateSettings(scope, settings);
       validateDefaultSort(scope, settings, config.allowlists);
     }
-    if (settings === config.settings) return config;
+    if (settings === config.settings) {
+      return config;
+    }
     return {
       entityName: config.entityName,
       settings,
@@ -929,7 +983,9 @@ export class KavoEngine<Entity extends object> {
         // input is the target id when the route names one and nothing
         // otherwise — everything else a read is given rides on
         // `context.query`.
-        if (descriptor.kind === "read") return request.id === null ? null : this.coerceId(request.id);
+        if (descriptor.kind === "read") {
+          return request.id === null ? null : this.coerceId(request.id);
+        }
         // A `replace`/`add`/`remove<Relation>` operation Kavo itself
         // synthesized (`registerArrayMutationOperations`) takes the
         // array-mutation path instead of the ordinary DTO deserializer:
@@ -1015,7 +1071,9 @@ export class KavoEngine<Entity extends object> {
     });
     const data = deserializer.deserialize(parsed.fields, dto, context);
     const relationEntries = Object.entries(parsed.relations);
-    if (relationEntries.length === 0) return { id, data };
+    if (relationEntries.length === 0) {
+      return { id, data };
+    }
 
     const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = {};
     for (const [relation, ops] of relationEntries) {
@@ -1041,7 +1099,9 @@ export class KavoEngine<Entity extends object> {
     values: readonly unknown[],
     context: KavoContext<Entity>,
   ): readonly EntityId[] {
-    if (values.length === 0) return [];
+    if (values.length === 0) {
+      return [];
+    }
     const wrapped = this.deps.deserializer.deserialize<Record<string, unknown>>({ [relation]: values }, null, context);
     const refs = (wrapped[relation] ?? []) as readonly Record<string, unknown>[];
     return refs.map((ref) => Object.values(ref)[0] as EntityId);
@@ -1075,7 +1135,9 @@ export class KavoEngine<Entity extends object> {
     }
     const wrapped = this.deps.deserializer.deserialize<Record<string, unknown>>({ [relation]: body }, null, context);
     const refs = wrapped[relation];
-    if (refs === null || refs === undefined) return null;
+    if (refs === null || refs === undefined) {
+      return null;
+    }
     return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
   }
 
@@ -1099,10 +1161,14 @@ export class KavoEngine<Entity extends object> {
         context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
       });
     };
-    if (body === null || body === undefined || Array.isArray(body)) invalid();
+    if (body === null || body === undefined || Array.isArray(body)) {
+      invalid();
+    }
     const memberIds = this.resolveArrayMutationMemberIds(relation, [body], context);
     const memberId = memberIds?.[0];
-    if (memberId === undefined) return invalid();
+    if (memberId === undefined) {
+      return invalid();
+    }
     return memberId;
   }
 
@@ -1134,7 +1200,9 @@ export class KavoEngine<Entity extends object> {
       return id;
     }
     const idField = metadata.fields.find((field) => field.name === metadata.idField);
-    if (idField?.kind !== "number" || typeof id !== "string") return id;
+    if (idField?.kind !== "number" || typeof id !== "string") {
+      return id;
+    }
     const value = Number(id);
     if (Number.isNaN(value)) {
       throw QueryValidationException.single({
@@ -1174,9 +1242,13 @@ export class KavoEngine<Entity extends object> {
     context: KavoContext<Entity>,
   ): KavoContext<Entity> {
     const arrayMutation = descriptor.meta.arrayMutation;
-    if (arrayMutation === undefined || arrayMutation.action !== "list") return context;
+    if (arrayMutation === undefined || arrayMutation.action !== "list") {
+      return context;
+    }
     const relation = this.deps.config.relations.get(arrayMutation.relation);
-    if (relation === undefined) return context;
+    if (relation === undefined) {
+      return context;
+    }
     const node: IncludeNode = {
       relation,
       path: arrayMutation.relation,
@@ -1346,8 +1418,12 @@ export class KavoEngine<Entity extends object> {
    */
   private listMeta(result: FindManyResult<Entity>, context: KavoContext<Entity>): ListMetaDto | undefined {
     const query = context.query;
-    if (query === null || !hasKeyset(query.pagination)) return compactMeta(result.meta);
-    if (isSincePagination(query.pagination)) return this.sinceListMeta(query.pagination, result, context);
+    if (query === null || !hasKeyset(query.pagination)) {
+      return compactMeta(result.meta);
+    }
+    if (isSincePagination(query.pagination)) {
+      return this.sinceListMeta(query.pagination, result, context);
+    }
     const pagination = query.pagination;
     // `hasMore` is the sentinel the built-in handler reports from its
     // `limit + 1` over-fetch. A replacement handler that does not report it
@@ -1448,10 +1524,14 @@ export class KavoEngine<Entity extends object> {
  * very divergence the omit-when-empty rule exists to prevent.
  */
 function compactMeta(meta: ListMetaDto | undefined): ListMetaDto | undefined {
-  if (meta === undefined) return undefined;
+  if (meta === undefined) {
+    return undefined;
+  }
   const copy: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(meta)) {
-    if (value !== undefined) copy[key] = value;
+    if (value !== undefined) {
+      copy[key] = value;
+    }
   }
   return Object.keys(copy).length === 0 ? undefined : copy;
 }
@@ -1571,10 +1651,18 @@ function validateProjectedResult<Entity>(
   context: KavoContext<Entity>,
   slot: "item" | "list",
 ): void {
-  if (isStandardOperationId(descriptor.id)) return;
-  if (context.query?.fields.root != null) return;
-  if (!carriesSomething(source)) return;
-  if (typeof projected !== "object" || projected === null || Object.keys(projected).length > 0) return;
+  if (isStandardOperationId(descriptor.id)) {
+    return;
+  }
+  if (context.query?.fields.root != null) {
+    return;
+  }
+  if (!carriesSomething(source)) {
+    return;
+  }
+  if (typeof projected !== "object" || projected === null || Object.keys(projected).length > 0) {
+    return;
+  }
   const served = slot === "list" ? "the first row of the list" : "the response";
   throw new ConfigurationException(
     context.entityName,
@@ -1602,9 +1690,15 @@ function validateProjectedResult<Entity>(
  * not making a declaration mistake about its shape.
  */
 function carriesSomething(source: unknown): boolean {
-  if (typeof source !== "object" || source === null) return false;
-  if (Array.isArray(source)) return source.length > 0;
-  if (Object.keys(source).length > 0) return true;
+  if (typeof source !== "object" || source === null) {
+    return false;
+  }
+  if (Array.isArray(source)) {
+    return source.length > 0;
+  }
+  if (Object.keys(source).length > 0) {
+    return true;
+  }
   // Anything that is not a plain object carries state somewhere the own-key
   // check cannot see. `null` prototype means a bare dictionary, which the
   // key check above already judged.
@@ -1618,7 +1712,9 @@ function describeResult(source: unknown): string {
     return `an array of ${source.length} item(s) — a collection result needs 'cardinality: "many"' on the operation`;
   }
   const keys = Object.keys(source as object);
-  if (keys.length > 0) return `an object whose keys are ${nameList(keys)}`;
+  if (keys.length > 0) {
+    return `an object whose keys are ${nameList(keys)}`;
+  }
   const name = (source as { constructor?: { name?: string } }).constructor?.name;
   return `a ${name === undefined || name === "" ? "non-plain object" : name} instance, whose values are not own enumerable properties`;
 }

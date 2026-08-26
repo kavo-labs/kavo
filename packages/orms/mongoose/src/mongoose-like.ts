@@ -116,8 +116,12 @@ export interface MongooseModelLike {
  * deep inside a query.
  */
 export function isModelLike(value: unknown): value is MongooseModelLike {
-  if (typeof value !== "function" && typeof value !== "object") return false;
-  if (value === null) return false;
+  if (typeof value !== "function" && typeof value !== "object") {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
   const candidate = value as Partial<MongooseModelLike>;
   return (
     typeof candidate.modelName === "string" &&

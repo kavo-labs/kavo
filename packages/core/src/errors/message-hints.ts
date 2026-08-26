@@ -42,7 +42,9 @@ export function suggestName(input: string, candidates: readonly string[]): strin
   let best: string | undefined;
   let bestDistance = threshold + 1;
   for (const candidate of candidates) {
-    if (candidate === input) continue;
+    if (candidate === input) {
+      continue;
+    }
     const distance = editDistance(input.toLowerCase(), candidate.toLowerCase(), threshold);
     if (distance < bestDistance) {
       best = candidate;
@@ -59,9 +61,13 @@ export function suggestName(input: string, candidates: readonly string[]): strin
  * entity whose `relations.edges` is still empty.
  */
 export function nameList(candidates: readonly string[], cap: number = DEFAULT_LIST_CAP): string {
-  if (candidates.length === 0) return "none";
+  if (candidates.length === 0) {
+    return "none";
+  }
   const sorted = [...candidates].sort();
-  if (sorted.length <= cap) return sorted.join(", ");
+  if (sorted.length <= cap) {
+    return sorted.join(", ");
+  }
   return `${sorted.slice(0, cap).join(", ")}, … (${sorted.length} total)`;
 }
 
@@ -159,7 +165,9 @@ export function pushAllowlistIssue(
  * without building the matrix at all.
  */
 function editDistance(a: string, b: string, ceiling: number): number {
-  if (Math.abs(a.length - b.length) > ceiling) return ceiling + 1;
+  if (Math.abs(a.length - b.length) > ceiling) {
+    return ceiling + 1;
+  }
   let twoBack: number[] = [];
   let previous = Array.from({ length: b.length + 1 }, (_unused, index) => index);
   for (let i = 1; i <= a.length; i += 1) {

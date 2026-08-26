@@ -53,10 +53,14 @@ const SETTINGS_KEYS = [
  * subset participates in the merge algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {
-  if (config === undefined) return undefined;
+  if (config === undefined) {
+    return undefined;
+  }
   const picked: Record<string, unknown> = {};
   for (const key of SETTINGS_KEYS) {
-    if (config[key] !== undefined) picked[key] = config[key];
+    if (config[key] !== undefined) {
+      picked[key] = config[key];
+    }
   }
   return picked as DeepPartial<KavoSettings>;
 }
@@ -107,9 +111,13 @@ export function resolveEntityConfig<Entity extends object>(
     OperationConfig<Entity> | boolean,
   ][]) {
     // Boolean shorthands carry no settings — enablement is the registry's.
-    if (typeof config === "boolean") continue;
+    if (typeof config === "boolean") {
+      continue;
+    }
     const settings = pickSettings(config as Readonly<Record<string, unknown>>);
-    if (settings === undefined || Object.keys(settings).length === 0) continue;
+    if (settings === undefined || Object.keys(settings).length === 0) {
+      continue;
+    }
     const merged = mergeSettings(entitySettings, settings);
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
@@ -177,8 +185,12 @@ function resolvePolicy<Entity extends object>(
   globalPolicy: Policy | undefined,
 ): Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>> {
   const entityPolicy = entityConfig?.policy;
-  if (entityPolicy !== undefined) assertIsPolicyFunction(entityName, "policy", entityPolicy);
-  if (globalPolicy !== undefined) assertIsPolicyFunction(entityName, "policy (global default)", globalPolicy);
+  if (entityPolicy !== undefined) {
+    assertIsPolicyFunction(entityName, "policy", entityPolicy);
+  }
+  if (globalPolicy !== undefined) {
+    assertIsPolicyFunction(entityName, "policy (global default)", globalPolicy);
+  }
 
   const resolved: Partial<Record<StandardOperationId, Policy<Entity>>> = {};
   for (const id of STANDARD_OPERATION_IDS) {
@@ -193,7 +205,9 @@ function resolvePolicy<Entity extends object>(
 
     const policy: Policy<Entity> | false | undefined =
       operationPolicy !== undefined ? operationPolicy : ((entityPolicy ?? globalPolicy) as Policy<Entity> | undefined);
-    if (policy === undefined || policy === false) continue;
+    if (policy === undefined || policy === false) {
+      continue;
+    }
 
     resolved[id] = policy;
   }
@@ -234,7 +248,9 @@ function resolveComputedFields<Entity extends object>(
   // the declared record erases to `{}` at this internal call site; the
   // key/value types are recovered here, once.
   const declared = (entityConfig as { readonly computed?: ComputedFieldMap<Entity> } | undefined)?.computed;
-  if (declared === undefined) return NO_COMPUTED_FIELDS;
+  if (declared === undefined) {
+    return NO_COMPUTED_FIELDS;
+  }
 
   // `__proto__` has two spellings and only one of them is a key. The
   // computed form (`{ ["__proto__"]: … }`) creates an own key and is caught
@@ -315,12 +331,18 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
   computed: ComputedFieldMap<Entity>,
 ): void {
   const names = new Set(Object.keys(computed));
-  if (names.size === 0) return;
+  if (names.size === 0) {
+    return;
+  }
   const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
-  if (dto === undefined) return;
+  if (dto === undefined) {
+    return;
+  }
   for (const slot of WRITE_DTO_SLOTS) {
     const declared = dtoShapeKeys(dto[slot] ?? null)?.find((key) => names.has(key));
-    if (declared === undefined) continue;
+    if (declared === undefined) {
+      continue;
+    }
     throw new ConfigurationException(
       entityName,
       `dto.${slot}`,
@@ -408,7 +430,9 @@ function resolveAllowlists<Entity extends object>(
   } as const;
   for (const key of ["filterable", "sortable", "searchable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
-      if (!Object.prototype.hasOwnProperty.call(computed, field)) continue;
+      if (!Object.prototype.hasOwnProperty.call(computed, field)) {
+        continue;
+      }
       const { verb, clause } = COMPUTED_REJECTION[key];
       throw new ConfigurationException(
         metadata.name,
@@ -424,7 +448,9 @@ function resolveAllowlists<Entity extends object>(
   // named in a write DTO, rather than letting it fall out silently later.
   for (const key of ["creatable", "updatable"] as const) {
     for (const field of allowlists[key] as readonly string[]) {
-      if (!Object.prototype.hasOwnProperty.call(computed, field)) continue;
+      if (!Object.prototype.hasOwnProperty.call(computed, field)) {
+        continue;
+      }
       throw new ConfigurationException(
         metadata.name,
         `allowlists.${key}`,
@@ -444,7 +470,9 @@ function resolveAllowlists<Entity extends object>(
   // laxity `filterable`/`sortable` already have for relation paths.
   const fieldKinds = new Map(metadata.fields.map((field) => [field.name, field.kind]));
   for (const field of allowlists.searchable as readonly string[]) {
-    if (field.includes(".")) continue;
+    if (field.includes(".")) {
+      continue;
+    }
     const kind = fieldKinds.get(field);
     if (kind !== undefined && kind !== "string") {
       throw new ConfigurationException(
@@ -530,7 +558,9 @@ function validateSincePagination<Entity extends object>(
   settings: KavoSettings,
   allowlists: ResolvedQueryAllowlists<Entity>,
 ): void {
-  if (settings.pagination.strategy !== "since") return;
+  if (settings.pagination.strategy !== "since") {
+    return;
+  }
   const { field } = settings.pagination.since;
   const filterable = allowlists.filterable as readonly string[];
   const selectable = allowlists.selectable as readonly string[];
@@ -618,8 +648,12 @@ function resolveProjection<Entity extends object>(
   allowlists: ResolvedQueryAllowlists<Entity>,
 ): readonly FieldPath<Entity>[] | null {
   const selector = entityConfig?.allowlists?.selectable;
-  if (selector === undefined) return null;
-  if (!("exclude" in selector)) return allowlists.selectable;
+  if (selector === undefined) {
+    return null;
+  }
+  if (!("exclude" in selector)) {
+    return allowlists.selectable;
+  }
   const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
   const excluded = new Set(selector.exclude as readonly string[]);
   return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
@@ -634,8 +668,12 @@ function resolveFieldSelector<Path extends string>(
   base: readonly Path[],
   selector: readonly Path[] | { readonly exclude: readonly Path[] } | undefined,
 ): readonly Path[] {
-  if (selector === undefined) return base;
-  if (!("exclude" in selector)) return selector;
+  if (selector === undefined) {
+    return base;
+  }
+  if (!("exclude" in selector)) {
+    return selector;
+  }
   const excluded = new Set(selector.exclude);
   return base.filter((path) => !excluded.has(path));
 }
@@ -663,11 +701,17 @@ function resolveIncludableSelector<Entity>(
   base: readonly IncludePath<Entity, 1>[],
   selector: RelationFieldSelector<Entity> | undefined,
 ): readonly IncludePath<Entity, 1>[] {
-  if (selector === undefined) return [];
-  if (!("exclude" in selector)) return selector;
+  if (selector === undefined) {
+    return [];
+  }
+  if (!("exclude" in selector)) {
+    return selector;
+  }
   const known = new Set<string>(base as readonly string[]);
   for (const name of selector.exclude) {
-    if (known.has(name as string)) continue;
+    if (known.has(name as string)) {
+      continue;
+    }
     throw new ConfigurationException(
       entityName,
       "allowlists.includable.exclude",

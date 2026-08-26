@@ -127,13 +127,17 @@ interface Connection {
  * no base set here to subtract from.
  */
 function isFieldAllowed(selector: RealtimeFieldSelector | undefined, field: string): boolean {
-  if (selector === undefined) return true;
+  if (selector === undefined) {
+    return true;
+  }
   // `"exclude" in selector`, not `Array.isArray` — `Array.isArray`'s guard is
   // `arg is any[]`, and a `readonly string[]` is not assignable to `any[]`,
   // so it fails to narrow the union in the negative branch. Same reason
   // core's own `resolveFieldSelector` (resolve-entity-config.ts) checks it
   // this way.
-  if ("exclude" in selector) return !selector.exclude.includes(field);
+  if ("exclude" in selector) {
+    return !selector.exclude.includes(field);
+  }
   return selector.includes(field);
 }
 
@@ -149,7 +153,9 @@ function narrowItem(
   selector: RealtimeFieldSelector | undefined,
   fields: readonly string[] | undefined,
 ): unknown {
-  if (item === null || typeof item !== "object") return item;
+  if (item === null || typeof item !== "object") {
+    return item;
+  }
   const record = item as Record<string, unknown>;
 
   let allowed: readonly string[];
@@ -163,7 +169,11 @@ function narrowItem(
   }
 
   const narrowed: Record<string, unknown> = {};
-  for (const key of allowed) if (key in record) narrowed[key] = record[key];
+  for (const key of allowed) {
+    if (key in record) {
+      narrowed[key] = record[key];
+    }
+  }
   return narrowed;
 }
 
@@ -205,7 +215,9 @@ function collectRawParams(searchParams: URLSearchParams): Record<string, unknown
 
 function hasFilterParams(searchParams: URLSearchParams): boolean {
   for (const key of searchParams.keys()) {
-    if (key === "filter" || key.startsWith("filter[")) return true;
+    if (key === "filter" || key.startsWith("filter[")) {
+      return true;
+    }
   }
   return false;
 }
@@ -218,7 +230,9 @@ function collectConditionFields(expression: FilterExpression<object>): readonly 
       fields.add(node.field as string);
       return;
     }
-    for (const child of node.children) visit(child);
+    for (const child of node.children) {
+      visit(child);
+    }
   };
   visit(expression);
   return [...fields];
@@ -255,9 +269,13 @@ export function createTransport(options: SseTransportOptions): SseTransport {
 
   function unsubscribe(connection: Connection): void {
     const subscribers = channels.get(connection.channel);
-    if (!subscribers) return;
+    if (!subscribers) {
+      return;
+    }
     subscribers.delete(connection);
-    if (subscribers.size === 0) channels.delete(connection.channel);
+    if (subscribers.size === 0) {
+      channels.delete(connection.channel);
+    }
   }
 
   /**
@@ -275,19 +293,25 @@ export function createTransport(options: SseTransportOptions): SseTransport {
    * rather than a silently-wrong "leave" event.
    */
   function matches(connection: Connection, event: RealtimeEventDto): boolean {
-    if (event.event === "deleted") return true;
+    if (event.event === "deleted") {
+      return true;
+    }
     return evaluateFilter(connection.filter, (event.item ?? {}) as Record<string, unknown>);
   }
 
   function deliverTo(subscribers: Set<Connection> | undefined, event: RealtimeEventDto, id: number): void {
-    if (!subscribers || subscribers.size === 0) return;
+    if (!subscribers || subscribers.size === 0) {
+      return;
+    }
     // Direct `for...of` over the live `Set`, not a snapshot copy: deleting
     // the current entry mid-iteration (the `unsubscribe` below, for a
     // connection that can't keep up) is well-defined under the Set
     // iteration protocol — already-visited and about-to-be-visited
     // entries are unaffected.
     for (const connection of subscribers) {
-      if (!matches(connection, event)) continue;
+      if (!matches(connection, event)) {
+        continue;
+      }
       if (connection.res.writableLength > bufferLimitBytes) {
         // Can't keep up: dropped rather than left to block publish to
         // every other subscriber of this channel.
@@ -308,7 +332,9 @@ export function createTransport(options: SseTransportOptions): SseTransport {
 
     get connectionCount(): number {
       let total = 0;
-      for (const subscribers of channels.values()) total += subscribers.size;
+      for (const subscribers of channels.values()) {
+        total += subscribers.size;
+      }
       return total;
     },
 
@@ -427,7 +453,9 @@ export function createTransport(options: SseTransportOptions): SseTransport {
 
     close(): void {
       for (const subscribers of channels.values()) {
-        for (const connection of subscribers) connection.res.end();
+        for (const connection of subscribers) {
+          connection.res.end();
+        }
       }
       channels.clear();
     },

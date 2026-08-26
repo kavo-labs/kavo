@@ -64,7 +64,9 @@ export function resolveSoftDelete<Entity>(
   scope: string = metadata.name,
 ): ResolvedSoftDelete {
   const softDelete = settings.softDelete;
-  if (softDelete === false || softDelete.strategy === "hard") return HARD_DELETE;
+  if (softDelete === false || softDelete.strategy === "hard") {
+    return HARD_DELETE;
+  }
 
   const configured = softDelete.field;
   const hasConfiguredColumn = metadata.fields.some((field) => field.name === configured);

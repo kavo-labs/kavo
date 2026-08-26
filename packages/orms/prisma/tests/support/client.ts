@@ -50,7 +50,9 @@ export function provisionTestDatabase(templatePath: string = TEMPLATE_DATABASE):
   const directory = mkdtempSync(join(scratchRoot, "db-"));
   const databasePath = join(directory, basename(templatePath));
   for (const suffix of DATABASE_FILE_SUFFIXES) {
-    if (existsSync(`${templatePath}${suffix}`)) copyFileSync(`${templatePath}${suffix}`, `${databasePath}${suffix}`);
+    if (existsSync(`${templatePath}${suffix}`)) {
+      copyFileSync(`${templatePath}${suffix}`, `${databasePath}${suffix}`);
+    }
   }
   return databasePath;
 }

@@ -88,7 +88,9 @@ class ContextRecordingAdapter implements RepositoryAdapter<User> {
 
   get last(): KavoContext<User> {
     const context = this.contexts[this.contexts.length - 1];
-    if (context === undefined) throw new Error("the adapter was never called");
+    if (context === undefined) {
+      throw new Error("the adapter was never called");
+    }
     return context;
   }
 

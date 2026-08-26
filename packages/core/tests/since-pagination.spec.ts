@@ -70,7 +70,9 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
 
   async findOneById(id: EntityId, query: NormalizedQueryContext<Event> | null, context: KavoContext<Event>) {
     const row = this.rows.find((candidate) => candidate.id === Number(id)) ?? null;
-    if (row === null) return null;
+    if (row === null) {
+      return null;
+    }
     return this.visible(row, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false) ? row : null;
   }
 
@@ -82,7 +84,9 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
     const visible = this.rows.filter((row) => this.visible(row, context, query.withDeleted, query.onlyDeleted));
     const matched = this.match(visible, readFilter(query).root).sort(comparatorFor(query.sort));
     const { pagination } = query;
-    if (hasKeyset(pagination)) return matched.slice(0, pagination.limit);
+    if (hasKeyset(pagination)) {
+      return matched.slice(0, pagination.limit);
+    }
     return matched.slice(pagination.offset, pagination.offset + pagination.limit);
   }
 
@@ -128,8 +132,12 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
   }
 
   private visible(row: Event, context: KavoContext<Event>, withDeleted: boolean, onlyDeleted: boolean): boolean {
-    if (context.config.softDelete.strategy !== "soft") return true;
-    if (onlyDeleted) return row.deletedAt !== null;
+    if (context.config.softDelete.strategy !== "soft") {
+      return true;
+    }
+    if (onlyDeleted) {
+      return row.deletedAt !== null;
+    }
     return withDeleted || row.deletedAt === null;
   }
 
@@ -139,15 +147,21 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
 
   private require(id: EntityId): Event {
     const row = this.rows.find((candidate) => candidate.id === Number(id));
-    if (row === undefined) throw new Error(`Event ${String(id)} not found`);
+    if (row === undefined) {
+      throw new Error(`Event ${String(id)} not found`);
+    }
     return row;
   }
 }
 
 function matches(row: Event, node: NormalizedQueryContext<Event>["filter"]["root"]): boolean {
-  if (node === null) return true;
+  if (node === null) {
+    return true;
+  }
   if (node.kind === "group") {
-    if (node.operator === "NOT") return !matches(row, node.children[0]!);
+    if (node.operator === "NOT") {
+      return !matches(row, node.children[0]!);
+    }
     const test = (child: (typeof node.children)[number]) => matches(row, child);
     return node.operator === "AND" ? node.children.every(test) : node.children.some(test);
   }
@@ -175,7 +189,9 @@ function comparatorFor(sort: readonly Sort<Event>[]): (left: Event, right: Event
   return (left, right) => {
     for (const entry of sort) {
       const sign = compare(valueOf(left, entry.field as string), valueOf(right, entry.field as string));
-      if (sign !== 0) return entry.direction === "desc" ? -sign : sign;
+      if (sign !== 0) {
+        return entry.direction === "desc" ? -sign : sign;
+      }
     }
     return 0;
   };
@@ -188,7 +204,9 @@ function valueOf(row: Event, field: string): number | string | boolean | Date | 
 function compare(left: unknown, right: unknown): number {
   const a = left instanceof Date ? left.getTime() : left;
   const b = right instanceof Date ? right.getTime() : right;
-  if (a === b) return 0;
+  if (a === b) {
+    return 0;
+  }
   return (a as never) < (b as never) ? -1 : 1;
 }
 
@@ -213,7 +231,9 @@ async function issuesOfAsync(fn: () => Promise<unknown>) {
   try {
     await fn();
   } catch (error) {
-    if (error instanceof QueryValidationException) return error.issues;
+    if (error instanceof QueryValidationException) {
+      return error.issues;
+    }
     throw error;
   }
   throw new Error("expected QueryValidationException");
@@ -376,7 +396,9 @@ describe("since pagination end to end", () => {
     let since: string | null = null;
     for (let page = 0; page < 10; page++) {
       const result = await client.findMany({ limit: 2, since } as never);
-      if (result.items.length === 0) break;
+      if (result.items.length === 0) {
+        break;
+      }
       names.push(...(result.items as Event[]).map((event) => event.name));
       since = nextSinceOf(result);
     }
@@ -443,7 +465,9 @@ describe("since pagination end to end", () => {
     let since: string | null = null;
     for (let page = 0; page < 5; page++) {
       const result = await client.findMany({ limit: 2, since } as never);
-      if (result.items.length === 0) break;
+      if (result.items.length === 0) {
+        break;
+      }
       names.push(...(result.items as Event[]).map((event) => event.name));
       since = nextSinceOf(result);
     }

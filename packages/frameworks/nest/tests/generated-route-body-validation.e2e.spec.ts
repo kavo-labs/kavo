@@ -33,7 +33,9 @@ class RecordingPipe implements PipeTransform {
   static metatypes: unknown[] = [];
 
   transform(value: unknown, metadata: ArgumentMetadata): unknown {
-    if (metadata.type === "body") RecordingPipe.metatypes.push(metadata.metatype);
+    if (metadata.type === "body") {
+      RecordingPipe.metatypes.push(metadata.metatype);
+    }
     return value;
   }
 }
@@ -174,7 +176,9 @@ function validatedTodoInfrastructure(adapter: InMemoryTodoAdapter): KavoInfrastr
       update: () => Promise.reject(new Error("unused")),
       patch: (id: EntityId, data: Partial<Entity>) => {
         const row = rows.get(Number(id));
-        if (row === undefined) return Promise.reject(new Error("not found"));
+        if (row === undefined) {
+          return Promise.reject(new Error("not found"));
+        }
         Object.assign(row, data);
         return Promise.resolve(row as unknown as Entity);
       },

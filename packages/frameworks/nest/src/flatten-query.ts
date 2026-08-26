@@ -29,7 +29,9 @@ export function flattenQuery(query: Readonly<Record<string, unknown>>): Record<s
   // `flat["__proto__"] = …` an ordinary assignment rather than a call into
   // the prototype setter.
   const flat = Object.create(null) as Record<string, unknown>;
-  if (query instanceof WireQuery) return Object.assign(flat, query.params);
+  if (query instanceof WireQuery) {
+    return Object.assign(flat, query.params);
+  }
   for (const [key, value] of Object.entries(query)) {
     flattenInto(flat, key, value);
   }

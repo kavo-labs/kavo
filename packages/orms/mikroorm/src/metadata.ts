@@ -23,22 +23,40 @@ import type { EntityProperty, MikroORM } from "@mikro-orm/core";
  * `new BigIntType("string")` — see doc 17 §1.
  */
 function fieldKindOf(property: EntityProperty): FieldKind {
-  if (property.enum === true) return "enum";
+  if (property.enum === true) {
+    return "enum";
+  }
   const type = String(property.runtimeType ?? property.type).toLowerCase();
-  if (type === "date") return "date";
-  if (type === "boolean" || type === "bool") return "boolean";
-  if (type === "number" || type === "bigint") return "number";
-  if (type === "string") return "string";
-  if (type === "object" || type === "json" || type === "jsonb") return "json";
+  if (type === "date") {
+    return "date";
+  }
+  if (type === "boolean" || type === "bool") {
+    return "boolean";
+  }
+  if (type === "number" || type === "bigint") {
+    return "number";
+  }
+  if (type === "string") {
+    return "string";
+  }
+  if (type === "object" || type === "json" || type === "jsonb") {
+    return "json";
+  }
   // Fall back to the declared column type for anything `runtimeType` did not
   // already answer (a custom `type: "int8"`, a driver-native column type).
   const declared = String(property.type).toLowerCase();
   if (/^(int|integer|tinyint|smallint|mediumint|bigint|float|double|real|decimal|numeric|number)/.test(declared)) {
     return "number";
   }
-  if (/^(bool|boolean)/.test(declared)) return "boolean";
-  if (/^(date|datetime|timestamp|time)/.test(declared)) return "date";
-  if (/^(json|jsonb)/.test(declared)) return "json";
+  if (/^(bool|boolean)/.test(declared)) {
+    return "boolean";
+  }
+  if (/^(date|datetime|timestamp|time)/.test(declared)) {
+    return "date";
+  }
+  if (/^(json|jsonb)/.test(declared)) {
+    return "json";
+  }
   return "string";
 }
 
@@ -92,7 +110,9 @@ function targetOf(orm: MikroORM, property: EntityProperty, owner: string): () =>
   return () => {
     const resolved =
       property.targetMeta?.class ?? orm.getMetadata().getByClassName(String(property.type), false)?.class;
-    if (resolved !== undefined) return resolved as ClassRef;
+    if (resolved !== undefined) {
+      return resolved as ClassRef;
+    }
     if (typeof property.entity === "function") {
       return (property.entity as () => ClassRef)();
     }

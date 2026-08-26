@@ -64,7 +64,9 @@ export class QueryNormalizer<Entity = unknown> {
 
     const withDeleted = parseSoftDeleteFlag("withDeleted", rawParams["withDeleted"], config, issues);
     const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", rawParams["onlyDeleted"], config, issues);
-    if (withDeleted && onlyDeleted) issues.push(conflictingSoftDeleteFlagsIssue());
+    if (withDeleted && onlyDeleted) {
+      issues.push(conflictingSoftDeleteFlagsIssue());
+    }
 
     let filter: Filter<Entity> = { root: null };
     try {
@@ -148,7 +150,9 @@ export class QueryNormalizer<Entity = unknown> {
     const input = query ?? {};
     const withDeleted = parseSoftDeleteFlag("withDeleted", input.withDeleted, config, issues);
     const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", input.onlyDeleted, config, issues);
-    if (withDeleted && onlyDeleted) issues.push(conflictingSoftDeleteFlagsIssue());
+    if (withDeleted && onlyDeleted) {
+      issues.push(conflictingSoftDeleteFlagsIssue());
+    }
 
     const root = input.filter ?? null;
     if (root !== null) {
@@ -184,8 +188,12 @@ export class QueryNormalizer<Entity = unknown> {
     // `{ limit, offset }`. A deliberate, narrow exception to §4's
     // structural-not-name-based rule, not a reversal of it (ADR-0030).
     if (strategy === "none") {
-      if (input.limit !== undefined) issues.push(noneParamUnsupportedIssue(config, "limit"));
-      if (input.offset !== undefined) issues.push(noneParamUnsupportedIssue(config, "offset"));
+      if (input.limit !== undefined) {
+        issues.push(noneParamUnsupportedIssue(config, "limit"));
+      }
+      if (input.offset !== undefined) {
+        issues.push(noneParamUnsupportedIssue(config, "offset"));
+      }
     }
     const limit = strategy === "none" ? NONE_PAGINATION_LIMIT : Math.min(input.limit ?? defaultLimit, maxLimit);
     const offset = strategy === "none" ? 0 : (input.offset ?? 0);
@@ -331,9 +339,13 @@ export class QueryNormalizer<Entity = unknown> {
     // A cursor decoded against a sort that was itself rejected would report
     // a second, misleading issue ("3 values but the sort has 2"), so the
     // first page's worth of problems is reported alone.
-    if (issues.length > before || pagination.cursor === null) return pagination;
+    if (issues.length > before || pagination.cursor === null) {
+      return pagination;
+    }
     const values = decodeCursor(pagination.cursor, sort, this.fields, issues);
-    if (values === null) return pagination;
+    if (values === null) {
+      return pagination;
+    }
     return { ...pagination, keyset: keysetExpression(sort, values) };
   }
 
@@ -423,8 +435,12 @@ export class QueryNormalizer<Entity = unknown> {
         requireAllowlisted(name, config, "selection", issues);
       }
     }
-    if (issues.length > before) return { sort: forcedSort, pagination };
-    if (pagination.since === null) return { sort: forcedSort, pagination };
+    if (issues.length > before) {
+      return { sort: forcedSort, pagination };
+    }
+    if (pagination.since === null) {
+      return { sort: forcedSort, pagination };
+    }
 
     const separator = pagination.since.lastIndexOf("|");
     if (separator < 0) {
@@ -528,11 +544,17 @@ export class QueryNormalizer<Entity = unknown> {
     const { defaultLimit, maxLimit } = config.settings.pagination;
     try {
       const probe = this.strategyFor(config).normalize({}, { defaultLimit, maxLimit });
-      if (isCursorPagination(probe)) return "cursor";
-      if (isSincePagination(probe)) return "since";
+      if (isCursorPagination(probe)) {
+        return "cursor";
+      }
+      if (isSincePagination(probe)) {
+        return "since";
+      }
       return "offset";
     } catch (error) {
-      if (error instanceof QueryValidationException) return "offset";
+      if (error instanceof QueryValidationException) {
+        return "offset";
+      }
       throw error;
     }
   }
@@ -628,7 +650,9 @@ function hasDefaultIncludes<Entity>(config: ResolvedEntityConfig<Entity>): boole
 
 /** `include=posts.comments,profile`, or the repeated-key array form. */
 function parseIncludePaths(raw: unknown, issues: QueryIssueDto[]): readonly string[] {
-  if (raw === undefined || raw === null || raw === "") return [];
+  if (raw === undefined || raw === null || raw === "") {
+    return [];
+  }
   const tokens = Array.isArray(raw) ? raw : [raw];
   const paths: string[] = [];
   for (const token of tokens) {
@@ -641,7 +665,9 @@ function parseIncludePaths(raw: unknown, issues: QueryIssueDto[]): readonly stri
       continue;
     }
     for (const path of token.split(",")) {
-      if (path !== "") paths.push(path);
+      if (path !== "") {
+        paths.push(path);
+      }
     }
   }
   return paths;
@@ -712,7 +738,9 @@ function parseSort<Entity>(
   config: ResolvedEntityConfig<Entity>,
   issues: QueryIssueDto[],
 ): readonly Sort<Entity>[] {
-  if (raw === undefined || raw === null || raw === "") return [];
+  if (raw === undefined || raw === null || raw === "") {
+    return [];
+  }
   if (typeof raw !== "string") {
     issues.push({
       field: "sort",
@@ -723,7 +751,9 @@ function parseSort<Entity>(
   }
   const result: Sort<Entity>[] = [];
   for (const token of raw.split(",")) {
-    if (token === "") continue;
+    if (token === "") {
+      continue;
+    }
     const descending = token.startsWith("-");
     const field = descending ? token.slice(1) : token;
     if (requireAllowlisted(field, config, "sorting", issues)) {
@@ -761,7 +791,9 @@ function collapseFieldSelection<Entity>(
   readonly root: readonly FieldPath<Entity, 1>[] | null;
   readonly relations: Readonly<Record<string, readonly string[]>>;
 } {
-  if (input === undefined) return { root: null, relations: {} };
+  if (input === undefined) {
+    return { root: null, relations: {} };
+  }
   if (Array.isArray(input)) {
     return { root: input as readonly FieldPath<Entity, 1>[], relations: {} };
   }
@@ -804,7 +836,9 @@ function parseFields<Entity>(
   const relations: Record<string, readonly string[]> = Object.create(null);
   for (const key of Object.keys(rawParams)) {
     const segments = parseBracketKey(key, "fields");
-    if (segments === null || segments.length !== 1 || segments[0] === "") continue;
+    if (segments === null || segments.length !== 1 || segments[0] === "") {
+      continue;
+    }
     const value = rawParams[key];
     if (typeof value !== "string") {
       issues.push({
@@ -831,7 +865,9 @@ function parseFields<Entity>(
   }
   const root: FieldPath<Entity, 1>[] = [];
   for (const field of raw.split(",")) {
-    if (field === "") continue;
+    if (field === "") {
+      continue;
+    }
     if (requireAllowlisted(field, config, "selection", issues)) {
       root.push(field as FieldPath<Entity, 1>);
     }
@@ -927,15 +963,21 @@ function parseSearch<Entity>(
       const requested = fieldsRaw.split(",").filter((field) => field !== "");
       let valid = true;
       for (const field of requested) {
-        if (searchable.includes(field)) continue;
+        if (searchable.includes(field)) {
+          continue;
+        }
         valid = false;
         pushAllowlistIssue(field, "searching", config.entityName, searchable, issues);
       }
-      if (valid) fields = requested;
+      if (valid) {
+        fields = requested;
+      }
     }
   }
 
-  if (issues.length > before) return filter;
+  if (issues.length > before) {
+    return filter;
+  }
 
   const words = mode === "words" ? query.split(/\s+/).filter((word) => word !== "") : [query];
   const terms = words.length > 0 ? words : [query];
@@ -1054,7 +1096,9 @@ function requireAllowlisted<Entity>(
   issues: QueryIssueDto[],
 ): boolean {
   const allowed = config.allowlists[ALLOWLIST_FOR[usage]] as readonly string[];
-  if (allowed.includes(field)) return true;
+  if (allowed.includes(field)) {
+    return true;
+  }
   pushAllowlistIssue(field, usage, config.entityName, allowed, issues);
   return false;
 }

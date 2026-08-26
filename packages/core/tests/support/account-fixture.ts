@@ -84,7 +84,9 @@ export class InMemoryAccountAdapter implements RepositoryAdapter<Account> {
     context: KavoContext<Account>,
   ): Promise<Account | null> {
     const row = this.rows.find((candidate) => candidate.id === Number(id)) ?? null;
-    if (row === null) return null;
+    if (row === null) {
+      return null;
+    }
     return this.visible(row, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false) ? row : null;
   }
 
@@ -157,8 +159,12 @@ export class InMemoryAccountAdapter implements RepositoryAdapter<Account> {
   }
 
   private visible(row: Account, context: KavoContext<Account>, withDeleted: boolean, onlyDeleted = false): boolean {
-    if (context.config.softDelete.strategy !== "soft") return true;
-    if (onlyDeleted) return row.deletedAt !== null;
+    if (context.config.softDelete.strategy !== "soft") {
+      return true;
+    }
+    if (onlyDeleted) {
+      return row.deletedAt !== null;
+    }
     return withDeleted || row.deletedAt === null;
   }
 

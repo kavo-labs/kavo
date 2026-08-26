@@ -115,7 +115,9 @@ async function walk(limit: number, query: Record<string, unknown> = {}): Promise
     const result = await posts.findMany({ ...query, limit, cursor } as never);
     titles.push(...result.items.map((item) => (item as Post).title));
     cursor = nextCursorOf(result);
-    if (cursor === null) return titles;
+    if (cursor === null) {
+      return titles;
+    }
   }
   throw new Error("cursor paging did not terminate");
 }

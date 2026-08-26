@@ -18,7 +18,9 @@ import {
  * already uses.
  */
 const catalog = new DefaultEntityCatalog((entity: ClassRef) => {
-  if (entity === CompositeEntity) return compositeMetadata as unknown as EntityMetadata<object>;
+  if (entity === CompositeEntity) {
+    return compositeMetadata as unknown as EntityMetadata<object>;
+  }
   return undefined;
 });
 

@@ -21,7 +21,9 @@ const ID_FIELD = "_id";
  * as `@kavo/typeorm` and `@kavo/prisma`.
  */
 function fieldKindOf(schemaType: MongooseSchemaTypeLike): FieldKind {
-  if ((schemaType.enumValues?.length ?? 0) > 0) return "enum";
+  if ((schemaType.enumValues?.length ?? 0) > 0) {
+    return "enum";
+  }
   const instance = schemaType.instance === "Array" ? schemaType.caster?.instance : schemaType.instance;
   switch (instance) {
     case "Number":
@@ -56,8 +58,12 @@ function fieldKindOf(schemaType: MongooseSchemaTypeLike): FieldKind {
  *   function specifically, not for non-primitiveness.
  */
 function isGeneratedField(path: string, schemaType: MongooseSchemaTypeLike, timestamps: ReadonlySet<string>): boolean {
-  if (schemaType.options?.auto === true) return true;
-  if (timestamps.has(path)) return true;
+  if (schemaType.options?.auto === true) {
+    return true;
+  }
+  if (timestamps.has(path)) {
+    return true;
+  }
   return typeof schemaType.options?.default === "function";
 }
 
@@ -106,20 +112,32 @@ function refTargetOf(schemaType: MongooseSchemaTypeLike): string | undefined {
 /** The `createdAt`/`updatedAt` path names in effect, honouring renames. */
 function timestampFields(schema: MongooseSchemaLike): ReadonlySet<string> {
   const timestamps = schema.options.timestamps;
-  if (timestamps === undefined || timestamps === false) return new Set();
-  if (timestamps === true) return new Set(["createdAt", "updatedAt"]);
+  if (timestamps === undefined || timestamps === false) {
+    return new Set();
+  }
+  if (timestamps === true) {
+    return new Set(["createdAt", "updatedAt"]);
+  }
   const names = new Set<string>();
-  if (typeof timestamps.createdAt === "string") names.add(timestamps.createdAt);
-  else if (timestamps.createdAt !== false) names.add("createdAt");
-  if (typeof timestamps.updatedAt === "string") names.add(timestamps.updatedAt);
-  else if (timestamps.updatedAt !== false) names.add("updatedAt");
+  if (typeof timestamps.createdAt === "string") {
+    names.add(timestamps.createdAt);
+  } else if (timestamps.createdAt !== false) {
+    names.add("createdAt");
+  }
+  if (typeof timestamps.updatedAt === "string") {
+    names.add(timestamps.updatedAt);
+  } else if (timestamps.updatedAt !== false) {
+    names.add("updatedAt");
+  }
   return names;
 }
 
 /** Mongoose's document-version bookkeeping path (`__v` unless renamed/disabled). */
 function versionKeyOf(schema: MongooseSchemaLike): string | undefined {
   const versionKey = schema.options.versionKey;
-  if (versionKey === false) return undefined;
+  if (versionKey === false) {
+    return undefined;
+  }
   return typeof versionKey === "string" ? versionKey : "__v";
 }
 
@@ -152,12 +170,16 @@ export function buildEntityMetadata<Entity extends object>(
     // caller never declared, so it stays out of the entity description
     // entirely — which also keeps it out of derived DTOs and, because the
     // default serializer projects onto these fields, out of every response.
-    if (path === versionKey) continue;
+    if (path === versionKey) {
+      continue;
+    }
 
     // `select: false` — the schema author already declared this value
     // un-returnable, so Kavo does not describe it at all. See
     // `isHiddenField` for why hiding it from responses alone is not enough.
-    if (isHiddenField(schemaType)) continue;
+    if (isHiddenField(schemaType)) {
+      continue;
+    }
 
     // Mongoose *flattens* a nested object literal — `{ address: { city:
     // String } }` becomes the paths `address.city`, `address.zip`, with no

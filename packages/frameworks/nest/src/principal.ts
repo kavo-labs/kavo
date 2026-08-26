@@ -50,6 +50,8 @@ const principalFromRequestUser: KavoPrincipalExtractor = (request) => request.us
  * app that never opts in keeps a `null` principal.
  */
 export function resolvePrincipalExtractor(option: KavoPrincipalOption | undefined): KavoPrincipalExtractor | undefined {
-  if (option === undefined || option === false) return undefined;
+  if (option === undefined || option === false) {
+    return undefined;
+  }
   return option === true ? principalFromRequestUser : option;
 }

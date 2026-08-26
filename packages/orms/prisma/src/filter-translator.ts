@@ -46,7 +46,9 @@ export function translateFilter<Entity>(
   options: FilterTranslatorOptions,
 ): PrismaWhere | undefined {
   const root = filter.root;
-  if (root === null) return undefined;
+  if (root === null) {
+    return undefined;
+  }
   return translateExpression(root, options);
 }
 
@@ -64,7 +66,9 @@ function translateExpression(expression: FilterExpression, options: FilterTransl
     // fixed in `@kavo/typeorm`, verified against a real engine in
     // `adapter.spec.ts`. `MATCHES_NOTHING` is the contradiction Prisma does
     // honor.
-    if (expression.children.length === 0) return MATCHES_NOTHING;
+    if (expression.children.length === 0) {
+      return MATCHES_NOTHING;
+    }
     return { NOT: conjunction(expression.children, options) };
   }
   const key = expression.operator === "OR" ? "OR" : "AND";
@@ -76,7 +80,9 @@ function translateExpression(expression: FilterExpression, options: FilterTransl
  * returned unwrapped so the common unary `NOT` keeps its exact shape.
  */
 function conjunction(children: readonly FilterExpression[], options: FilterTranslatorOptions): PrismaWhere {
-  if (children.length === 1) return translateExpression(children[0]!, options);
+  if (children.length === 1) {
+    return translateExpression(children[0]!, options);
+  }
   return { AND: children.map((child) => translateExpression(child, options)) };
 }
 
@@ -94,7 +100,9 @@ function conjunction(children: readonly FilterExpression[], options: FilterTrans
  */
 function nest(field: string, leaf: Record<string, unknown>, options: FilterTranslatorOptions): PrismaWhere {
   const segments = field.split(".");
-  if (segments.length === 1) return { [field]: leaf };
+  if (segments.length === 1) {
+    return { [field]: leaf };
+  }
 
   // Walk the path first, so an unresolvable segment raises a Kavo 400
   // instead of building a `where` Prisma will reject at runtime.
@@ -102,7 +110,9 @@ function nest(field: string, leaf: Record<string, unknown>, options: FilterTrans
   let model = options.model;
   for (const segment of segments.slice(0, -1)) {
     const edge = options.relations.get(model)?.get(segment);
-    if (edge === undefined) throw unknownRelationSegment(field, segment, model);
+    if (edge === undefined) {
+      throw unknownRelationSegment(field, segment, model);
+    }
     edges.push(edge);
     model = edge.target;
   }
@@ -210,7 +220,9 @@ function tokenizeLike(pattern: string): readonly LikeToken[] {
     }
     if (character === "%") {
       flush();
-      if (tokens[tokens.length - 1]?.kind !== "any") tokens.push({ kind: "any" });
+      if (tokens[tokens.length - 1]?.kind !== "any") {
+        tokens.push({ kind: "any" });
+      }
       continue;
     }
     if (character === "_") {
@@ -261,10 +273,18 @@ function likeToPrismaStringFilter(pattern: string, field: string): Record<string
     const trailing = tokens.length > 1 && tokens[tokens.length - 1]?.kind === "any";
     // `%` alone is one `any` token: leading with no literal, which reads as
     // `contains: ""` — every non-null value, the same set SQL `LIKE '%'` has.
-    if (tokens.length === 1 && leading) return { contains: "" };
-    if (leading && trailing) return { contains: text };
-    if (trailing) return { startsWith: text };
-    if (leading) return { endsWith: text };
+    if (tokens.length === 1 && leading) {
+      return { contains: "" };
+    }
+    if (leading && trailing) {
+      return { contains: text };
+    }
+    if (trailing) {
+      return { startsWith: text };
+    }
+    if (leading) {
+      return { endsWith: text };
+    }
     return { equals: text };
   }
 

@@ -39,7 +39,9 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
 
   apply(filter: Filter<Entity>): void {
     const root = filter.root;
-    if (root === null) return;
+    if (root === null) {
+      return;
+    }
     this.qb.andWhere(this.toBrackets(root));
   }
 
@@ -102,7 +104,9 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
    * the empty conjunction is the tautology `1 = 1`.
    */
   private conjunction(children: readonly FilterExpression<Entity>[]): Brackets {
-    if (children.length === 1) return this.toBrackets(children[0]!);
+    if (children.length === 1) {
+      return this.toBrackets(children[0]!);
+    }
     return new Brackets((where) => {
       if (children.length === 0) {
         where.where("1 = 1");
@@ -121,12 +125,18 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
 
     switch (condition.operator) {
       case "EQ":
-        if (value === null) where.where(`${column} IS NULL`);
-        else where.where(`${column} = :${parameter}`, { [parameter]: value });
+        if (value === null) {
+          where.where(`${column} IS NULL`);
+        } else {
+          where.where(`${column} = :${parameter}`, { [parameter]: value });
+        }
         return;
       case "NE":
-        if (value === null) where.where(`${column} IS NOT NULL`);
-        else where.where(`${column} != :${parameter}`, { [parameter]: value });
+        if (value === null) {
+          where.where(`${column} IS NOT NULL`);
+        } else {
+          where.where(`${column} != :${parameter}`, { [parameter]: value });
+        }
         return;
       case "GT":
         where.where(`${column} > :${parameter}`, { [parameter]: value });

@@ -90,15 +90,23 @@ export function withListMeta<Entity = unknown>(
  * defense; this is the first, and it fails loudly where the mistake is.
  */
 function isFindManyResult<Entity>(value: unknown): value is FindManyResult<Entity> {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
   const candidate = value as { entities?: unknown; total?: unknown };
   return Array.isArray(candidate.entities) && (typeof candidate.total === "number" || candidate.total === null);
 }
 
 function describeValue(value: unknown): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "an array";
-  if (typeof value !== "object") return typeof value;
+  if (value === null) {
+    return "null";
+  }
+  if (Array.isArray(value)) {
+    return "an array";
+  }
+  if (typeof value !== "object") {
+    return typeof value;
+  }
   return Array.isArray((value as { entities?: unknown }).entities)
     ? "an object whose 'total' is neither a number nor null"
     : "an object with no 'entities' array";

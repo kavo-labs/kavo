@@ -57,8 +57,12 @@ export class DefaultEntityCatalog implements EntityCatalog {
 
   get(entity: ClassRef): EntityRuntimeInfo | undefined {
     const known = this.registered.get(entity);
-    if (known !== undefined) return known;
-    if (this.derived.has(entity)) return this.derived.get(entity);
+    if (known !== undefined) {
+      return known;
+    }
+    if (this.derived.has(entity)) {
+      return this.derived.get(entity);
+    }
 
     let info: EntityRuntimeInfo | undefined;
     const metadata = this.metadataSource(entity);

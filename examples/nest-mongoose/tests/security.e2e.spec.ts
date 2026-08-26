@@ -38,12 +38,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
     try {
       await mongoose.disconnect();
     } finally {
-      if (mongoServer !== undefined) await mongoServer.stop();
+      if (mongoServer !== undefined) {
+        await mongoServer.stop();
+      }
     }
   }
 });

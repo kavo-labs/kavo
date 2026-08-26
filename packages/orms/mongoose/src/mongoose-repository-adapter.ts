@@ -181,7 +181,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    */
   private buildPopulate(tree: IncludeTree): readonly PopulateSpec[] | undefined {
     const nodes = Object.values(tree);
-    if (nodes.length === 0) return undefined;
+    if (nodes.length === 0) {
+      return undefined;
+    }
     return nodes.map((node) => {
       const children = this.buildPopulate(node.children);
       return {
@@ -201,14 +203,20 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     onlyDeleted = false,
   ): MongoWhere {
     const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") return where;
+    if (softDelete.strategy !== "soft") {
+      return where;
+    }
     if (onlyDeleted) {
       const deleted = { [softDelete.field]: { $ne: null } };
       return Object.keys(where).length === 0 ? deleted : { $and: [where, deleted] };
     }
-    if (withDeleted) return where;
+    if (withDeleted) {
+      return where;
+    }
     const live = { [softDelete.field]: { $eq: null } };
-    if (Object.keys(where).length === 0) return live;
+    if (Object.keys(where).length === 0) {
+      return live;
+    }
     return { $and: [where, live] };
   }
 
@@ -280,9 +288,13 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     const softDeleteField = context.config.softDelete.field;
     const changes = { ...(rawData as Record<string, unknown>) };
     delete changes[this.idField];
-    if (softDeleteField !== null) delete changes[softDeleteField];
+    if (softDeleteField !== null) {
+      delete changes[softDeleteField];
+    }
     for (const key of Object.keys(changes)) {
-      if (changes[key] === undefined) delete changes[key];
+      if (changes[key] === undefined) {
+        delete changes[key];
+      }
     }
     if (Object.keys(changes).length === 0) {
       throw new PatchNoChangesException({
@@ -315,12 +327,16 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       const softDeleteField = context.config.softDelete.field;
       const changes = { ...(rawData as Record<string, unknown>) };
       delete changes[this.idField];
-      if (softDeleteField !== null) delete changes[softDeleteField];
+      if (softDeleteField !== null) {
+        delete changes[softDeleteField];
+      }
       if (Object.keys(changes).length === 0) {
         // MongoDB rejects an empty `$set`. Nothing to write is not an
         // error — it is the current document, unchanged.
         const existing = await this.byId(id, context, false);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         return toPlainDocument(existing) as Entity;
       }
       // `runValidators` is off by default on every Mongoose update — only
@@ -334,7 +350,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         { $set: changes },
         { new: true, lean: true, runValidators: true },
       );
-      if (updated === null || updated === undefined) throw this.notFound(id, context);
+      if (updated === null || updated === undefined) {
+        throw this.notFound(id, context);
+      }
       return toPlainResult(updated) as Entity;
     } catch (error) {
       throw this.mapError(error, context, true);
@@ -346,7 +364,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     try {
       if (softDelete.strategy === "hard") {
         const existing = await this.byId(id, context, false);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         await this.model.deleteOne({ [this.idField]: { $eq: id } });
         return;
       }
@@ -365,7 +385,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       );
       if (updated === null || updated === undefined) {
         const existing = await this.byId(id, context, true);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         throw new AlreadyDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
           context: errorContext(context),
@@ -389,7 +411,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       );
       if (restored === null || restored === undefined) {
         const existing = await this.byId(id, context, true);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         throw new NotDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
           context: errorContext(context),
@@ -408,7 +432,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         // Purge is the second step of a two-step delete: it removes a
         // document that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         if (!this.isDeleted(existing, softDelete.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
@@ -417,7 +443,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         }
       } else {
         const existing = await this.byId(id, context, false);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
       }
       await this.model.deleteOne({ [this.idField]: { $eq: id } });
     } catch (error) {

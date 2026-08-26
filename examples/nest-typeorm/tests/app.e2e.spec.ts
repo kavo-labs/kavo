@@ -20,7 +20,9 @@ afterAll(async () => {
   // Guards against beforeAll throwing before `app` is assigned — without
   // this, a real bootstrap failure (e.g. a DI-wiring regression) is masked
   // by an unrelated TypeError here instead of surfacing its own message.
-  if (app !== undefined) await app.close();
+  if (app !== undefined) {
+    await app.close();
+  }
 });
 
 registerCrudE2eSuite(() => app);

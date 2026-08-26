@@ -10,12 +10,22 @@ import type { ColumnMetadata } from "typeorm/metadata/ColumnMetadata.js";
  * just doesn't narrow.
  */
 export function fieldKindOf(column: ColumnMetadata): FieldKind {
-  if (column.type === Number) return "number";
-  if (column.type === String) return "string";
-  if (column.type === Boolean) return "boolean";
-  if (column.type === Date) return "date";
+  if (column.type === Number) {
+    return "number";
+  }
+  if (column.type === String) {
+    return "string";
+  }
+  if (column.type === Boolean) {
+    return "boolean";
+  }
+  if (column.type === Date) {
+    return "date";
+  }
   const type = String(column.type).toLowerCase();
-  if (type === "enum" || type === "simple-enum") return "enum";
+  if (type === "enum" || type === "simple-enum") {
+    return "enum";
+  }
   if (
     /^(int|integer|tinyint|smallint|mediumint|bigint|float|double|double precision|real|decimal|numeric|number)$/.test(
       type,
@@ -23,9 +33,15 @@ export function fieldKindOf(column: ColumnMetadata): FieldKind {
   ) {
     return "number";
   }
-  if (/^(bool|boolean)$/.test(type)) return "boolean";
-  if (/^(date|datetime|timestamp|timestamptz|time)($| )/.test(type)) return "date";
-  if (/^(json|jsonb|simple-json)$/.test(type)) return "json";
+  if (/^(bool|boolean)$/.test(type)) {
+    return "boolean";
+  }
+  if (/^(date|datetime|timestamp|timestamptz|time)($| )/.test(type)) {
+    return "date";
+  }
+  if (/^(json|jsonb|simple-json)$/.test(type)) {
+    return "json";
+  }
   return "string";
 }
 

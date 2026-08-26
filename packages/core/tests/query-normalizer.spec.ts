@@ -28,8 +28,12 @@ const softDeletableNormalizer = new QueryNormalizer(accountMetadata);
  * soft-delete flags — can meet in a single normalized request.
  */
 const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
-  if (entity === Comment) return commentMetadata as unknown as EntityMetadata<object>;
-  if (entity === Author) return authorMetadata as unknown as EntityMetadata<object>;
+  if (entity === Comment) {
+    return commentMetadata as unknown as EntityMetadata<object>;
+  }
+  if (entity === Author) {
+    return authorMetadata as unknown as EntityMetadata<object>;
+  }
   return undefined;
 });
 const postConfig = resolveEntityConfig(postMetadata, { allowlists: { includable: ["comments"] } }, undefined);

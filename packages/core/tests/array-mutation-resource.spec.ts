@@ -31,7 +31,9 @@ class ResourceCapableAdapter<Entity extends { id: number; posts?: unknown }> ext
    */
   private async loaded(id: EntityId, relation: string): Promise<Entity> {
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = [...(this.membership.get(relation) ?? [])].map(
       (memberId) => ({ id: memberId, title: `Post ${memberId}` }),
     );

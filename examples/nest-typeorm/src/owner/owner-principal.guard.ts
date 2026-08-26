@@ -22,7 +22,9 @@ export class OwnerPrincipalGuard implements CanActivate {
       user?: unknown;
     }>();
     const permissions = request.headers["x-permissions"];
-    if (permissions === undefined) return true;
+    if (permissions === undefined) {
+      return true;
+    }
     request.user = { permissions: permissions.split(",").filter(Boolean) };
     return true;
   }

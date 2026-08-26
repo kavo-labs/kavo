@@ -62,7 +62,9 @@ export function decodeCursor<Entity>(
 ): readonly FilterScalar[] | null {
   const json = base64UrlDecode(token);
   const payload = json === null ? undefined : parseJson(json);
-  if (!Array.isArray(payload)) return invalidCursor(issues, "it is not a valid cursor token");
+  if (!Array.isArray(payload)) {
+    return invalidCursor(issues, "it is not a valid cursor token");
+  }
   if (payload.length !== sort.length) {
     return invalidCursor(
       issues,
@@ -136,7 +138,9 @@ export function cursorValuesOf<Entity>(
   return sort.map((entry) => {
     const name = entry.field as string;
     const value = (entity as Record<string, unknown>)[name];
-    if (value === undefined || value === null) return null;
+    if (value === undefined || value === null) {
+      return null;
+    }
     const field = fields.get(name);
     if (field === undefined || !isEncodable(value, field)) {
       throw new ConfigurationException(
@@ -191,7 +195,9 @@ export function keysetExpression<Entity>(
     chain.push(condition(entry.field, entry.direction === "desc" ? "LT" : "GT", values[boundary]!));
     branches.push(chain.length === 1 ? chain[0]! : { kind: "group", operator: "AND", children: chain });
   }
-  if (branches.length === 1) return branches[0]!;
+  if (branches.length === 1) {
+    return branches[0]!;
+  }
   const lead = sort[0]!;
   const startable = condition(lead.field, lead.direction === "desc" ? "LTE" : "GTE", values[0]!);
   return {
@@ -213,8 +219,12 @@ export function keysetExpression<Entity>(
  */
 export function readFilter<Entity>(query: NormalizedQueryContext<Entity>): Filter<Entity> {
   const { pagination, filter } = query;
-  if (!hasKeyset(pagination) || pagination.keyset === null) return filter;
-  if (filter.root === null) return { root: pagination.keyset };
+  if (!hasKeyset(pagination) || pagination.keyset === null) {
+    return filter;
+  }
+  if (filter.root === null) {
+    return { root: pagination.keyset };
+  }
   return { root: { kind: "group", operator: "AND", children: [filter.root, pagination.keyset] } };
 }
 
@@ -250,9 +260,13 @@ function isEncodable(value: unknown, field: FieldMetadata): boolean {
 
 /** The runtime type of a rejected cursor value, for the error message. */
 function describeRuntimeType(value: unknown): string {
-  if (value instanceof Date) return "Date";
+  if (value instanceof Date) {
+    return "Date";
+  }
   const type = typeof value;
-  if (type !== "object") return type;
+  if (type !== "object") {
+    return type;
+  }
   const name = (value as { constructor?: { name?: string } }).constructor?.name;
   return name === undefined || name === "" ? "object" : `${name} object`;
 }
@@ -273,7 +287,9 @@ function reviveValue(raw: unknown, field: FieldMetadata): FilterScalar | undefin
     case "enum":
       return typeof raw === "string" && (field.enumValues ?? []).includes(raw) ? raw : undefined;
     case "date": {
-      if (typeof raw !== "string") return undefined;
+      if (typeof raw !== "string") {
+        return undefined;
+      }
       const date = new Date(raw);
       return Number.isNaN(date.getTime()) ? undefined : date;
     }
@@ -323,9 +339,13 @@ function base64UrlEncode(ascii: string): string {
     const third = hasThird ? ascii.charCodeAt(index + 2) : 0;
     out += BASE64URL_ALPHABET[first >> 2];
     out += BASE64URL_ALPHABET[((first & 0x03) << 4) | (second >> 4)];
-    if (!hasSecond) break;
+    if (!hasSecond) {
+      break;
+    }
     out += BASE64URL_ALPHABET[((second & 0x0f) << 2) | (third >> 6)];
-    if (!hasThird) break;
+    if (!hasThird) {
+      break;
+    }
     out += BASE64URL_ALPHABET[third & 0x3f];
   }
   return out;
@@ -335,13 +355,17 @@ function base64UrlEncode(ascii: string): string {
 function base64UrlDecode(token: string): string | null {
   // A 4-character base64 group carries 3 bytes, so a trailing group of one
   // character encodes nothing — the token is malformed, not merely padded.
-  if (token.length % 4 === 1) return null;
+  if (token.length % 4 === 1) {
+    return null;
+  }
   let out = "";
   let buffer = 0;
   let bits = 0;
   for (const char of token) {
     const index = BASE64URL_ALPHABET.indexOf(char);
-    if (index < 0) return null;
+    if (index < 0) {
+      return null;
+    }
     buffer = (buffer << 6) | index;
     bits += 6;
     if (bits >= 8) {

@@ -277,7 +277,9 @@ describe("@Kavo prototype pollution over the wire", () => {
   });
 
   afterEach(() => {
-    for (const key of POLLUTED) delete (Object.prototype as Record<string, unknown>)[key];
+    for (const key of POLLUTED) {
+      delete (Object.prototype as Record<string, unknown>)[key];
+    }
   });
 
   async function attack(segment: string, value: string): Promise<void> {
@@ -1040,7 +1042,9 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
       @Override("updateOne")
       async activate(id: string): Promise<unknown> {
         const row = adapter.rows.find((candidate) => candidate.id === Number(id));
-        if (row !== undefined) row.done = true;
+        if (row !== undefined) {
+          row.done = true;
+        }
         return row ?? null;
       }
     }

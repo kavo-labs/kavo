@@ -49,12 +49,18 @@ class JsonPatchCapableAdapter<Entity extends { id: number; posts?: unknown }> ex
         context: { entityName: context.entityName, operation: context.operation },
       });
     }
-    for (const memberId of toAdd) current.add(memberId);
-    for (const memberId of changes.remove) current.delete(memberId);
+    for (const memberId of toAdd) {
+      current.add(memberId);
+    }
+    for (const memberId of changes.remove) {
+      current.delete(memberId);
+    }
     this.membership.set(relation, current);
 
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = [...current];
     return row;
   }
@@ -128,7 +134,9 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
     class ReplaceCapable extends SeededAdapter<Author> {
       async replaceRelation(id: EntityId, relation: string, memberIds: readonly EntityId[] | null): Promise<Author> {
         const row = await this.findOneById(id, null);
-        if (row === null) throw new Error("fixture");
+        if (row === null) {
+          throw new Error("fixture");
+        }
         (row as unknown as Record<string, unknown>)[relation] = memberIds;
         return row;
       }

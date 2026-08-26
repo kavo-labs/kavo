@@ -27,7 +27,9 @@ describe("crudTools", () => {
 
   function find(bindings: ReturnType<typeof setup>["bindings"], name: string) {
     const binding = bindings.find((candidate) => candidate.tool.name === name);
-    if (binding === undefined) throw new Error(`no tool named ${name}`);
+    if (binding === undefined) {
+      throw new Error(`no tool named ${name}`);
+    }
     return binding;
   }
 
@@ -261,7 +263,9 @@ describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
     );
     const bindings = crudTools({ name: "Todo", service: unpaginatedTodoService(adapter) });
     const binding = bindings.find((candidate) => candidate.tool.name === "todo.findMany");
-    if (binding === undefined) throw new Error("no tool named todo.findMany");
+    if (binding === undefined) {
+      throw new Error("no tool named todo.findMany");
+    }
 
     const result = await binding.handler({});
 
@@ -276,7 +280,9 @@ describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
   it("rejects an explicit limit/offset the same way REST does, rather than truncating silently", async () => {
     const bindings = crudTools({ name: "Todo", service: unpaginatedTodoService(new InMemoryTodoAdapter()) });
     const binding = bindings.find((candidate) => candidate.tool.name === "todo.findMany");
-    if (binding === undefined) throw new Error("no tool named todo.findMany");
+    if (binding === undefined) {
+      throw new Error("no tool named todo.findMany");
+    }
 
     const result = await binding.handler({ limit: 5 });
 

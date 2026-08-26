@@ -99,8 +99,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   httpServer = undefined;
-  if (app !== undefined) await app.close();
-  if (dataSource !== undefined) await dataSource.destroy();
+  if (app !== undefined) {
+    await app.close();
+  }
+  if (dataSource !== undefined) {
+    await dataSource.destroy();
+  }
 });
 
 beforeEach(async () => {

@@ -22,7 +22,9 @@ function coerce(kind: FieldKind, raw: unknown, extra: Partial<FieldMetadata> = {
  * succeeded — a negative-path test must not pass vacuously.
  */
 function issueOf(result: ReturnType<typeof coerceScalar>): QueryIssueDto {
-  if (!isIssue(result)) throw new Error(`expected a query issue, got ${String(result)}`);
+  if (!isIssue(result)) {
+    throw new Error(`expected a query issue, got ${String(result)}`);
+  }
   return result;
 }
 

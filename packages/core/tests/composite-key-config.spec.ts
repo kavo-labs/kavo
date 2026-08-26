@@ -22,7 +22,9 @@ class ReplaceCapableCompositeAdapter extends SeededAdapter<CompositeEntity> {
   ): Promise<CompositeEntity> {
     this.calls.push({ id, relation, memberIds });
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = memberIds;
     return row;
   }

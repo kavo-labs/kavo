@@ -20,7 +20,9 @@ import type { CacheSettings } from "../config/settings.js";
  * lives here rather than in either.
  */
 export function isEtagEnabled(cache: CacheSettings | false): boolean {
-  if (cache === false) return false;
+  if (cache === false) {
+    return false;
+  }
   return cache.etag;
 }
 
@@ -111,7 +113,9 @@ export async function computeEtag(representation: unknown): Promise<string> {
  */
 export function canonicalize(input: unknown): string {
   const value = unwrapToJson(input);
-  if (value === null || value === undefined) return "null";
+  if (value === null || value === undefined) {
+    return "null";
+  }
   switch (typeof value) {
     case "string":
       return JSON.stringify(value);
@@ -127,13 +131,19 @@ export function canonicalize(input: unknown): string {
       // Functions and symbols never survive JSON encoding either.
       return "null";
   }
-  if (value instanceof Date) return JSON.stringify(value.toISOString());
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(",")}]`;
+  if (value instanceof Date) {
+    return JSON.stringify(value.toISOString());
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalize).join(",")}]`;
+  }
   const source = value as Record<string, unknown>;
   const members: string[] = [];
   for (const key of Object.keys(source).sort()) {
     const member = source[key];
-    if (member === undefined) continue;
+    if (member === undefined) {
+      continue;
+    }
     members.push(`${JSON.stringify(key)}:${canonicalize(member)}`);
   }
   return `{${members.join(",")}}`;
@@ -147,9 +157,13 @@ export function canonicalize(input: unknown): string {
  * unwrapped by their own `canonicalize` call.
  */
 function unwrapToJson(value: unknown): unknown {
-  if (value === null || value === undefined) return value;
+  if (value === null || value === undefined) {
+    return value;
+  }
   const candidate = (value as { toJSON?: unknown }).toJSON;
-  if (typeof candidate !== "function") return value;
+  if (typeof candidate !== "function") {
+    return value;
+  }
   return (candidate as (this: unknown) => unknown).call(value);
 }
 

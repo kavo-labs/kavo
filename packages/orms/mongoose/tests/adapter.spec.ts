@@ -107,7 +107,9 @@ async function seed(): Promise<void> {
     { email: "alan@x.io", name: "Alan", age: 41, status: "banned" },
     { email: "joan@x.io", name: "Joan", age: 28, status: "pending" },
   ];
-  for (const row of rows) await authors.createOne(row as never);
+  for (const row of rows) {
+    await authors.createOne(row as never);
+  }
 }
 
 /** A normalized query with no filter — what a custom handler hands the reader. */

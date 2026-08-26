@@ -21,7 +21,9 @@ class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter
     _context: KavoContext<Entity>,
   ): Promise<Entity> {
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = memberIds;
     return row;
   }
@@ -81,7 +83,9 @@ function isAuthenticated<Entity>(): Policy<Entity> {
 function isOwner<Entity>(field: string): Policy<Entity> {
   return ({ context, entity }) => {
     const principal = principalOf(context);
-    if (principal.userId == null || entity === undefined) return false;
+    if (principal.userId == null || entity === undefined) {
+      return false;
+    }
     return (entity as unknown as Record<string, unknown>)[field] === principal.userId;
   };
 }
@@ -150,8 +154,12 @@ describe("policy — a plain function per operation", () => {
 
   it("composes role/permission/ownership/negation by hand — admin bypasses ownership, a banned owner is still denied", async () => {
     const policy: Policy<Post> = (args) => {
-      if (hasRole<Post>("admin")(args)) return true;
-      if (hasRole<Post>("banned")(args)) return false;
+      if (hasRole<Post>("admin")(args)) {
+        return true;
+      }
+      if (hasRole<Post>("banned")(args)) {
+        return false;
+      }
       return hasPermission<Post>("post:update")(args) && isOwner<Post>("authorId")(args);
     };
     const { crud, adapter } = makeCrud({ operations: { updateOne: { policy } } } as never);
@@ -769,9 +777,13 @@ describe("policy — authorization.required default-deny switch (ADR-0035)", () 
 describe("policy — a required query filter, expressed inside the function", () => {
   const requiresFilter = <Entity>(field: string): Policy<Entity> => {
     const filterHasField = (expression: unknown): boolean => {
-      if (expression === null || typeof expression !== "object") return false;
+      if (expression === null || typeof expression !== "object") {
+        return false;
+      }
       const node = expression as { kind: string; field?: string; children?: readonly unknown[] };
-      if (node.kind === "condition") return node.field === field;
+      if (node.kind === "condition") {
+        return node.field === field;
+      }
       return (node.children ?? []).some(filterHasField);
     };
     return ({ context }) => filterHasField(context.query?.filter.root ?? null);

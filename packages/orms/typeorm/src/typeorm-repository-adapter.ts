@@ -98,7 +98,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       const qb = this.byId(id, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false);
       this.joinIncludes(qb, include, this.alias);
       const entity = await qb.getOne();
-      if (entity !== null) await this.loadBatches([entity], this.entity, include);
+      if (entity !== null) {
+        await this.loadBatches([entity], this.entity, include);
+      }
       return entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -108,7 +110,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   async findOne(query: NormalizedQueryContext<Entity>, context: KavoContext<Entity>): Promise<Entity | null> {
     try {
       const entity = await this.buildQuery(query, context).take(1).getOne();
-      if (entity !== null) await this.loadBatches([entity], this.entity, query.include);
+      if (entity !== null) {
+        await this.loadBatches([entity], this.entity, query.include);
+      }
       return entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -187,7 +191,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     translator?: FilterTranslator<Entity>,
   ): void {
     for (const node of Object.values(tree)) {
-      if (node.strategy !== "join") continue;
+      if (node.strategy !== "join") {
+        continue;
+      }
       this.joinNode(qb, node, parentAlias, translator);
     }
   }
@@ -220,7 +226,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * point: a to-many never multiplies the rows that pagination counts.
    */
   private async loadBatches(rows: readonly ObjectLiteral[], entity: ClassRef, tree: IncludeTree): Promise<void> {
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      return;
+    }
     for (const node of Object.values(tree)) {
       if (node.strategy === "batch") {
         await this.batchLoad(rows, entity, node);
@@ -248,7 +256,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     const seen = new Map<unknown, unknown>();
     for (const parent of parents) {
       const key = rowKey(parent);
-      if (!seen.has(key)) seen.set(key, rowId(parent));
+      if (!seen.has(key)) {
+        seen.set(key, rowId(parent));
+      }
     }
     const ids = [...seen.values()];
     const alias = metadata.name;
@@ -289,20 +299,26 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     onlyDeleted = false,
   ): void {
     const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") return;
+    if (softDelete.strategy !== "soft") {
+      return;
+    }
     if (softDelete.field === this.deleteDateColumn) {
       if (onlyDeleted) {
         qb.withDeleted().andWhere(`${this.alias}.${softDelete.field} IS NOT NULL`);
         return;
       }
-      if (withDeleted) qb.withDeleted();
+      if (withDeleted) {
+        qb.withDeleted();
+      }
       return;
     }
     if (onlyDeleted) {
       qb.andWhere(`${this.alias}.${softDelete.field} IS NOT NULL`);
       return;
     }
-    if (!withDeleted) qb.andWhere(`${this.alias}.${softDelete.field} IS NULL`);
+    if (!withDeleted) {
+      qb.andWhere(`${this.alias}.${softDelete.field} IS NULL`);
+    }
   }
 
   /**
@@ -448,7 +464,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       // Scoped to live rows: a soft-deleted row is invisible to updates,
       // exactly as it is to reads. Reviving one is `restore`'s job.
       const existing = await this.byId(id, context, false).getOne();
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       // Defence in depth, mirroring the deserializer's own exclusion: even
       // an explicit write DTO that legitimately names the id (to assign a
       // natural key on `create`) must not be allowed to reassign an
@@ -464,7 +482,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       // — TypeORM's `update` rejects an empty value set outright, and there
       // is nothing left to change: the current row, unmodified, is the
       // correct answer.
-      if (Object.keys(data).length === 0) return existing;
+      if (Object.keys(data).length === 0) {
+        return existing;
+      }
       this.repository.merge(existing, data as never);
       const touchesRelation = Object.keys(data).some((key) => this.relationProperties.has(key));
       if (touchesRelation) {
@@ -486,12 +506,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     try {
       if (softDelete.strategy === "hard") {
         const result = await this.repository.delete(this.updateCriteria(id) as never);
-        if (result.affected === 0) throw this.notFound(id, context);
+        if (result.affected === 0) {
+          throw this.notFound(id, context);
+        }
         return;
       }
       const { field } = softDelete;
       const existing = await this.byId(id, context, true).getOne();
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (this.isDeleted(existing, field)) {
         throw new AlreadyDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -516,7 +540,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     try {
       const { field } = this.requireSoftDelete(context, "restore");
       const existing = await this.byId(id, context, true).getOne();
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (!this.isDeleted(existing, field)) {
         throw new NotDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -545,7 +571,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true).getOne();
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         if (!this.isDeleted(existing, softDelete.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
@@ -554,7 +582,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         }
       }
       const result = await this.repository.delete(this.updateCriteria(id) as never);
-      if (result.affected === 0) throw this.notFound(id, context);
+      if (result.affected === 0) {
+        throw this.notFound(id, context);
+      }
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
@@ -572,7 +602,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * row instead, so `joinColumns` there is empty and this never refuses it.
    */
   supportsArrayMutation(relation: string): boolean {
-    if (this.compositeIdFields === null) return true;
+    if (this.compositeIdFields === null) {
+      return true;
+    }
     const relationMetadata = this.dataSource
       .getMetadata(this.entity)
       .relations.find((candidate) => candidate.propertyName === relation);
@@ -598,7 +630,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   ): Promise<Entity> {
     try {
       const existing = await this.byId(id, context, false).getOne();
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
 
       const relationMetadata = this.dataSource
         .getMetadata(this.entity)
@@ -652,7 +686,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         where: this.findOneCriteria(id) as never,
         relations: { [relation]: true } as never,
       });
-      if (reloaded === null) throw this.notFound(id, context);
+      if (reloaded === null) {
+        throw this.notFound(id, context);
+      }
       return reloaded;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -678,7 +714,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     try {
       return await this.dataSource.transaction(async (manager) => {
         const existing = await manager.getRepository(this.entity).findOne({ where: this.findOneCriteria(id) as never });
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
 
         const relationMetadata = manager.connection
           .getMetadata(this.entity)
@@ -744,7 +782,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
           where: this.findOneCriteria(id) as never,
           relations: { [relation]: true } as never,
         });
-        if (reloaded === null) throw this.notFound(id, context);
+        if (reloaded === null) {
+          throw this.notFound(id, context);
+        }
         return reloaded;
       });
     } catch (error) {
@@ -767,12 +807,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     try {
       this.relationMetadataOf(this.dataSource, relation, context);
       const existing = await this.byId(id, context, false).getOne();
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       const reloaded = await this.repository.findOne({
         where: this.findOneCriteria(id) as never,
         relations: { [relation]: true } as never,
       });
-      if (reloaded === null) throw this.notFound(id, context);
+      if (reloaded === null) {
+        throw this.notFound(id, context);
+      }
       return reloaded;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -835,7 +879,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         }
         this.scopeToLive(existingQb, context, false, false);
         const existing = await existingQb.getOne();
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
 
         const relationMetadata = this.relationMetadataOf(manager, relation, context);
         const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
@@ -887,7 +933,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
           where: this.findOneCriteria(id) as never,
           relations: { [relation]: true } as never,
         });
-        if (reloaded === null) throw this.notFound(id, context);
+        if (reloaded === null) {
+          throw this.notFound(id, context);
+        }
         return reloaded;
       });
     } catch (error) {
@@ -947,10 +995,16 @@ function stripImmutableKeys<Entity>(
   softDeleteField: string | null,
 ): Partial<Entity> {
   const copy = { ...(data as Record<string, unknown>) };
-  for (const idField of idFields) delete copy[idField];
-  if (softDeleteField !== null) delete copy[softDeleteField];
+  for (const idField of idFields) {
+    delete copy[idField];
+  }
+  if (softDeleteField !== null) {
+    delete copy[softDeleteField];
+  }
   for (const key of Object.keys(copy)) {
-    if (copy[key] === undefined) delete copy[key];
+    if (copy[key] === undefined) {
+      delete copy[key];
+    }
   }
   return copy as Partial<Entity>;
 }
@@ -960,9 +1014,14 @@ function relatedRows(parents: readonly ObjectLiteral[], name: string): readonly 
   const rows: ObjectLiteral[] = [];
   for (const parent of parents) {
     const value = parent[name];
-    if (value === null || value === undefined) continue;
-    if (Array.isArray(value)) rows.push(...(value as ObjectLiteral[]));
-    else rows.push(value as ObjectLiteral);
+    if (value === null || value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      rows.push(...(value as ObjectLiteral[]));
+    } else {
+      rows.push(value as ObjectLiteral);
+    }
   }
   return rows;
 }

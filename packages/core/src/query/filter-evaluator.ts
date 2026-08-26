@@ -25,7 +25,9 @@ export function evaluateFilter<Entity = unknown>(
   root: FilterExpression<Entity> | null,
   item: Readonly<Record<string, unknown>>,
 ): boolean {
-  if (root === null) return true;
+  if (root === null) {
+    return true;
+  }
   return evaluateExpression(root, item);
 }
 
@@ -33,7 +35,9 @@ function evaluateExpression<Entity>(
   expression: FilterExpression<Entity>,
   item: Readonly<Record<string, unknown>>,
 ): boolean {
-  if (expression.kind === "condition") return evaluateCondition(expression, item);
+  if (expression.kind === "condition") {
+    return evaluateCondition(expression, item);
+  }
   switch (expression.operator) {
     case "AND":
       return expression.children.every((child) => evaluateExpression(child, item));
@@ -54,13 +58,19 @@ function evaluateCondition<Entity>(
 ): boolean {
   const itemValue = item[condition.field as string];
 
-  if (condition.operator === "IS_NULL") return itemValue === null || itemValue === undefined;
-  if (condition.operator === "IS_NOT_NULL") return itemValue !== null && itemValue !== undefined;
+  if (condition.operator === "IS_NULL") {
+    return itemValue === null || itemValue === undefined;
+  }
+  if (condition.operator === "IS_NOT_NULL") {
+    return itemValue !== null && itemValue !== undefined;
+  }
 
   // Every remaining operator: a missing/null item value can never satisfy
   // it, including `EQ null` — SQL's `NULL = NULL` is itself unknown, not
   // true, which is exactly why `IS_NULL` exists as its own operator.
-  if (itemValue === null || itemValue === undefined) return false;
+  if (itemValue === null || itemValue === undefined) {
+    return false;
+  }
 
   switch (condition.operator) {
     case "EQ":
@@ -93,7 +103,9 @@ function evaluateCondition<Entity>(
 /** `Date` compares by instant; everything else compares by strict equality after normalizing one side to a `Date` if the other is one. */
 function valuesEqual(itemValue: unknown, filterValue: FilterScalar): boolean {
   const [a, b] = normalizeForDateCompare(itemValue, filterValue);
-  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
   return a === b;
 }
 
@@ -105,13 +117,19 @@ function compareOrdered(
   const [a, b] = normalizeForDateCompare(itemValue, filterValue);
   const left = orderable(a);
   const right = orderable(b);
-  if (left === null || right === null) return false;
+  if (left === null || right === null) {
+    return false;
+  }
   return compare(left, right);
 }
 
 function orderable(value: unknown): number | string | null {
-  if (value instanceof Date) return value.getTime();
-  if (typeof value === "number" || typeof value === "string") return value;
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+  if (typeof value === "number" || typeof value === "string") {
+    return value;
+  }
   return null;
 }
 
@@ -127,7 +145,9 @@ function orderable(value: unknown): number | string | null {
 function normalizeForDateCompare(itemValue: unknown, filterValue: FilterScalar): [unknown, FilterScalar] {
   if (filterValue instanceof Date && typeof itemValue === "string") {
     const parsed = new Date(itemValue);
-    if (!Number.isNaN(parsed.getTime())) return [parsed, filterValue];
+    if (!Number.isNaN(parsed.getTime())) {
+      return [parsed, filterValue];
+    }
   }
   return [itemValue, filterValue];
 }

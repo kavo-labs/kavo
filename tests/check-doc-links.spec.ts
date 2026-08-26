@@ -39,7 +39,9 @@ const BASE_FIXTURE: Record<string, string> = {
 const fixtures: string[] = [];
 
 afterEach(() => {
-  for (const dir of fixtures.splice(0)) rmSync(dir, { recursive: true, force: true });
+  for (const dir of fixtures.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 /**
@@ -52,7 +54,9 @@ function fixture(overrides: Record<string, string | null> = {}): string {
 
   const files = { ...BASE_FIXTURE, ...overrides };
   for (const [relative, contents] of Object.entries(files)) {
-    if (contents === null) continue; // explicitly omitted from this fixture
+    if (contents === null) {
+      continue;
+    } // explicitly omitted from this fixture
     const absolute = join(root, relative);
     mkdirSync(dirname(absolute), { recursive: true });
     writeFileSync(absolute, contents);

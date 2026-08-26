@@ -8,7 +8,9 @@ import { ConfigurationException, KavoException } from "@kavo/core";
  * `QueryContext` surface directly, never REST's wire-string parser.
  */
 function parseSortArg(tokens: readonly string[] | undefined): { field: string; direction: "asc" | "desc" }[] {
-  if (tokens === undefined) return [];
+  if (tokens === undefined) {
+    return [];
+  }
   return tokens.map((token) =>
     token.startsWith("-")
       ? { field: token.slice(1), direction: "desc" as const }
@@ -56,7 +58,9 @@ function paginationStrategyOf(service: object): string | undefined {
 }
 
 function requireOffsetPageable(entityName: string, strategy: string | undefined): void {
-  if (strategy !== "cursor" && strategy !== "since") return;
+  if (strategy !== "cursor" && strategy !== "since") {
+    return;
+  }
   throw new ConfigurationException(
     entityName,
     "pagination.strategy",

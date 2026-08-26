@@ -8,7 +8,9 @@ import type { PrismaDatamodel, PrismaField } from "./datamodel.js";
  * degrade to `string`, same posture as `@kavo/typeorm`'s fallback.
  */
 function fieldKindOf(field: PrismaField): FieldKind {
-  if (field.kind === "enum") return "enum";
+  if (field.kind === "enum") {
+    return "enum";
+  }
   switch (field.type) {
     case "Int":
     case "Float":
@@ -38,8 +40,12 @@ function fieldKindOf(field: PrismaField): FieldKind {
  * either.
  */
 function isGeneratedField(field: PrismaField): boolean {
-  if (field.isUpdatedAt) return true;
-  if (!field.hasDefaultValue) return false;
+  if (field.isUpdatedAt) {
+    return true;
+  }
+  if (!field.hasDefaultValue) {
+    return false;
+  }
   const value = field.default;
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

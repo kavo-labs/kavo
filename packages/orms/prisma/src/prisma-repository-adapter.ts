@@ -161,7 +161,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
    */
   private buildInclude(tree: IncludeTree): Record<string, unknown> | undefined {
     const entries = Object.values(tree);
-    if (entries.length === 0) return undefined;
+    if (entries.length === 0) {
+      return undefined;
+    }
     const include: Record<string, unknown> = {};
     for (const node of entries) {
       const where = node.softDelete.strategy === "soft" ? { [node.softDelete.field]: null } : undefined;
@@ -184,14 +186,20 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     onlyDeleted = false,
   ): PrismaWhere | undefined {
     const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") return where;
+    if (softDelete.strategy !== "soft") {
+      return where;
+    }
     if (onlyDeleted) {
       const deleted = { [softDelete.field]: { not: null } };
       return where === undefined ? deleted : { AND: [where, deleted] };
     }
-    if (withDeleted) return where;
+    if (withDeleted) {
+      return where;
+    }
     const live = { [softDelete.field]: null };
-    if (where === undefined) return live;
+    if (where === undefined) {
+      return live;
+    }
     return { AND: [where, live] };
   }
 
@@ -258,9 +266,13 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     const softDeleteField = context.config.softDelete.field;
     const data = { ...(rawData as Record<string, unknown>) };
     delete data[this.idField];
-    if (softDeleteField !== null) delete data[softDeleteField];
+    if (softDeleteField !== null) {
+      delete data[softDeleteField];
+    }
     for (const key of Object.keys(data)) {
-      if (data[key] === undefined) delete data[key];
+      if (data[key] === undefined) {
+        delete data[key];
+      }
     }
     if (Object.keys(data).length === 0) {
       throw new PatchNoChangesException({
@@ -280,7 +292,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
   private async writeExisting(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
       const existing = await this.byId(id, context, false);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       // Defence in depth, mirroring the deserializer's own exclusion: even
       // an explicit write DTO that legitimately names the id (to assign a
       // natural key on `create`) must not be allowed to reassign an
@@ -290,7 +304,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
       const softDeleteField = context.config.softDelete.field;
       const data = { ...(rawData as Record<string, unknown>) };
       delete data[this.idField];
-      if (softDeleteField !== null) delete data[softDeleteField];
+      if (softDeleteField !== null) {
+        delete data[softDeleteField];
+      }
       return (await this.delegate.update({ where: { [this.idField]: id }, data })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
@@ -302,13 +318,17 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     try {
       if (softDelete.strategy === "hard") {
         const existing = await this.byId(id, context, false);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         await this.delegate.delete({ where: { [this.idField]: id } });
         return;
       }
       const { field } = softDelete;
       const existing = await this.byId(id, context, true);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (this.isDeleted(existing, field)) {
         throw new AlreadyDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -325,7 +345,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     try {
       const { field } = this.requireSoftDelete(context, "restore");
       const existing = await this.byId(id, context, true);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (!this.isDeleted(existing, field)) {
         throw new NotDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -345,7 +367,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         if (!this.isDeleted(existing, softDelete.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
@@ -354,7 +378,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
         }
       } else {
         const existing = await this.byId(id, context, false);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
       }
       await this.delegate.delete({ where: { [this.idField]: id } });
     } catch (error) {

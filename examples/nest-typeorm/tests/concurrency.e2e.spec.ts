@@ -29,7 +29,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (app !== undefined) await app.close();
+  if (app !== undefined) {
+    await app.close();
+  }
 });
 
 function server(): SupertestTarget {

@@ -80,8 +80,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   httpServer = undefined;
-  if (app !== undefined) await app.close();
-  if (dataSource !== undefined) await dataSource.destroy();
+  if (app !== undefined) {
+    await app.close();
+  }
+  if (dataSource !== undefined) {
+    await dataSource.destroy();
+  }
 });
 
 beforeEach(async () => {
@@ -117,8 +121,12 @@ describe("cursor pagination over HTTP", () => {
       pages++;
       labels.push(...(response.body.items as { label: string }[]).map((item) => item.label));
       cursor = (response.body.meta?.nextCursor ?? null) as string | null;
-      if (cursor === null) break;
-      if (pages > 20) throw new Error("cursor paging did not terminate");
+      if (cursor === null) {
+        break;
+      }
+      if (pages > 20) {
+        throw new Error("cursor paging did not terminate");
+      }
     }
 
     expect(labels).toEqual(["r-1", "r-2", "r-3", "r-4", "r-5", "r-6", "r-7"]);
@@ -184,8 +192,12 @@ describe("since pagination over HTTP", () => {
       const page = response.body.items as { label: string }[];
       labels.push(...page.map((item) => item.label));
       since = (response.body.meta?.nextSince ?? null) as string | null;
-      if (since === null || page.length === 0) break;
-      if (polls > 20) throw new Error("since paging did not terminate");
+      if (since === null || page.length === 0) {
+        break;
+      }
+      if (polls > 20) {
+        throw new Error("since paging did not terminate");
+      }
     }
 
     expect(labels).toEqual(["r-1", "r-2", "r-3", "r-4", "r-5", "r-6"]);

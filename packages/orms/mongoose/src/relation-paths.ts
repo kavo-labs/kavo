@@ -29,9 +29,13 @@ export function assertQueryablePath(
   usage: "filtering" | "sorting",
 ): void {
   const separator = field.indexOf(".");
-  if (separator === -1) return;
+  if (separator === -1) {
+    return;
+  }
   const root = field.slice(0, separator);
-  if (!relationNames.has(root)) return;
+  if (!relationNames.has(root)) {
+    return;
+  }
 
   throw QueryValidationException.single({
     field,

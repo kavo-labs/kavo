@@ -40,7 +40,9 @@ let cached: SwaggerModule | null | undefined;
  * not, this whole module is a no-op — Kavo never forces the dependency.
  */
 function loadSwagger(): SwaggerModule | null {
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   try {
     const require = createRequire(import.meta.url);
     cached = require("@nestjs/swagger") as SwaggerModule;
@@ -149,7 +151,9 @@ function listQueryParams(config: EntityConfig<object> | undefined): readonly { n
 
 function allowedFieldsDescription(selector: QueryFieldSelector<object> | undefined): string | undefined {
   const fields = explicitAllowlist(selector);
-  if (fields === null) return undefined;
+  if (fields === null) {
+    return undefined;
+  }
   // An explicit empty array is a real, allowed configuration ("nothing is
   // filterable"), and must read as a closed door rather than as nothing to
   // say at all — the same distinction `includableRelations` draws below.
@@ -157,7 +161,9 @@ function allowedFieldsDescription(selector: QueryFieldSelector<object> | undefin
 }
 
 function explicitAllowlist(selector: QueryFieldSelector<object> | undefined): readonly string[] | null {
-  if (selector === undefined || "exclude" in selector) return null;
+  if (selector === undefined || "exclude" in selector) {
+    return null;
+  }
   return selector;
 }
 
@@ -170,7 +176,9 @@ export function applySwaggerMetadata(
   config: EntityConfig<object> | undefined,
 ): void {
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
 
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const apply = (decorator: MethodDecorator): void => {
@@ -358,13 +366,19 @@ export function applyConditionalRequestDocs(
   route: RouteShape,
   cached: boolean,
 ): void {
-  if (!cached) return;
+  if (!cached) {
+    return;
+  }
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
 
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const method = propertyDescriptor.value as object;
-  if (alreadyDocumented.has(method)) return;
+  if (alreadyDocumented.has(method)) {
+    return;
+  }
   alreadyDocumented.add(method);
   const apply = (decorator: MethodDecorator): void => {
     decorator(prototype, methodName, propertyDescriptor);
@@ -431,13 +445,19 @@ export function applySearchQueryDocs(
   searchable: readonly string[],
 ): void {
   const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
-  if (!enabled || !isList) return;
+  if (!enabled || !isList) {
+    return;
+  }
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
 
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const method = propertyDescriptor.value as object;
-  if (alreadySearchDocumented.has(method)) return;
+  if (alreadySearchDocumented.has(method)) {
+    return;
+  }
   alreadySearchDocumented.add(method);
   const apply = (decorator: MethodDecorator): void => {
     decorator(prototype, methodName, propertyDescriptor);
@@ -504,13 +524,19 @@ export function applyPaginationDocs(
   strategy: string,
 ): void {
   const isList = descriptor.kind === "read" && descriptor.cardinality === "many";
-  if (!isList) return;
+  if (!isList) {
+    return;
+  }
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
 
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const method = propertyDescriptor.value as object;
-  if (alreadyPaginationDocumented.has(method)) return;
+  if (alreadyPaginationDocumented.has(method)) {
+    return;
+  }
   alreadyPaginationDocumented.add(method);
   const apply = (decorator: MethodDecorator): void => {
     decorator(prototype, methodName, propertyDescriptor);
@@ -583,18 +609,26 @@ export function applyBodySchemaDocs(
   allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
 ): void {
   const allowed = allowedFieldsFor(descriptor.id, allowlists);
-  if (allowed === null) return;
+  if (allowed === null) {
+    return;
+  }
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
 
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const method = propertyDescriptor.value as object;
-  if (alreadyBodySchemaDocumented.has(method)) return;
+  if (alreadyBodySchemaDocumented.has(method)) {
+    return;
+  }
   alreadyBodySchemaDocumented.add(method);
 
   const properties: Record<string, object> = {};
   for (const field of metadata.fields) {
-    if (field.generated || !allowed.includes(field.name)) continue;
+    if (field.generated || !allowed.includes(field.name)) {
+      continue;
+    }
     properties[field.name] = fieldSchema(field);
   }
   swagger.ApiBody({
@@ -665,7 +699,9 @@ function fieldSchema(field: FieldMetadata): object {
  */
 function bodyOptionsFor(bodyDto: ClassRef): object {
   const schema = schemaFromDto(bodyDto);
-  if (schema === null) return { type: bodyDto };
+  if (schema === null) {
+    return { type: bodyDto };
+  }
   return { schema: { title: bodyDto.name, ...schema } };
 }
 
@@ -690,7 +726,9 @@ function successBodyFor(
   entity: ClassRef,
   dtoResolver: DtoResolver<object>,
 ): object {
-  if (route.status === 204) return {};
+  if (route.status === 204) {
+    return {};
+  }
   // Descriptor override first, same fallback order as `mapResponse`
   // (issue #131): the engine serializes through `descriptor.output` ahead
   // of the entity's root `item`/`list` slot, so documenting the slot alone
@@ -802,21 +840,31 @@ export function applyResponseSchemaDocs(
   selectable: readonly string[],
   dtoResolver: DtoResolver<object>,
 ): void {
-  if (route.status === 204) return;
+  if (route.status === 204) {
+    return;
+  }
   const isList = descriptor.cardinality === "many";
   const slot: "item" | "list" = isList ? "list" : "item";
-  if (descriptor.output !== null || dtoResolver.resolve(slot, descriptor.id) !== null) return;
+  if (descriptor.output !== null || dtoResolver.resolve(slot, descriptor.id) !== null) {
+    return;
+  }
 
   const swagger = loadSwagger();
-  if (swagger === null) return;
+  if (swagger === null) {
+    return;
+  }
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
   const method = propertyDescriptor.value as object;
-  if (alreadyResponseSchemaDocumented.has(method)) return;
+  if (alreadyResponseSchemaDocumented.has(method)) {
+    return;
+  }
   alreadyResponseSchemaDocumented.add(method);
 
   const properties: Record<string, object> = {};
   for (const field of metadata.fields) {
-    if (!selectable.includes(field.name)) continue;
+    if (!selectable.includes(field.name)) {
+      continue;
+    }
     properties[field.name] = fieldSchema(field);
   }
   const element = { type: "object" as const, properties };
@@ -836,7 +884,9 @@ function schemaFromDto(bodyDto: ClassRef): { type: "object"; properties: Record<
     return null;
   }
   const keys = Object.keys(instance);
-  if (keys.length === 0) return null;
+  if (keys.length === 0) {
+    return null;
+  }
   const properties: Record<string, object> = {};
   for (const key of keys) {
     properties[key] = jsonSchemaForValue(instance[key]);
@@ -846,7 +896,9 @@ function schemaFromDto(bodyDto: ClassRef): { type: "object"; properties: Record<
 
 /** Infer a JSON-schema fragment from a DTO field's initializer value. */
 function jsonSchemaForValue(value: unknown): object {
-  if (isSchemaHint(value)) return schemaForHint(readSchemaHint(value));
+  if (isSchemaHint(value)) {
+    return schemaForHint(readSchemaHint(value));
+  }
   switch (typeof value) {
     case "string":
       return { type: "string" };
@@ -857,9 +909,15 @@ function jsonSchemaForValue(value: unknown): object {
     case "bigint":
       return { type: "integer" };
     case "object":
-      if (value instanceof Date) return { type: "string", format: "date-time" };
-      if (Array.isArray(value)) return { type: "array", items: {} };
-      if (value !== null) return { type: "object" };
+      if (value instanceof Date) {
+        return { type: "string", format: "date-time" };
+      }
+      if (Array.isArray(value)) {
+        return { type: "array", items: {} };
+      }
+      if (value !== null) {
+        return { type: "object" };
+      }
       return {};
     default:
       return {};
@@ -904,13 +962,19 @@ function schemaForHint(hint: SchemaHint): object {
  */
 function includableRelations(config: EntityConfig<object> | undefined): readonly string[] | null {
   const selector = (config?.allowlists as { includable?: RelationFieldSelector<object> } | undefined)?.includable;
-  if (selector === undefined) return [];
-  if ("exclude" in selector) return null;
+  if (selector === undefined) {
+    return [];
+  }
+  if ("exclude" in selector) {
+    return null;
+  }
   return selector;
 }
 
 export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
-  if (descriptor.input !== null) return descriptor.input as ClassRef;
+  if (descriptor.input !== null) {
+    return descriptor.input as ClassRef;
+  }
   const resolve = (slot: "create" | "update" | "patch"): ClassRef | null =>
     dtoResolver.resolve(slot, descriptor.id) as ClassRef | null;
   switch (descriptor.id) {

@@ -9,7 +9,9 @@ export function issuesOf(fn: () => unknown) {
   try {
     fn();
   } catch (error) {
-    if (error instanceof QueryValidationException) return error.issues;
+    if (error instanceof QueryValidationException) {
+      return error.issues;
+    }
     throw error;
   }
   throw new Error("expected QueryValidationException");

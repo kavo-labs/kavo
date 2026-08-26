@@ -22,7 +22,9 @@ function readSseFrames(body: ReadableStream<Uint8Array>): { next(): Promise<stri
   async function next(): Promise<string> {
     while (!buffer.includes("\n\n")) {
       const { value, done } = await reader.read();
-      if (done) throw new Error("stream ended before a full SSE frame arrived");
+      if (done) {
+        throw new Error("stream ended before a full SSE frame arrived");
+      }
       buffer += decoder.decode(value, { stream: true });
     }
     const end = buffer.indexOf("\n\n") + 2;

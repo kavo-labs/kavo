@@ -39,8 +39,12 @@ beforeAll(async () => {
 }, 240_000);
 
 afterAll(async () => {
-  if (app !== undefined) await app.close();
-  if (container !== undefined) await container.stop();
+  if (app !== undefined) {
+    await app.close();
+  }
+  if (container !== undefined) {
+    await container.stop();
+  }
 }, 30_000);
 
 registerCrudE2eSuite(() => app);

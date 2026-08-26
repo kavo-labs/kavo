@@ -44,7 +44,9 @@ const PNPM_RUN = /pnpm run ([\w:-]+)/g;
 function captures(source: string, pattern: RegExp): string[] {
   const found: string[] = [];
   for (const [, capture] of source.matchAll(pattern)) {
-    if (capture !== undefined) found.push(capture);
+    if (capture !== undefined) {
+      found.push(capture);
+    }
   }
   return found;
 }

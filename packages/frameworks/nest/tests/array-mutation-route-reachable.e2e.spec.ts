@@ -91,7 +91,9 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
   }
   async update(id: EntityId, data: Partial<Post>, context: KavoContext<Post>): Promise<Post> {
     const row = await this.findOneById(id);
-    if (row === null) throw new NotFoundException({ messageParams: { entity: context.entityName, id: String(id) } });
+    if (row === null) {
+      throw new NotFoundException({ messageParams: { entity: context.entityName, id: String(id) } });
+    }
     Object.assign(row, data);
     return row;
   }
@@ -105,7 +107,9 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
   async purge(): Promise<void> {}
   async replaceRelation(id: EntityId, relation: string, memberIds: readonly EntityId[] | null): Promise<Post> {
     const row = await this.findOneById(id);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = memberIds;
     return row;
   }
@@ -115,7 +119,9 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
     changes: { readonly add: readonly EntityId[]; readonly remove: readonly EntityId[] },
   ): Promise<Post> {
     const row = await this.findOneById(id);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = changes.add;
     return row;
   }
@@ -124,8 +130,12 @@ class FakePostAdapter implements RepositoryAdapter<Post> {
 function fakeInfrastructure(adapter: FakePostAdapter): KavoInfrastructure {
   return {
     metadataFor<Entity extends object>(entity: ClassRef<Entity>) {
-      if ((entity as ClassRef) === Tag) return tagMetadata as unknown as EntityMetadata<Entity>;
-      if ((entity as ClassRef) !== Post) throw new Error(`no metadata for ${entity.name}`);
+      if ((entity as ClassRef) === Tag) {
+        return tagMetadata as unknown as EntityMetadata<Entity>;
+      }
+      if ((entity as ClassRef) !== Post) {
+        throw new Error(`no metadata for ${entity.name}`);
+      }
       return postMetadata as unknown as EntityMetadata<Entity>;
     },
     adapterFor<Entity extends object>() {

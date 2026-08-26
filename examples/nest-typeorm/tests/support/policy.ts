@@ -26,7 +26,9 @@ export function isAuthenticated<Entity>(): Policy<Entity> {
 export function isOwner<Entity>(field: string): Policy<Entity> {
   return ({ context, entity }) => {
     const principal = principalOf(context);
-    if (principal.userId == null || entity === undefined) return false;
+    if (principal.userId == null || entity === undefined) {
+      return false;
+    }
     return (entity as unknown as Record<string, unknown>)[field] === principal.userId;
   };
 }

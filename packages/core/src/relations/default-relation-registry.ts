@@ -16,9 +16,15 @@ function resolveArrayMutationStrategy(
   write: RelationEdgeSettings["write"],
   entityDefault: ArrayMutationSettings | false,
 ): RelationDescriptor["write"] {
-  if (entityDefault === false) return undefined;
-  if (typeof write === "object" && write !== null) return write.strategy;
-  if (write !== true) return undefined;
+  if (entityDefault === false) {
+    return undefined;
+  }
+  if (typeof write === "object" && write !== null) {
+    return write.strategy;
+  }
+  if (write !== true) {
+    return undefined;
+  }
   return entityDefault.strategy;
 }
 

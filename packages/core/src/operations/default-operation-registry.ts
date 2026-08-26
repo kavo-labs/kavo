@@ -170,10 +170,14 @@ function resolveDtoOverride(
 ): Pick<OperationDescriptor, "input" | "output" | "query"> {
   const dto = settings?.dto as Readonly<Partial<Record<DtoOverrideField, DtoClass>>> | undefined;
   const resolved: Record<DtoOverrideField, DtoClass | null> = { input: null, output: null, query: null };
-  if (dto === undefined) return resolved;
+  if (dto === undefined) {
+    return resolved;
+  }
 
   for (const field of Object.keys(dto) as DtoOverrideField[]) {
-    if (dto[field] === undefined) continue;
+    if (dto[field] === undefined) {
+      continue;
+    }
     if (!allowed.includes(field)) {
       throw new ConfigurationException(
         entityName,
@@ -276,7 +280,9 @@ export function createOperationRegistry<Entity extends object>(
   const softDeleteDeclared = declaresSoftDelete(config);
 
   for (const [id, entry] of Object.entries(operations as unknown as Readonly<Record<string, unknown>>)) {
-    if (STANDARD_IDS.has(id)) continue;
+    if (STANDARD_IDS.has(id)) {
+      continue;
+    }
     registerCustomOperation(registry, scope, id, entry);
   }
 
@@ -394,7 +400,9 @@ function requireOneOf<Value extends string>(
   value: Value | undefined,
   allowed: readonly Value[],
 ): Value | undefined {
-  if (value === undefined || allowed.includes(value)) return value;
+  if (value === undefined || allowed.includes(value)) {
+    return value;
+  }
   throw new ConfigurationException(
     entityName,
     `operations.${id}.${key}`,
@@ -415,9 +423,13 @@ function rejectCustomOperationKeys(
   id: StandardOperationId,
   settings: Readonly<Record<string, unknown>> | undefined,
 ): void {
-  if (settings === undefined) return;
+  if (settings === undefined) {
+    return;
+  }
   for (const key of ["kind", "cardinality"] as const) {
-    if (settings[key] === undefined) continue;
+    if (settings[key] === undefined) {
+      continue;
+    }
     throw new ConfigurationException(
       entityName,
       `operations.${id}.${key}`,
@@ -436,7 +448,9 @@ function rejectCustomOperationKeys(
  */
 function declaresSoftDelete(config: { readonly softDelete?: unknown } | undefined): boolean {
   const softDelete = config?.softDelete;
-  if (typeof softDelete !== "object" || softDelete === null) return false;
+  if (typeof softDelete !== "object" || softDelete === null) {
+    return false;
+  }
   const { strategy, field } = softDelete as { strategy?: string; field?: string };
   return strategy === "soft" || typeof field === "string";
 }

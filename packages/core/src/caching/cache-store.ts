@@ -80,9 +80,13 @@ export function createMemoryCacheStore(): CacheStore {
   return {
     get(entityName, key) {
       const entries = byEntity.get(entityName);
-      if (entries === undefined) return null;
+      if (entries === undefined) {
+        return null;
+      }
       const entry = entries.get(key);
-      if (entry === undefined) return null;
+      if (entry === undefined) {
+        return null;
+      }
       if (entry.expiresAt <= Date.now()) {
         entries.delete(key);
         return null;

@@ -35,7 +35,9 @@ const ENTITY_TAG = /(?:W\/)?"[^"]*"|\*|[^\s,]+/g;
  * intermediary normalized the value away.
  */
 export function parseEntityTags(raw: string | string[] | undefined): readonly string[] | undefined {
-  if (raw === undefined) return undefined;
+  if (raw === undefined) {
+    return undefined;
+  }
   return (Array.isArray(raw) ? raw.join(",") : raw).match(ENTITY_TAG) ?? [];
 }
 
@@ -44,7 +46,9 @@ export function readPreconditions(request: ConditionalRequestShape): RequestPrec
   const headers = request.headers ?? {};
   const ifMatch = parseEntityTags(headers["if-match"]);
   const ifNoneMatch = parseEntityTags(headers["if-none-match"]);
-  if (ifMatch === undefined && ifNoneMatch === undefined) return null;
+  if (ifMatch === undefined && ifNoneMatch === undefined) {
+    return null;
+  }
   return {
     ...(ifMatch === undefined ? {} : { ifMatch }),
     ...(ifNoneMatch === undefined ? {} : { ifNoneMatch }),

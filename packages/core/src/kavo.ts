@@ -287,7 +287,9 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
  * bootstrap errors, one per `createCrud` call that happens to run first.
  */
 function validateRealtimeTransports(transports: readonly RealtimeTransport[] | undefined): void {
-  if (transports === undefined) return;
+  if (transports === undefined) {
+    return;
+  }
   for (const [index, transport] of transports.entries()) {
     const path = `realtimeTransports[${index}]`;
     const candidate = transport as { name?: unknown; publish?: unknown } | null;
@@ -327,7 +329,9 @@ function validateCacheStore(store: CacheStore): void {
     throw new ConfigurationException("createKavo", "cacheStore", `expected a CacheStore, got ${JSON.stringify(store)}`);
   }
   for (const method of ["get", "set", "invalidate"] as const) {
-    if (typeof candidate[method] === "function") continue;
+    if (typeof candidate[method] === "function") {
+      continue;
+    }
     throw new ConfigurationException(
       "createKavo",
       `cacheStore.${method}`,
@@ -347,9 +351,13 @@ function requireSoftDeletable<Entity extends object>(
   config: ResolvedEntityConfig<Entity>,
   registry: OperationRegistry<Entity>,
 ): void {
-  if (config.softDelete.strategy === "soft") return;
+  if (config.softDelete.strategy === "soft") {
+    return;
+  }
   for (const id of ["restoreOne", "purgeOne"] as const) {
-    if (registry.get(id)?.enabled !== true) continue;
+    if (registry.get(id)?.enabled !== true) {
+      continue;
+    }
     throw new ConfigurationException(
       config.entityName,
       `operations.${id}`,
@@ -372,7 +380,9 @@ function requireArrayMutationSupport<Entity extends object>(
   relationNames: readonly string[],
   adapter: RepositoryAdapter<Entity>,
 ): void {
-  if (relationNames.length === 0 || typeof adapter.replaceRelation === "function") return;
+  if (relationNames.length === 0 || typeof adapter.replaceRelation === "function") {
+    return;
+  }
   throw new ConfigurationException(
     config.entityName,
     `relations.edges.${relationNames[0]}.write`,
@@ -397,10 +407,14 @@ function requireResourceArrayMutationSupport<Entity extends object>(
   relationNames: readonly string[],
   adapter: RepositoryAdapter<Entity>,
 ): void {
-  if (relationNames.length === 0) return;
+  if (relationNames.length === 0) {
+    return;
+  }
   const required = ["replaceRelation", "readRelation", "addRelationMember", "removeRelationMember"] as const;
   for (const method of required) {
-    if (typeof adapter[method] === "function") continue;
+    if (typeof adapter[method] === "function") {
+      continue;
+    }
     throw new ConfigurationException(
       config.entityName,
       `relations.edges.${relationNames[0]}.write`,
@@ -423,7 +437,9 @@ function requireJsonPatchSupport<Entity extends object>(
   relationNames: readonly string[],
   adapter: RepositoryAdapter<Entity>,
 ): void {
-  if (relationNames.length === 0 || typeof adapter.patchRelation === "function") return;
+  if (relationNames.length === 0 || typeof adapter.patchRelation === "function") {
+    return;
+  }
   throw new ConfigurationException(
     config.entityName,
     `relations.edges.${relationNames[0]}.write`,
@@ -479,8 +495,12 @@ function requireArrayMutationTargetsResolvable<Entity extends object>(
 ): void {
   for (const name of relationNames) {
     const relation = config.relations.get(name);
-    if (relation === undefined) continue; // unreachable: relationNames came from this same registry
-    if (catalog.get(relation.target()) !== undefined) continue;
+    if (relation === undefined) {
+      continue;
+    } // unreachable: relationNames came from this same registry
+    if (catalog.get(relation.target()) !== undefined) {
+      continue;
+    }
     throw new ConfigurationException(
       config.entityName,
       `relations.edges.${name}.write`,

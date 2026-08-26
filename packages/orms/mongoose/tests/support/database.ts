@@ -55,6 +55,8 @@ export async function rejectionOf(promise: Promise<unknown>): Promise<{ code?: u
   } catch (error) {
     return error as { code?: unknown } & Error;
   }
-  if (resolved) throw new Error("expected the promise to reject, but it resolved");
+  if (resolved) {
+    throw new Error("expected the promise to reject, but it resolved");
+  }
   throw new Error("unreachable");
 }

@@ -50,6 +50,8 @@ export function toProblemDetails(
 }
 
 function describeCause(cause: unknown): string {
-  if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
+  if (cause instanceof Error) {
+    return `${cause.name}: ${cause.message}`;
+  }
   return String(cause);
 }

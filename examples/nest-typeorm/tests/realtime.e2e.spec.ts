@@ -62,7 +62,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   sse.close();
-  if (app !== undefined) await app.close();
+  if (app !== undefined) {
+    await app.close();
+  }
 });
 
 interface RealtimeFrames {
@@ -80,7 +82,9 @@ function readSseFrames(body: ReadableStream<Uint8Array>): RealtimeFrames {
   async function next(): Promise<string> {
     while (!buffer.includes("\n\n")) {
       const { value, done } = await reader.read();
-      if (done) throw new Error("stream ended before a full SSE frame arrived");
+      if (done) {
+        throw new Error("stream ended before a full SSE frame arrived");
+      }
       buffer += decoder.decode(value, { stream: true });
     }
     const end = buffer.indexOf("\n\n") + 2;
@@ -263,7 +267,9 @@ describe("GET /realtime — Owner writes stream over SSE", () => {
     // teardown propagates — poll rather than assert immediately.
     const deadline = Date.now() + 2000;
     while (sse.connectionCount !== 0) {
-      if (Date.now() > deadline) throw new Error(`connectionCount stuck at ${sse.connectionCount}`);
+      if (Date.now() > deadline) {
+        throw new Error(`connectionCount stuck at ${sse.connectionCount}`);
+      }
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   });
@@ -328,7 +334,9 @@ describe("GET /realtime — collection channel: every standard event type reache
     expect(await purgeOwner(owner.id)).toBe(204);
 
     const events: string[] = [];
-    for (let i = 0; i < 6; i++) events.push((await frames.nextEvent()).event);
+    for (let i = 0; i < 6; i++) {
+      events.push((await frames.nextEvent()).event);
+    }
     expect(events).toEqual(["created", "patched", "deleted", "restored", "deleted", "deleted"]);
 
     await frames.cancel();

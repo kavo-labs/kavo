@@ -61,15 +61,23 @@ afterAll(async () => {
   // socket server and the PGlite instance, or the runner leaks both for the
   // rest of the session.
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
     try {
-      if (orm !== undefined) await orm.close();
+      if (orm !== undefined) {
+        await orm.close();
+      }
     } finally {
       try {
-        if (socketServer !== undefined) await socketServer.stop();
+        if (socketServer !== undefined) {
+          await socketServer.stop();
+        }
       } finally {
-        if (db !== undefined) await db.close();
+        if (db !== undefined) {
+          await db.close();
+        }
       }
     }
   }

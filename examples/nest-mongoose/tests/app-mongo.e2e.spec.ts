@@ -49,12 +49,16 @@ afterAll(async () => {
   // the worker's event loop alive — and leak the container until Ryuk
   // reaps it, turning one failed test into a hung run.
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
     try {
       await mongoose.disconnect();
     } finally {
-      if (container !== undefined) await container.stop();
+      if (container !== undefined) {
+        await container.stop();
+      }
     }
   }
 }, 30_000);

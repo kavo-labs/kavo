@@ -265,7 +265,9 @@ function exportedNames(): string[] {
   for (const match of source.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}\s*from/g)) {
     for (const raw of (match[1] ?? "").split(",")) {
       const name = raw.trim().replace(/^type\s+/, "");
-      if (name.length > 0) names.push(name.includes(" as ") ? (name.split(" as ").pop() as string).trim() : name);
+      if (name.length > 0) {
+        names.push(name.includes(" as ") ? (name.split(" as ").pop() as string).trim() : name);
+      }
     }
   }
   return names;

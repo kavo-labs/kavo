@@ -235,9 +235,15 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     onlyDeleted = false,
   ): MikroWhere {
     const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") return where ?? {};
-    if (onlyDeleted) return and(where, { [softDelete.field]: { $ne: null } });
-    if (withDeleted) return where ?? {};
+    if (softDelete.strategy !== "soft") {
+      return where ?? {};
+    }
+    if (onlyDeleted) {
+      return and(where, { [softDelete.field]: { $ne: null } });
+    }
+    if (withDeleted) {
+      return where ?? {};
+    }
     return and(where, { [softDelete.field]: { $eq: null } });
   }
 
@@ -309,9 +315,13 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     const softDeleteField = context.config.softDelete.field;
     const data = { ...(rawData as Record<string, unknown>) };
     delete data[this.idField];
-    if (softDeleteField !== null) delete data[softDeleteField];
+    if (softDeleteField !== null) {
+      delete data[softDeleteField];
+    }
     for (const key of Object.keys(data)) {
-      if (data[key] === undefined) delete data[key];
+      if (data[key] === undefined) {
+        delete data[key];
+      }
     }
     if (Object.keys(data).length === 0) {
       throw new PatchNoChangesException({
@@ -340,7 +350,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
       // exactly as it is to reads. Reviving one is `restore`'s job.
       const where = this.scopeToLive({ [this.idField]: id }, context, false);
       const existing = await em.findOne(this.entity, where as never);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       // Defence in depth, mirroring the deserializer's own exclusion: even
       // an explicit write DTO that legitimately names the id (to assign a
       // natural key on `create`) must not be allowed to reassign an
@@ -350,7 +362,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
       const softDeleteField = context.config.softDelete.field;
       const data = { ...(rawData as Record<string, unknown>) };
       delete data[this.idField];
-      if (softDeleteField !== null) delete data[softDeleteField];
+      if (softDeleteField !== null) {
+        delete data[softDeleteField];
+      }
       wrap(existing).assign(this.toWriteData(data as Partial<Entity>) as never, { em });
       await em.flush();
       return toPlain(existing);
@@ -364,12 +378,16 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     try {
       if (softDelete.strategy === "hard") {
         const affected = await this.fork().nativeDelete(this.entity, { [this.idField]: id } as never);
-        if (affected === 0) throw this.notFound(id, context);
+        if (affected === 0) {
+          throw this.notFound(id, context);
+        }
         return;
       }
       const { field } = softDelete;
       const existing = await this.byId(id, context, true);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (this.isDeleted(existing, field)) {
         throw new AlreadyDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -386,7 +404,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     try {
       const { field } = this.requireSoftDelete(context, "restore");
       const existing = await this.byId(id, context, true);
-      if (existing === null) throw this.notFound(id, context);
+      if (existing === null) {
+        throw this.notFound(id, context);
+      }
       if (!this.isDeleted(existing, field)) {
         throw new NotDeletedException({
           messageParams: { entity: context.entityName, id: String(id) },
@@ -411,7 +431,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
-        if (existing === null) throw this.notFound(id, context);
+        if (existing === null) {
+          throw this.notFound(id, context);
+        }
         if (!this.isDeleted(existing, softDelete.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
@@ -420,7 +442,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
         }
       }
       const affected = await this.fork().nativeDelete(this.entity, { [this.idField]: id } as never);
-      if (affected === 0) throw this.notFound(id, context);
+      if (affected === 0) {
+        throw this.notFound(id, context);
+      }
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
@@ -438,7 +462,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
   private toWriteData(data: Partial<Entity>): Record<string, unknown> {
     const result: Record<string, unknown> = { ...data };
     for (const [name, idFieldOf] of this.relationIdFields) {
-      if (!(name in result)) continue;
+      if (!(name in result)) {
+        continue;
+      }
       result[name] = unwrapAssociation(result[name], idFieldOf());
     }
     return result;
@@ -485,14 +511,18 @@ function pruneIncluded<Row>(row: Row, tree: IncludeTree): Row {
     const name = node.relation.name;
     const value = source[name];
     const deleted = (candidate: unknown): boolean => {
-      if (node.softDelete.strategy !== "soft") return false;
+      if (node.softDelete.strategy !== "soft") {
+        return false;
+      }
       const marker = (candidate as Record<string, unknown>)[node.softDelete.field];
       return marker !== null && marker !== undefined;
     };
 
     if (Array.isArray(value)) {
       const live = value.filter((child) => !deleted(child));
-      for (const child of live) pruneIncluded(child, node.children);
+      for (const child of live) {
+        pruneIncluded(child, node.children);
+      }
       source[name] = live;
       continue;
     }
@@ -508,7 +538,9 @@ function pruneIncluded<Row>(row: Row, tree: IncludeTree): Row {
 }
 
 function unwrapAssociation(value: unknown, idField: string): unknown {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined) {
+    return null;
+  }
   if (Array.isArray(value)) {
     // Nulls are filtered, not mapped through, exactly as core's `associate`
     // does: a to-many element carrying no id contributes nothing, and passing

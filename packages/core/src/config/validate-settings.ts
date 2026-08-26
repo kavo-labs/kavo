@@ -104,8 +104,12 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     if (typeof edge !== "object" || edge === null) {
       throw new ConfigurationException(entityName, path, `expected an object, got ${JSON.stringify(edge)}`);
     }
-    if (edge.defaultInclude !== undefined) bool(`${path}.defaultInclude`, edge.defaultInclude);
-    if (edge.maxDepth !== undefined) positiveInt(`${path}.maxDepth`, edge.maxDepth);
+    if (edge.defaultInclude !== undefined) {
+      bool(`${path}.defaultInclude`, edge.defaultInclude);
+    }
+    if (edge.maxDepth !== undefined) {
+      positiveInt(`${path}.maxDepth`, edge.maxDepth);
+    }
     if (edge.strategy !== undefined && !["join", "batch", "auto"].includes(edge.strategy)) {
       throw new ConfigurationException(
         entityName,

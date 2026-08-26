@@ -62,7 +62,9 @@ export function writeOptedInRelationNames(
   edges:
     Readonly<Record<string, { readonly write?: boolean | { readonly strategy?: string } } | undefined>> | undefined,
 ): readonly string[] {
-  if (edges === undefined) return [];
+  if (edges === undefined) {
+    return [];
+  }
   return Object.entries(edges)
     .filter(([, edge]) => edge?.write === true || typeof edge?.write === "object")
     .map(([name]) => name);

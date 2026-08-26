@@ -54,7 +54,9 @@ async function bootstrap(): Promise<{ app: INestApplication; server: SupertestTa
 
 function boundAddress(server: SupertestTarget): AddressInfo {
   const address = (server as Server).address();
-  if (address === null || typeof address === "string") throw new Error("server is not bound to a TCP address");
+  if (address === null || typeof address === "string") {
+    throw new Error("server is not bound to a TCP address");
+  }
   return address;
 }
 

@@ -61,7 +61,9 @@ describe("DefaultOperationRegistry — the operation table (ADR-0006)", () => {
 
   it("returns every entry in registration order", () => {
     const registry = new DefaultOperationRegistry<User>();
-    for (const id of ["gamma", "alpha", "beta"]) registry.register(descriptor({ id }));
+    for (const id of ["gamma", "alpha", "beta"]) {
+      registry.register(descriptor({ id }));
+    }
     expect(ids(registry)).toEqual(["gamma", "alpha", "beta"]);
   });
 

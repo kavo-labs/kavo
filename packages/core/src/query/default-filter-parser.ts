@@ -72,7 +72,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     const bracketTree = this.collectBracketTree(rawParams);
     if (bracketTree !== null) {
       const expression = this.convertNode(bracketTree, config, issues);
-      if (expression !== null) roots.push(expression);
+      if (expression !== null) {
+        roots.push(expression);
+      }
     }
 
     const json = rawParams["filter"];
@@ -80,7 +82,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
       const parsed = this.parseJsonFilter(json, issues);
       if (parsed !== null) {
         const expression = this.convertNode(parsed, config, issues);
-        if (expression !== null) roots.push(expression);
+        if (expression !== null) {
+          roots.push(expression);
+        }
       }
     }
 
@@ -120,7 +124,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     let found = false;
     for (const [key, value] of Object.entries(rawParams)) {
       const segments = parseBracketKey(key, "filter");
-      if (segments === null) continue;
+      if (segments === null) {
+        continue;
+      }
       found = true;
       assignPath(tree, segments, value);
     }
@@ -168,8 +174,12 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
       this.convertConditions(key, value, config, issues, children);
     }
 
-    if (children.length === 0) return null;
-    if (children.length === 1) return children[0] as FilterExpression<Entity>;
+    if (children.length === 0) {
+      return null;
+    }
+    if (children.length === 1) {
+      return children[0] as FilterExpression<Entity>;
+    }
     return { kind: "group", operator: "AND", children };
   }
 
@@ -208,7 +218,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         continue;
       }
       const child = this.convertNode(branch as Record<string, unknown>, config, issues);
-      if (child !== null) children.push(child);
+      if (child !== null) {
+        children.push(child);
+      }
     }
     if (children.length > 0) {
       out.push({
@@ -244,7 +256,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     }
     for (const [token, raw] of Object.entries(value)) {
       const condition = this.buildCondition(field, token, raw, config, issues);
-      if (condition !== null) out.push(condition);
+      if (condition !== null) {
+        out.push(condition);
+      }
     }
   }
 
@@ -314,7 +328,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
           return null;
         }
         const values = this.coerceAll(parts, field, metadata, issues);
-        if (values === null) return null;
+        if (values === null) {
+          return null;
+        }
         return { kind: "condition", field: path, operator, value: values };
       }
       case "BETWEEN": {
@@ -328,7 +344,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
           return null;
         }
         const values = this.coerceAll(parts, field, metadata, issues);
-        if (values === null) return null;
+        if (values === null) {
+          return null;
+        }
         return { kind: "condition", field: path, operator, value: values };
       }
       case "LIKE":
@@ -385,8 +403,12 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
 
 /** Comma-separated by default; the repeated-key form arrives as an array. */
 function splitMultiValue(raw: unknown): readonly unknown[] {
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === "string") return raw.split(",");
+  if (Array.isArray(raw)) {
+    return raw;
+  }
+  if (typeof raw === "string") {
+    return raw.split(",");
+  }
   return [raw];
 }
 
@@ -406,11 +428,15 @@ function isBareEmptyOperand(parts: readonly unknown[]): boolean {
 }
 
 function expressionDepth(expression: FilterExpression<unknown>): number {
-  if (expression.kind === "condition") return 1;
+  if (expression.kind === "condition") {
+    return 1;
+  }
   let deepest = 0;
   for (const child of expression.children) {
     const depth = expressionDepth(child);
-    if (depth > deepest) deepest = depth;
+    if (depth > deepest) {
+      deepest = depth;
+    }
   }
   return 1 + deepest;
 }
@@ -444,7 +470,9 @@ function emptyNode(): Record<string, unknown> {
 function assignPath(tree: Record<string, unknown>, segments: readonly string[], value: unknown): void {
   const append = segments[segments.length - 1] === "";
   const path = append ? segments.slice(0, -1) : segments;
-  if (path.length === 0) return;
+  if (path.length === 0) {
+    return;
+  }
 
   let node = tree;
   for (let i = 0; i < path.length - 1; i++) {
@@ -464,8 +492,11 @@ function assignPath(tree: Record<string, unknown>, segments: readonly string[], 
     const bucket = Array.isArray(existing)
       ? (existing as unknown[])
       : ((node[last] = existing === undefined ? [] : [existing]) as unknown[]);
-    if (Array.isArray(value)) bucket.push(...(value as unknown[]));
-    else bucket.push(value);
+    if (Array.isArray(value)) {
+      bucket.push(...(value as unknown[]));
+    } else {
+      bucket.push(value);
+    }
     return;
   }
   node[last] = value;

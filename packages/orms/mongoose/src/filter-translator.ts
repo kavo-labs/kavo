@@ -45,7 +45,9 @@ const MATCHES_NOTHING: MongoWhere = { $nor: [{}] };
  */
 export function translateFilter<Entity>(filter: Filter<Entity>, options: FilterTranslatorOptions): MongoWhere {
   const root = filter.root;
-  if (root === null) return {};
+  if (root === null) {
+    return {};
+  }
   return translateExpression(root, options);
 }
 
@@ -62,7 +64,9 @@ function translateExpression(expression: FilterExpression, options: FilterTransl
     // than one child is conjoined *first* and the conjunction negated,
     // rather than handed to `$nor` as siblings. Core's wire parser only
     // ever builds the unary shape; this guards a hand-built AST.
-    if (children.length === 0) return MATCHES_NOTHING;
+    if (children.length === 0) {
+      return MATCHES_NOTHING;
+    }
     return { $nor: [children.length === 1 ? children[0]! : { $and: children }] };
   }
 

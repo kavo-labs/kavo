@@ -133,10 +133,14 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     const keys = projection.keys ?? Object.keys(source);
     const result: Record<string, unknown> = {};
     for (const key of keys) {
-      if (projection.relations.has(key)) continue;
+      if (projection.relations.has(key)) {
+        continue;
+      }
       // Before the computed branch: a deselected computed field's `resolve`
       // must never run, or `fields=` would pay for work it discards.
-      if (selection !== null && !selection.has(key)) continue;
+      if (selection !== null && !selection.has(key)) {
+        continue;
+      }
       // Own properties only: `keys` can come from a DTO class or from the
       // row itself, and an inherited `constructor`/`toString` must not be
       // mistaken for a declared computed field.
@@ -146,7 +150,9 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
         // column branch draws below, so a resolver that opts out of
         // emitting a value reads the same programmatically as it does once
         // `JSON.stringify` has dropped the key.
-        if (value !== undefined) result[key] = value;
+        if (value !== undefined) {
+          result[key] = value;
+        }
         continue;
       }
       // Reached only when the key names no computed field: the branch order
@@ -154,12 +160,16 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
       // a TypeORM entity with a `get fullName()`, or an adapter row with a
       // column the metadata seam does not describe. Resolving wins; reading
       // the row here would resurrect the exact accident ADR-0019 replaced.
-      if (key in source) result[key] = source[key];
+      if (key in source) {
+        result[key] = source[key];
+      }
     }
     for (const [name, node] of Object.entries(include)) {
       // Absent means "not loaded" — a programmatic caller can hand the
       // engine an entity the adapter never hydrated.
-      if (!(name in source)) continue;
+      if (!(name in source)) {
+        continue;
+      }
       result[name] = this.projectRelated(source[name], node, context);
     }
     return result;
@@ -185,7 +195,9 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
    */
   private projectionFor(node: IncludeNode): Projection {
     const info = this.catalog?.get(node.relation.target());
-    if (info === undefined) return { keys: null, relations: NO_RELATIONS, computed: NO_COMPUTED_FIELDS };
+    if (info === undefined) {
+      return { keys: null, relations: NO_RELATIONS, computed: NO_COMPUTED_FIELDS };
+    }
     const dto = info.config.dto.resolve(node.relation.cardinality === "many" ? "list" : "item", "findMany");
     const computed: ErasedComputedFields = info.config.computed;
     // The target's own `selectable`, not the root's: an include never
@@ -217,7 +229,9 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
  * name a relation path, which is not a key this projection ever emits.
  */
 function narrowToProjection(derived: readonly string[], projection: readonly string[] | null): readonly string[] {
-  if (projection === null) return derived;
+  if (projection === null) {
+    return derived;
+  }
   const allowed = new Set(projection);
   return derived.filter((key) => allowed.has(key));
 }
@@ -311,7 +325,9 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       // Lazily: the target may enter the catalog after this entity does.
       relations.set(relation.name, () => {
         const target = catalog?.get(relation.target())?.metadata;
-        if (target === undefined) return undefined;
+        if (target === undefined) {
+          return undefined;
+        }
         return target.compositeIdFields !== undefined
           ? { compositeIdFields: target.compositeIdFields }
           : { idField: target.idField };
@@ -346,15 +362,21 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     for (const key of allowed) {
       // A computed field has no column behind it, so a value for it could
       // only ever reach the adapter as an unknown write (ADR-0019).
-      if (this.computedNames.has(key)) continue;
-      if (key === softDeleteField) continue;
+      if (this.computedNames.has(key)) {
+        continue;
+      }
+      if (key === softDeleteField) {
+        continue;
+      }
       // Own properties only. `raw` is a wire body, so an inherited key is
       // never something the client sent — but it *is* something a polluted
       // `Object.prototype` would supply, silently adding a writable field to
       // every request that omits it. Defence in depth: the filter parser no
       // longer offers a way to pollute (see `emptyNode` there), and this
       // keeps a pollution introduced anywhere else out of writes.
-      if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+      if (!Object.prototype.hasOwnProperty.call(source, key)) {
+        continue;
+      }
       const spec = this.relationIdFields.get(key)?.();
       result[key] = spec === undefined ? source[key] : associate(source[key], spec);
     }
@@ -376,14 +398,18 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
    */
   private narrowToWritableAllowlist(context: KavoContext<Entity>): readonly string[] {
     const allowlists = context.config?.allowlists;
-    if (allowlists === undefined) return this.writableProjection;
+    if (allowlists === undefined) {
+      return this.writableProjection;
+    }
     let allowlist: readonly string[] | undefined;
     if (context.operation === "createOne") {
       allowlist = allowlists.creatable as readonly string[];
     } else if (context.operation === "updateOne" || context.operation === "patchOne") {
       allowlist = allowlists.updatable as readonly string[];
     }
-    if (allowlist === undefined) return this.writableProjection;
+    if (allowlist === undefined) {
+      return this.writableProjection;
+    }
     const allowed = new Set(allowlist);
     return this.writableProjection.filter((key) => allowed.has(key));
   }
@@ -405,7 +431,9 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
  * it does by a single one.
  */
 function associate(value: unknown, spec: RelationIdSpec): unknown {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined) {
+    return null;
+  }
   if (Array.isArray(value)) {
     return value.map((element) => associate(element, spec)).filter((element) => element !== null);
   }
@@ -423,14 +451,18 @@ function associate(value: unknown, spec: RelationIdSpec): unknown {
     const result: Record<string, unknown> = {};
     for (const field of compositeIdFields) {
       const fieldValue = record[field];
-      if (fieldValue === undefined) return null;
+      if (fieldValue === undefined) {
+        return null;
+      }
       result[field] = fieldValue;
     }
     return result;
   }
   if (typeof value === "string") {
     const parts = decodeCompositeId(value, compositeIdFields.length);
-    if (parts === null) return null;
+    if (parts === null) {
+      return null;
+    }
     return Object.fromEntries(compositeIdFields.map((field, index) => [field, parts[index]]));
   }
   return null;

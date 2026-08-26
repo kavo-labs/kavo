@@ -53,9 +53,13 @@ export class KavoResponseInterceptor implements NestInterceptor {
 }
 
 function unwrap(context: ExecutionContext, value: unknown): unknown {
-  if (!isKavoResponse(value)) return value;
+  if (!isKavoResponse(value)) {
+    return value;
+  }
   const response = context.switchToHttp().getResponse<ConditionalResponse>();
-  if (value.etag !== null) response.header("ETag", value.etag);
+  if (value.etag !== null) {
+    response.header("ETag", value.etag);
+  }
   if (value.notModified) {
     response.status(NOT_MODIFIED);
     return undefined;

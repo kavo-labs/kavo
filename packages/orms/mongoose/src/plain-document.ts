@@ -41,7 +41,9 @@ export function isObjectIdLike(value: unknown): value is { toHexString(): string
  * dates, and recursing into one would shred it.
  */
 export function toPlainDocument(value: unknown): unknown {
-  if (isObjectIdLike(value)) return value.toHexString();
+  if (isObjectIdLike(value)) {
+    return value.toHexString();
+  }
   // `BigInt` and `Decimal128` paths are described to core as `kind:
   // "number"`, so they have to *leave* as numbers. Neither does on its own:
   // a hydrated document's `toObject()` yields a real `bigint`, which
@@ -56,14 +58,26 @@ export function toPlainDocument(value: unknown): unknown {
   // — surfacing them as strings — would break filtering, because MongoDB
   // compares numerically across its numeric BSON types but not against a
   // string.
-  if (typeof value === "bigint") return Number(value);
-  if (value === null || typeof value !== "object") return value;
-  if (value instanceof Date) return value;
-  if (isDecimalLike(value)) return Number(String(value));
-  if (Array.isArray(value)) return value.map(toPlainDocument);
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (isDecimalLike(value)) {
+    return Number(String(value));
+  }
+  if (Array.isArray(value)) {
+    return value.map(toPlainDocument);
+  }
   // Anything else exotic (Buffer, …) is left alone: this adapter's
   // contract is the id and numeric conversion, not a BSON-wide codec.
-  if (!isPlainObject(value)) return value;
+  if (!isPlainObject(value)) {
+    return value;
+  }
 
   const plain: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {

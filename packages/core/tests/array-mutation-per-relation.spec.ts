@@ -34,7 +34,9 @@ class FullCapableAdapter<Entity extends { id: number }> extends SeededAdapter<En
     this.calls.push({ method: "replaceRelation", relation });
     this.membership.set(relation, new Set(memberIds ?? []));
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = memberIds;
     return row;
   }
@@ -42,7 +44,9 @@ class FullCapableAdapter<Entity extends { id: number }> extends SeededAdapter<En
   async readRelation(id: EntityId, relation: string, _context: KavoContext<Entity>): Promise<Entity> {
     this.calls.push({ method: "readRelation", relation });
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     return row;
   }
 
@@ -52,7 +56,9 @@ class FullCapableAdapter<Entity extends { id: number }> extends SeededAdapter<En
     current.add(memberId);
     this.membership.set(relation, current);
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     return row;
   }
 
@@ -62,7 +68,9 @@ class FullCapableAdapter<Entity extends { id: number }> extends SeededAdapter<En
     current.delete(memberId);
     this.membership.set(relation, current);
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     return row;
   }
 
@@ -73,11 +81,17 @@ class FullCapableAdapter<Entity extends { id: number }> extends SeededAdapter<En
   ): Promise<Entity> {
     this.calls.push({ method: "patchRelation", relation });
     const current = this.membership.get(relation) ?? new Set<EntityId>();
-    for (const memberId of changes.add) current.add(memberId);
-    for (const memberId of changes.remove) current.delete(memberId);
+    for (const memberId of changes.add) {
+      current.add(memberId);
+    }
+    for (const memberId of changes.remove) {
+      current.delete(memberId);
+    }
     this.membership.set(relation, current);
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     return row;
   }
 }
@@ -99,7 +113,9 @@ class ReplaceOnlyAdapter<Entity extends { id: number }> extends SeededAdapter<En
     _context: KavoContext<Entity>,
   ): Promise<Entity> {
     const row = await this.findOneById(id, null);
-    if (row === null) throw new Error("fixture: row not found");
+    if (row === null) {
+      throw new Error("fixture: row not found");
+    }
     (row as unknown as Record<string, unknown>)[relation] = memberIds;
     return row;
   }

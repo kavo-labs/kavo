@@ -43,9 +43,13 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
-    if (orm !== undefined) await orm.close();
+    if (orm !== undefined) {
+      await orm.close();
+    }
   }
 });
 

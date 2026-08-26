@@ -25,10 +25,14 @@ export function coerceScalar(
   // values pass through as strings and the database compares them. Wiring
   // target-entity metadata through the relation registry would close the
   // gap — that was never done, so this is still open.
-  if (metadata === undefined) return String(raw);
+  if (metadata === undefined) {
+    return String(raw);
+  }
 
   if (raw === null || raw === "null") {
-    if (metadata.nullable) return null;
+    if (metadata.nullable) {
+      return null;
+    }
     return issue(field, `null (column is not nullable)`, metadata.kind);
   }
   const text = String(raw);
@@ -43,8 +47,12 @@ export function coerceScalar(
       return value;
     }
     case "boolean": {
-      if (text === "true" || text === "1") return true;
-      if (text === "false" || text === "0") return false;
+      if (text === "true" || text === "1") {
+        return true;
+      }
+      if (text === "false" || text === "0") {
+        return false;
+      }
       return issue(field, text, "boolean");
     }
     case "date": {
@@ -55,7 +63,9 @@ export function coerceScalar(
       return value;
     }
     case "enum": {
-      if (metadata.enumValues?.includes(text)) return text;
+      if (metadata.enumValues?.includes(text)) {
+        return text;
+      }
       return issue(field, text, `member of [${(metadata.enumValues ?? []).join(", ")}]`);
     }
     case "json":

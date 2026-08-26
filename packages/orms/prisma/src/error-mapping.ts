@@ -47,7 +47,9 @@ function isPrismaKnownRequestError(error: unknown): error is PrismaKnownRequestE
  * unique index scoped to live rows.
  */
 export function mapDriverError(error: unknown, context: ErrorContext): KavoException {
-  if (error instanceof KavoException) return error;
+  if (error instanceof KavoException) {
+    return error;
+  }
 
   const entity = context.entityName ?? "entity";
   if (isPrismaKnownRequestError(error)) {

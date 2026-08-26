@@ -46,12 +46,18 @@ afterAll(async () => {
   // Each step is guarded: a failure closing the app must still stop the
   // container, or the runner leaks a Postgres for the rest of the session.
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
     try {
-      if (orm !== undefined) await orm.close();
+      if (orm !== undefined) {
+        await orm.close();
+      }
     } finally {
-      if (container !== undefined) await container.stop();
+      if (container !== undefined) {
+        await container.stop();
+      }
     }
   }
 }, 30_000);

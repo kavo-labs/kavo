@@ -51,7 +51,9 @@ class FakeServerResponse extends EventEmitter {
 
   writeHead(code: number, headers?: Record<string, string | number>): this {
     this._statusCode = code;
-    if (headers !== undefined) this._headers = headers;
+    if (headers !== undefined) {
+      this._headers = headers;
+    }
     return this;
   }
 

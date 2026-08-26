@@ -21,7 +21,9 @@ let cached: ClassValidatorModule | null | undefined;
  * at class-decoration time (ADR-0012), which cannot await a dynamic import.
  */
 function loadClassValidator(): ClassValidatorModule | null {
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   try {
     const require = createRequire(import.meta.url);
     cached = require("class-validator") as ClassValidatorModule;
@@ -47,7 +49,9 @@ function loadClassValidator(): ClassValidatorModule | null {
  */
 export function entityHasValidationMetadata(entity: ClassRef): boolean {
   const classValidator = loadClassValidator();
-  if (classValidator === null) return false;
+  if (classValidator === null) {
+    return false;
+  }
   const target = entity as unknown as Function;
   return classValidator.getMetadataStorage().getTargetValidationMetadatas(target, "", true, false).length > 0;
 }
@@ -69,12 +73,18 @@ const partialClasses = new WeakMap<ClassRef, ClassRef>();
  */
 export function entityPartialValidationClass(entity: ClassRef): ClassRef | null {
   const classValidator = loadClassValidator();
-  if (classValidator === null) return null;
+  if (classValidator === null) {
+    return null;
+  }
   const cached = partialClasses.get(entity);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) {
+    return cached;
+  }
   const target = entity as unknown as Function;
   const metadatas = classValidator.getMetadataStorage().getTargetValidationMetadatas(target, "", true, false);
-  if (metadatas.length === 0) return null;
+  if (metadatas.length === 0) {
+    return null;
+  }
   class PartialEntityDto extends (entity as unknown as new (...args: never[]) => object) {}
   Object.defineProperty(PartialEntityDto, "name", { value: `Partial${target.name}` });
   const propertyNames = new Set(metadatas.map((metadata) => metadata.propertyName));

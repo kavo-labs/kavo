@@ -68,7 +68,9 @@ function readPackageDirs(source: string): string[] {
   for (const line of lines.slice(start + 1)) {
     const indent = line.length - line.trimStart().length;
     // The block ends at the first blank or dedented line.
-    if (line.trim() === "" || indent <= keyIndent) break;
+    if (line.trim() === "" || indent <= keyIndent) {
+      break;
+    }
     dirs.push(line.trim());
   }
 
@@ -87,7 +89,9 @@ function readStepNames(source: string): string[] {
 function readStepBlock(source: string, name: string): string {
   const lines = source.split("\n");
   const start = lines.findIndex((line) => line.trim() === `- name: ${name}`);
-  if (start === -1) throw new Error(`publish.yml has no step named "${name}"`);
+  if (start === -1) {
+    throw new Error(`publish.yml has no step named "${name}"`);
+  }
 
   const header = lines[start]!;
   const stepIndent = header.length - header.trimStart().length;
@@ -95,7 +99,9 @@ function readStepBlock(source: string, name: string): string {
 
   for (const line of lines.slice(start + 1)) {
     const indent = line.length - line.trimStart().length;
-    if (line.trim() !== "" && indent <= stepIndent) break;
+    if (line.trim() !== "" && indent <= stepIndent) {
+      break;
+    }
     block.push(line);
   }
 
@@ -113,19 +119,25 @@ function readStepRun(source: string, name: string): string {
   const block = readStepBlock(source, name);
   const lines = block.split("\n");
   const start = lines.findIndex((line) => /^\s*run:/.test(line));
-  if (start === -1) throw new Error(`publish.yml step "${name}" has no run: key`);
+  if (start === -1) {
+    throw new Error(`publish.yml step "${name}" has no run: key`);
+  }
 
   const header = lines[start]!;
   const value = /^\s*run:[ \t]*(.*)$/.exec(header)![1]!.trim();
   // Anything that is not a block indicator (`|`, `|-`, `>`, `>-`, `|2` …) is
   // the command itself, written inline.
-  if (value !== "" && !/^[|>][-+]?\d*$/.test(value)) return value;
+  if (value !== "" && !/^[|>][-+]?\d*$/.test(value)) {
+    return value;
+  }
 
   const runIndent = header.length - header.trimStart().length;
   const body: string[] = [];
   for (const line of lines.slice(start + 1)) {
     const indent = line.length - line.trimStart().length;
-    if (line.trim() !== "" && indent <= runIndent) break;
+    if (line.trim() !== "" && indent <= runIndent) {
+      break;
+    }
     body.push(line.trim());
   }
 
@@ -140,13 +152,17 @@ function readStepRun(source: string, name: string): string {
 function readJobBlock(source: string, name: string): string {
   const lines = source.split("\n");
   const start = lines.findIndex((line) => line.trimEnd() === `  ${name}:`);
-  if (start === -1) throw new Error(`publish.yml has no job named "${name}"`);
+  if (start === -1) {
+    throw new Error(`publish.yml has no job named "${name}"`);
+  }
 
   const jobIndent = lines[start]!.length - lines[start]!.trimStart().length;
   const block = [lines[start]!];
   for (const line of lines.slice(start + 1)) {
     const indent = line.length - line.trimStart().length;
-    if (line.trim() !== "" && indent <= jobIndent) break;
+    if (line.trim() !== "" && indent <= jobIndent) {
+      break;
+    }
     block.push(line);
   }
 
@@ -182,13 +198,17 @@ function readWorkspaceRoots(): string[] {
 
   const patterns: string[] = [];
   for (const line of lines.slice(start + 1)) {
-    if (line.trim() === "") continue;
+    if (line.trim() === "") {
+      continue;
+    }
     // Only the `packages:` list counts. Sweeping the whole file would also
     // pick up the entries of pnpm's other top-level lists — most likely
     // `onlyBuiltDependencies:`, which `pnpm approve-builds` writes — and
     // then try to walk `esbuild/` as if it were a workspace root.
     const entry = /^\s+-\s+["']?([^"'\s]+)/.exec(line);
-    if (!entry) break;
+    if (!entry) {
+      break;
+    }
     patterns.push(entry[1]!);
   }
 
@@ -203,10 +223,15 @@ function readWorkspaceRoots(): string[] {
 function findWorkspacePackages(dir: string): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(resolve(REPO_ROOT, dir), { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === "dist") continue;
+    if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === "dist") {
+      continue;
+    }
     const child = `${dir}/${entry.name}`;
-    if (existsSync(resolve(REPO_ROOT, child, "package.json"))) found.push(child);
-    else found.push(...findWorkspacePackages(child));
+    if (existsSync(resolve(REPO_ROOT, child, "package.json"))) {
+      found.push(child);
+    } else {
+      found.push(...findWorkspacePackages(child));
+    }
   }
   return found;
 }
@@ -237,13 +262,17 @@ function findBehind(version: string | undefined, actual: Record<string, string |
 
   return Object.keys(actual).filter((dir) => {
     const found = actual[dir];
-    if (found === version) return false;
+    if (found === version) {
+      return false;
+    }
     // A manifest with no `version` at all is drift, never a match against the
     // allowance: `tolerated[dir]` is also undefined for every directory that
     // is not grandfathered, so comparing the two directly would read a
     // missing field as "in lockstep" — the one thing the gate script itself
     // is careful to call a mismatch.
-    if (found === undefined) return true;
+    if (found === undefined) {
+      return true;
+    }
     return tolerated[dir] !== found;
   });
 }

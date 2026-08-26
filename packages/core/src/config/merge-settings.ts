@@ -22,7 +22,9 @@ export function mergeSettings(
 ): KavoSettings {
   let result: Record<string, unknown> = { ...base };
   for (const override of overrides) {
-    if (override === undefined) continue;
+    if (override === undefined) {
+      continue;
+    }
     result = mergeLevel(result, override as Record<string, unknown>);
   }
   return result as unknown as KavoSettings;
@@ -31,7 +33,9 @@ export function mergeSettings(
 function mergeLevel(base: Record<string, unknown>, override: Record<string, unknown>): Record<string, unknown> {
   const result = { ...base };
   for (const [key, value] of Object.entries(override)) {
-    if (value === undefined) continue;
+    if (value === undefined) {
+      continue;
+    }
     const current = result[key];
     if (isPlainObject(value) && isPlainObject(current)) {
       result[key] = mergeLevel(current, value);
@@ -52,7 +56,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export function deepFreeze<T>(value: T): T {
   if (typeof value === "object" && value !== null && !Object.isFrozen(value)) {
     Object.freeze(value);
-    for (const child of Object.values(value)) deepFreeze(child);
+    for (const child of Object.values(value)) {
+      deepFreeze(child);
+    }
   }
   return value;
 }

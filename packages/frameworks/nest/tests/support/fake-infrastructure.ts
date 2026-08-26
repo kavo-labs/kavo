@@ -115,7 +115,9 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
     context: KavoContext<Todo>,
   ): Promise<Todo | null> {
     const row = this.rows.find((candidate) => candidate.id === Number(id)) ?? null;
-    if (row === null) return null;
+    if (row === null) {
+      return null;
+    }
     return this.visible(row, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false) ? row : null;
   }
 
@@ -205,8 +207,12 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
    * Driven by the resolved strategy rather than this fake's own opinion.
    */
   private visible(row: Todo, context: KavoContext<Todo>, withDeleted: boolean, onlyDeleted: boolean): boolean {
-    if (context.config.softDelete.strategy !== "soft") return true;
-    if (onlyDeleted) return row.deletedAt !== null;
+    if (context.config.softDelete.strategy !== "soft") {
+      return true;
+    }
+    if (onlyDeleted) {
+      return row.deletedAt !== null;
+    }
     return withDeleted || row.deletedAt === null;
   }
 

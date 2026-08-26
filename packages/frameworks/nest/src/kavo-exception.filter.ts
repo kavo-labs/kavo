@@ -40,7 +40,9 @@ export class KavoExceptionFilter implements ExceptionFilter {
     // routes, so outside an HTTP context this filter has nothing to map and
     // must not swallow the exception Nest's own per-transport handling
     // would otherwise see.
-    if (host.getType() !== "http") throw exception;
+    if (host.getType() !== "http") {
+      throw exception;
+    }
 
     const shape = exception instanceof KavoException ? exception : toKavoExceptionShape(exception);
     const response = host.switchToHttp().getResponse<ProblemResponse>();

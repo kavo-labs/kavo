@@ -60,7 +60,9 @@ class HeaderPrincipalGuard implements CanActivate {
       user?: unknown;
     }>();
     const userId = incoming.headers["x-user"];
-    if (userId === undefined) return true;
+    if (userId === undefined) {
+      return true;
+    }
     incoming.user = {
       userId,
       roles: (incoming.headers["x-roles"] ?? "").split(",").filter(Boolean),
@@ -115,8 +117,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   httpServer = undefined;
-  if (app !== undefined) await app.close();
-  if (dataSource !== undefined) await dataSource.destroy();
+  if (app !== undefined) {
+    await app.close();
+  }
+  if (dataSource !== undefined) {
+    await dataSource.destroy();
+  }
 });
 
 beforeEach(async () => {

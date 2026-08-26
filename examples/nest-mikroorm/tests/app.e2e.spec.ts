@@ -35,9 +35,13 @@ beforeAll(async () => {
 afterAll(async () => {
   // An `app.close()` rejection must not strand the ORM's connection pool.
   try {
-    if (app !== undefined) await app.close();
+    if (app !== undefined) {
+      await app.close();
+    }
   } finally {
-    if (orm !== undefined) await orm.close();
+    if (orm !== undefined) {
+      await orm.close();
+    }
   }
 });
 

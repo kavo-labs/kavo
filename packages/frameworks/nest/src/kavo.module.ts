@@ -42,8 +42,12 @@ import {
 export type KavoGraphQLOption = boolean | { readonly path?: string };
 
 function graphqlPathFrom(option: KavoGraphQLOption | undefined): string | undefined {
-  if (option === undefined || option === false) return undefined;
-  if (option === true) return DEFAULT_GRAPHQL_PATH;
+  if (option === undefined || option === false) {
+    return undefined;
+  }
+  if (option === true) {
+    return DEFAULT_GRAPHQL_PATH;
+  }
   return option.path ?? DEFAULT_GRAPHQL_PATH;
 }
 
@@ -51,8 +55,12 @@ function graphqlPathFrom(option: KavoGraphQLOption | undefined): string | undefi
 export type KavoMcpOption = boolean | { readonly path?: string };
 
 function mcpPathFrom(option: KavoMcpOption | undefined): string | undefined {
-  if (option === undefined || option === false) return undefined;
-  if (option === true) return DEFAULT_MCP_PATH;
+  if (option === undefined || option === false) {
+    return undefined;
+  }
+  if (option === true) {
+    return DEFAULT_MCP_PATH;
+  }
   return option.path ?? DEFAULT_MCP_PATH;
 }
 
@@ -334,18 +342,26 @@ function requireArrayMutationRouteReachable(
   },
 ): void {
   const relationNames = writeOptedInRelationNames(metadata.config?.relations?.edges);
-  if (relationNames.length === 0) return;
+  if (relationNames.length === 0) {
+    return;
+  }
   const entityDeclared = declaredArrayMutationStrategy(metadata.config);
   const edges = metadata.config?.relations?.edges;
   const unreachable: string[] = [];
   for (const name of relationNames) {
     const declared = declaredRelationArrayMutationStrategy(edges?.[name]?.write, entityDeclared);
-    if (declared !== undefined) continue; // an explicit local declaration always matches what resolves
+    if (declared !== undefined) {
+      continue;
+    } // an explicit local declaration always matches what resolves
     const resolvedStrategy = service.engine.config.relations.get(name)?.write;
-    if (resolvedStrategy !== "replace" && resolvedStrategy !== "resource") continue; // no route needed
+    if (resolvedStrategy !== "replace" && resolvedStrategy !== "resource") {
+      continue;
+    } // no route needed
     unreachable.push(`${name} (resolves ${JSON.stringify(resolvedStrategy)})`);
   }
-  if (unreachable.length === 0) return;
+  if (unreachable.length === 0) {
+    return;
+  }
   throw new ConfigurationException(
     metadata.entity.name,
     "arrayMutation",
@@ -384,9 +400,13 @@ class KavoBinder implements OnModuleInit {
     for (const wrapper of this.discovery.getControllers()) {
       const metatype = wrapper.metatype;
       const instance = wrapper.instance as Record<string, unknown> | undefined;
-      if (metatype === null || instance === undefined) continue;
+      if (metatype === null || instance === undefined) {
+        continue;
+      }
       const metadata = Reflect.getMetadata(KAVO_CONTROLLER_METADATA, metatype) as KavoControllerMetadata | undefined;
-      if (metadata === undefined) continue;
+      if (metadata === undefined) {
+        continue;
+      }
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
       requireArrayMutationRouteReachable(metadata, service);
       instance[KAVO_SERVICE_PROPERTY] = service;

@@ -122,7 +122,9 @@ describe("the run's scratch root", () => {
       expect(statSync(root).isDirectory()).toBe(true);
     } finally {
       teardown();
-      if (runRoot !== undefined) process.env[SCRATCH_ROOT_ENV] = runRoot;
+      if (runRoot !== undefined) {
+        process.env[SCRATCH_ROOT_ENV] = runRoot;
+      }
     }
 
     // Teardown is the entire reason this hook sits in the root vitest config:

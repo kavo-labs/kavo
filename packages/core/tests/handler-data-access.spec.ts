@@ -133,11 +133,15 @@ describe("KavoContext.repository — a custom handler's data access", () => {
           handler: {
             async execute(_input: unknown, context: KavoContext<User>): Promise<FindManyResult<User>> {
               const query = context.query;
-              if (query === null) throw new Error("a read is given a normalized query");
+              if (query === null) {
+                throw new Error("a read is given a normalized query");
+              }
               const entities = await context.repository.findMany(query, context);
               // A read that writes: unusual, and deliberately not refused.
               // `kind: "read"` means query resolution and no request body.
-              for (const row of entities) await context.repository.patch(row.id, { age: row.age + 1 }, context);
+              for (const row of entities) {
+                await context.repository.patch(row.id, { age: row.age + 1 }, context);
+              }
               return { entities, total: entities.length };
             },
           },

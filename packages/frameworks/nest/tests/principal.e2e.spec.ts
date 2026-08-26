@@ -36,7 +36,9 @@ class HeaderUserGuard implements CanActivate {
       session?: unknown;
     }>();
     const id = incoming.headers["x-user"];
-    if (id === undefined) return true;
+    if (id === undefined) {
+      return true;
+    }
     incoming.user = { id };
     incoming.session = { account: `session-${id}` };
     return true;

@@ -86,8 +86,12 @@ async function walk(
     pages++;
     names.push(...page.items.map((item) => (item as User).name));
     cursor = nextCursorOf(page);
-    if (cursor === null) return { names, pages };
-    if (pages > 50) throw new Error("cursor paging did not terminate");
+    if (cursor === null) {
+      return { names, pages };
+    }
+    if (pages > 50) {
+      throw new Error("cursor paging did not terminate");
+    }
   }
 }
 
@@ -800,7 +804,9 @@ describe("cursor pagination end to end", () => {
     });
     await seed(crud, 6);
     // Two status buckets, so the leading key really has ties to break.
-    for (const row of adapter.rows) row.status = row.age % 2 === 0 ? "active" : "pending";
+    for (const row of adapter.rows) {
+      row.status = row.age % 2 === 0 ? "active" : "pending";
+    }
 
     const { names } = await walk(crud, 2);
     expect(names).toEqual(["user-6", "user-4", "user-2", "user-5", "user-3", "user-1"]);

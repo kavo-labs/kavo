@@ -55,7 +55,9 @@ function paginationStrategyOf(service: object): string | undefined {
 }
 
 function requireOffsetPageable(entityName: string, strategy: string | undefined, protocolName: string): void {
-  if (strategy !== "cursor" && strategy !== "since") return;
+  if (strategy !== "cursor" && strategy !== "since") {
+    return;
+  }
   throw new ConfigurationException(
     entityName,
     "pagination.strategy",
@@ -73,7 +75,9 @@ function requireOffsetPageable(entityName: string, strategy: string | undefined,
  * directly, never wire strings).
  */
 function parseSortArg(tokens: readonly string[] | undefined): { field: string; direction: "asc" | "desc" }[] {
-  if (tokens === undefined) return [];
+  if (tokens === undefined) {
+    return [];
+  }
   return tokens.map((token) =>
     token.startsWith("-")
       ? { field: token.slice(1), direction: "desc" as const }

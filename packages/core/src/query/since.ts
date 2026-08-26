@@ -58,9 +58,15 @@ export function sinceValueOf<Entity>(
  */
 function encodeScalar(entity: unknown, field: FieldMetadata, entityName: string): string {
   const value = (entity as Record<string, unknown>)[field.name];
-  if (value === null || value === undefined) return "null";
-  if (value instanceof Date) return value.toISOString();
-  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
   throw new ConfigurationException(
     entityName,
     "pagination.since.field",
@@ -73,7 +79,9 @@ function encodeScalar(entity: unknown, field: FieldMetadata, entityName: string)
 
 function describeRuntimeType(value: unknown): string {
   const type = typeof value;
-  if (type !== "object") return type;
+  if (type !== "object") {
+    return type;
+  }
   const name = (value as { constructor?: { name?: string } }).constructor?.name;
   return name === undefined || name === "" ? "object" : `${name} object`;
 }
