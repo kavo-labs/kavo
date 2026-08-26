@@ -10,12 +10,13 @@ import {
 
 /**
  * Association by id (ADR-0014) against a composite-key relation target
- * (issue #263). A single-key target already accepts a bare scalar
- * (`{owner: 7}`) or a reference object keyed by its real `idField`
- * (`{owner: {id: 7}}`); a composite target has no single field to key a
- * reference object by, so it accepts an object naming each of
- * `compositeIdFields` directly, or the same `~`-delimited wire id a route
- * already uses.
+ * (issue #263). A single-key target accepts a reference object keyed by its
+ * real `idField` (`{owner: {id: 7}}`) — a bare scalar is rejected (issue
+ * #291); a composite target has no single field to key a reference object
+ * by, so it accepts an object naming each of `compositeIdFields` directly,
+ * or the same `~`-delimited wire id a route already uses — a composite key
+ * has no single column that shorthand could be mistaken for, so it is
+ * unaffected by the single-key restriction.
  */
 const catalog = new DefaultEntityCatalog((entity: ClassRef) => {
   if (entity === CompositeEntity) {

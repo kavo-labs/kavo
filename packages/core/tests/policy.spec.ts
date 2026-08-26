@@ -765,7 +765,7 @@ describe("policy — authorization.required default-deny switch (ADR-0035)", () 
     const response = await crud.engine.execute({
       operation: "replacePosts",
       id: "1",
-      body: [2, 3] as never,
+      body: [{ id: 2 }, { id: 3 }] as never,
       query: null,
       options: null,
     } as never);

@@ -1,4 +1,6 @@
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsBoolean, IsNotEmpty, IsOptional, IsString, ValidateNested } from "class-validator";
+import { IdRefDto } from "../common/id-ref.dto.js";
 
 /**
  * DTO slots for the OwnerSetting route. `owner_id` never appears on any of
@@ -14,9 +16,9 @@ import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString } from "
 
 /** `create` slot — request body for POST /owner-settings. */
 export class CreateOwnerSettingDto {
-  @IsInt()
-  @IsPositive()
-  owner = 0;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  owner: IdRefDto = new IdRefDto();
 
   @IsString()
   @IsNotEmpty()

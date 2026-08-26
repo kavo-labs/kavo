@@ -258,7 +258,7 @@ describe("MikroOrmRepositoryAdapter — CRUD", () => {
     // The association is asserted against the database, not the response:
     // core's serializer emits a relation key only for an included node, so a
     // written-but-not-included relation is correctly absent from the result.
-    const created = (await books.createOne({ title: "Notes", author: ada.id } as never)) as Book;
+    const created = (await books.createOne({ title: "Notes", author: { id: ada.id } } as never)) as Book;
     expect(created).toMatchObject({ title: "Notes" });
     expect(await readAuthorId(created.id)).toBe(ada.id);
 
@@ -308,14 +308,14 @@ describe("MikroOrmRepositoryAdapter — relation writes", () => {
       .sort();
   }
 
-  it("associates a to-many by an array of ids and of { id } references", async () => {
+  it("associates a to-many by an array of { id } references", async () => {
     const a = await newShelf("A");
     const b = await newShelf("B");
     const created = (await authors.createOne({
       email: "ada@x.io",
       name: "Ada",
       age: 36,
-      shelves: [a, { id: b }],
+      shelves: [{ id: a }, { id: b }],
     } as never)) as Author;
 
     expect(await shelvesOf(created.id)).toEqual(["A", "B"]);
@@ -341,7 +341,7 @@ describe("MikroOrmRepositoryAdapter — relation writes", () => {
   it("clears a to-one association when the payload sends null", async () => {
     const books = kavo.createCrud(Book) as DefaultKavoService<Book>;
     const ada = (await authors.createOne({ email: "ada@x.io", name: "Ada", age: 36 } as never)) as Author;
-    const book = (await books.createOne({ title: "Notes", author: ada.id } as never)) as Book;
+    const book = (await books.createOne({ title: "Notes", author: { id: ada.id } } as never)) as Book;
     expect(await readAuthorId(book.id)).toBe(ada.id);
 
     await books.patchOne(book.id, { author: null } as never);

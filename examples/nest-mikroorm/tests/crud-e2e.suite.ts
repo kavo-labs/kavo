@@ -214,7 +214,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       const ownerId = await newOwner();
       await request(server())
         .post("/cats")
-        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
         .expect(201);
 
       const cats = await request(server()).get("/cats?include=owner").expect(200);
@@ -229,7 +229,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       const ownerId = await newOwner();
       await request(server())
         .post("/cats")
-        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
         .expect(201);
 
       const nested = await request(server()).get("/cats?include=owner.pets").expect(200);
@@ -240,7 +240,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       const ownerId = await newOwner();
       await request(server())
         .post("/cats")
-        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
         .expect(201);
 
       const plain = await request(server()).get("/cats").expect(200);
@@ -255,11 +255,11 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       const zoe = await newOwner("Zoe", "zoe@x.io");
       await request(server())
         .post("/cats")
-        .send({ name: "AdaCat", age: 3, size: "small", indoor: true, livesLeft: 9, owner: ada })
+        .send({ name: "AdaCat", age: 3, size: "small", indoor: true, livesLeft: 9, owner: { id: ada } })
         .expect(201);
       await request(server())
         .post("/cats")
-        .send({ name: "ZoeCat", age: 4, size: "small", indoor: true, livesLeft: 9, owner: zoe })
+        .send({ name: "ZoeCat", age: 4, size: "small", indoor: true, livesLeft: 9, owner: { id: zoe } })
         .expect(201);
 
       const filtered = await request(server()).get("/cats?filter[owner.name][eq]=Ada").expect(200);
@@ -277,7 +277,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       for (const name of ["One", "Two", "Three"]) {
         await request(server())
           .post("/cats")
-          .send({ name, age: 3, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+          .send({ name, age: 3, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
           .expect(201);
       }
 
@@ -294,7 +294,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
         .expect(201);
       const created = await request(server())
         .post("/owners")
-        .send({ name: "Ada", email: "ada@x.io", address: address.body.id })
+        .send({ name: "Ada", email: "ada@x.io", address: { id: address.body.id } })
         .expect(201);
 
       const fetched = await request(server()).get(`/owners/${created.body.id}?include=address`).expect(200);
@@ -314,7 +314,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       }
       const cat = await request(server())
         .post("/cats")
-        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, tags: tagIds })
+        .send({
+          name: "Whiskers",
+          age: 3,
+          size: "small",
+          indoor: true,
+          livesLeft: 9,
+          tags: tagIds.map((id) => ({ id })),
+        })
         .expect(201);
 
       const fetched = await request(server()).get(`/cats/${cat.body.id}?include=tags`).expect(200);
@@ -324,7 +331,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       // Replacing the set is the documented association semantic (ADR-0014).
       await request(server())
         .put(`/cats/${cat.body.id}`)
-        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, tags: [tagIds[0]] })
+        .send({ name: "Whiskers", age: 3, size: "small", indoor: true, livesLeft: 9, tags: [{ id: tagIds[0] }] })
         .expect(200);
       const reduced = await request(server()).get(`/cats/${cat.body.id}?include=tags`).expect(200);
       expect(reduced.body.tags.map((tag: { name: string }) => tag.name)).toEqual(["fluffy"]);
@@ -339,7 +346,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       for (const name of ["One", "Two"]) {
         await request(server())
           .post("/cats")
-          .send({ name, age: 3, size: "small", indoor: true, livesLeft: 9, tags: tagIds })
+          .send({
+            name,
+            age: 3,
+            size: "small",
+            indoor: true,
+            livesLeft: 9,
+            tags: tagIds.map((id) => ({ id })),
+          })
           .expect(201);
       }
 

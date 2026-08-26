@@ -87,9 +87,11 @@ so `DefaultDeserializer.deserialize` (which returns `{}` for a
 non-object/array raw body) cannot parse it directly. The engine instead
 wraps the raw body as `{ [relation]: body }` and re-enters the deserializer
 with `dto: null`, reusing its existing relation-association logic
-(`associate()`) unchanged — a scalar id, an `{id}` reference, and the
-target entity's real id field are resolved exactly the way `create`/
-`update` already resolve them. A body that is not an array or `null` at
+(`associate()`) unchanged — each element must be an `{id}` reference
+(a bare scalar element is rejected, `AssociationInvalidShapeException`,
+per ADR-0014's later amendment), resolved against the target entity's real
+id field exactly the way `create`/`update` already resolve them. A body
+that is not an array or `null` at
 the top level raises `ArrayMutationInvalidShapeException`
 (`KAVO_ARRAY_MUTATION_INVALID_SHAPE`, 400) before deserialization runs —
 `replace` disables partial mutation outright, so a `{ add: [...] }`- or

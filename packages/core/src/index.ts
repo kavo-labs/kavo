@@ -220,6 +220,7 @@ export {
   AlreadyDeletedException,
   ArrayMutationInvalidShapeException,
   ArrayMutationMemberNotFoundException,
+  AssociationInvalidShapeException,
   ConfigurationException,
   ConflictException,
   ForbiddenException,

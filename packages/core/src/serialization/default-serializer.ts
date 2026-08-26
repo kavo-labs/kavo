@@ -7,6 +7,7 @@ import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
+import { AssociationInvalidShapeException } from "../errors/exceptions.js";
 
 /**
  * Computed fields as the projector consumes them: entity type erased,
@@ -255,10 +256,12 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * (generated columns) is the safe default: a client cannot write `id` or
  * `createdAt` by including them in a body.
  *
- * Relation properties are writable **by association only** (ADR-0014):
- * a scalar id, an `{ id }` reference, or an array of either.
- * A nested object carrying more than the id is narrowed to the id, because
- * a deep nested write is not something this layer should do by accident.
+ * Relation properties are writable **by association only** (ADR-0014): a
+ * single-key relation takes an `{ id }` reference (or an array of them for
+ * a to-many) — a bare scalar id is rejected (`AssociationInvalidShapeException`),
+ * not accepted as shorthand. A nested object carrying more than the id is
+ * narrowed to the id, because a deep nested write is not something this
+ * layer should do by accident.
  *
  * Computed fields are **never** writable (ADR-0019), and this class is the
  * inner of the two layers that make that true. A registered
@@ -378,7 +381,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
         continue;
       }
       const spec = this.relationIdFields.get(key)?.();
-      result[key] = spec === undefined ? source[key] : associate(source[key], spec);
+      result[key] = spec === undefined ? source[key] : associate(source[key], spec, key, context);
     }
     return result as Shape;
   }
@@ -416,26 +419,40 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
 }
 
 /**
- * `5` → `{ id: 5 }`; `{ id: 5, … }` → `{ id: 5 }`; arrays element-wise.
+ * `{ id: 5, … }` → `{ id: 5 }`; arrays element-wise; `null`/`undefined` →
+ * `null`.
+ *
+ * A single-key target accepts only a reference object naming its `idField`
+ * (`{owner: {id: 5}}`) — narrowed to just that key before it ever reaches
+ * the adapter, so a nested write like `{owner: {id: 5, name: "Rae"}}` still
+ * associates rather than cascading. A bare scalar (`{owner: 5}`) is
+ * **rejected**, not accepted as shorthand: ADR-0014 originally treated the
+ * two as equivalent, but a bare scalar left a caller's intent ambiguous —
+ * is `5` the related row's id, or a mistyped value for some other field
+ * named `owner`? — and, resolved wrong, surfaced as an opaque FK-constraint
+ * failure from the database rather than a 400 naming the actual problem
+ * (issue #291). {@link AssociationInvalidShapeException} names it instead.
  *
  * A composite-key target (issue #263) has no single `idField` to key a
  * reference object by, so it accepts two shapes instead: an object naming
  * each of the target's `compositeIdFields` directly (`{owner: {userId:
  * "u1", topic: "billing"}}`), or a bare scalar carrying the same
  * `~`-delimited wire id a route already uses (`{owner: "u1~billing"}`,
- * `encodeCompositeId`/`decodeCompositeId`) — the same two forms
- * (reference object / bare scalar) a single-key target already accepts,
- * just with a composite id on one side of each. Either narrows to the
- * target's real column names before it ever reaches the adapter, so a
- * TypeORM partial-entity write associates by composite key the same way
- * it does by a single one.
+ * `encodeCompositeId`/`decodeCompositeId`) — composite keys have no single
+ * column a bare scalar could be mistaken for, so the ambiguity above does
+ * not apply there and that shorthand is unchanged.
  */
-function associate(value: unknown, spec: RelationIdSpec): unknown {
+function associate<Entity>(
+  value: unknown,
+  spec: RelationIdSpec,
+  relation: string,
+  context: KavoContext<Entity>,
+): unknown {
   if (value === null || value === undefined) {
     return null;
   }
   if (Array.isArray(value)) {
-    return value.map((element) => associate(element, spec)).filter((element) => element !== null);
+    return value.map((element) => associate(element, spec, relation, context)).filter((element) => element !== null);
   }
   if ("idField" in spec) {
     const { idField } = spec;
@@ -443,7 +460,10 @@ function associate(value: unknown, spec: RelationIdSpec): unknown {
       const id = (value as Record<string, unknown>)[idField];
       return id === undefined ? null : { [idField]: id };
     }
-    return { [idField]: value };
+    throw new AssociationInvalidShapeException({
+      messageParams: { relation, idField, entity: context.entityName },
+      context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+    });
   }
   const { compositeIdFields } = spec;
   if (typeof value === "object") {

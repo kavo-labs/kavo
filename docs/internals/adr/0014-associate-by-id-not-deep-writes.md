@@ -17,15 +17,25 @@ and getting any of them wrong corrupts data rather than returning a 400.
 ## Decision
 
 v6 supports **association by id** and nothing deeper. On `create`,
-`update`, and `patch`, a relation property accepts:
+`update`, and `patch`, a single-key relation property accepts:
 
-- a scalar id — `{"owner": 7}`;
 - a reference object — `{"owner": {"id": 7}}`;
-- an array of either for a to-many — `{"tags": [1, {"id": 2}]}`;
+- an array of them for a to-many — `{"tags": [{"id": 1}, {"id": 2}]}`;
 - `null` to disassociate.
 
-The default deserializer normalizes all of these to `{ id }` references
-and **narrows anything else away**: `{"owner": {"id": 7, "name": "Rae"}}`
+A bare scalar (`{"owner": 7}`) is **rejected**, not accepted as shorthand
+(`AssociationInvalidShapeException`, `KAVO_ASSOCIATION_INVALID_SHAPE`, 400).
+Earlier v6 releases treated a bare scalar as equivalent to `{"id": 7}`, but
+that shorthand left the caller's intent ambiguous — is the scalar the
+related row's id, or a mistyped value meant for some other field of the
+same name? — and, resolved wrong, surfaced as an opaque FK-constraint
+failure from the database instead of a 400 naming the actual problem
+(issue #291). A composite-key target (ADR-0039) is unaffected: it has no
+single column a bare scalar could be mistaken for, so its own `~`-delimited
+scalar shorthand (`{"owner": "u1~billing"}`) remains supported.
+
+The default deserializer normalizes a reference object to `{ id }` and
+**narrows anything else away**: `{"owner": {"id": 7, "name": "Rae"}}`
 writes the association and drops `name`. A nested object is never a
 cascade; the framework does not partially honor a deep write.
 

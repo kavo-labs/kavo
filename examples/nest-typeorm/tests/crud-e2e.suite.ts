@@ -217,7 +217,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const ownerId = owner.body.id as number;
       await request(server())
         .post("/cats")
-        .send({ name: "Kit", age: 1, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+        .send({ name: "Kit", age: 1, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
         .expect(201);
 
       // To-one: joined into the list query, projected through OwnerItemDto
@@ -252,7 +252,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const ownerId = owner.body.id as number;
       const cat = await request(server())
         .post("/cats")
-        .send({ name: "Momo", age: 2, size: "small", indoor: true, livesLeft: 9, owner: ownerId })
+        .send({ name: "Momo", age: 2, size: "small", indoor: true, livesLeft: 9, owner: { id: ownerId } })
         .expect(201);
 
       const response = await request(server()).get(`/cats/${cat.body.id}?include=owner.pets`).expect(200);
@@ -407,7 +407,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       const owner = await request(server())
         .post("/owners")
-        .send({ name: "Nadia", email: "nadia@x.io", address: addressId })
+        .send({ name: "Nadia", email: "nadia@x.io", address: { id: addressId } })
         .expect(201);
       const ownerId = owner.body.id as number;
 
@@ -437,7 +437,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(201);
       await request(server())
         .put(`/owners/${id}`)
-        .send({ name: "Otis", email: "otis@x.io", address: address.body.id })
+        .send({ name: "Otis", email: "otis@x.io", address: { id: address.body.id } })
         .expect(200);
       const attached = await request(server()).get(`/owners/${id}?include=address`).expect(200);
       expect(attached.body.address).toMatchObject({ id: address.body.id as number });
@@ -457,7 +457,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(201);
       const withAddress = await request(server())
         .post("/owners")
-        .send({ name: "Priya", email: "priya@x.io", address: address.body.id })
+        .send({ name: "Priya", email: "priya@x.io", address: { id: address.body.id } })
         .expect(201);
       const withoutAddress = await request(server())
         .post("/owners")
@@ -486,7 +486,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
           .post("/addresses")
           .send({ street: `${name} St`, city: "Fanoutville", postalCode: "40004" })
           .expect(201);
-        await request(server()).post("/owners").send({ name, email, address: address.body.id }).expect(201);
+        await request(server())
+          .post("/owners")
+          .send({ name, email, address: { id: address.body.id } })
+          .expect(201);
       }
 
       const withoutInclude = await request(server())
@@ -508,11 +511,11 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(201);
       await request(server())
         .post("/owners")
-        .send({ name: "First", email: "first@x.io", address: address.body.id })
+        .send({ name: "First", email: "first@x.io", address: { id: address.body.id } })
         .expect(201);
       const conflict = await request(server())
         .post("/owners")
-        .send({ name: "Second", email: "second@x.io", address: address.body.id })
+        .send({ name: "Second", email: "second@x.io", address: { id: address.body.id } })
         .expect(409)
         .expect("Content-Type", /application\/problem\+json/);
       expect(conflict.body.code).toBe("KAVO_CONFLICT");
@@ -521,7 +524,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     it("rejects associating a nonexistent address id as a conflict, not a silent drop", async () => {
       const created = await request(server())
         .post("/owners")
-        .send({ name: "Rex", email: "rex@x.io", address: 999999 })
+        .send({ name: "Rex", email: "rex@x.io", address: { id: 999999 } })
         .expect(409)
         .expect("Content-Type", /application\/problem\+json/);
       expect(created.body.code).toBe("KAVO_CONFLICT");
@@ -529,7 +532,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const owner = await request(server()).post("/owners").send({ name: "Sam", email: "sam@x.io" }).expect(201);
       const updateConflict = await request(server())
         .put(`/owners/${owner.body.id}`)
-        .send({ name: "Sam", email: "sam@x.io", address: 999999 })
+        .send({ name: "Sam", email: "sam@x.io", address: { id: 999999 } })
         .expect(409)
         .expect("Content-Type", /application\/problem\+json/);
       expect(updateConflict.body.code).toBe("KAVO_CONFLICT");
@@ -545,7 +548,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(201);
       const owner = await request(server())
         .post("/owners")
-        .send({ name: "Tara", email: "tara@x.io", address: address.body.id })
+        .send({ name: "Tara", email: "tara@x.io", address: { id: address.body.id } })
         .expect(201);
 
       await request(server()).delete(`/addresses/${address.body.id}`).expect(204);
@@ -733,7 +736,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       const cat = await request(server())
         .post("/cats")
-        .send({ name: "Tagged", age: 2, size: "small", indoor: true, livesLeft: 9, tags: [tagIdA, tagIdB] })
+        .send({
+          name: "Tagged",
+          age: 2,
+          size: "small",
+          indoor: true,
+          livesLeft: 9,
+          tags: [{ id: tagIdA }, { id: tagIdB }],
+        })
         .expect(201);
       const catId = cat.body.id as number;
 
@@ -766,7 +776,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
           size: "small",
           indoor: true,
           livesLeft: 9,
-          tags: [tagIdB],
+          tags: [{ id: tagIdB }],
         })
         .expect(200);
       const afterUpdate = await request(server()).get(`/cats/${catId}?include=tags`).expect(200);
@@ -793,7 +803,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       // an unknown id surfaces as the join table's own FK-constraint violation.
       const response = await request(server())
         .post("/cats")
-        .send({ name: "BadTag", age: 1, size: "small", indoor: true, livesLeft: 9, tags: [999999] })
+        .send({ name: "BadTag", age: 1, size: "small", indoor: true, livesLeft: 9, tags: [{ id: 999999 }] })
         .expect(409)
         .expect("Content-Type", /application\/problem\+json/);
       expect(response.body.code).toBe("KAVO_CONFLICT");
@@ -804,7 +814,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const tagId = tag.body.id as number;
       const cat = await request(server())
         .post("/cats")
-        .send({ name: "Referencing", age: 1, size: "small", indoor: true, livesLeft: 9, tags: [tagId] })
+        .send({ name: "Referencing", age: 1, size: "small", indoor: true, livesLeft: 9, tags: [{ id: tagId }] })
         .expect(201);
 
       await request(server()).delete(`/tags/${tagId}`).expect(204);
@@ -821,7 +831,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       async function createCat(tags: number[] = []): Promise<number> {
         const cat = await request(server())
           .post("/cats")
-          .send({ name: "Replaceable", age: 3, size: "small", indoor: true, livesLeft: 9, tags })
+          .send({
+            name: "Replaceable",
+            age: 3,
+            size: "small",
+            indoor: true,
+            livesLeft: 9,
+            tags: tags.map((id) => ({ id })),
+          })
           .expect(201);
         return cat.body.id as number;
       }
@@ -838,7 +855,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
         await request(server())
           .put(`/cats/${catId}/tags`)
-          .send([tagB])
+          .send([{ id: tagB }])
           .expect(200)
           .expect((response) => {
             // The response is the parent Cat, not the tag list.
@@ -848,17 +865,17 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         expect(await tagsOf(catId)).toEqual([tagB]);
       });
 
-      it("accepts {id} references alongside bare ids, same as create/update", async () => {
+      it("rejects a bare scalar element instead of resolving it as shorthand for an {id} reference (issue #291)", async () => {
         const tagA = await createTag("a");
         const tagB = await createTag("b");
         const catId = await createCat();
 
-        await request(server())
+        const response = await request(server())
           .put(`/cats/${catId}/tags`)
           .send([tagA, { id: tagB }])
-          .expect(200);
-
-        expect(await tagsOf(catId)).toEqual([tagA, tagB].sort((a, b) => a - b));
+          .expect(400)
+          .expect("Content-Type", /application\/problem\+json/);
+        expect(response.body.code).toBe("KAVO_ASSOCIATION_INVALID_SHAPE");
       });
 
       it("clears every tag when the body is null", async () => {
@@ -887,7 +904,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         const tagB = await createTag("stable-b");
         const catId = await createCat([tagA, tagB]);
 
-        await request(server()).put(`/cats/${catId}/tags`).send([tagA, tagB]).expect(200);
+        await request(server())
+          .put(`/cats/${catId}/tags`)
+          .send([{ id: tagA }, { id: tagB }])
+          .expect(200);
 
         expect(await tagsOf(catId)).toEqual([tagA, tagB].sort((a, b) => a - b));
       });
@@ -908,7 +928,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
         const response = await request(server())
           .put(`/cats/${catId}/tags`)
-          .send([999999])
+          .send([{ id: 999999 }])
           .expect(404)
           .expect("Content-Type", /application\/problem\+json/);
         expect(response.body.code).toBe("KAVO_NOT_FOUND");
@@ -943,7 +963,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       async function createCat(photos: number[] = []): Promise<number> {
         const cat = await request(server())
           .post("/cats")
-          .send({ name: "Snapshot", age: 2, size: "small", indoor: true, livesLeft: 9, photos })
+          .send({
+            name: "Snapshot",
+            age: 2,
+            size: "small",
+            indoor: true,
+            livesLeft: 9,
+            photos: photos.map((id) => ({ id })),
+          })
           .expect(201);
         return cat.body.id as number;
       }
@@ -996,7 +1023,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         const photoB = await createPhoto("g.png");
         const catId = await createCat([photoA]);
 
-        await request(server()).put(`/cats/${catId}/photos`).send([photoB]).expect(200);
+        await request(server())
+          .put(`/cats/${catId}/photos`)
+          .send([{ id: photoB }])
+          .expect(200);
 
         const fetched = await request(server()).get(`/cats/${catId}/photos`).expect(200);
         expect((fetched.body.photos as { id: number }[]).map((photo) => photo.id)).toEqual([photoB]);
@@ -1029,7 +1059,14 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       }
       const fanOut = await request(server())
         .post("/cats")
-        .send({ name: "FanOut", age: 1, size: "small", indoor: true, livesLeft: 9, tags })
+        .send({
+          name: "FanOut",
+          age: 1,
+          size: "small",
+          indoor: true,
+          livesLeft: 9,
+          tags: tags.map((id) => ({ id })),
+        })
         .expect(201);
       const fanOutId = fanOut.body.id as number;
 
@@ -1537,7 +1574,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     it("rejects a non-positive owner address id on POST /owners", async () => {
       const response = await request(server())
         .post("/owners")
-        .send({ name: "BadAddr", email: "badaddr@x.io", address: -1 })
+        .send({ name: "BadAddr", email: "badaddr@x.io", address: { id: -1 } })
         .expect(400);
       expect(response.body.detail).toContain("address");
     });
@@ -1632,7 +1669,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       const created = await request(server())
         .post("/owner-settings")
-        .send({ owner: ownerId, theme: "dark", emailNotifications: false })
+        .send({ owner: { id: ownerId }, theme: "dark", emailNotifications: false })
         .expect(201);
       // `owner_id` — this entity's sole primary column — comes from the
       // `owner` relation's join column, never a raw field on the body.

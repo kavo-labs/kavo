@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EntityId, KavoContext } from "@kavo/core";
 import {
   ArrayMutationInvalidShapeException,
+  AssociationInvalidShapeException,
   ConfigurationException,
   DefaultOperationRegistry,
   createKavo,
@@ -229,12 +230,12 @@ describe("registerArrayMutationOperations / replaceRelationOperationId / writeOp
 });
 
 describe("replace<Relation> — end to end through KavoEngine", () => {
-  it("normalizes scalar ids and {id} references, and returns the updated parent", async () => {
+  it("normalizes {id} references, and returns the updated parent", async () => {
     const { crud, adapter } = makeAuthorCrud(true);
     const response = await crud.engine.execute({
       operation: "replacePosts",
       id: "1",
-      body: [2, { id: 3 }] as never,
+      body: [{ id: 2 }, { id: 3 }] as never,
       query: null,
       options: null,
     } as never);
@@ -249,28 +250,41 @@ describe("replace<Relation> — end to end through KavoEngine", () => {
     await crud.engine.execute({
       operation: "replacePosts",
       id: "1",
-      body: [2, 2, 3] as never,
+      body: [{ id: 2 }, { id: 2 }, { id: 3 }] as never,
       query: null,
       options: null,
     } as never);
     expect(adapter.calls).toEqual([{ id: 1, relation: "posts", memberIds: [2, 2, 3] }]);
   });
 
-  it("silently drops an array element that doesn't narrow to an id, rather than rejecting it", async () => {
+  it("silently drops an array element with no id key, rather than rejecting it", async () => {
     // Element-level leniency, not top-level: only a non-array/non-null body
-    // is ArrayMutationInvalidShapeException. An element that isn't a scalar
-    // or an {id} reference goes through the same associate()/narrow-and-drop
-    // path create/update already use (ADR-0014) — pinned here so a change to
-    // that shared logic doesn't silently start rejecting these instead.
+    // is ArrayMutationInvalidShapeException. An object element that carries
+    // no `id` key goes through the same associate()/narrow-and-drop path
+    // create/update already use (ADR-0014) — pinned here so a change to that
+    // shared logic doesn't silently start rejecting these instead.
     const { crud, adapter } = makeAuthorCrud(true);
     await crud.engine.execute({
       operation: "replacePosts",
       id: "1",
-      body: [2, { name: "no id here" }] as never,
+      body: [{ id: 2 }, { name: "no id here" }] as never,
       query: null,
       options: null,
     } as never);
     expect(adapter.calls).toEqual([{ id: 1, relation: "posts", memberIds: [2] }]);
+  });
+
+  it("rejects a bare scalar array element instead of resolving it as shorthand for an {id} reference (issue #291)", async () => {
+    const { crud } = makeAuthorCrud(true);
+    await expect(
+      crud.engine.execute({
+        operation: "replacePosts",
+        id: "1",
+        body: [2, { id: 3 }] as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(AssociationInvalidShapeException);
   });
 
   it("treats a null body as clearing every member", async () => {

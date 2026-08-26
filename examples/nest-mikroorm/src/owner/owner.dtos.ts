@@ -29,9 +29,10 @@ export class CreateOwnerDto {
   name = "";
   email = "";
   startedAt: Date | null = null;
-  // Association by id (ADR-0014): send the address's id, or an `{ id }`
-  // reference. Deep nested writes are deliberately out of scope.
-  address: number | null = null;
+  // Association by id (ADR-0014): send an `{ id }` reference — a bare
+  // scalar is rejected (issue #291). Deep nested writes are deliberately
+  // out of scope.
+  address: { id: number } | null = null;
 }
 
 /** `update` slot — request body for PUT /owners/:id (patch derives from it). */
@@ -39,7 +40,7 @@ export class UpdateOwnerDto {
   name = "";
   email = "";
   startedAt: Date | null = null;
-  address: number | null = null;
+  address: { id: number } | null = null;
 }
 
 /** `item` slot — the detail projection. */

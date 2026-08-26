@@ -81,6 +81,12 @@ export const ERROR_CATALOG = {
     title: "Invalid array-mutation body",
     message: "The body for '{relation}' on {entity} is not a valid array-mutation shape: {expected}.",
   },
+  KAVO_ASSOCIATION_INVALID_SHAPE: {
+    status: 400,
+    title: "Invalid association shape",
+    message:
+      "The value for '{relation}' on {entity} must be a reference object naming '{idField}', or null — not a bare id.",
+  },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: {
     status: 400,
     title: "Invalid JSON Patch document",

@@ -43,6 +43,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_FORBIDDEN: { status: 403, title: "Forbidden" },
   KAVO_CONFLICT: { status: 409, title: "Conflict" },
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
+  KAVO_ASSOCIATION_INVALID_SHAPE: { status: 400, title: "Invalid association shape" },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: { status: 400, title: "Invalid JSON Patch document" },
   KAVO_JSON_PATCH_TARGET_NOT_FOUND: { status: 404, title: "JSON Patch target not found" },
   KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND: { status: 404, title: "Array-mutation member not found" },
