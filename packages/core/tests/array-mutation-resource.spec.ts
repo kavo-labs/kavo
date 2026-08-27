@@ -3,6 +3,7 @@ import type { EntityId, KavoContext } from "@kavo/core";
 import {
   ArrayMutationInvalidShapeException,
   ArrayMutationMemberNotFoundException,
+  AssociationInvalidShapeException,
   ConfigurationException,
   DefaultOperationRegistry,
   NotFoundException,
@@ -237,12 +238,12 @@ describe("list<Relation> — end to end through KavoEngine", () => {
 });
 
 describe("add<Relation> — end to end through KavoEngine", () => {
-  it("resolves a scalar id and calls addRelationMember", async () => {
+  it("resolves an {id} reference and calls addRelationMember", async () => {
     const { crud, adapter } = makeAuthorCrud();
     const response = await crud.engine.execute({
       operation: "addPosts",
       id: "1",
-      body: 2 as never,
+      body: { id: 2 } as never,
       query: null,
       options: null,
     } as never);
@@ -250,16 +251,17 @@ describe("add<Relation> — end to end through KavoEngine", () => {
     expect(response.item).toMatchObject({ id: 1, name: "Ada" });
   });
 
-  it("resolves an {id} reference the same way replace does", async () => {
-    const { crud, adapter } = makeAuthorCrud();
-    await crud.engine.execute({
-      operation: "addPosts",
-      id: "1",
-      body: { id: 3 } as never,
-      query: null,
-      options: null,
-    } as never);
-    expect(adapter.calls).toEqual([{ method: "addRelationMember", id: 1, relation: "posts", memberId: 3 }]);
+  it("rejects a bare scalar body instead of resolving it as shorthand for an {id} reference (issue #291)", async () => {
+    const { crud } = makeAuthorCrud();
+    await expect(
+      crud.engine.execute({
+        operation: "addPosts",
+        id: "1",
+        body: 2 as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(AssociationInvalidShapeException);
   });
 
   it("is idempotent — adding an id already a member changes nothing", async () => {
@@ -268,7 +270,7 @@ describe("add<Relation> — end to end through KavoEngine", () => {
     await crud.engine.execute({
       operation: "addPosts",
       id: "1",
-      body: 2 as never,
+      body: { id: 2 } as never,
       query: null,
       options: null,
     } as never);
@@ -280,7 +282,7 @@ describe("add<Relation> — end to end through KavoEngine", () => {
     const call = crud.engine.execute({
       operation: "addPosts",
       id: "1",
-      body: 404 as never,
+      body: { id: 404 } as never,
       query: null,
       options: null,
     } as never);
@@ -316,13 +318,13 @@ describe("add<Relation> — end to end through KavoEngine", () => {
 });
 
 describe("remove<Relation> — end to end through KavoEngine", () => {
-  it("resolves a scalar id and calls removeRelationMember", async () => {
+  it("resolves an {id} reference and calls removeRelationMember", async () => {
     const { crud, adapter } = makeAuthorCrud();
     adapter.membership.set("posts", new Set([2, 3]));
     const response = await crud.engine.execute({
       operation: "removePosts",
       id: "1",
-      body: 2 as never,
+      body: { id: 2 } as never,
       query: null,
       options: null,
     } as never);
@@ -336,12 +338,25 @@ describe("remove<Relation> — end to end through KavoEngine", () => {
     const call = crud.engine.execute({
       operation: "removePosts",
       id: "1",
-      body: 99 as never,
+      body: { id: 99 } as never,
       query: null,
       options: null,
     } as never);
     await expect(call).rejects.toThrowError(ArrayMutationMemberNotFoundException);
     await expect(call).rejects.toMatchObject({ code: "KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND", status: 404 });
+  });
+
+  it("rejects a bare scalar body instead of resolving it as shorthand for an {id} reference (issue #291)", async () => {
+    const { crud } = makeAuthorCrud();
+    await expect(
+      crud.engine.execute({
+        operation: "removePosts",
+        id: "1",
+        body: 2 as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(AssociationInvalidShapeException);
   });
 
   it("rejects an array body with KAVO_ARRAY_MUTATION_INVALID_SHAPE", async () => {

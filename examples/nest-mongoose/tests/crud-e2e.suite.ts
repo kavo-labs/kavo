@@ -107,7 +107,10 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
     it("embeds a relation with include, and filters by the reference id", async () => {
       const authorId = await newAuthor();
-      await request(server()).post("/articles").send({ title: "Owned", author: authorId }).expect(201);
+      await request(server())
+        .post("/articles")
+        .send({ title: "Owned", author: { _id: authorId } })
+        .expect(201);
       await request(server()).post("/articles").send({ title: "Orphan" }).expect(201);
 
       const included = await request(server()).get("/articles?include=author&filter[title][eq]=Owned").expect(200);

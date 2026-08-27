@@ -106,6 +106,22 @@ export class ArrayMutationInvalidShapeException extends KavoException {
 }
 
 /**
+ * A single-key relation's write value on `create`/`update`/`patch` was a
+ * bare scalar (`{"product": "<uuid>"}`) instead of the reference object
+ * ADR-0014 requires (`{"product": {"id": "<uuid>"}}`) → 400. Previously a
+ * bare scalar was silently accepted as shorthand for the reference object;
+ * that shorthand made a caller's intent ambiguous — was `"<uuid>"` the
+ * related row's id, or a value for some other field named `product`? — and
+ * masked the shape of the actual foreign key when it was wrong (issue
+ * #291). The deserializer now rejects it outright rather than guessing.
+ */
+export class AssociationInvalidShapeException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_ASSOCIATION_INVALID_SHAPE", options);
+  }
+}
+
+/**
  * `arrayMutation`'s `jsonPatch` strategy: a `PATCH /entity/:id` array body
  * that is not a well-formed RFC 6902 document within Kavo's supported
  * subset → 400. Covers a malformed op (missing/invalid `op`, `path`, or

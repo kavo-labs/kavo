@@ -46,7 +46,7 @@ Opting even one relation into `"jsonPatch"` this way turns on RFC 6902 body pars
 
 ### `"replace"`
 
-Gives each write-opted to-many relation `PUT /<entity>/:id/<relation>`, generated the same way every other route is: one registry entry per relation, at `@Kavo` decoration time. The body is a full replacement array, ids or `{id}` references or `null`, still id-only per [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes). Partial mutation is disabled outright: no `{ add: [...] }`/`{ remove: [...] }` shape, no patch ops. Any other top-level body shape is a `400 KAVO_ARRAY_MUTATION_INVALID_SHAPE`. The response is the parent entity's own `item` shape, not the relation's member list.
+Gives each write-opted to-many relation `PUT /<entity>/:id/<relation>`, generated the same way every other route is: one registry entry per relation, at `@Kavo` decoration time. The body is a full replacement array of `{id}` references, or `null`, still id-only per [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes) — a bare scalar element is rejected (`400 KAVO_ASSOCIATION_INVALID_SHAPE`). Partial mutation is disabled outright: no `{ add: [...] }`/`{ remove: [...] }` shape, no patch ops. Any other top-level body shape is a `400 KAVO_ARRAY_MUTATION_INVALID_SHAPE`. The response is the parent entity's own `item` shape, not the relation's member list.
 
 ```ts
 @Kavo(Book, {

@@ -161,9 +161,13 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
 ## 5. Writes
 
 Association by id, never deep nested writes — the rationale and the
-extension point are **ADR-0014**. `{"owner": 7}`, `{"owner": {"id": 7}}`,
-`{"tags": [1, {"id": 2}]}`, and `null` all work; anything more inside a
-relation object is narrowed to the id rather than half-honored.
+extension point are **ADR-0014**. `{"owner": {"id": 7}}`,
+`{"tags": [{"id": 1}, {"id": 2}]}`, and `null` all work; anything more
+inside a relation object is narrowed to the id rather than half-honored. A
+bare scalar (`{"owner": 7}`) is rejected with `AssociationInvalidShapeException`
+(`KAVO_ASSOCIATION_INVALID_SHAPE`) rather than accepted as shorthand — a
+composite-key target (ADR-0039) is the one exception, keeping its own
+`~`-delimited scalar shorthand.
 
 ### Array-relation mutation (`arrayMutation`, ADR-0029)
 

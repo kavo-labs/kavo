@@ -17,10 +17,11 @@ import {
  * child repository auto-write the `species` discriminator on create.
  * Routes: POST /cats, GET /cats, GET/PUT/DELETE /cats/:id (PATCH disabled),
  * PUT /cats/:id/tags, GET/POST/DELETE/PUT /cats/:id/photos. `include=owner`
- * embeds the owner; `owner` is also writable by id (`{"owner": 1}` on
- * create — ADR-0014). `include=tags`/`include=photos` embed the cat's tags
+ * embeds the owner; `owner` is also writable by an `{ id }` reference
+ * (`{"owner": {"id": 1}}` on create — ADR-0014; a bare scalar is rejected,
+ * issue #291). `include=tags`/`include=photos` embed the cat's tags
  * and photos (both many-to-many, batch-loaded like any other to-many);
- * both relations are likewise writable by an array of ids on create/update,
+ * both relations are likewise writable by an array of `{ id }` refs on create/update,
  * and — since both opt into `write` — independently through their own
  * array-mutation routes, each under its **own** strategy (ADR-0029's
  * per-relation amendment, issue #223): `tags` stays `replace` — a single

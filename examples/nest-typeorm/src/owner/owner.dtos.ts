@@ -1,8 +1,10 @@
 import { enumProp, oneOfArray } from "@kavo/nest";
-import { IsEmail, IsInt, IsISO8601, IsNotEmpty, IsOptional, IsPositive, IsString } from "class-validator";
+import { Type } from "class-transformer";
+import { IsEmail, IsISO8601, IsNotEmpty, IsOptional, IsString, ValidateNested } from "class-validator";
 import { CatItemDto } from "../cat/cat.dtos.js";
 import { AddressItemDto } from "../address/address.dtos.js";
 import { PetSizeEnum } from "../pet/pet.entity.js";
+import { IdRefDto } from "../common/id-ref.dto.js";
 
 /**
  * DTO slots for the Owner route. See `cat.dtos.ts` for the
@@ -43,12 +45,13 @@ export class CreateOwnerDto {
   @IsISO8601()
   startedAt: Date | null = null;
 
-  // Association by id (ADR-0014): send the address's id, or an `{ id }`
-  // reference. Deep nested writes are deliberately out of scope.
+  // Association by id (ADR-0014): send the address as an `{ id }`
+  // reference — a bare scalar is rejected (issue #291). Deep nested writes
+  // are deliberately out of scope.
   @IsOptional()
-  @IsInt()
-  @IsPositive()
-  address: number | null = null;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  address: IdRefDto | null = null;
 }
 
 /** `update` slot — request body for PUT /owners/:id (patch derives from it). */
@@ -65,9 +68,9 @@ export class UpdateOwnerDto {
   startedAt: Date | null = null;
 
   @IsOptional()
-  @IsInt()
-  @IsPositive()
-  address: number | null = null;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  address: IdRefDto | null = null;
 }
 
 /**
@@ -92,9 +95,9 @@ export class PatchOwnerDto {
   startedAt?: Date | null;
 
   @IsOptional()
-  @IsInt()
-  @IsPositive()
-  address?: number | null;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  address?: IdRefDto | null;
 }
 
 /** `item` slot — the detail projection. */

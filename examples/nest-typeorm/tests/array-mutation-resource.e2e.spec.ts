@@ -179,7 +179,10 @@ describe("resource strategy sub-collection routes over real HTTP", () => {
 
   it("PUT :id/tags still replaces the whole array, unchanged from the replace strategy", async () => {
     const { bookId, tagIds } = await seed();
-    await request(server()).put(`/resource-books/${bookId}/tags`).send([tagIds[0], tagIds[1]]).expect(200);
+    await request(server())
+      .put(`/resource-books/${bookId}/tags`)
+      .send([{ id: tagIds[0] }, { id: tagIds[1] }])
+      .expect(200);
 
     const reloaded = await dataSource.getRepository(Book).findOne({ where: { id: bookId }, relations: { tags: true } });
     expect(reloaded?.tags.map((tag) => tag.id).sort()).toEqual([...tagIds].sort());

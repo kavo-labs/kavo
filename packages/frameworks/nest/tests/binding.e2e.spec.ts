@@ -1455,7 +1455,10 @@ describe("@Kavo relation includes", () => {
   });
 
   it("parses include= off the wire and embeds the loaded relation", async () => {
-    await request(server()).post("/todos").send({ title: "x", list: 7 }).expect(201);
+    await request(server())
+      .post("/todos")
+      .send({ title: "x", list: { id: 7 } })
+      .expect(201);
     // The fake adapter stores what deserialization produced: an `{ id }`
     // association, which is what a real adapter would resolve.
     expect(adapter.rows[0]?.list).toEqual({ id: 7 });
@@ -1465,7 +1468,10 @@ describe("@Kavo relation includes", () => {
   });
 
   it("narrows an included node with fields[relation]", async () => {
-    await request(server()).post("/todos").send({ title: "x", list: 7 }).expect(201);
+    await request(server())
+      .post("/todos")
+      .send({ title: "x", list: { id: 7 } })
+      .expect(201);
     const response = await request(server()).get("/todos/1?include=list&fields[list]=id").expect(200);
     expect(response.body.list).toEqual({ id: 7 });
   });
@@ -1493,7 +1499,7 @@ describe("@Kavo relation includes", () => {
     for (let i = 1; i <= 3; i++) {
       await request(server())
         .post("/todos")
-        .send({ title: `t${i}`, priority: i, list: 7 })
+        .send({ title: `t${i}`, priority: i, list: { id: 7 } })
         .expect(201);
     }
 

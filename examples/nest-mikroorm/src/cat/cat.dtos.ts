@@ -20,12 +20,13 @@ export class CreateCatDto {
   size = enumProp(Object.values(PetSizeEnum), { example: PetSizeEnum.Medium });
   indoor = false;
   livesLeft = 9;
-  // Association by id (ADR-0014): send the owner's id, or an `{ id }`
-  // reference. Deep nested writes are deliberately out of scope.
-  owner: number | null = null;
-  // Same mechanism over a to-many edge: an array of tag ids (or `{ id }`
-  // refs) replaces the full set of associated tags.
-  tags: number[] = [];
+  // Association by id (ADR-0014): send an `{ id }` reference — a bare
+  // scalar is rejected (issue #291). Deep nested writes are deliberately
+  // out of scope.
+  owner: { id: number } | null = null;
+  // Same mechanism over a to-many edge: an array of `{ id }` refs replaces
+  // the full set of associated tags.
+  tags: { id: number }[] = [];
 }
 
 /** `update` slot — request body for PUT /cats/:id (patch derives from it). */
@@ -35,8 +36,8 @@ export class UpdateCatDto {
   size = enumProp(Object.values(PetSizeEnum), { example: PetSizeEnum.Medium });
   indoor = false;
   livesLeft = 0;
-  owner: number | null = null;
-  tags: number[] = [];
+  owner: { id: number } | null = null;
+  tags: { id: number }[] = [];
 }
 
 /** `item` slot — the detail projection. */

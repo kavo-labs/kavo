@@ -29,7 +29,8 @@ const articleSchema = new Schema(
     tags: [String],
     // The `ref` edge. In Mongoose this single path is *both* the relation
     // and the foreign key, so `author` is includable (`?include=author`)
-    // and writable by id (`{"author": "<id>"}` — ADR-0014).
+    // and writable by an `{ _id }` reference (`{"author": {"_id": "<id>"}}`
+    // — ADR-0014; a bare scalar is rejected, issue #291).
     author: { type: Schema.Types.ObjectId, ref: AUTHOR_MODEL },
     // Mongoose declares no `@DeleteDateColumn` equivalent, so the marker is
     // an ordinary path that the controller names via `softDelete.field`.

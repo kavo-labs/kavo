@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
-import type { KavoContext, IncludeNode, NormalizedQueryContext, ResolvedEntityConfig } from "@kavo/core";
+import type {
+  ClassRef,
+  EntityMetadata,
+  KavoContext,
+  IncludeNode,
+  NormalizedQueryContext,
+  ResolvedEntityConfig,
+} from "@kavo/core";
 import {
+  AssociationInvalidShapeException,
   DefaultDeserializer,
   DefaultDtoResolver,
+  DefaultEntityCatalog,
   DefaultSerializer,
   createKavoContext,
   resolveEntityConfig,
 } from "@kavo/core";
 import { User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
-import { Author, Post, postMetadata } from "./support/blog-fixture.js";
+import { Author, Post, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
 const userConfig = resolveEntityConfig(userMetadata, undefined, undefined);
 const postConfig = resolveEntityConfig(postMetadata, undefined, undefined);
@@ -320,6 +329,47 @@ describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
       contextWithMarker("deletedAt"),
     );
     expect(payload).toEqual({ deletedAt: new Date(0), name: "Ada" });
+  });
+});
+
+describe("DefaultDeserializer — single-key relation association (ADR-0014, issue #291)", () => {
+  const catalog = new DefaultEntityCatalog((entity: ClassRef) => {
+    if (entity === Author) {
+      return authorMetadata as unknown as EntityMetadata<object>;
+    }
+    return undefined;
+  });
+  const deserializer = new DefaultDeserializer<Post>(postMetadata, catalog);
+
+  function deserialize(raw: unknown) {
+    return deserializer.deserialize(raw, null, { entityName: "Post", operation: "createOne" } as never);
+  }
+
+  it("narrows a reference object to just the target's id field", () => {
+    expect(deserialize({ author: { id: 7 } })).toEqual({ author: { id: 7 } });
+  });
+
+  it("drops extra keys on a reference object rather than honoring a deep write", () => {
+    expect(deserialize({ author: { id: 7, name: "Rae" } })).toEqual({ author: { id: 7 } });
+  });
+
+  it("disassociates on null", () => {
+    expect(deserialize({ author: null })).toEqual({ author: null });
+  });
+
+  it("rejects a bare scalar instead of resolving it as shorthand for an {id} reference", () => {
+    expect(() => deserialize({ author: 7 })).toThrowError(AssociationInvalidShapeException);
+  });
+
+  it("throws AssociationInvalidShapeException with the KAVO_ASSOCIATION_INVALID_SHAPE code", () => {
+    try {
+      deserialize({ author: 7 });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(AssociationInvalidShapeException);
+      expect((error as AssociationInvalidShapeException).code).toBe("KAVO_ASSOCIATION_INVALID_SHAPE");
+      expect((error as AssociationInvalidShapeException).status).toBe(400);
+    }
   });
 });
 

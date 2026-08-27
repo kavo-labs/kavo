@@ -389,7 +389,7 @@ describe("per-relation jsonPatch — engine end to end", () => {
     const response = await crud.engine.execute({
       operation: "patchOne",
       id: "1",
-      body: [{ op: "add", path: "/favorites/-", value: 2 }] as never,
+      body: [{ op: "add", path: "/favorites/-", value: { id: 2 } }] as never,
       query: null,
       options: null,
     } as never);
@@ -441,7 +441,7 @@ describe("per-relation jsonPatch — engine end to end", () => {
       id: "1",
       body: [
         { op: "replace", path: "/name", value: "Marie" },
-        { op: "add", path: "/favorites/-", value: 2 },
+        { op: "add", path: "/favorites/-", value: { id: 2 } },
       ] as never,
       query: null,
       options: null,

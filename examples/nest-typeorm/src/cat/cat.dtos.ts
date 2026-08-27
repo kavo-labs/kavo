@@ -1,19 +1,21 @@
 import { enumProp } from "@kavo/nest";
+import { Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsInt,
   IsNotEmpty,
+  IsInt,
   IsOptional,
-  IsPositive,
   IsString,
   Min,
   ValidateIf,
+  ValidateNested,
 } from "class-validator";
 import { PetSizeEnum } from "../pet/pet.entity.js";
 import { TagItemDto } from "../tag/tag.dtos.js";
 import { PhotoItemDto } from "../photo/photo.dtos.js";
+import { IdRefDto } from "../common/id-ref.dto.js";
 
 /**
  * DTO slots for the Cat route. Fields are initialized so the
@@ -71,26 +73,29 @@ export class CreateCatDto {
   @Min(0)
   livesLeft = 9;
 
-  // Association by id (ADR-0014): send the owner's id, or an
-  // `{ id }` reference. Deep nested writes are deliberately out of scope.
+  // Association by id (ADR-0014): send an `{ id }` reference — a bare
+  // scalar is rejected (issue #291). Deep nested writes are deliberately
+  // out of scope.
   @IsOptional()
-  @IsInt()
-  @IsPositive()
-  owner: number | null = null;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  owner: IdRefDto | null = null;
 
-  // Same mechanism, over a to-many edge: an array of tag ids (or `{ id }`
-  // refs) replaces the full set of associated tags.
+  // Same mechanism, over a to-many edge: an array of `{ id }` refs
+  // replaces the full set of associated tags.
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  tags: number[] = [];
+  @ValidateNested({ each: true })
+  @Type(() => IdRefDto)
+  tags: IdRefDto[] = [];
 
   // Same mechanism again, over `photos` — independently write-opted under
   // the `resource` strategy rather than `tags`'s `replace` (issue #223).
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  photos: number[] = [];
+  @ValidateNested({ each: true })
+  @Type(() => IdRefDto)
+  photos: IdRefDto[] = [];
 }
 
 /** `update` slot — request body for PUT /cats/:id (patch derives from it). */
@@ -115,19 +120,21 @@ export class UpdateCatDto {
   livesLeft = 0;
 
   @IsOptional()
-  @IsInt()
-  @IsPositive()
-  owner: number | null = null;
+  @ValidateNested()
+  @Type(() => IdRefDto)
+  owner: IdRefDto | null = null;
 
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  tags: number[] = [];
+  @ValidateNested({ each: true })
+  @Type(() => IdRefDto)
+  tags: IdRefDto[] = [];
 
   @IsOptional()
   @IsArray()
-  @IsInt({ each: true })
-  photos: number[] = [];
+  @ValidateNested({ each: true })
+  @Type(() => IdRefDto)
+  photos: IdRefDto[] = [];
 }
 
 /** `item` slot — the detail projection. */

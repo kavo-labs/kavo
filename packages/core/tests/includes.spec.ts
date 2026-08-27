@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ConfigurationException, QueryValidationException, createKavo } from "@kavo/core";
+import {
+  AssociationInvalidShapeException,
+  ConfigurationException,
+  QueryValidationException,
+  createKavo,
+} from "@kavo/core";
 import type {
   KavoInstance,
   KavoOptions,
@@ -362,11 +367,11 @@ describe("include serialization", () => {
 });
 
 describe("association by id (ADR-0014)", () => {
-  it("accepts a scalar id, an { id } reference, and narrows a deep payload", async () => {
+  it("accepts an { id } reference, and narrows a deep payload", async () => {
     const fixture = blog();
     const { posts, postAdapter } = fixture;
 
-    const created = await posts.createOne({ title: "a", author: 7 } as never);
+    const created = await posts.createOne({ title: "a", author: { id: 7 } } as never);
     expect(created).toMatchObject({ title: "a" });
     expect(lastRow(postAdapter)["author"]).toEqual({ id: 7 });
 
@@ -378,10 +383,18 @@ describe("association by id (ADR-0014)", () => {
     expect(lastRow(postAdapter)["author"]).toBeNull();
   });
 
+  it("rejects a bare scalar id instead of resolving it as shorthand for an { id } reference (issue #291)", async () => {
+    const fixture = blog();
+    const { posts } = fixture;
+    await expect(posts.createOne({ title: "a", author: 7 } as never)).rejects.toThrowError(
+      AssociationInvalidShapeException,
+    );
+  });
+
   it("maps a to-many association element-wise", async () => {
     const fixture = blog();
     const { authors, authorAdapter } = fixture;
-    await authors.createOne({ name: "Ada", posts: [1, { id: 2 }] } as never);
+    await authors.createOne({ name: "Ada", posts: [{ id: 1 }, { id: 2 }] } as never);
     expect(lastRow(authorAdapter)["posts"]).toEqual([{ id: 1 }, { id: 2 }]);
   });
 });

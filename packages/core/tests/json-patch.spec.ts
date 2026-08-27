@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntityId, KavoContext } from "@kavo/core";
 import {
+  AssociationInvalidShapeException,
   ConfigurationException,
   JsonPatchInvalidDocumentException,
   JsonPatchTargetNotFoundException,
@@ -345,13 +346,13 @@ describe("patchOne — jsonPatch document, field ops", () => {
 });
 
 describe("patchOne — jsonPatch document, relation ops", () => {
-  it("resolves a scalar id and an {id} reference the same way replace does, and calls patchRelation", async () => {
+  it("resolves {id} reference values and calls patchRelation", async () => {
     const { crud, adapter } = makeAuthorCrud("jsonPatch");
     const response = await crud.engine.execute({
       operation: "patchOne",
       id: "1",
       body: [
-        { op: "add", path: "/posts/-", value: 2 },
+        { op: "add", path: "/posts/-", value: { id: 2 } },
         { op: "add", path: "/posts/-", value: { id: 3 } },
       ] as never,
       query: null,
@@ -368,8 +369,8 @@ describe("patchOne — jsonPatch document, relation ops", () => {
       operation: "patchOne",
       id: "1",
       body: [
-        { op: "add", path: "/posts/-", value: 2 },
-        { op: "remove", path: "/posts/-", value: 1 },
+        { op: "add", path: "/posts/-", value: { id: 2 } },
+        { op: "remove", path: "/posts/-", value: { id: 1 } },
       ] as never,
       query: null,
       options: null,
@@ -384,7 +385,7 @@ describe("patchOne — jsonPatch document, relation ops", () => {
       id: "1",
       body: [
         { op: "replace", path: "/name", value: "Grace" },
-        { op: "add", path: "/posts/-", value: 2 },
+        { op: "add", path: "/posts/-", value: { id: 2 } },
       ] as never,
       query: null,
       options: null,
@@ -401,7 +402,7 @@ describe("patchOne — jsonPatch document, relation ops", () => {
     const call = crud.engine.execute({
       operation: "patchOne",
       id: "1",
-      body: [{ op: "remove", path: "/posts/-", value: 99 }] as never,
+      body: [{ op: "remove", path: "/posts/-", value: { id: 99 } }] as never,
       query: null,
       options: null,
     } as never);
@@ -426,7 +427,7 @@ describe("patchOne — jsonPatch document, relation ops", () => {
       id: "1",
       body: [
         { op: "replace", path: "/name", value: "Grace" },
-        { op: "remove", path: "/posts/-", value: 99 },
+        { op: "remove", path: "/posts/-", value: { id: 99 } },
       ] as never,
       query: null,
       options: null,
@@ -448,7 +449,7 @@ describe("patchOne — jsonPatch document, relation ops", () => {
     const call = crud.engine.execute({
       operation: "patchOne",
       id: "1",
-      body: [{ op: "add", path: "/posts/-", value: 404 }] as never,
+      body: [{ op: "add", path: "/posts/-", value: { id: 404 } }] as never,
       query: null,
       options: null,
     } as never);
@@ -462,7 +463,7 @@ describe("patchOne — jsonPatch document, relation ops", () => {
       crud.engine.execute({
         operation: "patchOne",
         id: "1",
-        body: [{ op: "add", path: "/posts/-", value: 2 }] as never,
+        body: [{ op: "add", path: "/posts/-", value: { id: 2 } }] as never,
         query: null,
         options: null,
       } as never),
@@ -561,12 +562,25 @@ describe("patchOne — jsonPatch document, relation ops", () => {
         operation: "patchOne",
         id: "1",
         body: [
-          { op: "add", path: "/posts/-", value: 7 },
-          { op: "remove", path: "/posts/-", value: 7 },
+          { op: "add", path: "/posts/-", value: { id: 7 } },
+          { op: "remove", path: "/posts/-", value: { id: 7 } },
         ] as never,
         query: null,
         options: null,
       } as never),
     ).rejects.toThrowError(JsonPatchTargetNotFoundException);
+  });
+
+  it("rejects a bare scalar value instead of resolving it as shorthand for an {id} reference (issue #291)", async () => {
+    const { crud } = makeAuthorCrud("jsonPatch");
+    await expect(
+      crud.engine.execute({
+        operation: "patchOne",
+        id: "1",
+        body: [{ op: "add", path: "/posts/-", value: 2 }] as never,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrowError(AssociationInvalidShapeException);
   });
 });
