@@ -74,7 +74,9 @@ export function registerDogE2eSuite(getApp: () => INestApplication): void {
         const tag = nextTag();
         const { id } = await createDog({ name: `Isolated-${tag}` });
         await request(server()).get(`/cats/${id}`).expect(404);
-        const catList = await request(server()).get("/cats").query({ "filter[name][eq]": `Isolated-${tag}` });
+        const catList = await request(server())
+          .get("/cats")
+          .query({ "filter[name][eq]": `Isolated-${tag}` });
         expect(catList.body.items).toEqual([]);
       });
 
@@ -86,7 +88,9 @@ export function registerDogE2eSuite(getApp: () => INestApplication): void {
           .expect(201);
         const id = created.body.id as number;
         await request(server()).get(`/dogs/${id}`).expect(404);
-        const dogList = await request(server()).get("/dogs").query({ "filter[name][eq]": `CatOnly-${tag}` });
+        const dogList = await request(server())
+          .get("/dogs")
+          .query({ "filter[name][eq]": `CatOnly-${tag}` });
         expect(dogList.body.items).toEqual([]);
       });
 

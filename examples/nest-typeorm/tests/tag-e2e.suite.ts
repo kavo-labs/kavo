@@ -53,10 +53,16 @@ export function registerTagE2eSuite(getApp: () => INestApplication): void {
         const id = created.body.id as number;
 
         await request(server()).get(`/tags/${id}`).expect(200);
-        const updated = await request(server()).put(`/tags/${id}`).send({ name: `Renamed-${tag}` }).expect(200);
+        const updated = await request(server())
+          .put(`/tags/${id}`)
+          .send({ name: `Renamed-${tag}` })
+          .expect(200);
         expect(updated.body.name).toBe(`Renamed-${tag}`);
 
-        const patched = await request(server()).patch(`/tags/${id}`).send({ name: `Patched-${tag}` }).expect(200);
+        const patched = await request(server())
+          .patch(`/tags/${id}`)
+          .send({ name: `Patched-${tag}` })
+          .expect(200);
         expect(patched.body.name).toBe(`Patched-${tag}`);
 
         await request(server()).delete(`/tags/${id}`).expect(204);

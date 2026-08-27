@@ -151,10 +151,7 @@ export function registerAddressE2eSuite(getApp: () => INestApplication): void {
       it("a stale If-Match still refuses the delete (the override forwards preconditions)", async () => {
         const { id } = await createAddress();
         const fetched = await request(server()).get(`/addresses/${id}`).expect(200);
-        await request(server())
-          .patch(`/addresses/${id}`)
-          .send({ city: "Changed once" })
-          .expect(200);
+        await request(server()).patch(`/addresses/${id}`).send({ city: "Changed once" }).expect(200);
         const response = await request(server())
           .delete(`/addresses/${id}`)
           .set("If-Match", fetched.headers.etag as string)

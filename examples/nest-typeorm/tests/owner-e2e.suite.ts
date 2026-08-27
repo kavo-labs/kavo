@@ -74,7 +74,9 @@ export function registerOwnerE2eSuite(getApp: () => INestApplication): void {
       });
 
       it("does not gate createOne, updateOne, patchOne, or findOne — only deleteOne carries a policy", async () => {
-        const created = await request(server()).post("/owners").send({ name: "Open", email: email(nextTag()) });
+        const created = await request(server())
+          .post("/owners")
+          .send({ name: "Open", email: email(nextTag()) });
         expect(created.status).toBe(201);
         const id = created.body.id as number;
         await request(server()).get(`/owners/${id}`).expect(200);

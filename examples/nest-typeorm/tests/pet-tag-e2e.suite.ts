@@ -50,9 +50,7 @@ export function registerPetTagE2eSuite(getApp: () => INestApplication): void {
         const tagId = await createTag();
         await request(server()).post("/pet-tags").send({ petId, tagId, note: "collar" }).expect(201);
 
-        const fetched = await request(server())
-          .get(`/pet-tags/${petId}~${tagId}`)
-          .expect(200);
+        const fetched = await request(server()).get(`/pet-tags/${petId}~${tagId}`).expect(200);
         expect(fetched.body).toMatchObject({ petId, tagId, note: "collar" });
       });
 
@@ -70,15 +68,10 @@ export function registerPetTagE2eSuite(getApp: () => INestApplication): void {
         const petId = await createPet();
         const tagId = await createTag();
         await request(server()).post("/pet-tags").send({ petId, tagId, note: "first" }).expect(201);
-        const second = await request(server())
-          .post("/pet-tags")
-          .send({ petId, tagId, note: "second" })
-          .expect(201);
+        const second = await request(server()).post("/pet-tags").send({ petId, tagId, note: "second" }).expect(201);
         expect(second.body).toMatchObject({ petId, tagId, note: "second" });
 
-        const fetched = await request(server())
-          .get(`/pet-tags/${petId}~${tagId}`)
-          .expect(200);
+        const fetched = await request(server()).get(`/pet-tags/${petId}~${tagId}`).expect(200);
         expect(fetched.body.note).toBe("second");
       });
     });
