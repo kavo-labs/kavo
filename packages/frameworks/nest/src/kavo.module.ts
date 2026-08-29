@@ -446,6 +446,7 @@ class KavoBinder implements OnModuleInit {
             route,
             service.engine.metadata,
             service.engine.config.allowlists.selectable as readonly string[],
+            Object.keys(service.engine.config.computed),
             dtoResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same

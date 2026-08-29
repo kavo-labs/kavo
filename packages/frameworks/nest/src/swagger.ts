@@ -866,6 +866,7 @@ export function applyResponseSchemaDocs(
   route: RouteShape,
   metadata: EntityMetadata<object>,
   selectable: readonly string[],
+  computedFieldNames: readonly string[],
   dtoResolver: DtoResolver<object>,
 ): void {
   if (route.status === 204) {
@@ -894,6 +895,20 @@ export function applyResponseSchemaDocs(
       continue;
     }
     properties[field.name] = fieldSchema(field);
+  }
+  // Declared computed fields (ADR-0019) aren't in `metadata.fields` — no
+  // column backs them — but the engine serializes them into every response
+  // and the resolved `selectable` allowlist carries their names by default.
+  // Gate them by the same `selectable` check as the columns above, so an
+  // explicit `allowlists.selectable` that omits or `exclude`s one (ADR-0026),
+  // or a `selectable: false` descriptor, drops it here too. Computed
+  // descriptors carry no type information, so the fragment is left untyped
+  // and nullable rather than coerced to `string` (issue #302).
+  for (const name of computedFieldNames) {
+    if (!selectable.includes(name)) {
+      continue;
+    }
+    properties[name] = { nullable: true };
   }
   const element = { type: "object" as const, properties };
   const schema = isList

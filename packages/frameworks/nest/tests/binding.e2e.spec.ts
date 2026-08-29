@@ -2551,6 +2551,62 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(schema?.$ref).toBeUndefined();
     expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title"]);
   });
+
+  it("adds a declared computed field to the synthesized item and list schemas, untyped (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+    })
+    @Controller("todos")
+    class ComputedController {}
+    await bootstrap(ComputedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const single = itemBody("/todos/{id}", "get", "200");
+    expect(Object.keys(single?.properties ?? {})).toEqual([
+      "id",
+      "title",
+      "done",
+      "priority",
+      "deletedAt",
+      "titleUpper",
+    ]);
+    // No assumed `type` — computed descriptors carry none.
+    expect(single?.properties?.titleUpper).toEqual({ nullable: true });
+
+    const listElement = itemBody("/todos", "get", "200")?.properties?.items?.items;
+    expect(Object.keys(listElement?.properties ?? {})).toContain("titleUpper");
+    expect(listElement?.properties?.titleUpper).toEqual({ nullable: true });
+  });
+
+  it("omits a computed field when an explicit selectable list excludes it (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+      allowlists: { selectable: ["id", "title"] },
+    })
+    @Controller("todos")
+    class NarrowedComputedController {}
+    await bootstrap(NarrowedComputedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
+  });
+
+  it("leaves a registered item DTO's response untouched even when a computed field is declared (issue #302)", async () => {
+    class TodoItemDto {
+      id = 0;
+      title = "";
+    }
+    @Kavo(Todo, {
+      dto: { item: TodoItemDto },
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+    })
+    @Controller("todos")
+    class DtoComputedController {}
+    await bootstrap(DtoComputedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
+  });
 });
 
 describe("@Kavo Swagger DTO slot fallbacks", () => {
