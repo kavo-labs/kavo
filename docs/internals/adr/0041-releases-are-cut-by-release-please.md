@@ -76,7 +76,7 @@ config details are load-bearing, and they were all found the hard way:
   empty, so `chore: release${component} v${version}` → `chore: release
 v0.15.0`; the token still has to be present for the parse to line up.
 - With `separate-pull-requests: false` the repo produces a single **grouped**
-  PR, and that PR is named by `group-pull-request-title-pattern`, *not*
+  PR, and that PR is named by `group-pull-request-title-pattern`, _not_
   `pull-request-title-pattern`. Both are set to
   `chore: release${component} v${version}` so the PR title is
   `chore: release vX.Y.Z`. Left unset, `group-pull-request-title-pattern`
