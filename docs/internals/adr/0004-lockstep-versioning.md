@@ -19,7 +19,8 @@ ranges between them pin the same version line.
   reproducible from one number.
 - Occasional no-op bumps of untouched packages — trivially cheap in an
   automated pipeline (`.github/workflows/publish.yml`; changesets was
-  considered and never adopted).
+  considered and never adopted). Releases themselves are cut by
+  release-please, which bumps every package's manifest in one PR (ADR-0041).
 - Enforced mechanically rather than by review: before it packs anything,
   `.github/workflows/publish.yml` runs
   `.github/scripts/verify-lockstep-versions.mjs` over every package in

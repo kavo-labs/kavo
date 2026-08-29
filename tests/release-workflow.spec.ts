@@ -394,6 +394,16 @@ describe("optional protocol peers", () => {
 });
 
 describe("publish.yml wiring", () => {
+  it("triggers on a published GitHub Release (release-please creates it with GITHUB_TOKEN)", () => {
+    // A tag pushed by GITHUB_TOKEN does not fire `on: push: tags`; the
+    // Release event does. See docs/internals/adr/0041-*.
+    expect(workflow).toMatch(/release:\s*\n\s*types:\s*\[\s*published\s*\]/);
+  });
+
+  it("still triggers on a manually pushed vX.Y.Z tag as an escape hatch", () => {
+    expect(workflow).toMatch(/push:\s*\n\s*tags:\s*\n\s*-\s*"v\*\.\*\.\*"/);
+  });
+
   it("declares a non-empty PACKAGE_DIRS list of directories that exist", () => {
     expect(packageDirs.length).toBeGreaterThan(0);
     for (const dir of packageDirs) {
@@ -539,13 +549,15 @@ describe("publish.yml wiring", () => {
     expect(step).not.toContain('"-*.tgz');
   });
 
-  it("keeps /publish's package table in the order PACKAGE_DIRS publishes", () => {
-    // publish.md names PACKAGE_DIRS the authority and calls a disagreement
-    // "a bug to fix in the same pass" — this is what notices.
+  it("keeps /publish scoped to bootstrapping a brand-new package, not routine releases", () => {
+    // Routine releases are a merged release-please PR (ADR-0041). /publish is
+    // now only the first-publish bootstrap, and must not have regrown the
+    // version-bump / commit-to-main / tag-push machinery release-please owns.
     const doc = readFileSync(PUBLISH_COMMAND_PATH, "utf8");
-    const rows = [...doc.matchAll(/^\s*\|\s*`(packages\/[^`]+)`\s*\|/gm)].map((match) => match[1]!);
 
-    expect(rows).toEqual(packageDirs);
+    expect(doc).toMatch(/bootstrap/i);
+    expect(doc).not.toContain("git tag -a");
+    expect(doc).not.toContain("chore(release):");
   });
 });
 
@@ -707,5 +719,69 @@ describe("verify-lockstep-versions", () => {
     expect(runCheck(cwd, ["0.6.0"]).status).toBe(2);
     expect(runCheck(cwd, []).status).toBe(2);
     expect(runCheck(cwd, []).stderr).toContain("usage:");
+  });
+});
+
+/**
+ * release-please cuts routine releases (ADR-0041): a single release PR on
+ * `main` carries the computed lockstep bump and the generated changelog, and
+ * merging it creates the `vX.Y.Z` tag + GitHub Release that `publish.yml`
+ * runs on. These assertions pin the config that keeps that automated bump in
+ * lockstep with `PACKAGE_DIRS` and shaped the way `publish.yml` expects.
+ */
+describe("release-please config", () => {
+  const config = JSON.parse(readFileSync(resolve(REPO_ROOT, "release-please-config.json"), "utf8"));
+  const manifest = JSON.parse(readFileSync(resolve(REPO_ROOT, ".release-please-manifest.json"), "utf8"));
+
+  it("produces a bare vX.Y.Z tag, matching publish.yml's trigger", () => {
+    expect(config["include-component-in-tag"]).toBe(false);
+  });
+
+  it("keeps a pre-1.0 breaking change at a minor bump, not 1.0.0", () => {
+    expect(config["bump-minor-pre-major"]).toBe(true);
+  });
+
+  it("bumps every published package.json in lockstep via extra-files", () => {
+    const rootPkg = config.packages["."];
+    expect(rootPkg).toBeDefined();
+    const jsonExtras = (rootPkg["extra-files"] ?? []).filter((f: { type: string }) => f.type === "json");
+    const extraDirs = jsonExtras.map((f: { path: string }) => f.path.replace(/\/package\.json$/, ""));
+    // PACKAGE_DIRS stays the only authority for the released set; extra-files
+    // must cover exactly it. (The "." entry additionally bumps the private
+    // root manifest, which is not in PACKAGE_DIRS.)
+    expect([...extraDirs].sort()).toEqual([...packageDirs].sort());
+    for (const f of jsonExtras) {
+      expect(f.jsonpath, `${f.path} jsonpath`).toBe("$.version");
+    }
+  });
+
+  it("seeds the manifest at the current released version and never lets it drift", () => {
+    expect(manifest["."]).toBe(readManifest("packages/core").version);
+  });
+
+  it("only names changelog sections for types the repo actually uses", () => {
+    const KNOWN = new Set(["feat", "fix", "chore", "test", "docs", "refactor", "perf", "ci"]);
+    for (const section of config["changelog-sections"] ?? []) {
+      expect(KNOWN.has(section.type), `unknown changelog type: ${section.type}`).toBe(true);
+    }
+  });
+});
+
+describe("release-please workflow", () => {
+  const wf = readFileSync(resolve(REPO_ROOT, ".github/workflows/release-please.yml"), "utf8");
+
+  it("runs on pushes to main", () => {
+    expect(wf).toMatch(/push:[\s\S]*branches:\s*\[?\s*main/);
+  });
+
+  it("grants the permissions release-please needs to open its PR and tag", () => {
+    expect(wf).toMatch(/contents:\s*write/);
+    expect(wf).toMatch(/pull-requests:\s*write/);
+  });
+
+  it("points release-please at the repo's config and manifest files", () => {
+    expect(wf).toContain("release-please-config.json");
+    expect(wf).toContain(".release-please-manifest.json");
+    expect(wf).toContain("googleapis/release-please-action@v4");
   });
 });

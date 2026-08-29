@@ -139,7 +139,9 @@ you just opened. The fan-out itself (`kavo-reviewer`, `kavo-test-auditor`,
 when the diff touches their area — read it there rather than here, so this
 file doesn't drift when the fan-out changes.
 
-`/list` reads existing GitHub issues without changing anything; `/publish` bumps and tags a release once `main` is green — neither is part of the per-issue loop above. (Reading one issue is just `gh issue view <n>`, which needs no command of its own.)
+`/list` reads existing GitHub issues without changing anything — not part of the per-issue loop above. (Reading one issue is just `gh issue view <n>`, which needs no command of its own.)
+
+Releases are cut by release-please (ADR-0041): merging its standing release PR on `main` bumps every `@kavo/*` version in lockstep, writes `CHANGELOG.md`, and creates the `vX.Y.Z` tag + GitHub Release that `.github/workflows/publish.yml` runs on. `/publish` is now only the procedure for bootstrapping a brand-new package's first npm publish.
 
 Two rules make this work:
 

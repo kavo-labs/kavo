@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "node",
+  "include-component-in-tag": false,
+  "separate-pull-requests": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "package-name": "kavo",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/orms/typeorm/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/orms/prisma/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/orms/mongoose/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/orms/mikroorm/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/realtime/sse/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/protocols/graphql/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/protocols/mcp/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" }
+      ]
+    }
+  },
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactoring" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "test", "section": "Tests" },
+    { "type": "ci", "section": "CI" },
+    { "type": "chore", "section": "Chores", "hidden": true }
+  ]
+}
