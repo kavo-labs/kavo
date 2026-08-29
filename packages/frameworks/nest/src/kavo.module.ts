@@ -450,15 +450,15 @@ class KavoBinder implements OnModuleInit {
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
-          // doc comment in swagger.ts): `query.search.enabled` needs the
-          // full precedence chain, and `allowlists.searchable` is only
-          // fully resolved once ORM metadata exists, neither of which
+          // doc comment in swagger.ts): whether `query.search` resolved to an
+          // object needs the full precedence chain, and `allowlists.searchable`
+          // is only fully resolved once ORM metadata exists, neither of which
           // `@Kavo` decoration time has.
           applySearchQueryDocs(
             prototype,
             methodName,
             descriptor,
-            settings.query.search.enabled,
+            settings.query.search !== false,
             service.engine.config.allowlists.searchable as readonly string[],
           );
           // `limit`/`offset` docs (issue #225) — deferred for the same

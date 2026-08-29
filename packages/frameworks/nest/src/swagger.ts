@@ -438,7 +438,7 @@ export function applyConditionalRequestDocs(
  * The `search[query]`/`search[mode]`/`search[fields]` params on a list
  * route (issue #156) — deferred the same way `applyConditionalRequestDocs`
  * is, and for the same reason: whether they belong on the route depends on
- * `query.search.enabled`, resolved through the *full* precedence chain
+ * whether `query.search` resolved to an object, through the *full* precedence chain
  * (built-in default → global → entity → operation), which only exists once
  * `KavoModule`'s discovery binder resolves the entity's config —
  * `KavoBinder.onModuleInit`, long after `@Kavo` decoration ran (ADR-0012).

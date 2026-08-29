@@ -57,8 +57,6 @@ export type SearchMode = "substring" | "words";
 export type SearchDriver = "orm";
 
 export interface SearchSettings {
-  /** `search[query]` is rejected with a 400 unless this is `true`. */
-  readonly enabled: boolean;
   /** `substring`: one `ILIKE '%term%'` per field. `words`: one per word, AND-ed. */
   readonly mode: SearchMode;
   readonly driver: SearchDriver;
@@ -76,8 +74,14 @@ export interface QuerySettings {
    * client-supplied sort fields are at request time.
    */
   readonly defaultSort: readonly Sort[];
-  /** `search[query]` free-text search (doc 05 §4). */
-  readonly search: SearchSettings;
+  /**
+   * `search[query]` free-text search (doc 05 §4). `false` (the default)
+   * disables it — `search[query]` is rejected with a 400 until an entity or
+   * operation scope sets an object. The same `false` sentinel `softDelete`/
+   * `realtime` use; any object turns search on, with `mode`/`driver`
+   * backfilled from their defaults (`resolveEntityConfig`).
+   */
+  readonly search: SearchSettings | false;
 }
 
 export interface ErrorSettings {

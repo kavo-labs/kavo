@@ -878,7 +878,7 @@ function parseFields<Entity>(
 /**
  * `search[query]`/`search[mode]`/`search[fields]` (doc 05 §4): validated and
  * synthesized here, in the normalizer, rather than the filter parser —
- * `searchable` is an allowlist and `search.enabled`/`mode` are per-operation
+ * `searchable` is an allowlist and `query.search` (`false` or `{ mode }`) is a per-operation
  * settings, both already in the normalizer's scope, and synthesis needs the
  * already-parsed `filter` to `AND` the fragment into.
  *
@@ -916,13 +916,14 @@ function parseSearch<Entity>(
   }
 
   const searchable = config.allowlists.searchable as readonly string[];
-  if (!config.settings.query.search.enabled) {
+  const search = config.settings.query.search;
+  if (search === false) {
     issues.push({
       field: "search[query]",
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",
       detail:
         `Query parameter 'search[query]' is not supported: search is not enabled for ${config.entityName}. ` +
-        `Set 'query.search.enabled' to true to turn it on.`,
+        `Set 'query.search' to an object to turn it on.`,
     });
     return filter;
   }
@@ -938,7 +939,7 @@ function parseSearch<Entity>(
   }
 
   const before = issues.length;
-  let mode = config.settings.query.search.mode;
+  let mode = search.mode;
   if (hasValue(modeRaw)) {
     if (modeRaw !== "substring" && modeRaw !== "words") {
       issues.push({

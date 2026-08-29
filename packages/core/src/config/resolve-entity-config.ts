@@ -66,6 +66,30 @@ function pickSettings(config: Readonly<Record<string, unknown>> | undefined): De
 }
 
 /**
+ * Backfill `query.search`'s `mode`/`driver` after a merge. `false` (the
+ * default) stays `false` — search off. Any object turns search on, and a
+ * nearer scope re-enabling from `false` may name only the keys it changes
+ * (`search: { mode: "words" }`), so the missing ones fall back to the
+ * built-in defaults here rather than being left `undefined`.
+ */
+function normalizeSearch(settings: KavoSettings): KavoSettings {
+  const search = settings.query.search;
+  if (search === false) {
+    return settings;
+  }
+  const defaults = BUILT_IN_DEFAULT_SEARCH;
+  return {
+    ...settings,
+    query: {
+      ...settings.query,
+      search: { mode: search.mode ?? defaults.mode, driver: search.driver ?? defaults.driver },
+    },
+  };
+}
+
+const BUILT_IN_DEFAULT_SEARCH = Object.freeze({ mode: "substring" as const, driver: "orm" as const });
+
+/**
  * Merge and validate one entity's configuration, once, at bootstrap:
  * `built-in defaults → global → entity → operation`. The result
  * is deep-frozen; per-call overrides are parameters (`KavoCallOptions`),
@@ -85,10 +109,12 @@ export function resolveEntityConfig<Entity extends object>(
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
-  const entitySettings = mergeSettings(
-    BUILT_IN_DEFAULTS,
-    globalDefaults,
-    pickSettings(entityConfig as Readonly<Record<string, unknown>> | undefined),
+  const entitySettings = normalizeSearch(
+    mergeSettings(
+      BUILT_IN_DEFAULTS,
+      globalDefaults,
+      pickSettings(entityConfig as Readonly<Record<string, unknown>> | undefined),
+    ),
   );
   validateSettings(entityName, entitySettings);
   validateDefaultSort(entityName, entitySettings, allowlists);
@@ -118,7 +144,7 @@ export function resolveEntityConfig<Entity extends object>(
     if (settings === undefined || Object.keys(settings).length === 0) {
       continue;
     }
-    const merged = mergeSettings(entitySettings, settings);
+    const merged = normalizeSearch(mergeSettings(entitySettings, settings));
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
     validateDefaultSort(scope, merged, allowlists);

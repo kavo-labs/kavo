@@ -191,9 +191,9 @@ describe("QueryNormalizer — wire params", () => {
 });
 
 describe("QueryNormalizer — search[...]", () => {
-  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: { enabled: true } } }, undefined);
+  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: {} } }, undefined);
 
-  it("rejects search[query] when search.enabled is false (the default)", () => {
+  it("rejects search[query] when query.search is false (the default)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
@@ -201,7 +201,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
     const emptySearchable = resolveEntityConfig(
       userMetadata,
-      { query: { search: { enabled: true } }, allowlists: { searchable: [] } },
+      { query: { search: {} }, allowlists: { searchable: [] } },
       undefined,
     );
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
@@ -283,7 +283,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("caps the number of words in words mode at query.maxInValues", () => {
     const tightCap = resolveEntityConfig(
       userMetadata,
-      { query: { search: { enabled: true }, maxInValues: 2 } },
+      { query: { search: {}, maxInValues: 2 } },
       undefined,
     );
     const issues = issuesOf(() =>
@@ -299,7 +299,7 @@ describe("QueryNormalizer — search[...]", () => {
     // checked `terms.length` would let this through.
     const tightCap = resolveEntityConfig(
       userMetadata,
-      { query: { search: { enabled: true }, maxInValues: 3 } },
+      { query: { search: {}, maxInValues: 3 } },
       undefined,
     );
     const issues = issuesOf(() =>
@@ -311,7 +311,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("lets the same product through once search[fields] narrows it under the cap", () => {
     const tightCap = resolveEntityConfig(
       userMetadata,
-      { query: { search: { enabled: true }, maxInValues: 3 } },
+      { query: { search: {}, maxInValues: 3 } },
       undefined,
     );
     // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
@@ -364,7 +364,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
     const relationSearchable = resolveEntityConfig(
       authorMetadata,
-      { query: { search: { enabled: true } }, allowlists: { searchable: ["name", "posts.title" as never] } },
+      { query: { search: {} }, allowlists: { searchable: ["name", "posts.title" as never] } },
       undefined,
     );
     const authorNormalizer = new QueryNormalizer(authorMetadata);
@@ -382,7 +382,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
     const independent = resolveEntityConfig(
       userMetadata,
-      { query: { search: { enabled: true } }, allowlists: { filterable: [], searchable: ["name"] } },
+      { query: { search: {} }, allowlists: { filterable: [], searchable: ["name"] } },
       undefined,
     );
     const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
@@ -393,18 +393,37 @@ describe("QueryNormalizer — search[...]", () => {
     const config = resolveEntityConfig(
       userMetadata,
       {
-        query: { search: { enabled: true, mode: "words" } },
+        query: { search: { mode: "words" } },
         operations: { findMany: { query: { search: { mode: "substring" } } } },
       },
       { query: { search: { mode: "substring" } } },
     );
-    // Entity scope overrides global mode, but leaves `enabled` (set only at
-    // entity scope) untouched rather than reverting it to the built-in
-    // default — a partial per-scope override must not wipe sibling keys.
-    expect(config.settings.query.search).toEqual({ enabled: true, mode: "words", driver: "orm" });
+    // Entity scope overrides global mode; `driver` (never named at any
+    // scope) is backfilled from the built-in default — a partial per-scope
+    // override must not leave sibling keys undefined.
+    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
     // The operation scope's narrower override wins for that operation only.
-    expect(config.settingsFor("findMany").query.search).toEqual({ enabled: true, mode: "substring", driver: "orm" });
-    expect(config.settingsFor("findOne").query.search.mode).toBe("words");
+    expect(config.settingsFor("findMany").query.search).toEqual({ mode: "substring", driver: "orm" });
+    const findOneSearch = config.settingsFor("findOne").query.search;
+    expect(findOneSearch !== false && findOneSearch.mode).toBe("words");
+  });
+
+  it("lets an operation scope disable an entity-enabled search with search: false", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      {
+        query: { search: {} },
+        operations: { findMany: { query: { search: false } } },
+      },
+      undefined,
+    );
+    expect(config.settings.query.search).toEqual({ mode: "substring", driver: "orm" });
+    expect(config.settingsFor("findMany").query.search).toBe(false);
+  });
+
+  it("backfills mode/driver when a scope re-enables search from the false default with a partial object", () => {
+    const config = resolveEntityConfig(userMetadata, { query: { search: { mode: "words" } } }, undefined);
+    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
   });
 });
 

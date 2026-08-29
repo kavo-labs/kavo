@@ -79,20 +79,22 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     }
   }
 
-  bool("query.search.enabled", settings.query.search.enabled);
-  if (settings.query.search.mode !== "substring" && settings.query.search.mode !== "words") {
-    throw new ConfigurationException(
-      entityName,
-      "query.search.mode",
-      `expected "substring" or "words", got ${JSON.stringify(settings.query.search.mode)}`,
-    );
-  }
-  if (settings.query.search.driver !== "orm") {
-    throw new ConfigurationException(
-      entityName,
-      "query.search.driver",
-      `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(settings.query.search.driver)}`,
-    );
+  const search = settings.query.search;
+  if (search !== false) {
+    if (search.mode !== "substring" && search.mode !== "words") {
+      throw new ConfigurationException(
+        entityName,
+        "query.search.mode",
+        `expected "substring" or "words", got ${JSON.stringify(search.mode)}`,
+      );
+    }
+    if (search.driver !== "orm") {
+      throw new ConfigurationException(
+        entityName,
+        "query.search.driver",
+        `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(search.driver)}`,
+      );
+    }
   }
 
   bool("errors.exposeInternals", settings.errors.exposeInternals);

@@ -203,7 +203,7 @@ describe("@Kavo route generation", () => {
  * allowlist (every own string column) with no explicit configuration.
  */
 describe("@Kavo search[...] (issue #156)", () => {
-  @Kavo(Todo, { query: { search: { enabled: true } } })
+  @Kavo(Todo, { query: { search: {} } })
   @Controller("todos")
   class SearchController {}
 
@@ -1726,13 +1726,13 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
  * `search[query]`/`search[mode]`/`search[fields]` docs (issue #156) are
  * applied later than the rest — deferred to `KavoModule`'s discovery binder
  * (`applySearchQueryDocs`), because whether they belong on the route
- * depends on `query.search.enabled` resolved through the full precedence
+ * depends on whether `query.search` resolved to an object through the full precedence
  * chain, and `allowlists.searchable`'s default/`{ exclude }` cases need ORM
  * metadata that doesn't exist at `@Kavo` decoration time.
  */
 describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   it("documents search[query]/search[mode]/search[fields] with the resolved searchable allowlist when enabled", async () => {
-    @Kavo(Todo, { query: { search: { enabled: true } } })
+    @Kavo(Todo, { query: { search: {} } })
     @Controller("todos")
     class SearchDocsController {}
 
@@ -1765,7 +1765,7 @@ describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   });
 
   it("documents an explicit empty searchable allowlist as a closed door", async () => {
-    @Kavo(Todo, { query: { search: { enabled: true } }, allowlists: { searchable: [] } })
+    @Kavo(Todo, { query: { search: {} }, allowlists: { searchable: [] } })
     @Controller("todos")
     class EmptySearchableController {}
 

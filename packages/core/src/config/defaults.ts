@@ -22,14 +22,12 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // Unset: today's no-`sort`-means-no-`ORDER BY` behavior is unchanged
     // for apps that don't declare a default.
     defaultSort: Object.freeze([]),
-    // Off by default: `search[query]` is rejected until an entity or
-    // operation opts in explicitly, even though `searchable`'s own default
-    // is permissive (doc 05 §4).
-    search: Object.freeze({
-      enabled: false,
-      mode: "substring" as const,
-      driver: "orm" as const,
-    }),
+    // Off by default, the same `false` sentinel `softDelete`/`realtime` use:
+    // `search[query]` is rejected until an entity or operation scope sets an
+    // object, even though `searchable`'s own default is permissive (doc 05
+    // §4). Any object turns it on; `mode`/`driver` are backfilled from
+    // `substring`/`orm` in `resolveEntityConfig`.
+    search: false,
   }),
   errors: Object.freeze({
     exposeInternals: false,

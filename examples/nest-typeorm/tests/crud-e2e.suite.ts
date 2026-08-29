@@ -122,7 +122,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(200);
       expect(combined.body.items.map((c: { name: string }) => c.name)).toEqual(["Shadow", "Whiskers"]);
 
-      // Off by default: TagController never set `query.search.enabled` —
+      // Off by default: TagController never set `query.search` to an object —
       // this is CatController's own opt-in, not process-wide.
       const disabled = await request(server()).get("/tags").query("search[query]=x").expect(400);
       expect(disabled.body.errors).toEqual([

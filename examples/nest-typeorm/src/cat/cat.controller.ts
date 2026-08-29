@@ -58,7 +58,7 @@ import {
   // strategy instead, overriding it (issue #223).
   arrayMutation: { strategy: "replace" },
   pagination: { defaultLimit: 10, maxLimit: 50 },
-  query: { search: { enabled: true } },
+  query: { search: {} },
   // Explicit include-lists (the plain form, contrast Owner's `{ exclude }`
   // in owner.controller.ts): `indoor`, `livesLeft`, and `createdAt` are
   // still returned in every response (`CatItemDto` includes them), just
@@ -69,7 +69,7 @@ import {
     sortable: ["id", "name", "age"],
     selectable: ["id", "name", "age", "size"],
     includable: ["owner", "tags", "photos"],
-    // Search is opt-in per entity (`query.search.enabled` above).
+    // Search is opt-in per entity (`query.search` set to an object above).
     // `name` is Cat's only own string-kind column, so this is the same set
     // the zero-config default would resolve to — named explicitly here for
     // the reference app to point at.
