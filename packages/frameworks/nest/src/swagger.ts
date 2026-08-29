@@ -53,7 +53,15 @@ function loadSwagger(): SwaggerModule | null {
   return cached;
 }
 
+/**
+ * The RFC 9457 problem-details body every 400/404/409/412 answers with. The
+ * `x-kavo-error` markers here are the counterpart of `x-kavo-entity` on the
+ * DTO schemas (#294): `registerKavoSchemas` (`register-schemas.ts`) uses
+ * them to hoist this shape — and its nested `errors[]` entry — into
+ * `components.schemas` as `KavoProblemDetails` / `KavoProblemDetailError`.
+ */
 const PROBLEM_DETAILS_SCHEMA = {
+  "x-kavo-error": true,
   type: "object",
   properties: {
     type: { type: "string", example: "https://kavo.dev/errors/kavo-not-found" },
@@ -65,6 +73,7 @@ const PROBLEM_DETAILS_SCHEMA = {
     errors: {
       type: "array",
       items: {
+        "x-kavo-error": true,
         type: "object",
         properties: {
           field: { type: "string" },
@@ -583,6 +592,69 @@ export function applyPaginationDocs(
   );
 }
 
+/**
+ * Retags the always-present `400` response (applied by `applySwaggerMetadata`
+ * at decoration time with the bare `PROBLEM_DETAILS_SCHEMA`) as an
+ * entity-scoped variant, so `registerKavoSchemas` can hoist it to
+ * `<Entity>ValidationError` — an `allOf` over `KavoProblemDetails` — instead
+ * of collapsing every entity's `400` onto the one shared component. The only
+ * thing entity-specific it can add is the `x-kavo-entity` marker and a
+ * name-scoping `description`; it deliberately does **not** enumerate the
+ * fields a validation error may reference:
+ *
+ * - an `enum` on `errors[].field` would be a lie — a validation error can
+ *   name a nested relation path (`owner.name`) or a non-column key, the same
+ *   reason `applyBodySchemaDocs` refuses `additionalProperties: false`; and
+ * - a `description` listing the resolved write/query allowlist would disagree
+ *   with the request-body schema on the very same route, which is projected
+ *   through the resolved `create`/`update` DTO when one is registered
+ *   (`DefaultDeserializer`: an explicit DTO *replaces* the allowlist,
+ *   ADR-0026's precedent) — publishing the wider allowlist would disclose
+ *   internal column names the DTO boundary exists to hide.
+ *
+ * Deferred to bind time only so it rides the same `KavoBinder.onModuleInit`
+ * pass as the other retag functions here; an app with no
+ * `KavoModule.forRoot`/`forRootAsync` never reaches it, so its `400`s keep
+ * the bare shape and hoist to `KavoProblemDetails` — the same
+ * graceful-degradation the sibling deferred functions accept.
+ */
+const alreadyValidationErrorDocumented = new WeakSet<object>();
+
+export function applyValidationErrorDoc(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  entityName: string,
+): void {
+  const swagger = loadSwagger();
+  if (swagger === null) {
+    return;
+  }
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyValidationErrorDocumented.has(method)) {
+    return;
+  }
+  alreadyValidationErrorDocumented.add(method);
+
+  // `type: undefined` clears the key `mergeResponseEntry`'s `Object.assign`
+  // would otherwise leave behind — see `applyResponseSchemaDocs`'s doc
+  // comment. The decoration-time `description` ("Query validation failed…")
+  // is preserved by the same merge and still accurate.
+  swagger.ApiResponse({
+    status: 400,
+    type: undefined,
+    schema: {
+      "x-kavo-error": true,
+      "x-kavo-entity": entityName,
+      allOf: [PROBLEM_DETAILS_SCHEMA],
+      description:
+        `Request validation failed for the ${entityName} entity (RFC 9457 problem details). ` +
+        "Each `errors[]` entry identifies the offending field.",
+    },
+  })(prototype, methodName, propertyDescriptor);
+}
+
 const alreadyBodySchemaDocumented = new WeakSet<object>();
 
 /**
@@ -760,10 +832,20 @@ function successBodyFor(
   // would advertise a shape no response actually has.
   const resolve = (slot: "item" | "list"): ClassRef =>
     (descriptor.output as ClassRef | null) ?? (dtoResolver.resolve(slot, descriptor.id) as ClassRef | null) ?? entity;
+  // A per-operation `descriptor.output` override (issue #131) or a custom
+  // operation's own `dto.output` produces a shape that is *not* the entity's
+  // root `item`/`list` slot, so `registerKavoSchemas` must name its
+  // component per operation (`<Entity><Operation>`) rather than fold it onto
+  // the shared `<Entity>Item`/`<Entity>List` and hand the loser a
+  // positional `_2`. This marker is that signal; it rides the same
+  // `withKavoEntity` stamp #294 already applies.
+  const operationScoped = descriptor.output !== null;
   if (descriptor.cardinality === "many") {
     // `list` falls back to `item` inside the resolver.
     const listDto = resolve("list");
-    return { schema: listEnvelopeSchema(schemaFromDto(listDto, entity.name), listDto.name, entity.name) };
+    return {
+      schema: listEnvelopeSchema(schemaFromDto(listDto, entity.name), listDto.name, entity.name, operationScoped),
+    };
   }
   // Restore reuses the `item` slot — no dedicated restore shape — and so
   // does every custom single-row operation that registers no `dto.output`.
@@ -771,7 +853,12 @@ function successBodyFor(
   const schema = schemaFromDto(itemDto, entity.name);
   return schema === null
     ? { type: itemDto }
-    : { schema: withKavoEntity({ title: itemDto.name, ...schema }, entity.name) };
+    : {
+        schema: withKavoEntity(
+          { title: itemDto.name, ...(operationScoped ? { "x-kavo-operation-scoped": true } : {}), ...schema },
+          entity.name,
+        ),
+      };
 }
 
 /**
@@ -794,30 +881,38 @@ function listEnvelopeSchema(
   element: { type: "object"; properties: Record<string, object> } | null,
   title: string,
   entityName: string,
+  operationScoped = false,
 ): object {
-  return {
-    title: `${title}List`,
-    type: "object",
-    required: ["items", "limit", "offset", "total"],
-    properties: {
-      items: {
-        type: "array",
-        items: element === null ? { type: "object" } : withKavoEntity(element, entityName),
-      },
-      limit: { type: "integer" },
-      offset: { type: "integer" },
-      total: { type: "integer", nullable: true },
-      meta: {
-        type: "object",
-        additionalProperties: true,
-        description:
-          "Open metadata bag about the list itself, filled by the findMany " +
-          "handler (see FindManyResult.meta / withListMeta). Absent when " +
-          "nothing contributed; its keys are application-defined and are " +
-          "not projected through a DTO.",
+  return withKavoEntity(
+    {
+      title: `${title}List`,
+      ...(operationScoped ? { "x-kavo-operation-scoped": true } : {}),
+      type: "object",
+      required: ["items", "limit", "offset", "total"],
+      properties: {
+        items: {
+          type: "array",
+          items: element === null ? { type: "object" } : withKavoEntity(element, entityName),
+        },
+        limit: { type: "integer" },
+        offset: { type: "integer" },
+        total: { type: "integer", nullable: true },
+        meta: withKavoEntity(
+          {
+            type: "object",
+            additionalProperties: true,
+            description:
+              "Open metadata bag about the list itself, filled by the findMany " +
+              "handler (see FindManyResult.meta / withListMeta). Absent when " +
+              "nothing contributed; its keys are application-defined and are " +
+              "not projected through a DTO.",
+          },
+          entityName,
+        ),
       },
     },
-  };
+    entityName,
+  );
 }
 
 const alreadyResponseSchemaDocumented = new WeakSet<object>();

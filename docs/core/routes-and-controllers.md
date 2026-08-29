@@ -104,3 +104,19 @@ export class AppModule {}
 When `@nestjs/swagger` is installed, every generated route — standard, custom, and `@Override`d alike — carries an `operationId` (`Book_findOne`), a `tags: ["Book"]` entry, and `x-kavo-entity`/`x-kavo-operation` vendor extensions on the operation object. Every inline DTO schema Kavo builds for a request or response body carries the same `x-kavo-entity`, so a generated OpenAPI document lets tooling recover which Kavo entity/operation an operation or schema came from without parsing `operationId`.
 
 A client generator that splits output by `tags` — [Orval](https://orval.dev) and `openapi-generator` both do — will produce one module per entity out of the box; point it at the app's `/docs-json` (or wherever `SwaggerModule.setup` serves the document) with no extra configuration.
+
+### Named component schemas
+
+By default those DTO schemas are emitted **inline** on each route, so a generator names them anonymously. Wrap the built document in `registerKavoSchemas` (exported from `@kavo/nest`) to hoist every shape Kavo generated into `components.schemas` under a stable, entity-prefixed name and leave a `$ref` behind:
+
+```ts
+import { registerKavoSchemas } from "@kavo/nest";
+
+SwaggerModule.setup("docs", app, registerKavoSchemas(SwaggerModule.createDocument(app, config)));
+```
+
+For an entity `Ad` you get `AdCreate` / `AdUpdate` / `AdPatch` (request bodies), `AdItem` (single-row response), `AdList` with its `items[]` element `AdListItem` and its `meta` bag `AdListMeta`, the shared `KavoProblemDetails` / `KavoProblemDetailError` error bodies, and `AdValidationError` (the entity-scoped `400`, an `allOf` over `KavoProblemDetails`). Each component keeps its `x-kavo-entity` / `x-kavo-error` extension.
+
+Response naming is operation-aware. The standard operations that serve the entity's root `item` / `list` shape all collapse onto `AdItem` / `AdList`. An operation with its own `dto.output` — a per-operation override or a [custom operation](/core/custom-operations) — serves a different shape and gets its own `Ad<Operation>` component (`AdArchiveOne`, …) rather than racing the root name.
+
+The helper is opt-in and purely additive — it imports nothing from `@nestjs/swagger`, and a schema that is already a `$ref` (a `@ApiProperty`-decorated or declared-only DTO class, where `@nestjs/swagger` builds and names the schema itself) is left exactly as it is. The same shape requested under two names — `AdUpdate` and `AdPatch` are byte-identical when no `dto.patch` is set — is emitted under both. A genuine same-name/different-shape clash (rare after the operation-aware naming above — e.g. an entity literally named `AdListItem`) resolves first-wins, then `AdListItem_2`, `AdListItem_3`, …; that order is stable within a build but shifts if entities are added or `controllers: [...]` is reordered, so treat a `_2` as a prompt to disambiguate with an explicit DTO class, not a name to depend on.

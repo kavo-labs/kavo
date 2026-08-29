@@ -26,6 +26,7 @@ import {
   applyPaginationDocs,
   applyResponseSchemaDocs,
   applySearchQueryDocs,
+  applyValidationErrorDoc,
   bodyDtoFor,
 } from "./swagger.js";
 import {
@@ -466,6 +467,13 @@ class KavoBinder implements OnModuleInit {
           // reason as the two above (`applyPaginationDocs`'s doc comment):
           // `pagination.strategy` needs the full precedence chain too.
           applyPaginationDocs(prototype, methodName, descriptor, settings.pagination.strategy);
+          // Retag the always-present `400` as `<Entity>ValidationError`
+          // (issue #310) so `registerKavoSchemas` gives each entity its own
+          // named component instead of collapsing every `400` onto the
+          // shared `KavoProblemDetails`. Rides this bind-time pass only for
+          // scheduling; without `forRoot`/`forRootAsync` the `400` stays
+          // bare and hoists to `KavoProblemDetails`.
+          applyValidationErrorDoc(prototype, methodName, metadata.entity.name);
         }
       }
     }
