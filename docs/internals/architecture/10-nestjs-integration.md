@@ -480,6 +480,9 @@ lifts the inline schemas Kavo built into `components.schemas`, leaving a
 | `<Entity>ListMeta`            | that envelope's `meta` bag                                   |
 | `<Entity><Operation>`         | a single-row success with its own `dto.output`               |
 | `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside) |
+| `<Entity>Pagination`          | the `{ limit, offset }` page controls (issue #313)           |
+| `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313) |
+| `<Entity>Sort`                | the sortable keys (bare + `-`-prefixed), as `array<enum>`    |
 | `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)                   |
 | `KavoProblemDetailError`      | one entry of its `errors[]` array                            |
 | `<Entity>ValidationError`     | the entity-scoped `400`                                      |
@@ -516,6 +519,41 @@ DTO, which _replaces_ the allowlist (`DefaultDeserializer`, ADR-0026's
 precedent) — and disclose internal column names the DTO boundary exists to
 hide. An app with no `KavoModule.forRoot`/`forRootAsync` never reaches that
 pass, so its `400`s stay bare and hoist to `KavoProblemDetails`.
+
+`<Entity>Pagination` / `<Entity>Include` / `<Entity>Sort` (issue #313) are
+the query shapes fully derivable from an entity's _resolved_ config — the
+`{ limit, offset }` page controls, the top-level `allowlists.includable`
+relation names (ADR-0028 — `IncludePath<_, 1>`, so a nested path is dotted
+into one and is not enumerated), and the `allowlists.sortable` keys. Like
+`<Entity>ValidationError` they ride `KavoBinder.onModuleInit`, not
+decoration time: the resolved allowlists and the precedence-merged
+`pagination.strategy` (ADR-0030) only exist then. `applyQuerySchemaDocs`
+(`swagger.ts`) builds the three shapes and stamps them, keyed by slot, as
+an `x-kavo-query-schemas` extension on every enabled read route
+(`pagination`/`sort` on list routes only, `include` on every read);
+`registerKavoSchemas` reads that blob, names each entry
+`<Entity><Slot-in-PascalCase>` off the operation's own `x-kavo-entity`,
+hoists it through the same registry as the DTO schemas — structurally
+identical repeats across an entity's read routes collapse onto one
+component — and deletes the extension, leaving no plumbing in the published
+document. A document that never runs `registerKavoSchemas` keeps the raw
+blob on the route instead. `include`/`sort` are entity-scoped so they never
+split; `pagination.strategy` is per-operation (`settingsFor(id)`), so an
+entity with a custom list op configured `strategy: "none"` alongside a
+paginating `findMany` gets `<Entity>Pagination` _and_
+`<Entity>Pagination_2`, the same positional `_N` any genuine clash below
+produces. None of the three is `$ref`d from anywhere — they exist only to
+give a generator a name for the query shapes, so a bundler that prunes
+unreferenced `components.schemas` will drop them, as intended. The wire value of `include`/`sort` is a comma-separated
+_string_, so each is modelled as `array<enum>` (a bare `{ type: "string",
+enum }` would reject `include=a,b`); `sort` carries every token bare and
+`-`-prefixed so the sign stays inside the machine-checkable enum.
+`<Entity>Include` is **omitted** when nothing is includable, matching the
+flat `include` param's own "omit it" path; `<Entity>Pagination` is still
+emitted under `pagination.strategy: "none"`, carrying the same
+`UNPAGINATED_DESCRIPTION` `applyPaginationDocs` puts on `limit`/`offset` —
+annotate, don't drop. These are purely additive: the flat bracket params
+and `KAVO_API_GUIDE` grammar are untouched.
 
 Dedup is by name **and** shape: a schema requested under a name already
 holding a byte-identical shape (five routes serving `<Entity>Item`) reuses
