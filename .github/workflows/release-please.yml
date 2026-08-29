@@ -39,4 +39,6 @@ jobs:
         if: ${{ steps.release.outputs.releases_created == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run publish.yml --ref "${{ steps.release.outputs.tag_name }}"
+        # --repo is required: this job has no actions/checkout, so `gh` has no
+        # local git remote to infer the repository from.
+        run: gh workflow run publish.yml --ref "${{ steps.release.outputs.tag_name }}" --repo "${{ github.repository }}"

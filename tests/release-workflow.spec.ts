@@ -823,7 +823,8 @@ describe("release-please workflow", () => {
     // publish.yml, so release-please.yml dispatches it explicitly.
     expect(wf).toContain("actions: write");
     expect(wf).toMatch(/releases_created['"]?\s*==\s*['"]true['"]/);
-    expect(wf).toMatch(/gh workflow run publish\.yml --ref .*tag_name/);
+    // --repo is required: the job has no checkout, so gh can't infer the repo.
+    expect(wf).toMatch(/gh workflow run publish\.yml --ref .*tag_name.*--repo/);
   });
 
   it("has a manual escape hatch to reconcile a release that never got cut", () => {
