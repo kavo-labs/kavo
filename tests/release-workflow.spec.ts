@@ -394,14 +394,23 @@ describe("optional protocol peers", () => {
 });
 
 describe("publish.yml wiring", () => {
-  it("triggers on a published GitHub Release (release-please creates it with GITHUB_TOKEN)", () => {
-    // A tag pushed by GITHUB_TOKEN does not fire `on: push: tags`; the
-    // Release event does. See docs/internals/adr/0041-*.
+  it("triggers on a published GitHub Release (kept for a human-created Release)", () => {
+    // Retained for a Release created by a real identity (manual, or a future
+    // PAT/App-token release-please). A Release that release-please cuts with
+    // the default GITHUB_TOKEN fires neither this nor `push: tags` — that case
+    // uses the workflow_dispatch hatch below. See docs/internals/adr/0041-*.
     expect(workflow).toMatch(/release:\s*\n\s*types:\s*\[\s*published\s*\]/);
   });
 
   it("still triggers on a manually pushed vX.Y.Z tag as an escape hatch", () => {
     expect(workflow).toMatch(/push:\s*\n\s*tags:\s*\n\s*-\s*"v\*\.\*\.\*"/);
+  });
+
+  it("has a workflow_dispatch escape hatch (a GITHUB_TOKEN-cut Release fires neither event)", () => {
+    // release-please cuts the tag + Release with GITHUB_TOKEN, so neither
+    // `release: published` nor `push: tags` fires; the release is dispatched
+    // against its tag by hand. See docs/internals/adr/0041-*.
+    expect(workflow).toContain("workflow_dispatch:");
   });
 
   it("declares a non-empty PACKAGE_DIRS list of directories that exist", () => {

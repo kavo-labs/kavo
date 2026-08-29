@@ -6,6 +6,12 @@ on:
   push:
     tags:
       - "v*.*.*"
+  # Manual escape hatch. release-please creates the tag + Release with the
+  # default GITHUB_TOKEN, and GitHub fires neither `release: published` nor
+  # `push: tags` for a ref created that way — so a release cut by
+  # release-please never reaches npm on its own. Re-run this against the tag
+  # (`gh workflow run publish.yml --ref vX.Y.Z`) to publish it.
+  workflow_dispatch:
 
 permissions:
   contents: write
