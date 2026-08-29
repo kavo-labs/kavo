@@ -76,8 +76,12 @@ config details are load-bearing, and they were all found the hard way:
   empty, so `chore: release${component} v${version}` → `chore: release
 v0.15.0`; the token still has to be present for the parse to line up.
 - With `separate-pull-requests: false` the repo produces a single **grouped**
-  PR, so `group-pull-request-title-pattern` (default `chore: release ${branch}`
-  → `chore: release main`) also has to be set to the same value.
+  PR, and that PR is named by `group-pull-request-title-pattern`, *not*
+  `pull-request-title-pattern`. Both are set to
+  `chore: release${component} v${version}` so the PR title is
+  `chore: release vX.Y.Z`. Left unset, `group-pull-request-title-pattern`
+  defaults to the branch name (`chore: release main`) — which is the bug this
+  replaced, so it must stay set.
 
 The nine package versions are bumped through `extra-files`, independent of
 all of the above.
