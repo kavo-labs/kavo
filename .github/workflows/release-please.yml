@@ -1,8 +1,19 @@
 name: release-please
 
 on:
+  # Opens / updates the standing release PR as feature commits land on main.
   push:
     branches: [main]
+  # Cuts the tag + GitHub Release once the release PR is merged. A separate
+  # trigger because merging the release PR does NOT fire `on: push` — its
+  # commits are authored by github-actions[bot] via the default GITHUB_TOKEN,
+  # and GitHub suppresses push workflows for those to avoid recursion. The
+  # `pull_request` event fires on the human merge instead, so no PAT is needed.
+  pull_request:
+    types: [closed]
+  # Manual escape hatch: re-run to reconcile a release that never got cut
+  # (manifest ahead of tags).
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -11,6 +22,10 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.merged == true &&
+       github.event.pull_request.head.ref == 'release-please--branches--main')
     steps:
       - uses: googleapis/release-please-action@v4
         with:
