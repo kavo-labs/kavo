@@ -98,3 +98,9 @@ export class AppModule {}
 ```
 
 `KavoModule`'s discovery binder finds every `@Kavo`-decorated controller in the module graph's `controllers: [...]` array and binds its service. There's no per-entity registration step. See [Module setup](/guides/configuration/module-setup) for the full options surface, and [NestJS integration](/internals/architecture/10-nestjs-integration) for how the binder, route generation, and Swagger metadata fit together underneath.
+
+## OpenAPI documentation
+
+When `@nestjs/swagger` is installed, every generated route — standard, custom, and `@Override`d alike — carries an `operationId` (`Book_findOne`), a `tags: ["Book"]` entry, and `x-kavo-entity`/`x-kavo-operation` vendor extensions on the operation object. Every inline DTO schema Kavo builds for a request or response body carries the same `x-kavo-entity`, so a generated OpenAPI document lets tooling recover which Kavo entity/operation an operation or schema came from without parsing `operationId`.
+
+A client generator that splits output by `tags` — [Orval](https://orval.dev) and `openapi-generator` both do — will produce one module per entity out of the box; point it at the app's `/docs-json` (or wherever `SwaggerModule.setup` serves the document) with no extra configuration.
