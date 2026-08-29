@@ -22,6 +22,7 @@ export { KavoResponseInterceptor } from "./kavo-response.interceptor.js";
 export { ConditionalRequest, parseEntityTags } from "./conditional-request.decorator.js";
 export { flattenQuery } from "./flatten-query.js";
 export { KAVO_API_GUIDE } from "./swagger.js";
+export { registerKavoSchemas } from "./register-schemas.js";
 export { enumProp, oneOfArray, type SchemaHint } from "./schema-hints.js";
 export type { KavoPrincipalExtractor, KavoPrincipalOption, KavoPrincipalRequest } from "./principal.js";
 export {

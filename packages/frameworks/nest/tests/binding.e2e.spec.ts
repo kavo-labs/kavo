@@ -32,6 +32,7 @@ import {
   flattenQuery,
   getKavoServiceToken,
   oneOfArray,
+  registerKavoSchemas,
 } from "@kavo/nest";
 import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
@@ -2744,5 +2745,170 @@ describe("@Kavo Swagger schema hints (enum, oneOf)", () => {
         "x-kavo-entity": "Todo",
       },
     ]);
+  });
+});
+
+describe("@Kavo Swagger named component schemas (issue #310)", () => {
+  class CreateTodoDto {
+    title = "";
+    priority = 0;
+    done = false;
+  }
+  class TodoItemDto {
+    id = 0;
+    title = "";
+    done = false;
+  }
+  class TodoListDto {
+    id = 0;
+    title = "";
+  }
+
+  @Kavo(Todo, { dto: { create: CreateTodoDto, item: TodoItemDto, list: TodoListDto } })
+  @Controller("todos")
+  class NamedSchemaController {}
+
+  type Schema = {
+    $ref?: string;
+    type?: string;
+    title?: string;
+    required?: string[];
+    additionalProperties?: boolean;
+    description?: string;
+    allOf?: Schema[];
+    properties?: Record<string, Schema>;
+    items?: Schema;
+    "x-kavo-entity"?: string;
+    "x-kavo-error"?: boolean;
+  };
+  type Doc = {
+    components?: { schemas?: Record<string, Schema> };
+    paths: Record<
+      string,
+      Record<
+        string,
+        {
+          requestBody?: { content?: Record<string, { schema?: Schema }> };
+          responses?: Record<string, { content?: Record<string, { schema?: Schema }> }>;
+        }
+      >
+    >;
+  };
+
+  let document: Doc;
+  const schemas = (): Record<string, Schema> => document.components?.schemas ?? {};
+  const reqSchema = (path: string, verb: string): Schema | undefined =>
+    document.paths[path]?.[verb]?.requestBody?.content?.["application/json"]?.schema;
+  const resSchema = (path: string, verb: string, status: string): Schema | undefined =>
+    document.paths[path]?.[verb]?.responses?.[status]?.content?.["application/json"]?.schema;
+
+  beforeEach(async () => {
+    await bootstrap(NamedSchemaController);
+    document = registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+  });
+
+  it("hoists request bodies to <Entity>Create/Update/Patch and $refs them", () => {
+    expect(reqSchema("/todos", "post")).toEqual({ $ref: "#/components/schemas/TodoCreate" });
+    expect(reqSchema("/todos/{id}", "put")).toEqual({ $ref: "#/components/schemas/TodoUpdate" });
+    expect(reqSchema("/todos/{id}", "patch")).toEqual({ $ref: "#/components/schemas/TodoPatch" });
+    expect(Object.keys(schemas().TodoCreate?.properties ?? {})).toEqual(["title", "priority", "done"]);
+    // The update/patch bodies come from the #264 bind-time fallback (no
+    // `dto.update` configured) and still get a stable name.
+    expect(Object.keys(schemas().TodoUpdate?.properties ?? {})).toContain("title");
+  });
+
+  it("hoists the single-row response to <Entity>Item, keeping x-kavo-entity and dropping title", () => {
+    expect(resSchema("/todos/{id}", "get", "200")).toEqual({ $ref: "#/components/schemas/TodoItem" });
+    expect(Object.keys(schemas().TodoItem?.properties ?? {})).toEqual(["id", "title", "done"]);
+    expect(schemas().TodoItem?.["x-kavo-entity"]).toBe("Todo");
+    expect(schemas().TodoItem?.title).toBeUndefined();
+  });
+
+  it("hoists the list envelope, its element and its meta bag to distinct components", () => {
+    expect(resSchema("/todos", "get", "200")).toEqual({ $ref: "#/components/schemas/TodoList" });
+    const list = schemas().TodoList;
+    expect(list?.properties?.items?.items).toEqual({ $ref: "#/components/schemas/TodoListItem" });
+    expect(list?.properties?.meta).toEqual({ $ref: "#/components/schemas/TodoListMeta" });
+    expect(list?.required).toEqual(["items", "limit", "offset", "total"]);
+    expect(Object.keys(schemas().TodoListItem?.properties ?? {})).toEqual(["id", "title"]);
+    expect(schemas().TodoListMeta).toMatchObject({ type: "object", additionalProperties: true });
+    expect(schemas().TodoListMeta?.description).toContain("findMany");
+    expect(schemas().TodoListMeta?.["x-kavo-entity"]).toBe("Todo");
+  });
+
+  it("hoists every error response to the shared KavoProblemDetails family", () => {
+    for (const [path, verb, status] of [
+      ["/todos", "post", "400"],
+      ["/todos/{id}", "get", "404"],
+      ["/todos/{id}", "put", "412"],
+      ["/todos/{id}", "patch", "412"],
+    ] as const) {
+      const ref = resSchema(path, verb, status)?.$ref ?? "";
+      expect(ref).toMatch(/#\/components\/schemas\/(KavoProblemDetails|TodoValidationError)$/);
+    }
+    expect(schemas().KavoProblemDetails?.["x-kavo-error"]).toBe(true);
+    expect(schemas().KavoProblemDetails?.properties?.errors?.items).toEqual({
+      $ref: "#/components/schemas/KavoProblemDetailError",
+    });
+    expect(schemas().KavoProblemDetailError?.["x-kavo-error"]).toBe(true);
+  });
+
+  it("narrows the write route's 400 to <Entity>ValidationError as an allOf over KavoProblemDetails", () => {
+    expect(resSchema("/todos", "post", "400")).toEqual({ $ref: "#/components/schemas/TodoValidationError" });
+    const validation = schemas().TodoValidationError;
+    expect(validation?.["x-kavo-entity"]).toBe("Todo");
+    expect(validation?.allOf).toEqual([{ $ref: "#/components/schemas/KavoProblemDetails" }]);
+    // A description, not an enum — nested paths stay legal.
+    expect(validation?.description).toContain("title");
+  });
+
+  it("leaves a declarative DTO on Swagger's own $ref — no empty named component", async () => {
+    class DeclaredOnlyDto {
+      title!: string;
+    }
+    @Kavo(Todo, { dto: { create: DeclaredOnlyDto } })
+    @Controller("todos")
+    class DeclarativeController {}
+    await app.close();
+    await bootstrap(DeclarativeController);
+    const doc = registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+    const body = doc.paths["/todos"]?.["post"]?.requestBody?.content?.["application/json"]?.schema;
+    expect(body?.$ref).toContain("DeclaredOnlyDto");
+    expect(doc.components?.schemas?.TodoCreate).toBeUndefined();
+  });
+
+  it("keeps a second document built from the same app self-contained", () => {
+    // `applySwaggerMetadata` shares one `PROBLEM_DETAILS_SCHEMA` reference
+    // across every error response; a hoist that mutated it in place would
+    // leave the next document $ref-ing a component only the first one added.
+    registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+    const second = registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+    expect(second.components?.schemas?.KavoProblemDetailError).toBeDefined();
+    expect(second.components?.schemas?.KavoProblemDetails?.properties?.errors?.items).toEqual({
+      $ref: "#/components/schemas/KavoProblemDetailError",
+    });
+  });
+
+  it("does not touch the un-processed document — createDocument alone still emits inline schemas", async () => {
+    // Parity guard: `registerKavoSchemas` is opt-in. The raw document keeps
+    // the inline shape every existing consumer relies on.
+    const raw = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("t").setVersion("0").build(),
+    ) as unknown as Doc;
+    expect(
+      raw.paths["/todos/{id}"]?.["get"]?.responses?.["200"]?.content?.["application/json"]?.schema?.$ref,
+    ).toBeUndefined();
+    expect(
+      raw.paths["/todos/{id}"]?.["get"]?.responses?.["200"]?.content?.["application/json"]?.schema?.properties,
+    ).toBeDefined();
   });
 });

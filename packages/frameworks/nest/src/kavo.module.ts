@@ -26,7 +26,9 @@ import {
   applyPaginationDocs,
   applyResponseSchemaDocs,
   applySearchQueryDocs,
+  applyValidationErrorDoc,
   bodyDtoFor,
+  validationErrorFieldsFor,
 } from "./swagger.js";
 import {
   KAVO_INSTANCE,
@@ -466,6 +468,23 @@ class KavoBinder implements OnModuleInit {
           // reason as the two above (`applyPaginationDocs`'s doc comment):
           // `pagination.strategy` needs the full precedence chain too.
           applyPaginationDocs(prototype, methodName, descriptor, settings.pagination.strategy);
+          // Entity-scoped `<Entity>ValidationError` for the always-present
+          // `400` (issue #310) — deferred here because it names the resolved
+          // write/query allowlists, which only exist now. `registerKavoSchemas`
+          // hoists it; without `forRoot`/`forRootAsync` the `400` stays the
+          // bare `KavoProblemDetails`.
+          applyValidationErrorDoc(
+            prototype,
+            methodName,
+            metadata.entity.name,
+            validationErrorFieldsFor(descriptor, {
+              creatable: service.engine.config.allowlists.creatable as readonly string[],
+              updatable: service.engine.config.allowlists.updatable as readonly string[],
+              filterable: service.engine.config.allowlists.filterable as readonly string[],
+              sortable: service.engine.config.allowlists.sortable as readonly string[],
+              selectable: service.engine.config.allowlists.selectable as readonly string[],
+            }),
+          );
         }
       }
     }
