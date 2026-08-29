@@ -402,6 +402,10 @@ const config = defineConfig({
                 text: "0041 — Releases are cut by release-please",
                 link: "/internals/adr/0041-releases-are-cut-by-release-please",
               },
+              {
+                text: "0042 — Filter and Query are documented-only aggregate component schemas",
+                link: "/internals/adr/0042-filter-and-query-component-schemas",
+              },
             ],
           },
         ],

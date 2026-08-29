@@ -28,6 +28,8 @@
  * | `<Entity>Pagination`    | the `{ limit, offset }` page controls (issue #313) |
  * | `<Entity>Include`       | the includable relation paths (issue #313)        |
  * | `<Entity>Sort`          | the sortable keys, `-` = descending (issue #313)  |
+ * | `<Entity>Filter`        | the structured filter predicate (issue #314, ADR-0042) |
+ * | `<Entity>Query`         | the documented-only `filter`+`sort`+`pagination`+`fields`+`include`+`search` aggregate (issue #314, ADR-0042) |
  * | `<Entity><Operation>`   | a per-operation `dto.output` (issue #131) or a custom op's own output shape — single-row |
  * | `<Entity><Operation>List` | the same, `many` — plus `…ListItem` / `…ListMeta` |
  * | `KavoProblemDetails`    | shared RFC 9457 error body (400/404/409/412)      |
@@ -212,23 +214,32 @@ function hoistResponses(registry: SchemaRegistry, operation: OperationObject, en
 }
 
 /**
- * The `<Entity>Pagination` / `<Entity>Include` / `<Entity>Sort` query-shape
- * components (issue #313). `applyQuerySchemaDocs` (`swagger.ts`) stamped
- * them, keyed by slot, as an `x-kavo-query-schemas` extension on every
- * enabled read route at bind time; this lifts each into `components.schemas`
- * under `<Entity><Slot-in-PascalCase>` through the same registry the DTO
- * schemas use, so identical repeats across an entity's read routes collapse
- * onto one component and a genuine cross-entity name clash still resolves to
- * `_2`. The extension is dropped afterwards — it is plumbing, not published
- * surface, and a document that skipped `registerKavoSchemas` keeps the raw
- * blob instead.
+ * The `<Entity>Pagination` / `<Entity>Include` / `<Entity>Sort` (issue #313)
+ * and `<Entity>Filter` / `<Entity>Query` (issue #314, ADR-0042) query-shape
+ * components. `applyQuerySchemaDocs` (`swagger.ts`) stamped them, keyed by
+ * slot, as an `x-kavo-query-schemas` extension on every enabled read route at
+ * bind time; this lifts each into `components.schemas` under
+ * `<Entity><Slot-in-PascalCase>` through the same registry the DTO schemas
+ * use, so identical repeats across an entity's read routes collapse onto one
+ * component and a genuine cross-entity name clash still resolves to `_2`
+ * (which `Filter`'s own recursive `and`/`or`/`not` `$ref`s, and `Query`'s
+ * `$ref`s to its sibling slots, do not chase — ADR-0042 accepts that as the
+ * same edge case `<Entity>Pagination_2` already lives with). The extension is
+ * dropped afterwards — it is plumbing, not published surface, and a document
+ * that skipped `registerKavoSchemas` keeps the raw blob instead.
  */
 function hoistQuerySchemas(registry: SchemaRegistry, operation: OperationObject, entity: string): void {
   const slots = operation["x-kavo-query-schemas"];
   if (slots === null || typeof slots !== "object") {
     return;
   }
-  const bySlot: Record<string, string> = { pagination: "Pagination", include: "Include", sort: "Sort" };
+  const bySlot: Record<string, string> = {
+    pagination: "Pagination",
+    include: "Include",
+    sort: "Sort",
+    filter: "Filter",
+    query: "Query",
+  };
   for (const [slot, suffix] of Object.entries(bySlot)) {
     const schema = (slots as Record<string, unknown>)[slot];
     if (schema !== undefined && typeof schema === "object" && schema !== null) {

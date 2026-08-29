@@ -574,6 +574,57 @@ describe("registerKavoSchemas", () => {
       expect(schemasOf(doc).AdSort_2?.items?.enum).toEqual(["a"]);
     });
 
+    it("hoists filter/query into <Entity>Filter/<Entity>Query alongside pagination/include/sort (issue #314)", () => {
+      const filterRef = { $ref: "#/components/schemas/AdFilter" };
+      const doc = withQuerySchemas({
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          "x-kavo-entity": "Ad",
+        },
+        include: { type: "array", items: { type: "string", enum: ["owner"] }, "x-kavo-entity": "Ad" },
+        sort: { type: "array", items: { type: "string", enum: ["name", "-name"] }, "x-kavo-entity": "Ad" },
+        filter: {
+          type: "object",
+          properties: {
+            name: { type: "object", properties: { eq: { type: "string" } } },
+            and: { type: "array", items: filterRef },
+            or: { type: "array", items: filterRef },
+            not: filterRef,
+          },
+          "x-kavo-entity": "Ad",
+        },
+        query: {
+          type: "object",
+          properties: {
+            filter: filterRef,
+            sort: { $ref: "#/components/schemas/AdSort" },
+            pagination: { $ref: "#/components/schemas/AdPagination" },
+            fields: { type: "array", items: { type: "string", enum: ["name"] } },
+            include: { $ref: "#/components/schemas/AdInclude" },
+          },
+          "x-kavo-entity": "Ad",
+        },
+      });
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdFilter?.properties?.name).toEqual({
+        type: "object",
+        properties: { eq: { type: "string" } },
+      });
+      // The recursive and/or/not $refs keep pointing at the entity's own
+      // expected component name — no rewriting happens during hoisting.
+      expect(schemasOf(doc).AdFilter?.properties?.and?.items).toEqual(filterRef);
+      expect(schemasOf(doc).AdFilter?.properties?.or?.items).toEqual(filterRef);
+      expect(schemasOf(doc).AdFilter?.properties?.not).toEqual(filterRef);
+      expect(schemasOf(doc).AdQuery?.properties?.filter).toEqual(filterRef);
+      expect(schemasOf(doc).AdQuery?.properties?.sort).toEqual({ $ref: "#/components/schemas/AdSort" });
+      expect(schemasOf(doc).AdQuery?.properties?.pagination).toEqual({ $ref: "#/components/schemas/AdPagination" });
+      expect(schemasOf(doc).AdQuery?.properties?.include).toEqual({ $ref: "#/components/schemas/AdInclude" });
+      expect(doc.paths["/ads"]?.get?.["x-kavo-query-schemas"]).toBeUndefined();
+    });
+
     it("does not mutate the schema on the source operation blob", () => {
       const doc = withQuerySchemas({
         sort: { type: "array", items: { type: "string", enum: ["name"] }, "x-kavo-entity": "Ad", title: "x" },

@@ -6,6 +6,12 @@ end-user documentation verbatim. The implementation lives in
 pagination strategies); adapters only ever see the validated, normalized
 result.
 
+The `<Entity>Filter` / `<Entity>Query` OpenAPI component schemas
+(`@kavo/nest`, doc 10 §4 "Named component schemas") model this grammar
+structurally for GraphQL/MCP and programmatic callers — see ADR-0042 for
+what fidelity they carry and why REST's own flat query params here are
+untouched.
+
 ## 1. Operators — AST names and wire tokens (single source of truth)
 
 | AST operator  | Wire token   | Example                                            |

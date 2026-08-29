@@ -471,21 +471,23 @@ the finished document — the same "the app splices this in" shape as
 lifts the inline schemas Kavo built into `components.schemas`, leaving a
 `$ref`:
 
-| Component                     | Source                                                       |
-| ----------------------------- | ------------------------------------------------------------ |
-| `<Entity>Create/Update/Patch` | the `createOne`/`updateOne`/`patchOne` request body          |
-| `<Entity>Item`                | a single-row success serving the root `item` slot            |
-| `<Entity>List`                | a `"many"` success serving the root `list` slot              |
-| `<Entity>ListItem`            | that envelope's `items[]` element                            |
-| `<Entity>ListMeta`            | that envelope's `meta` bag                                   |
-| `<Entity><Operation>`         | a single-row success with its own `dto.output`               |
-| `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside) |
-| `<Entity>Pagination`          | the `{ limit, offset }` page controls (issue #313)           |
-| `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313) |
-| `<Entity>Sort`                | the sortable keys (bare + `-`-prefixed), as `array<enum>`    |
-| `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)                   |
-| `KavoProblemDetailError`      | one entry of its `errors[]` array                            |
-| `<Entity>ValidationError`     | the entity-scoped `400`                                      |
+| Component                     | Source                                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `<Entity>Create/Update/Patch` | the `createOne`/`updateOne`/`patchOne` request body                                                           |
+| `<Entity>Item`                | a single-row success serving the root `item` slot                                                             |
+| `<Entity>List`                | a `"many"` success serving the root `list` slot                                                               |
+| `<Entity>ListItem`            | that envelope's `items[]` element                                                                             |
+| `<Entity>ListMeta`            | that envelope's `meta` bag                                                                                    |
+| `<Entity><Operation>`         | a single-row success with its own `dto.output`                                                                |
+| `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside)                                                  |
+| `<Entity>Pagination`          | the `{ limit, offset }` page controls (issue #313)                                                            |
+| `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313)                                                  |
+| `<Entity>Sort`                | the sortable keys (bare + `-`-prefixed), as `array<enum>`                                                     |
+| `<Entity>Filter`              | the structured filter predicate (issue #314, ADR-0042)                                                        |
+| `<Entity>Query`               | the documented-only `filter`+`sort`+`pagination`+`fields`+`include`+`search` aggregate (issue #314, ADR-0042) |
+| `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)                                                                    |
+| `KavoProblemDetailError`      | one entry of its `errors[]` array                                                                             |
+| `<Entity>ValidationError`     | the entity-scoped `400`                                                                                       |
 
 Names come from the `x-kavo-*` extensions already on the document (#294)
 plus position, plus one new internal marker: `successBodyFor` stamps
@@ -554,6 +556,36 @@ emitted under `pagination.strategy: "none"`, carrying the same
 `UNPAGINATED_DESCRIPTION` `applyPaginationDocs` puts on `limit`/`offset` —
 annotate, don't drop. These are purely additive: the flat bracket params
 and `KAVO_API_GUIDE` grammar are untouched.
+
+`<Entity>Filter` and `<Entity>Query` (issue #314, ADR-0042) ride the same
+`x-kavo-query-schemas` extension, list routes only — REST's own `filter=`
+param is itself list-only (`listQueryParams`'s `isList` guard), so a shape
+documenting that grammar has no single-row route to ride either.
+`<Entity>Filter` carries one property per field on the resolved
+`filterable` allowlist that is also one of the entity's own scalar
+columns, each valued by an operator-map object
+(`eq`/`ne`/`gt`/`gte`/`lt`/`lte`/`in`/`notIn`/`between`/`isNull`/
+`isNotNull` for every kind, plus `like`/`ilike` for a string-kind field
+only — doc 05 §1's one kind-specific rule); a filterable relation path
+(`profile.city`) is valid on the wire but not enumerable here, the same
+known gap `<Entity>Include`'s nested-path handling already accepts, so
+the schema carries no `additionalProperties: false`. `and`/`or` are
+arrays of `Filter`, `not` is one `Filter` — the wire parser's unary shape
+(doc 05 §1), not the AST's variadic one — both `$ref`ing back to this
+entity's own expected `<Entity>Filter` name, an assumption that holds
+absent a genuine cross-entity name collision (the same `_2` edge case
+`<Entity>Pagination` already lives with). `<Entity>Query` is the
+aggregate `filter`+`sort`+`pagination`+`fields`+`include`+`search` shape
+a GraphQL/MCP resolver or a programmatic `QueryContext` caller reasons
+about — **documented-only**: no REST parameter `$ref`s it, and REST's
+flat query params are entirely unchanged (ADR-0042 explicitly rules out
+a `style: deepObject` migration). `sort`/`pagination`/`include`/`filter`
+on `<Entity>Query` `$ref` the entity's own other expected component
+names; `fields`/`search` are inlined rather than hoisted as their own
+components, since only `Filter`/`Query` were asked for. `search` is
+omitted from `<Entity>Query` when `query.search` doesn't resolve to an
+object, the same gate `applySearchQueryDocs` uses for the flat
+`search[...]` params.
 
 Dedup is by name **and** shape: a schema requested under a name already
 holding a byte-identical shape (five routes serving `<Entity>Item`) reuses
