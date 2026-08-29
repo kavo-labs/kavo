@@ -788,4 +788,17 @@ describe("release-please workflow", () => {
     expect(wf).toContain(".release-please-manifest.json");
     expect(wf).toContain("googleapis/release-please-action@v4");
   });
+
+  it("also cuts the release when the release PR is merged (push is suppressed for GITHUB_TOKEN commits)", () => {
+    // Merging release-please's own PR does not fire `on: push` — its commits
+    // are authored by github-actions[bot] via the default GITHUB_TOKEN. The
+    // `pull_request: closed` event fires on the human merge instead.
+    expect(wf).toMatch(/pull_request:\s*\n\s*types:\s*\[?\s*closed/);
+    expect(wf).toContain("github.event.pull_request.merged == true");
+    expect(wf).toContain("release-please--branches--main");
+  });
+
+  it("has a manual escape hatch to reconcile a release that never got cut", () => {
+    expect(wf).toContain("workflow_dispatch:");
+  });
 });
