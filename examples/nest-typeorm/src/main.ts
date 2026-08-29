@@ -5,7 +5,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import type { DefaultKavoService, EntityMetadata, ResolvedEntityConfig } from "@kavo/core";
-import { KAVO_API_GUIDE, getKavoServiceToken } from "@kavo/nest";
+import { KAVO_API_GUIDE, getKavoServiceToken, registerKavoSchemas } from "@kavo/nest";
 import { createTransport } from "@kavo/sse";
 import { AppModule } from "./app.module.js";
 import { Owner } from "./owner/owner.entity.js";
@@ -57,25 +57,34 @@ async function bootstrap(): Promise<void> {
   // point in `bootstrap` — it fires inside `app.listen()` below. A factory
   // here (rather than a plain document) defers `createDocument()` until the
   // first request for the docs, by which point that hook has completed.
+  //
+  // `registerKavoSchemas` then hoists every inline DTO schema Kavo generated
+  // into named `components.schemas` entries (`CatCreate`, `DogItem`, …) so a
+  // client generator gets stable type names — see `@kavo/nest`'s docs. It
+  // works whether or not an entity declares a `dto` block: `Dog` has none,
+  // and still gets `DogCreate` / `DogItem` / `DogList` / `DogValidationError`
+  // from the entity-derived fallback schemas.
   const buildDocument = (): ReturnType<typeof SwaggerModule.createDocument> =>
-    SwaggerModule.createDocument(
-      app,
-      new DocumentBuilder()
-        .setTitle("Kavo — Pet example")
-        .setDescription(
-          "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
-            "sorting, pagination, layered config, and RFC 9457 problem-details " +
-            "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
-            "model the schema, with opt-in relation includes " +
-            "(`?include=owner`, `?include=pets`) and soft delete on owners.\n\n" +
-            "### Realtime (SSE)\n\n" +
-            "Owner writes also publish over SSE — see the realtime example " +
-            "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
-            "optionally `&filter[...]=...`).\n\n" +
-            KAVO_API_GUIDE,
-        )
-        .setVersion("0.0.0")
-        .build(),
+    registerKavoSchemas(
+      SwaggerModule.createDocument(
+        app,
+        new DocumentBuilder()
+          .setTitle("Kavo — Pet example")
+          .setDescription(
+            "Cats, dogs, and owners: full CRUD over HTTP with filtering, " +
+              "sorting, pagination, layered config, and RFC 9457 problem-details " +
+              "errors. Single-table inheritance (Cat/Dog) and an Owner relation " +
+              "model the schema, with opt-in relation includes " +
+              "(`?include=owner`, `?include=pets`) and soft delete on owners.\n\n" +
+              "### Realtime (SSE)\n\n" +
+              "Owner writes also publish over SSE — see the realtime example " +
+              "in the README (`GET /realtime?channel=Owner` or `Owner.<id>`, " +
+              "optionally `&filter[...]=...`).\n\n" +
+              KAVO_API_GUIDE,
+          )
+          .setVersion("0.0.0")
+          .build(),
+      ),
     );
   SwaggerModule.setup("docs", app, buildDocument);
 
