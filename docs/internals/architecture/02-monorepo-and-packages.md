@@ -245,13 +245,21 @@ change almost always touches an edge package, and a single version answers
 version bumps for an untouched package — accepted as trivially cheap next
 to cross-package version-matrix support.
 
-Release mechanics live in `.github/workflows/publish.yml`, triggered by a
-`vX.Y.Z` tag. `PACKAGE_DIRS` there is the explicit list of what gets
-released, ordered so every package publishes after the packages it depends
-on (`@kavo/nest` last), which keeps the registry internally consistent if a
+Release mechanics live in `.github/workflows/publish.yml`, which runs on a
+published GitHub Release (and still on a manually pushed `vX.Y.Z` tag, as a
+fallback). `PACKAGE_DIRS` there is the explicit list of what gets released,
+ordered so every package publishes after the packages it depends on
+(`@kavo/nest` last), which keeps the registry internally consistent if a
 run fails partway. Lockstep itself is checked rather than assumed: a gate
 ahead of packing fails the release unless every listed package is already at
 the tag's version.
+
+Those mechanics are _triggered_ by release-please (ADR-0041), not run by
+hand: a single release PR on `main` carries the computed lockstep bump
+(every `package.json` via `extra-files`) and the generated root
+`CHANGELOG.md`, and merging it creates the `vX.Y.Z` tag and GitHub Release.
+`.claude/commands/publish.md` is now only the procedure for bootstrapping a
+brand-new package's first publish.
 
 The artifact is checked too, between packing and publishing: no packed
 tarball may carry a `workspace:` range in any dependency field a consumer

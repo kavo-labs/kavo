@@ -408,7 +408,7 @@ For each hit that describes cutting a routine release, repoint it to "merge the 
 - [ ] **Step 5: Verify doc links**
 
 Run: `pnpm docs:links`
-Expected: PASS — all new `ADR-0041` / spec references resolve. If the ADR index (`docs/internals/adr/README.md` or a sidebar) enumerates ADRs, add the 0041 row.
+Expected: PASS — all new ADR-0041 and spec references resolve. The ADR list lives in the VitePress sidebar (`docs/.vitepress/config.mts`); add the 0041 row there next to 0040.
 
 - [ ] **Step 6: Build the docs**
 
