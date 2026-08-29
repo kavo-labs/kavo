@@ -4,7 +4,6 @@
   "include-component-in-tag": false,
   "separate-pull-requests": false,
   "pull-request-title-pattern": "chore: release v${version}",
-  "pull-request-footer": "Co-authored-by: release-please[bot] <55107282+release-please[bot]@users.noreply.github.com>",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
