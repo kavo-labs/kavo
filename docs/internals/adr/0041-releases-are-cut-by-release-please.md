@@ -37,31 +37,31 @@ GitHub Release. `publish.yml` runs on `release: published` — a tag pushed by
 `GITHUB_TOKEN` does not fire `on: push: tags`, but the Release does. The
 `push: tags: v*.*.*` trigger is kept as a manual escape hatch.
 
-The release PR's title is `chore: release${component} v${version}`, so the
-squash-merge commit on `main` reads `chore: release vX.Y.Z (#NNN)`. Three
-config details have to line up for that:
+The release PR's title is `chore: release ${component} v${version}` — which
+renders `chore: release kavo v0.16.0` — so the squash-merge commit on `main`
+reads `chore: release kavo vX.Y.Z (#NNN)`. The `kavo` in the title is
+load-bearing, not decoration:
 
-- With `separate-pull-requests: false` the repo produces a single **grouped**
-  PR, so it is `group-pull-request-title-pattern` — not
-  `pull-request-title-pattern` — that names it. Its default is
-  `chore: release ${branch}` (i.e. `chore: release main`), so both keys are
-  set explicitly.
 - The pattern is **bidirectional**. release-please writes the PR title with
   it and, when the merged PR is what triggers the release, parses the title
-  back through it to recover `${component}` and `${version}`. A pattern
-  without `${component}` parses the component as `undefined`, which fails to
-  match the configured component; release-please then reports
-  `Expected 1 releases, only found 0` and aborts without cutting the tag.
-  `${component}` must stay in the pattern even though this repo has only one
-  package — do not "simplify" it out.
-- The root package sets **neither `package-name` nor `component`**, so the
-  configured component is `undefined`. `${component}` then renders empty on
-  the write side (`chore: release v0.15.0`, not `chore: release kavo v0.15.0`)
-  and the parse side compares `undefined` to `undefined`. Adding
-  `package-name: "kavo"` back makes the configured component `kavo`, which no
-  longer matches the empty component parsed from the title — release-please
-  aborts with `Expected 1 releases, only found 0`. The nine package versions
-  are bumped through `extra-files`, not `package-name`, so nothing needs it.
+  back through it to recover `${component}` and `${version}`. If the parsed
+  component does not equal the configured component, release-please logs
+  `PR component: … does not match configured component: kavo`, finds zero
+  releases, and never cuts the tag (`Expected 1 releases, only found 0`).
+- The configured component is **`kavo`, taken from the root `package.json`
+  `name` field** by the `node` release type. It cannot be emptied from
+  config: removing `package-name` just moves the lookup to `package.json`,
+  which still says `kavo`. So the title pattern must carry `${component}`
+  and the rendered title must literally contain `kavo`. Dropping
+  `${component}` to get a cleaner `chore: release v${version}` is what
+  breaks release cutting — do not "simplify" it out.
+- With `separate-pull-requests: false` the repo produces a single **grouped**
+  PR, so `group-pull-request-title-pattern` (default `chore: release ${branch}`
+  → `chore: release main`) also has to be set to the same value; both keys
+  are set explicitly.
+
+The nine package versions are bumped through `extra-files`, independent of
+all of the above.
 
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking
 change on `0.x` at a minor bump rather than `1.0.0`, and
