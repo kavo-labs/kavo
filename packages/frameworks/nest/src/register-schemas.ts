@@ -25,7 +25,7 @@
  * | `<Entity>List`          | list-envelope success response (root `list` slot) |
  * | `<Entity>ListItem`      | the envelope's `items[]` element                  |
  * | `<Entity>ListMeta`      | the envelope's `meta` bag                         |
- * | `<Entity>Pagination`    | the `{ limit, offset }` page controls (issue #313) |
+ * | `<Entity>Pagination`    | the page controls for the resolved `pagination.strategy` (issue #313, #319) |
  * | `<Entity>Include`       | the includable relation paths (issue #313)        |
  * | `<Entity>Sort`          | the sortable keys, `-` = descending (issue #313)  |
  * | `<Entity>Filter`        | the structured filter predicate (issue #314, ADR-0042) |
