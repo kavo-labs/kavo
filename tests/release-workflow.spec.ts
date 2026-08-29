@@ -499,6 +499,16 @@ describe("publish.yml wiring", () => {
     expect([...packageDirs].sort()).toEqual(publishable.sort());
   });
 
+  it("never touches the GitHub Release — release-please owns it", () => {
+    // release-please creates the Release (notes from CHANGELOG.md) as part of
+    // cutting the tag (ADR-0041). publish.yml only pushes to npm. A
+    // `gh release create` here collided with release-please's Release ("a
+    // release with the same tag name already exists") and failed the job
+    // after every package had already published; `gh release upload` would
+    // just re-couple the two workflows. Keep the responsibility split.
+    expect(workflow).not.toMatch(/gh release (create|upload|edit|delete)/);
+  });
+
   it("verifies the packed tarballs after packing them and before publishing", () => {
     const steps = readStepNames(workflow);
     const pack = steps.indexOf("Pack packages");
