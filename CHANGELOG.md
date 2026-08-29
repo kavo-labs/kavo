@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.1](https://github.com/kavo-labs/kavo/compare/v0.15.0...v0.15.1) (2026-08-29)
+
+### Documentation
+
+- **adr:** clarify the grouped release PR title is vX.Y.Z, not ${branch} ([9e0d540](https://github.com/kavo-labs/kavo/commit/9e0d5401d3516ff39fd0c9bf1f8dcb60c104f156))
+
+### CI
+
+- add a workflow_dispatch hatch to publish.yml ([527a7e2](https://github.com/kavo-labs/kavo/commit/527a7e2f7125c9bf145cfe6a687f10ac7445b7bf))
+- auto-cut releases via a schedule tick, no PAT or GitHub App ([7f6f34f](https://github.com/kavo-labs/kavo/commit/7f6f34f0d3415dea239975d628aa12d4bcb2fbdc))
+- drop package-name so the release PR component round-trips ([76c8bc1](https://github.com/kavo-labs/kavo/commit/76c8bc1a398033420f593eb3d61d5b430e251c7b))
+- keep ${component} in the release PR title pattern so releases cut ([eda67f0](https://github.com/kavo-labs/kavo/commit/eda67f014ecf3f7a7bdee30890baec9431e74712))
+- put the package name in the release PR title so releases cut ([077eb6a](https://github.com/kavo-labs/kavo/commit/077eb6ab4c55425fb9e21f74fb12b941e2fa4760))
+- run release-please with a GitHub App token so releases auto-cut ([b7aec72](https://github.com/kavo-labs/kavo/commit/b7aec7236b510b971fa92bbc585a4cfd87ce0b2f))
+- set package-name "" so release-please actually cuts the tag ([5791697](https://github.com/kavo-labs/kavo/commit/5791697d4ec5a14037f85f688b5c2d00c02f4c0c))
+
 ## [0.15.0](https://github.com/kavo-labs/kavo/compare/v0.14.7...v0.15.0) (2026-08-29)
 
 ### ⚠ BREAKING CHANGES
