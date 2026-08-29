@@ -2,6 +2,19 @@ import { ChildEntity, Column } from "typeorm";
 import { Pet } from "../pet/pet.entity.js";
 
 /**
+ * Structured payload for the `vitals` JSON column. The concrete type is a
+ * compile-time contract only — the TypeORM adapter still maps the column to
+ * core's opaque `json` `FieldKind` (derived from the column type, not this
+ * interface), so the generated DTO / OpenAPI schema stays an open object and
+ * the field remains non-filterable, exactly like `attributes`.
+ */
+export interface DogVitals {
+  weightKg: number;
+  heightCm: number;
+  lastCheckup: string;
+}
+
+/**
  * A concrete Pet subtype. Child columns must be nullable under single-table
  * inheritance (rows of sibling types leave them empty).
  */
@@ -24,4 +37,10 @@ export class Dog extends Pet {
   // cannot be filtered).
   @Column("simple-json", { nullable: true })
   attributes!: Record<string, unknown> | null;
+
+  // Same `simple-json` mechanics as `attributes`, but typed to a concrete
+  // shape (`DogVitals`) rather than an open record — the app-side value is
+  // statically checked, while the wire contract is unchanged.
+  @Column("simple-json", { nullable: true })
+  vitals!: DogVitals | null;
 }
