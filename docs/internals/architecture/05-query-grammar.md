@@ -315,9 +315,12 @@ or equivalent, same as any other leading-wildcard `LIKE`/`ILIKE` query
 would.
 
 **Gate.** `search[query]` is rejected outright
-(`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `query.search.enabled` resolves to
-`true` — off by default, resolved through the standard global → entity →
-operation → per-call precedence chain (doc 08). This keeps "does this
+(`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `query.search` resolves to an
+object (`{ mode, driver }`) rather than `false` — `false` by default,
+resolved through the standard global → entity → operation → per-call
+precedence chain (doc 08). A nearer scope re-enabling search from `false`
+may name only the keys it changes (`search: { mode: "words" }`); the
+missing ones backfill from their defaults. This keeps "does this
 endpoint support search at all" an explicit decision even though
 `searchable`'s own default is permissive. The same rejection covers a
 `searchable` that resolves empty.

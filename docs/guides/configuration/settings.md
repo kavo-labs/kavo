@@ -26,7 +26,7 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 `defaultSort` (default `[]`) is the sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright; it never merges with this. It's validated against the sortable allowlist, same as a client-supplied sort.
 
-`search.enabled` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until turned on, even though `allowlists.searchable` itself defaults to every own string column. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token).
+`search` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until a scope sets it to an object (`{}` uses the defaults), even though `allowlists.searchable` itself defaults to every own string column; set it back to `false` at a narrower scope to disable it there. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token). A narrower scope re-enabling search from `false` may name only the keys it changes — the rest backfill from these defaults.
 
 ## errors
 

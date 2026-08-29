@@ -23,7 +23,7 @@ See [Pagination](/querying/pagination) and [Settings](/guides/configuration/sett
 | `query.maxFilterDepth` | `number`                 | `3`           |
 | `query.maxInValues`    | `number`                 | `100`         |
 | `query.defaultSort`    | `Sort[]`                 | `[]`          |
-| `query.search.enabled` | `boolean`                | `false`       |
+| `query.search`         | `{ mode, driver } \| false` | `false`     |
 | `query.search.mode`    | `"substring" \| "words"` | `"substring"` |
 | `query.search.driver`  | `"orm"`                  | `"orm"`       |
 
