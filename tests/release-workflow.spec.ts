@@ -767,10 +767,17 @@ describe("release-please config", () => {
   });
 
   it("titles the release PR with the version so the squash commit carries it", () => {
-    expect(config["pull-request-title-pattern"]).toBe("chore: release v${version}");
+    // The pattern is bidirectional: release-please writes the PR title with it
+    // AND parses the merged title back through it to recover ${component} +
+    // ${version} when cutting the release. Drop ${component} and the parser
+    // reads component as undefined, fails to match the configured component,
+    // and aborts with "Expected 1 releases, only found 0" (see ADR-0041).
+    // ${component} renders empty here because the root package sets component "".
+    expect(config["pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
     // separate-pull-requests:false makes this a grouped PR, whose title comes
     // from group-pull-request-title-pattern (default: "chore: release ${branch}").
-    expect(config["group-pull-request-title-pattern"]).toBe("chore: release v${version}");
+    expect(config["group-pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
+    expect(config.packages["."].component).toBe("");
   });
 });
 

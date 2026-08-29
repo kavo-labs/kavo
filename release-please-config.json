@@ -3,13 +3,14 @@
   "release-type": "node",
   "include-component-in-tag": false,
   "separate-pull-requests": false,
-  "pull-request-title-pattern": "chore: release v${version}",
-  "group-pull-request-title-pattern": "chore: release v${version}",
+  "pull-request-title-pattern": "chore: release${component} v${version}",
+  "group-pull-request-title-pattern": "chore: release${component} v${version}",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     ".": {
       "package-name": "kavo",
+      "component": "",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },

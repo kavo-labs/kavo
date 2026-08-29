@@ -37,13 +37,27 @@ GitHub Release. `publish.yml` runs on `release: published` — a tag pushed by
 `GITHUB_TOKEN` does not fire `on: push: tags`, but the Release does. The
 `push: tags: v*.*.*` trigger is kept as a manual escape hatch.
 
-The release PR's title is `chore: release v${version}`, so the squash-merge
-commit on `main` reads `chore: release vX.Y.Z (#NNN)`. Two config keys have
-to agree for that: with `separate-pull-requests: false` the repo produces a
-single **grouped** PR, and it is `group-pull-request-title-pattern` — not
-`pull-request-title-pattern` — that names that PR. Its default is
-`chore: release ${branch}` (i.e. `chore: release main`), so both keys are
-set explicitly to `chore: release v${version}`.
+The release PR's title is `chore: release${component} v${version}`, so the
+squash-merge commit on `main` reads `chore: release vX.Y.Z (#NNN)`. Three
+config details have to line up for that:
+
+- With `separate-pull-requests: false` the repo produces a single **grouped**
+  PR, so it is `group-pull-request-title-pattern` — not
+  `pull-request-title-pattern` — that names it. Its default is
+  `chore: release ${branch}` (i.e. `chore: release main`), so both keys are
+  set explicitly.
+- The pattern is **bidirectional**. release-please writes the PR title with
+  it and, when the merged PR is what triggers the release, parses the title
+  back through it to recover `${component}` and `${version}`. A pattern
+  without `${component}` parses the component as `undefined`, which fails to
+  match the configured component; release-please then reports
+  `Expected 1 releases, only found 0` and aborts without cutting the tag.
+  `${component}` must stay in the pattern even though this repo has only one
+  package — do not "simplify" it out.
+- The root package sets `component: ""`, so `${component}` renders empty on
+  the write side (`chore: release v0.15.0`, not `chore: release kavo v0.15.0`)
+  and the parse side compares empty-to-empty. `package-name: "kavo"` stays
+  for changelog/npm references; `component` is what the title pattern round-trips.
 
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking
 change on `0.x` at a minor bump rather than `1.0.0`, and
