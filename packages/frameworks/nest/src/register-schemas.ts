@@ -25,6 +25,9 @@
  * | `<Entity>List`          | list-envelope success response (root `list` slot) |
  * | `<Entity>ListItem`      | the envelope's `items[]` element                  |
  * | `<Entity>ListMeta`      | the envelope's `meta` bag                         |
+ * | `<Entity>Pagination`    | the `{ limit, offset }` page controls (issue #313) |
+ * | `<Entity>Include`       | the includable relation paths (issue #313)        |
+ * | `<Entity>Sort`          | the sortable keys, `-` = descending (issue #313)  |
  * | `<Entity><Operation>`   | a per-operation `dto.output` (issue #131) or a custom op's own output shape — single-row |
  * | `<Entity><Operation>List` | the same, `many` — plus `…ListItem` / `…ListMeta` |
  * | `KavoProblemDetails`    | shared RFC 9457 error body (400/404/409/412)      |
@@ -92,6 +95,7 @@ interface OperationObject {
   "x-kavo-entity"?: unknown;
   "x-kavo-operation"?: unknown;
   "x-kavo-cardinality"?: unknown;
+  "x-kavo-query-schemas"?: unknown;
 }
 
 interface OpenApiDocument {
@@ -132,6 +136,7 @@ export function registerKavoSchemas<T extends object>(document: T): T {
       }
       hoistRequestBody(registry, operation, entity);
       hoistResponses(registry, operation, entity);
+      hoistQuerySchemas(registry, operation, entity);
     }
   }
 
@@ -204,6 +209,33 @@ function hoistResponses(registry: SchemaRegistry, operation: OperationObject, en
       media.schema = registry.register(schema, scoped ? `${entity}${opName}` : `${entity}Item`);
     }
   }
+}
+
+/**
+ * The `<Entity>Pagination` / `<Entity>Include` / `<Entity>Sort` query-shape
+ * components (issue #313). `applyQuerySchemaDocs` (`swagger.ts`) stamped
+ * them, keyed by slot, as an `x-kavo-query-schemas` extension on every
+ * enabled read route at bind time; this lifts each into `components.schemas`
+ * under `<Entity><Slot-in-PascalCase>` through the same registry the DTO
+ * schemas use, so identical repeats across an entity's read routes collapse
+ * onto one component and a genuine cross-entity name clash still resolves to
+ * `_2`. The extension is dropped afterwards — it is plumbing, not published
+ * surface, and a document that skipped `registerKavoSchemas` keeps the raw
+ * blob instead.
+ */
+function hoistQuerySchemas(registry: SchemaRegistry, operation: OperationObject, entity: string): void {
+  const slots = operation["x-kavo-query-schemas"];
+  if (slots === null || typeof slots !== "object") {
+    return;
+  }
+  const bySlot: Record<string, string> = { pagination: "Pagination", include: "Include", sort: "Sort" };
+  for (const [slot, suffix] of Object.entries(bySlot)) {
+    const schema = (slots as Record<string, unknown>)[slot];
+    if (schema !== undefined && typeof schema === "object" && schema !== null) {
+      registry.register(schema as SchemaObject, `${entity}${suffix}`);
+    }
+  }
+  delete operation["x-kavo-query-schemas"];
 }
 
 /** Capitalise the first character of a camelCase operation id. */
