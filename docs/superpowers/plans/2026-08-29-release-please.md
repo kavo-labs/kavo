@@ -26,11 +26,13 @@
 ### Task 1: release-please config + seed manifest
 
 **Files:**
+
 - Create: `release-please-config.json` (repo root)
 - Create: `.release-please-manifest.json` (repo root)
 - Test: `tests/release-workflow.spec.ts` (add a `describe("release-please config")` block)
 
 **Interfaces:**
+
 - Consumes: `PACKAGE_DIRS` parsed from `.github/workflows/publish.yml` — the spec file already has `readPackageDirs(workflow)` and exports `const packageDirs`. Reuse it.
 - Produces: `release-please-config.json` with `packages["."].extra-files` (array of `{ type: "json", path, jsonpath: "$.version" }`) and top-level `include-component-in-tag: false`, `bump-minor-pre-major: true`, `bump-patch-for-minor-pre-major: true`. `.release-please-manifest.json` is `{ ".": "<core version>" }`.
 
@@ -130,7 +132,7 @@ Note: the `.` root entry bumps the root `package.json` (private, but it carries 
 The `.` package is the **repo root** (`./package.json`), which is `private` and unpublished. `packages/core/package.json` is a separate file and IS in the `extra-files` list above. So `extra-files` must list **all nine** `PACKAGE_DIRS` entries (the root `.` is extra, on top of the nine). Adjust the test in Step 1 accordingly:
 
 ```ts
-    expect([...extraPaths].sort()).toEqual([...packageDirs].sort());
+expect([...extraPaths].sort()).toEqual([...packageDirs].sort());
 ```
 
 and remove the `.filter((d) => d !== ".")` — `packageDirs` never contains `.`. Keep the config's `extra-files` listing all nine as written above.
@@ -160,10 +162,12 @@ git commit -m "ci: add release-please config for lockstep root release"
 ### Task 2: release-please workflow
 
 **Files:**
+
 - Create: `.github/workflows/release-please.yml`
 - Test: `tests/release-workflow.spec.ts` (extend the `describe("release-please config")` block or add `describe("release-please workflow")`)
 
 **Interfaces:**
+
 - Consumes: `release-please-config.json`, `.release-please-manifest.json` from Task 1.
 - Produces: a workflow that runs on `push` to `main` and grants `contents: write` + `pull-requests: write`.
 
@@ -240,10 +244,12 @@ git commit -m "ci: add release-please workflow on main"
 ### Task 3: point publish.yml at the GitHub Release
 
 **Files:**
+
 - Modify: `.github/workflows/publish.yml` (the `on:` block only, lines ~3-6)
 - Test: `tests/release-workflow.spec.ts` (add to `describe("publish.yml wiring")`)
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `publish.yml` triggers on **both** `release: { types: [published] }` and `push: { tags: ["v*.*.*"] }`. Job body unchanged — `GITHUB_REF_NAME` is the tag name on a release event too.
 
@@ -252,15 +258,15 @@ git commit -m "ci: add release-please workflow on main"
 Add inside the existing `describe("publish.yml wiring", () => { ... })`:
 
 ```ts
-  it("triggers on a published GitHub Release (release-please creates it with GITHUB_TOKEN)", () => {
-    // A tag pushed by GITHUB_TOKEN does not fire `on: push: tags`; the
-    // Release event does. See the release-please design doc.
-    expect(workflow).toMatch(/on:\s*[\s\S]*release:\s*[\s\S]*types:\s*\[\s*published\s*\]/);
-  });
+it("triggers on a published GitHub Release (release-please creates it with GITHUB_TOKEN)", () => {
+  // A tag pushed by GITHUB_TOKEN does not fire `on: push: tags`; the
+  // Release event does. See the release-please design doc.
+  expect(workflow).toMatch(/on:\s*[\s\S]*release:\s*[\s\S]*types:\s*\[\s*published\s*\]/);
+});
 
-  it("still triggers on a manually pushed vX.Y.Z tag as an escape hatch", () => {
-    expect(workflow).toMatch(/push:\s*[\s\S]*tags:\s*[\s\S]*v\*\.\*\.\*/);
-  });
+it("still triggers on a manually pushed vX.Y.Z tag as an escape hatch", () => {
+  expect(workflow).toMatch(/push:\s*[\s\S]*tags:\s*[\s\S]*v\*\.\*\.\*/);
+});
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -309,10 +315,12 @@ git commit -m "ci: trigger publish.yml on published GitHub Release"
 ### Task 4: cut /publish down to a bootstrap-only procedure
 
 **Files:**
+
 - Modify: `.claude/commands/publish.md` (large rewrite)
-- Modify: `tests/release-workflow.spec.ts` — the test `it("keeps /publish's package table in the order PACKAGE_DIRS publishes", ...)` currently asserts a `| \`packages/...\` |` markdown table exists in `publish.md`. The rewrite removes that table.
+- Modify: `tests/release-workflow.spec.ts` — the test `it("keeps /publish's package table in the order PACKAGE_DIRS publishes", ...)` currently asserts a `| \`packages/...\` |`markdown table exists in`publish.md`. The rewrite removes that table.
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `publish.md` whose stated purpose is "bootstrap the first published version of a brand-new `@kavo/*` package". It retains the `pnpm pack` → `npm publish <tarball>` bootstrap steps, the trusted-publisher setup, and the `--dry-run` resolution check that already live in the file. It drops: version-bump classification, the nine-manifest bump table + walk, `pnpm install && pnpm check` for a routine release, the "confirm before irreversible" release prompt, `git commit`/`git tag`/`git push`, and "watch the release workflow". `allowed-tools` keeps `npm publish`/`pnpm publish` OUT.
 
@@ -335,6 +343,7 @@ Expected: PASS (the removed test no longer runs; everything else green).
 New front matter `description`: `Bootstrap the first npm publish of a brand-new @kavo/* package`. New `argument-hint`: `<package-dir>` (the `PACKAGE_DIRS` entry to bootstrap). Keep `allowed-tools` as-is (do NOT add `Bash(npm:*)` or widen `pnpm`).
 
 Body sections, in order:
+
 1. **When to use this.** Only when `npm view <name>` shows the package has never been published. Routine releases are a merged release-please PR — link `docs/superpowers/specs/2026-08-29-release-please-design.md` and ADR-0041.
 2. **Preconditions.** On `main`, up to date, clean tree. The package's version in its `package.json` already matches the current lockstep version (release-please / the release PR sets that — a bootstrap does not bump versions).
 3. **Build.** `pnpm install --frozen-lockfile && pnpm build` — `dist/` is gitignored and no package defines `prepack`, so a bare `pnpm pack` ships an empty tarball.
@@ -364,12 +373,14 @@ git commit -m "docs: reduce /publish to a brand-new-package bootstrap procedure"
 ### Task 5: ADR-0041 + architecture doc + prose sweep
 
 **Files:**
+
 - Create: `docs/internals/adr/0041-releases-are-cut-by-release-please.md`
 - Modify: `docs/internals/architecture/02-monorepo-and-packages.md` (§7, lines ~248-254)
 - Modify: any file a grep turns up that tells a maintainer to run `/publish` for a routine release
 - Test: `pnpm docs:links` (every `docs/**.md` reference resolves)
 
 **Interfaces:**
+
 - Consumes: everything from Tasks 1-4.
 - Produces: ADR-0041, cross-linked from ADR-0004 and architecture doc §7.
 
@@ -377,7 +388,7 @@ git commit -m "docs: reduce /publish to a brand-new-package bootstrap procedure"
 
 Follow the house format (see `docs/internals/adr/0004-lockstep-versioning.md`): `# ADR-0041 — Releases are cut by release-please`, `**Status:** accepted`, then `## Context`, `## Decision`, `## Consequences`.
 
-- **Context:** the `/publish` skill hand-computed the bump, edited nine manifests, committed straight to `main`, and pushed the tag — error-prone toil (v0.6.0 shipped `@kavo/prisma` one version behind). We want the version math, changelog, and tag to be automated, while a human still decides *when* a release goes out.
+- **Context:** the `/publish` skill hand-computed the bump, edited nine manifests, committed straight to `main`, and pushed the tag — error-prone toil (v0.6.0 shipped `@kavo/prisma` one version behind). We want the version math, changelog, and tag to be automated, while a human still decides _when_ a release goes out.
 - **Decision:** `release-please` (single logical package at the repo root, `include-component-in-tag: false`) keeps one release PR open on `main` with the computed lockstep bump (all nine `package.json`s via `extra-files`) and a generated root `CHANGELOG.md`. Merging that PR is the release trigger: release-please then creates tag `vX.Y.Z` and the GitHub Release, and `publish.yml` runs on `release: published`. `/publish` is retained only to bootstrap a brand-new package's first version, which release-please cannot do (no npm trusted-publisher page exists until the package has a version). Pre-1.0 bump rule: `bump-minor-pre-major` keeps a breaking change at a minor bump; `bump-patch-for-minor-pre-major` makes a plain `feat:` a **patch** bump — a deliberate change from `/publish`, which bumped the minor for any `feat:` on `0.x`. `1.0.0` is reached only by an explicit `Release-As: 1.0.0`.
 - **Consequences:** no hand-run version math; lockstep still enforced (by `extra-files` and, as backstop, `verify-lockstep-versions.mjs` in `publish.yml`); a `feat:` on `0.x` now bumps the patch not the minor; `publish.yml` keeps its `push: tags` trigger as a manual escape hatch; `tests/release-workflow.spec.ts` gates the config/manifest/workflow wiring. Cross-reference ADR-0004.
 
@@ -390,7 +401,7 @@ In `docs/internals/adr/0004-lockstep-versioning.md`, in the Consequences list wh
 In `docs/internals/architecture/02-monorepo-and-packages.md`, after the paragraph ending "...fails the release unless every listed package is already at the tag's version." add:
 
 ```markdown
-Those mechanics are *triggered* by release-please (ADR-0041), not run by
+Those mechanics are _triggered_ by release-please (ADR-0041), not run by
 hand: a single release PR on `main` carries the computed lockstep bump
 (every `package.json` via `extra-files`) and the generated root
 `CHANGELOG.md`, and merging it creates the `vX.Y.Z` tag and GitHub
@@ -427,6 +438,7 @@ git commit -m "docs(adr): ADR-0041 releases are cut by release-please"
 ### Task 6: full gate + rollout notes
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/2026-08-29-release-please-design.md` — flip the status line to note the plan is executed (optional housekeeping)
 - No code.
 
@@ -443,11 +455,12 @@ Expected: PASS. If it fails on the new JSON/YAML/MD files, run `pnpm prettify` a
 - [ ] **Step 3: Sanity-check the release-please config locally (optional, no network needed for `--dry-run` of the config parse)**
 
 Run: `npx release-please@latest manifest-pr --dry-run --repo-url=kavo-labs/kavo --config-file=release-please-config.json --manifest-file=.release-please-manifest.json --token=dummy 2>&1 | head -30`
-Expected: it parses the config without a schema error (it will fail later on the dummy token / network — that is fine; a config *parse* error is not).
+Expected: it parses the config without a schema error (it will fail later on the dummy token / network — that is fine; a config _parse_ error is not).
 
 - [ ] **Step 4: Write the rollout note into the PR description (for `/pr`)**
 
 The PR body must state:
+
 - After merge, release-please opens a release PR against `main` computing the bump from commits since `v0.14.6`.
 - A reviewer must check that PR: version correct, `CHANGELOG.md` readable, all nine `package.json` versions bumped in lockstep.
 - Merging that release PR creates the tag + GitHub Release and triggers `publish.yml` → npm.
@@ -466,21 +479,21 @@ git commit -m "docs(specs): mark release-please design as implemented"
 
 **Spec coverage:**
 
-| Spec section | Task |
-| --- | --- |
-| `release-please-config.json` (root logical release, extra-files) | Task 1 |
-| `.release-please-manifest.json` seed | Task 1 |
-| Pre-1.0 bump rules in config | Task 1 (config), Task 5 (ADR rationale) |
-| `changelog-sections` ⊆ conventions vocabulary | Task 1 |
-| `.github/workflows/release-please.yml` | Task 2 |
-| `publish.yml` `release: published` trigger, keep `push: tags` | Task 3 |
-| `/publish` rewritten to bootstrap-only | Task 4 |
-| ADR-0041 | Task 5 |
-| architecture doc §7 edit + ADR-0004 back-ref | Task 5 |
-| adopter-facing prose sweep | Task 5 Step 4 |
-| `tests/release-workflow.spec.ts` updates (trigger asserts, config/manifest consistency, workflow asserts, drop `/publish` table test) | Tasks 1, 2, 3, 4 |
-| Rollout (first release PR, manual Actions setting) | Task 6 Step 4 |
-| Non-goals (no per-package versioning/changelogs, no backfill, no `publish.yml` body change) | respected — no task touches those |
+| Spec section                                                                                                                          | Task                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| `release-please-config.json` (root logical release, extra-files)                                                                      | Task 1                                  |
+| `.release-please-manifest.json` seed                                                                                                  | Task 1                                  |
+| Pre-1.0 bump rules in config                                                                                                          | Task 1 (config), Task 5 (ADR rationale) |
+| `changelog-sections` ⊆ conventions vocabulary                                                                                         | Task 1                                  |
+| `.github/workflows/release-please.yml`                                                                                                | Task 2                                  |
+| `publish.yml` `release: published` trigger, keep `push: tags`                                                                         | Task 3                                  |
+| `/publish` rewritten to bootstrap-only                                                                                                | Task 4                                  |
+| ADR-0041                                                                                                                              | Task 5                                  |
+| architecture doc §7 edit + ADR-0004 back-ref                                                                                          | Task 5                                  |
+| adopter-facing prose sweep                                                                                                            | Task 5 Step 4                           |
+| `tests/release-workflow.spec.ts` updates (trigger asserts, config/manifest consistency, workflow asserts, drop `/publish` table test) | Tasks 1, 2, 3, 4                        |
+| Rollout (first release PR, manual Actions setting)                                                                                    | Task 6 Step 4                           |
+| Non-goals (no per-package versioning/changelogs, no backfill, no `publish.yml` body change)                                           | respected — no task touches those       |
 
 **Placeholder scan:** none — every config file, workflow, and test block is given in full. The ADR and doc prose are specified as concrete text to write, with the house format referenced by file.
 

@@ -16,7 +16,7 @@ was already public.
 
 The version math, the changelog, and the tag are all mechanically derivable
 from Conventional Commit history. What is not mechanical, and should stay
-human, is *deciding when a release goes out*.
+human, is _deciding when a release goes out_.
 
 ## Decision
 

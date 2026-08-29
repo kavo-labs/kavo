@@ -70,9 +70,9 @@ ordinary merge to `main`.
         { "type": "json", "path": "packages/realtime/sse/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/protocols/graphql/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/protocols/mcp/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" }
-      ]
-    }
+        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" },
+      ],
+    },
   },
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
@@ -82,8 +82,8 @@ ordinary merge to `main`.
     { "type": "docs", "section": "Documentation" },
     { "type": "test", "section": "Tests" },
     { "type": "ci", "section": "CI" },
-    { "type": "chore", "section": "Chores", "hidden": true }
-  ]
+    { "type": "chore", "section": "Chores", "hidden": true },
+  ],
 }
 ```
 
@@ -184,16 +184,16 @@ Grep during implementation for any prose that tells a maintainer to run
 `/publish` today classifies commits with the `conventions` type vocabulary and
 caps at minor while `0.x`:
 
-| commit                                   | `/publish` today | release-please with the config above |
-| ---------------------------------------- | ---------------- | ------------------------------------- |
-| `feat!:` / `BREAKING CHANGE:` on `0.x`   | minor            | minor (`bump-minor-pre-major`)        |
-| `feat:` on `0.x`                         | minor            | **patch** (`bump-patch-for-minor-pre-major`) |
-| `fix:` / `chore:` / `docs:` / ...        | patch            | patch                                 |
-| `1.0.0`                                  | only on explicit `major` arg + human confirm | never automatic; `bump-minor-pre-major` keeps it `0.x` until a human sets `Release-As: 1.0.0` |
+| commit                                 | `/publish` today                             | release-please with the config above                                                          |
+| -------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `feat!:` / `BREAKING CHANGE:` on `0.x` | minor                                        | minor (`bump-minor-pre-major`)                                                                |
+| `feat:` on `0.x`                       | minor                                        | **patch** (`bump-patch-for-minor-pre-major`)                                                  |
+| `fix:` / `chore:` / `docs:` / ...      | patch                                        | patch                                                                                         |
+| `1.0.0`                                | only on explicit `major` arg + human confirm | never automatic; `bump-minor-pre-major` keeps it `0.x` until a human sets `Release-As: 1.0.0` |
 
-**The change:** under `/publish`, any `feat:` on `0.x` bumped the *minor*
+**The change:** under `/publish`, any `feat:` on `0.x` bumped the _minor_
 (`0.14.6` → `0.15.0`). With `bump-patch-for-minor-pre-major: true`, a `feat:`
-bumps the *patch* (`0.14.6` → `0.14.7`) and only a breaking change bumps the
+bumps the _patch_ (`0.14.6` → `0.14.7`) and only a breaking change bumps the
 minor. This is the standard release-please pre-1.0 behavior and is, I think,
 the more defensible reading of semver-zero — but it is a deviation from
 current practice and must be called out in the ADR and confirmed.
@@ -216,7 +216,7 @@ Existing assertions that must be updated:
   - `publish.yml` has `on.release.types` containing `published`.
   - `publish.yml` still has the `push.tags` `v*.*.*` trigger.
 - The `/publish` package-table assertion (`keeps /publish's package table in
-  the order PACKAGE_DIRS publishes`) — the table is being removed from
+the order PACKAGE_DIRS publishes`) — the table is being removed from
   `publish.md`. Replace with an assertion that
   `release-please-config.json`'s `extra-files` paths, plus the `.` root, cover
   exactly `PACKAGE_DIRS` (order-independent; `PACKAGE_DIRS` remains the source
