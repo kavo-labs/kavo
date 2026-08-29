@@ -1020,18 +1020,31 @@ export function applyBodySchemaDocs(
   alreadyBodySchemaDocumented.add(method);
 
   const properties: Record<string, object> = {};
+  const required: string[] = [];
   for (const field of metadata.fields) {
     if (field.generated || !allowed.includes(field.name)) {
       continue;
     }
     properties[field.name] = fieldSchema(field);
+    if (!field.nullable) {
+      required.push(field.name);
+    }
   }
+  // `patchOne` is a partial update — every field is optional regardless of
+  // column nullability — so it never carries `required`. `createOne` and
+  // `updateOne` replace the row, so a non-nullable column the caller is
+  // allowed to write is genuinely required. A database `default:` cannot be
+  // told apart from a true requirement here (`FieldMetadata` has no
+  // `hasDefault`), so such a column is reported required — a known, narrow
+  // over-statement, not a lie about what the route accepts.
+  const emitRequired = descriptor.id !== "patchOne" && required.length > 0;
   swagger.ApiBody({
     schema: withKavoEntity(
       {
         title: `${metadata.name}${titleForBodyOperation(descriptor.id)}`,
         type: "object",
         properties,
+        ...(emitRequired ? { required } : {}),
         ...(allowed.length === 0 ? { description: "No field is writable." } : {}),
       },
       metadata.name,
@@ -1215,7 +1228,7 @@ function successBodyFor(
  * permitted keys, which is the opposite of what this field is.
  */
 function listEnvelopeSchema(
-  element: { type: "object"; properties: Record<string, object> } | null,
+  element: { type: "object"; properties: Record<string, object>; required?: string[] } | null,
   title: string,
   entityName: string,
   operationScoped = false,
@@ -1322,11 +1335,18 @@ export function applyResponseSchemaDocs(
   alreadyResponseSchemaDocumented.add(method);
 
   const properties: Record<string, object> = {};
+  const required: string[] = [];
   for (const field of metadata.fields) {
     if (!selectable.includes(field.name)) {
       continue;
     }
     properties[field.name] = fieldSchema(field);
+    // A non-nullable column is always present in a serialized row, so it is
+    // `required` in the response shape. Computed fields (below) carry no type
+    // information and are left optional.
+    if (!field.nullable) {
+      required.push(field.name);
+    }
   }
   // Declared computed fields (ADR-0019) aren't in `metadata.fields` — no
   // column backs them — but the engine serializes them into every response
@@ -1342,7 +1362,7 @@ export function applyResponseSchemaDocs(
     }
     properties[name] = { nullable: true };
   }
-  const element = { type: "object" as const, properties };
+  const element = { type: "object" as const, properties, ...(required.length > 0 ? { required } : {}) };
   const schema = isList
     ? listEnvelopeSchema(element, metadata.name, metadata.name)
     : withKavoEntity({ title: metadata.name, ...element }, metadata.name);
