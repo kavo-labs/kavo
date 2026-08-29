@@ -42,7 +42,7 @@ the tag it created fired nothing — every release needed two manual
 `workflow_dispatch` kicks. `release-please.yml` therefore mints an
 installation token from a GitHub App (`actions/create-github-app-token`,
 secrets `RELEASE_PLEASE_APP_ID` / `RELEASE_PLEASE_APP_PRIVATE_KEY`) and passes
-it to `release-please-action` as `token:`. An App's pushes and releases *do*
+it to `release-please-action` as `token:`. An App's pushes and releases _do_
 cascade, so:
 
 - Merging the release PR fires `release-please.yml`'s `push` (the release
