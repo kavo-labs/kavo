@@ -281,11 +281,7 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("caps the number of words in words mode at query.maxInValues", () => {
-    const tightCap = resolveEntityConfig(
-      userMetadata,
-      { query: { search: {}, maxInValues: 2 } },
-      undefined,
-    );
+    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 2 } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
     );
@@ -297,11 +293,7 @@ describe("QueryNormalizer — search[...]", () => {
     // Two words × two fields = 4 synthesized conditions — over a cap of 3 —
     // even though the word count alone (2) is under it. A cap that only
     // checked `terms.length` would let this through.
-    const tightCap = resolveEntityConfig(
-      userMetadata,
-      { query: { search: {}, maxInValues: 3 } },
-      undefined,
-    );
+    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, tightCap),
     );
@@ -309,11 +301,7 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("lets the same product through once search[fields] narrows it under the cap", () => {
-    const tightCap = resolveEntityConfig(
-      userMetadata,
-      { query: { search: {}, maxInValues: 3 } },
-      undefined,
-    );
+    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
     // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
     const query = normalizer.normalizeWire(
       { "search[query]": "blue iphone", "search[mode]": "words", "search[fields]": "name" },
