@@ -658,6 +658,31 @@ export function applyPaginationDocs(
  * Idempotent per method function via `alreadyQuerySchemaDocumented`, the
  * same guard the other bind-time passes use against a second bootstrap of
  * one controller class (routine in this package's tests).
+ *
+ * **`filter` and `query` (ADR-0042), list routes only, same as
+ * `pagination`/`sort`** — REST's own `filter=` param is itself list-only
+ * (`listQueryParams`'s `isList` guard in `applySwaggerMetadata`), so a
+ * shape documenting that grammar has no single-row route to ride either.
+ *
+ * - **`filter`** — `<Entity>Filter`, one property per field on the
+ *   resolved `filterable` allowlist that is also one of the entity's own
+ *   scalar columns (`filterOperatorsSchema`); a filterable relation path
+ *   (`profile.city`) is valid on the wire but not enumerable here, the
+ *   same known gap `include`'s nested-path doc above already accepts —
+ *   so the schema carries no `additionalProperties: false`. `and`/`or`
+ *   are arrays of `Filter`, `not` is one `Filter` (the wire parser's
+ *   unary shape, doc 05 §1) — both `$ref`ing back to this entity's own
+ *   expected `<Entity>Filter` name, an assumption `hoistQuerySchemas`
+ *   makes true absent a genuine cross-entity name collision (ADR-0042).
+ * - **`query`** — `<Entity>Query`, the aggregate `filter`+`sort`+
+ *   `pagination`+`fields`+`include`+`search` shape for a GraphQL/MCP
+ *   resolver or a programmatic `QueryContext` caller — documented-only,
+ *   published as a component no REST parameter ever `$ref`s (ADR-0042).
+ *   `sort`/`pagination`/`include`/`filter` `$ref` the entity's own other
+ *   expected component names; `fields`/`search` are inlined rather than
+ *   hoisted, since this issue only asks for `Filter`/`Query` as named
+ *   components. `search` is omitted when `query.search` doesn't resolve
+ *   to an object, the same gate `applySearchQueryDocs` uses.
  */
 const alreadyQuerySchemaDocumented = new WeakSet<object>();
 
@@ -666,10 +691,15 @@ export function applyQuerySchemaDocs(
   methodName: string,
   descriptor: OperationDescriptor<object>,
   entityName: string,
+  metadata: EntityMetadata<object>,
   resolved: {
     readonly strategy: string;
     readonly includable: readonly string[];
     readonly sortable: readonly string[];
+    readonly filterable: readonly string[];
+    readonly selectable: readonly string[];
+    readonly searchable: readonly string[];
+    readonly searchEnabled: boolean;
   },
 ): void {
   if (descriptor.kind !== "read") {
@@ -689,6 +719,7 @@ export function applyQuerySchemaDocs(
 
   const isList = descriptor.cardinality === "many";
   const slots: Record<string, object> = {};
+  const filterRef = { $ref: `#/components/schemas/${entityName}Filter` };
 
   if (resolved.includable.length > 0) {
     slots.include = withKavoEntity(
@@ -737,6 +768,66 @@ export function applyQuerySchemaDocs(
           resolved.sortable.length === 0
             ? "No field is sortable."
             : "Sort keys, as passed to `sort=` (comma-separated). Prefix a key with `-` for descending order.",
+      },
+      entityName,
+    );
+
+    const filterProperties: Record<string, object> = {};
+    for (const field of metadata.fields) {
+      if (resolved.filterable.includes(field.name)) {
+        filterProperties[field.name] = filterOperatorsSchema(field);
+      }
+    }
+    slots.filter = withKavoEntity(
+      {
+        type: "object",
+        description:
+          Object.keys(filterProperties).length === 0
+            ? "No field is filterable."
+            : "Structured filter predicate mirroring `filter[field][operator]=value` and the " +
+              "`filter={...}` JSON escape hatch (docs/internals/architecture/05-query-grammar.md). " +
+              "Field keys are per-field operator maps; `and`/`or` take an array of nested Filter, " +
+              "`not` takes one. Relation-path filters (e.g. `profile.city`) are permitted on the wire " +
+              "but not enumerated as properties here.",
+        properties: {
+          ...filterProperties,
+          and: { type: "array", items: filterRef },
+          or: { type: "array", items: filterRef },
+          not: filterRef,
+        },
+      },
+      entityName,
+    );
+
+    const queryProperties: Record<string, object> = { filter: filterRef };
+    queryProperties.sort = { $ref: `#/components/schemas/${entityName}Sort` };
+    queryProperties.pagination = { $ref: `#/components/schemas/${entityName}Pagination` };
+    queryProperties.fields = {
+      type: "array",
+      items: { type: "string", enum: [...resolved.selectable] },
+      description: "Sparse fieldset for the root resource, as passed to `fields=` (comma-separated).",
+    };
+    if (resolved.includable.length > 0) {
+      queryProperties.include = { $ref: `#/components/schemas/${entityName}Include` };
+    }
+    if (resolved.searchEnabled) {
+      queryProperties.search = {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+          mode: { type: "string", enum: ["substring", "words"] },
+          fields: { type: "array", items: { type: "string", enum: [...resolved.searchable] } },
+        },
+      };
+    }
+    slots.query = withKavoEntity(
+      {
+        type: "object",
+        description:
+          "The full query surface — filter, sort, pagination, fields, include, search — as one " +
+          "typed aggregate, for a GraphQL/MCP resolver or a programmatic QueryContext caller. " +
+          "No REST parameter references this shape; REST keeps its flat query params unchanged (ADR-0042).",
+        properties: queryProperties,
       },
       entityName,
     );
@@ -920,25 +1011,61 @@ function titleForBodyOperation(id: string): string {
   }
 }
 
+/** The base OpenAPI fragment for one column's own value type, ignoring nullability. */
+function fieldKindSchema(field: FieldMetadata): object {
+  switch (field.kind) {
+    case "string":
+      return { type: "string" };
+    case "number":
+      return { type: "number" };
+    case "boolean":
+      return { type: "boolean" };
+    case "date":
+      return { type: "string", format: "date-time" };
+    case "enum":
+      return { type: "string", ...(field.enumValues !== undefined ? { enum: [...field.enumValues] } : {}) };
+    case "json":
+      return { type: "object" };
+  }
+}
+
 /** Map one ORM-independent column description to its OpenAPI fragment. */
 function fieldSchema(field: FieldMetadata): object {
-  const base = ((): object => {
-    switch (field.kind) {
-      case "string":
-        return { type: "string" };
-      case "number":
-        return { type: "number" };
-      case "boolean":
-        return { type: "boolean" };
-      case "date":
-        return { type: "string", format: "date-time" };
-      case "enum":
-        return { type: "string", ...(field.enumValues !== undefined ? { enum: [...field.enumValues] } : {}) };
-      case "json":
-        return { type: "object" };
-    }
-  })();
+  const base = fieldKindSchema(field);
   return field.nullable ? { ...base, nullable: true } : base;
+}
+
+/**
+ * The per-field operator map `<Entity>Filter` (ADR-0042) values one
+ * filterable field by — `eq`/`ne`/`gt`/`gte`/`lt`/`lte`/`in`/`notIn`/
+ * `between`/`isNull`/`isNotNull` for every kind, matching doc 05's grammar
+ * table uniformly; `like`/`ilike` only for a string-kind field, doc 05's
+ * one kind-specific restriction ("Both operators apply to string columns
+ * only"). The operator value itself ignores the column's own nullability —
+ * `isNull`/`isNotNull` are what a filter uses to test it — so this reads
+ * `fieldKindSchema` directly rather than `fieldSchema`'s nullable-augmented
+ * form.
+ */
+function filterOperatorsSchema(field: FieldMetadata): object {
+  const value = fieldKindSchema(field);
+  const properties: Record<string, object> = {
+    eq: value,
+    ne: value,
+    gt: value,
+    gte: value,
+    lt: value,
+    lte: value,
+    in: { type: "array", items: value },
+    notIn: { type: "array", items: value },
+    between: { type: "array", items: value, minItems: 2, maxItems: 2 },
+    isNull: { type: "boolean" },
+    isNotNull: { type: "boolean" },
+  };
+  if (field.kind === "string") {
+    properties.like = value;
+    properties.ilike = value;
+  }
+  return { type: "object", properties };
 }
 
 /**

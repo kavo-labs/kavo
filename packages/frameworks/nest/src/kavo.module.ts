@@ -468,16 +468,22 @@ class KavoBinder implements OnModuleInit {
           // reason as the two above (`applyPaginationDocs`'s doc comment):
           // `pagination.strategy` needs the full precedence chain too.
           applyPaginationDocs(prototype, methodName, descriptor, settings.pagination.strategy);
-          // `<Entity>Pagination`/`Include`/`Sort` query-shape components
-          // (issue #313) — deferred for the same reason as the passes
-          // above: the resolved `allowlists.sortable`/`includable` and the
-          // precedence-merged `pagination.strategy` only exist here. The
-          // extension `applyQuerySchemaDocs` stamps is hoisted into
-          // `components.schemas` by `registerKavoSchemas`.
-          applyQuerySchemaDocs(prototype, methodName, descriptor, metadata.entity.name, {
+          // `<Entity>Pagination`/`Include`/`Sort`/`Filter`/`Query` query-shape
+          // components (issue #313, issue #314 / ADR-0042) — deferred for the
+          // same reason as the passes above: the resolved
+          // `allowlists.sortable`/`includable`/`filterable`/`selectable`/
+          // `searchable` and the precedence-merged `pagination.strategy` /
+          // `query.search` only exist here. The extension
+          // `applyQuerySchemaDocs` stamps is hoisted into `components.schemas`
+          // by `registerKavoSchemas`.
+          applyQuerySchemaDocs(prototype, methodName, descriptor, metadata.entity.name, service.engine.metadata, {
             strategy: settings.pagination.strategy,
             includable: service.engine.config.allowlists.includable as readonly string[],
             sortable: service.engine.config.allowlists.sortable as readonly string[],
+            filterable: service.engine.config.allowlists.filterable as readonly string[],
+            selectable: service.engine.config.allowlists.selectable as readonly string[],
+            searchable: service.engine.config.allowlists.searchable as readonly string[],
+            searchEnabled: settings.query.search !== false,
           });
           // Retag the always-present `400` as `<Entity>ValidationError`
           // (issue #310) so `registerKavoSchemas` gives each entity its own
