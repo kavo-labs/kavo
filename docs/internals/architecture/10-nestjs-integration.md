@@ -460,6 +460,33 @@ time by handler code Kavo never sees. It is therefore published as
 whether it is merely documentation or an enforced projection; the GraphQL
 binding has the same open question (doc 13 §"Out of scope").
 
+The `issue #264` fallback body/response schemas — synthesized at bind time
+for a route with no explicit DTO, from `metadata.fields` narrowed to the
+resolved `creatable`/`updatable` (bodies) or `selectable` (responses)
+allowlist — also emit a `required` array off column nullability: a
+non-`nullable` column is listed in `required`, a nullable column and an
+untyped computed field stay optional. A `generated` column is already
+excluded from a body (it isn't writable), so it never reaches the body's
+`required`; on the response side a non-`nullable` `generated` column (a
+primary key, a `@CreateDateColumn`) _is_ in `required`, because the row
+always carries it. `patchOne` is the deliberate exception: a partial
+update never requires a field, so its `<Entity>Patch` carries no
+`required` regardless of nullability. An empty `required` is omitted
+rather than emitted as `[]`.
+
+Two known over-statements, both narrowing documentation only — the schema
+stays open (no `additionalProperties: false`, matching `allowlists.md`'s
+"narrows silently"), so neither lies about what the route accepts or
+returns. `FieldMetadata` exposes no `hasDefault`, so a non-nullable column
+with a database `default:` is reported `required` in `<Entity>Create`
+even though the caller may omit it. And the response `required` describes
+the unprojected row; a `fields=`-narrowed read (ADR-0026) returns a
+subset, so a strict client validating that response against `<Entity>Item`
+would see "missing required" — expected, the same way `fields=` already
+diverges from the full schema's `properties`. The request side mirrors the
+explicit-DTO path, where `@nestjs/swagger` + class-validator derive
+`required` themselves.
+
 ### Named component schemas (`registerKavoSchemas`)
 
 Everything above emits schemas **inline** on the route — the only identity
