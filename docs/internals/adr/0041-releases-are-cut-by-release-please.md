@@ -29,31 +29,33 @@ release-please bumps all nine `package.json` versions together;
 `tests/release-workflow.spec.ts` asserts that list stays equal to
 `PACKAGE_DIRS`.
 
-`release-please-action` runs on every push to `main`
-(`.github/workflows/release-please.yml`) and keeps one release PR open with
-the pending bump and changelog. Merging that PR cuts the `vX.Y.Z` tag +
-GitHub Release, and `publish.yml` publishes that release to npm — both
-automatically.
+`release-please-action` runs from `.github/workflows/release-please.yml` on
+the default `GITHUB_TOKEN` — no PAT, no GitHub App. `GITHUB_TOKEN` is enough
+for release-please to open the release PR and to create the tag + GitHub
+Release; what it *cannot* do is make those events start another workflow run.
+GitHub suppresses workflow triggers from `GITHUB_TOKEN`-authored events to
+avoid recursion, and that suppression is why two hops need help:
 
-**That automation depends on a GitHub App token, not `GITHUB_TOKEN`.** GitHub
-suppresses workflow triggers from `GITHUB_TOKEN`-authored events to avoid
-recursion, so with the default token the release PR's merge fired nothing and
-the tag it created fired nothing — every release needed two manual
-`workflow_dispatch` kicks. `release-please.yml` therefore mints an
-installation token from a GitHub App (`actions/create-github-app-token`,
-secrets `RELEASE_PLEASE_APP_ID` / `RELEASE_PLEASE_APP_PRIVATE_KEY`) and passes
-it to `release-please-action` as `token:`. An App's pushes and releases _do_
-cascade, so:
+- **Merging the release PR triggers nothing.** The release PR branch is
+  `GITHUB_TOKEN`-authored, so its squash-merge fires neither `push` nor
+  `pull_request`. The workflow therefore also runs `on: schedule` (a cron
+  tick every 15 min, which is *not* suppressed); the first tick after the
+  merge is what cuts the tag. `on: push: main` still runs it too, so an
+  unrelated commit landing sooner cuts the tag sooner; `workflow_dispatch`
+  forces it immediately.
+- **The tag + Release trigger nothing.** Same suppression, so `publish.yml`'s
+  `release: published` / `push: tags` do not fire. `workflow_dispatch` is one
+  of the two events exempt from the suppression, so when
+  `release-please-action` reports `releases_created`, `release-please.yml`'s
+  next step runs `gh workflow run publish.yml --ref <tag>` (needs
+  `permissions: actions: write`). `publish.yml` then publishes to npm.
 
-- Merging the release PR fires `release-please.yml`'s `push` (the release
-  branch is App-authored) → the tag + GitHub Release are cut.
-- That Release fires `publish.yml`'s `release: published` → npm publish.
-
-A GitHub App was chosen over a PAT: it is repo-owned rather than tied to a
-person, its per-run token is short-lived, and it has no yearly expiry to
-renew. The App needs only **Contents: write** and **Pull requests: write** on
-this repo. The `workflow_dispatch` hatches on both workflows are kept as a
-fallback for when the token or a run fails.
+The alternative — a PAT or a GitHub App token as `token:` — makes both hops
+fire directly and drops the cron and the hand-off step, but a PAT has a
+yearly expiry to renew and an App is a standing piece of org infrastructure;
+the cron + dispatch chain keeps the whole release path inside the repo with
+nothing to maintain. The cost is up to one cron interval of latency between
+merging the release PR and the tag appearing.
 
 The release PR's title is `chore: release${component} v${version}`, which
 renders `chore: release v0.15.0` (see the empty `${component}` below), so the

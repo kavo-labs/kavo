@@ -1,45 +1,42 @@
 name: release-please
 
 on:
-  # Opens / updates the standing release PR as commits land on main, and —
-  # because the release PR branch is now authored by the GitHub App, not the
-  # default GITHUB_TOKEN — this same `push` fires on the release PR's own
-  # squash-merge, which is what cuts the tag + GitHub Release. A GITHUB_TOKEN
-  # push is suppressed to avoid recursion; an App push is not.
+  # Opens / updates the standing release PR as commits land on main.
   push:
     branches: [main]
-  # Belt-and-braces: the merge also arrives as a pull_request `closed` event.
-  pull_request:
-    types: [closed]
-  # Manual escape hatch: re-run to reconcile a release that never got cut
-  # (manifest ahead of tags).
+  # Cuts the tag once the release PR is merged. Merging release-please's own
+  # PR fires neither `push` nor `pull_request` — its branch is authored by the
+  # default GITHUB_TOKEN and GitHub suppresses those events to avoid recursion.
+  # A `schedule` tick is NOT suppressed, so it is what actually cuts the tag,
+  # within one cron interval of the merge.
+  schedule:
+    - cron: "*/15 * * * *"
+  # Manual escape hatch: reconcile a release immediately instead of waiting
+  # for the next tick.
   workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
+  actions: write # so the publish hand-off below can workflow_dispatch publish.yml
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    if: >-
-      github.event_name != 'pull_request' ||
-      (github.event.pull_request.merged == true &&
-       github.event.pull_request.head.ref == 'release-please--branches--main')
     steps:
-      # A GitHub App installation token, not a PAT: minted fresh per run
-      # (~1h lifetime), owned by the repo rather than a person, and — unlike
-      # GITHUB_TOKEN — its pushes/commits DO trigger downstream workflows, so
-      # merging the release PR auto-cuts the tag and that tag's Release
-      # auto-triggers publish.yml. Needs repo secrets RELEASE_PLEASE_APP_ID
-      # and RELEASE_PLEASE_APP_PRIVATE_KEY (see docs/internals/adr/0041-*).
-      - uses: actions/create-github-app-token@v2
-        id: app-token
-        with:
-          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # release-please cuts the tag + GitHub Release with GITHUB_TOKEN, which
+      # does NOT trigger publish.yml's `release: published` / `push: tags`.
+      # `workflow_dispatch` is one of the two events exempt from GITHUB_TOKEN
+      # suppression, so hand off to publish.yml explicitly against the new tag.
+      - name: Publish the new release to npm
+        if: ${{ steps.release.outputs.releases_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --ref "${{ steps.release.outputs.tag_name }}"

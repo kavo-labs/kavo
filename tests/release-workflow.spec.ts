@@ -811,21 +811,19 @@ describe("release-please workflow", () => {
     expect(wf).toContain("googleapis/release-please-action@v4");
   });
 
-  it("authenticates release-please with a GitHub App token, not GITHUB_TOKEN", () => {
-    // A GITHUB_TOKEN-authored push/release does not trigger downstream
-    // workflows, so merging the release PR (and the tag it creates) would fire
-    // nothing. An App installation token cascades, so both hops auto-run. See
-    // docs/internals/adr/0041-*.
-    expect(wf).toContain("actions/create-github-app-token@v2");
-    expect(wf).toContain("RELEASE_PLEASE_APP_ID");
-    expect(wf).toContain("RELEASE_PLEASE_APP_PRIVATE_KEY");
-    expect(wf).toMatch(/token:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  it("cuts the tag after a merge via a schedule tick (push/pull_request are GITHUB_TOKEN-suppressed)", () => {
+    // Merging release-please's own PR fires neither `push` nor `pull_request`
+    // (its branch is GITHUB_TOKEN-authored), so a cron `schedule` — which is
+    // NOT suppressed — is what actually cuts the tag. See ADR-0041.
+    expect(wf).toMatch(/schedule:\s*\n\s*-\s*cron:/);
   });
 
-  it("also handles the merge as a pull_request closed event", () => {
-    expect(wf).toMatch(/pull_request:\s*\n\s*types:\s*\[?\s*closed/);
-    expect(wf).toContain("github.event.pull_request.merged == true");
-    expect(wf).toContain("release-please--branches--main");
+  it("hands off to publish.yml when a release is cut (workflow_dispatch is not suppressed)", () => {
+    // release-please's GITHUB_TOKEN-cut tag/Release does not trigger
+    // publish.yml, so release-please.yml dispatches it explicitly.
+    expect(wf).toContain("actions: write");
+    expect(wf).toMatch(/releases_created['"]?\s*==\s*['"]true['"]/);
+    expect(wf).toMatch(/gh workflow run publish\.yml --ref .*tag_name/);
   });
 
   it("has a manual escape hatch to reconcile a release that never got cut", () => {
