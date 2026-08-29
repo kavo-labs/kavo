@@ -20,6 +20,7 @@ type Schema = {
   items?: Schema;
   "x-kavo-entity"?: string;
   "x-kavo-error"?: boolean;
+  "x-kavo-operation-scoped"?: boolean;
 };
 type Media = { schema?: Schema };
 type Operation = {
@@ -178,7 +179,7 @@ describe("registerKavoSchemas", () => {
                 "x-kavo-error": true,
                 "x-kavo-entity": "Ad",
                 allOf: [bareProblem],
-                description: "Each `errors[]` entry's `field` names one of: title, priority.",
+                description: "Request validation failed for the Ad entity (RFC 9457 problem details).",
               },
             },
           },
@@ -195,8 +196,131 @@ describe("registerKavoSchemas", () => {
     expect(validation).toBeDefined();
     expect(validation?.allOf).toEqual([{ $ref: "#/components/schemas/KavoProblemDetails" }]);
     expect(validation?.["x-kavo-entity"]).toBe("Ad");
-    expect(validation?.description).toContain("title");
+    expect(validation?.description).toContain("Ad");
     expect(schemasOf(doc).KavoProblemDetails).toBeDefined();
+  });
+
+  it("names a per-operation-scoped response for its operation, keeping the root Item/List names free", () => {
+    const rootItem: Schema = {
+      title: "AdItemDto",
+      type: "object",
+      properties: { id: { type: "string" } },
+      "x-kavo-entity": "Ad",
+    };
+    const opItem: Schema = {
+      title: "AdSummaryDto",
+      "x-kavo-operation-scoped": true,
+      type: "object",
+      properties: { id: { type: "string" }, label: { type: "string" } },
+      "x-kavo-entity": "Ad",
+    };
+    const doc: Doc = {
+      paths: {
+        "/ads/{id}": {
+          get: {
+            "x-kavo-entity": "Ad",
+            "x-kavo-operation": "findOne",
+            "x-kavo-cardinality": "one",
+            responses: { "200": { content: { [json]: { schema: rootItem } } } },
+          },
+          put: {
+            "x-kavo-entity": "Ad",
+            "x-kavo-operation": "updateOne",
+            "x-kavo-cardinality": "one",
+            responses: { "200": { content: { [json]: { schema: opItem } } } },
+          },
+        },
+      },
+    };
+
+    registerKavoSchemas(doc);
+
+    expect(resSchema(doc, "/ads/{id}", "get", "200")).toEqual({ $ref: "#/components/schemas/AdItem" });
+    expect(resSchema(doc, "/ads/{id}", "put", "200")).toEqual({ $ref: "#/components/schemas/AdUpdateOne" });
+    // No positional _2, and the internal marker does not survive into the component.
+    expect(schemasOf(doc).AdItem_2).toBeUndefined();
+    expect(schemasOf(doc).AdUpdateOne?.["x-kavo-operation-scoped"]).toBeUndefined();
+    expect(Object.keys(schemasOf(doc).AdUpdateOne?.properties ?? {})).toEqual(["id", "label"]);
+  });
+
+  it("namespaces components by entity across a multi-entity document, suffixing a genuine cross-entity clash", () => {
+    const itemFor = (entity: string, props: Record<string, Schema>): { get: Operation } => ({
+      get: {
+        "x-kavo-entity": entity,
+        "x-kavo-operation": "findOne",
+        "x-kavo-cardinality": "one",
+        responses: {
+          "200": {
+            content: {
+              [json]: {
+                schema: { title: `${entity}ItemDto`, type: "object", properties: props, "x-kavo-entity": entity },
+              },
+            },
+          },
+        },
+      },
+    });
+    const doc: Doc = {
+      paths: {
+        "/todos/{id}": itemFor("Todo", { id: { type: "string" }, title: { type: "string" } }),
+        "/books/{id}": itemFor("Book", { id: { type: "string" }, isbn: { type: "string" } }),
+        // An entity whose name collides with Todo's list-element component.
+        "/todo-list-items/{id}": itemFor("TodoListItem", { id: { type: "string" }, done: { type: "boolean" } }),
+      },
+    };
+
+    registerKavoSchemas(doc);
+
+    expect(resSchema(doc, "/todos/{id}", "get", "200")).toEqual({ $ref: "#/components/schemas/TodoItem" });
+    expect(resSchema(doc, "/books/{id}", "get", "200")).toEqual({ $ref: "#/components/schemas/BookItem" });
+    expect(Object.keys(schemasOf(doc).TodoItem?.properties ?? {})).toEqual(["id", "title"]);
+    expect(Object.keys(schemasOf(doc).BookItem?.properties ?? {})).toEqual(["id", "isbn"]);
+    // `TodoListItem` (the entity) wants `TodoListItemItem` — distinct from
+    // `Todo`'s hypothetical `TodoListItem`, so no clash here; assert the
+    // per-entity prefix actually keeps them apart.
+    expect(schemasOf(doc).TodoListItemItem).toBeDefined();
+    expect(Object.keys(schemasOf(doc).TodoListItemItem?.properties ?? {})).toEqual(["id", "done"]);
+  });
+
+  it("suffixes a real same-name/different-shape clash through _2 and _3", () => {
+    const route = (path: string, op: string, props: Record<string, Schema>): Record<string, Operation> => ({
+      get: {
+        "x-kavo-entity": "Ad",
+        "x-kavo-operation": op,
+        "x-kavo-cardinality": "one",
+        responses: {
+          "200": {
+            content: {
+              [json]: {
+                schema: {
+                  title: op,
+                  "x-kavo-operation-scoped": true,
+                  type: "object",
+                  properties: props,
+                  "x-kavo-entity": "Ad",
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    // Three operations all PascalCase to `Sync` is impossible, so force the
+    // clash by pre-seeding the bare + `_2` names with unrelated shapes.
+    const doc: Doc = {
+      components: {
+        schemas: {
+          AdSync: { type: "object", properties: { a: { type: "number" } } },
+          AdSync_2: { type: "object", properties: { b: { type: "number" } } },
+        },
+      },
+      paths: { "/ads/sync": route("/ads/sync", "sync", { c: { type: "string" } }) },
+    };
+
+    registerKavoSchemas(doc);
+
+    expect(resSchema(doc, "/ads/sync", "get", "200")).toEqual({ $ref: "#/components/schemas/AdSync_3" });
+    expect(Object.keys(schemasOf(doc).AdSync_3?.properties ?? {})).toEqual(["c"]);
   });
 
   it("collapses identical schemas onto one component and suffixes genuine collisions deterministically", () => {

@@ -2780,6 +2780,7 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     items?: Schema;
     "x-kavo-entity"?: string;
     "x-kavo-error"?: boolean;
+    "x-kavo-operation-scoped"?: boolean;
   };
   type Doc = {
     components?: { schemas?: Record<string, Schema> };
@@ -2838,15 +2839,17 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     expect(schemas().TodoListMeta?.["x-kavo-entity"]).toBe("Todo");
   });
 
-  it("hoists every error response to the shared KavoProblemDetails family", () => {
-    for (const [path, verb, status] of [
-      ["/todos", "post", "400"],
-      ["/todos/{id}", "get", "404"],
-      ["/todos/{id}", "put", "412"],
-      ["/todos/{id}", "patch", "412"],
+  it("points every non-400 error response at the shared KavoProblemDetails, and every 400 at TodoValidationError", () => {
+    for (const [path, verb, status, name] of [
+      ["/todos", "post", "400", "TodoValidationError"],
+      ["/todos/{id}", "put", "400", "TodoValidationError"],
+      ["/todos/{id}", "patch", "400", "TodoValidationError"],
+      ["/todos", "get", "400", "TodoValidationError"],
+      ["/todos/{id}", "get", "404", "KavoProblemDetails"],
+      ["/todos/{id}", "put", "412", "KavoProblemDetails"],
+      ["/todos/{id}", "patch", "412", "KavoProblemDetails"],
     ] as const) {
-      const ref = resSchema(path, verb, status)?.$ref ?? "";
-      expect(ref).toMatch(/#\/components\/schemas\/(KavoProblemDetails|TodoValidationError)$/);
+      expect(resSchema(path, verb, status)).toEqual({ $ref: `#/components/schemas/${name}` });
     }
     expect(schemas().KavoProblemDetails?.["x-kavo-error"]).toBe(true);
     expect(schemas().KavoProblemDetails?.properties?.errors?.items).toEqual({
@@ -2855,13 +2858,45 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     expect(schemas().KavoProblemDetailError?.["x-kavo-error"]).toBe(true);
   });
 
-  it("narrows the write route's 400 to <Entity>ValidationError as an allOf over KavoProblemDetails", () => {
-    expect(resSchema("/todos", "post", "400")).toEqual({ $ref: "#/components/schemas/TodoValidationError" });
+  it("retags the 400 as <Entity>ValidationError — an allOf over KavoProblemDetails, no field enumeration", () => {
     const validation = schemas().TodoValidationError;
     expect(validation?.["x-kavo-entity"]).toBe("Todo");
     expect(validation?.allOf).toEqual([{ $ref: "#/components/schemas/KavoProblemDetails" }]);
-    // A description, not an enum — nested paths stay legal.
-    expect(validation?.description).toContain("title");
+    // Deliberately generic: enumerating the resolved write/query allowlist
+    // here would disagree with the request-body schema on the same route
+    // (an explicit DTO replaces the allowlist) and leak column names.
+    expect(validation?.description).toContain("Todo");
+    expect(validation?.description).not.toContain("title");
+  });
+
+  it("names a per-operation output DTO for its operation, not the shared TodoItem", async () => {
+    class SpotlightDto {
+      id = 0;
+      headline = "";
+    }
+    @Kavo(Todo, {
+      dto: { item: TodoItemDto },
+      operations: { findOne: true, createOne: { dto: { output: SpotlightDto } } },
+    })
+    @Controller("todos")
+    class PerOpController {}
+    await app.close();
+    await bootstrap(PerOpController);
+    const doc = registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+    const s = doc.components?.schemas ?? {};
+    // createOne serves its own output shape → its own component.
+    expect(doc.paths["/todos"]?.["post"]?.responses?.["201"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/TodoCreateOne",
+    });
+    expect(Object.keys(s.TodoCreateOne?.properties ?? {})).toEqual(["id", "headline"]);
+    // findOne still serves the root item slot → the shared name, undisturbed.
+    expect(doc.paths["/todos/{id}"]?.["get"]?.responses?.["200"]?.content?.["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/TodoItem",
+    });
+    expect(s.TodoItem_2).toBeUndefined();
+    expect(s.TodoCreateOne?.["x-kavo-operation-scoped"]).toBeUndefined();
   });
 
   it("leaves a declarative DTO on Swagger's own $ref — no empty named component", async () => {

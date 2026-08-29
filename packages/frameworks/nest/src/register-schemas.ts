@@ -21,13 +21,15 @@
  * | `<Entity>Create`        | `createOne` request body                          |
  * | `<Entity>Update`        | `updateOne` request body                          |
  * | `<Entity>Patch`         | `patchOne` request body                           |
- * | `<Entity>Item`          | single-row success response                       |
- * | `<Entity>List`          | list-envelope success response                    |
+ * | `<Entity>Item`          | single-row success response (root `item` slot)    |
+ * | `<Entity>List`          | list-envelope success response (root `list` slot) |
  * | `<Entity>ListItem`      | the envelope's `items[]` element                  |
  * | `<Entity>ListMeta`      | the envelope's `meta` bag                         |
+ * | `<Entity><Operation>`   | a per-operation `dto.output` (issue #131) or a custom op's own output shape — single-row |
+ * | `<Entity><Operation>List` | the same, `many` — plus `…ListItem` / `…ListMeta` |
  * | `KavoProblemDetails`    | shared RFC 9457 error body (400/404/409/412)      |
  * | `KavoProblemDetailError`| one entry of that body's `errors[]` array         |
- * | `<Entity>ValidationError`| the entity-scoped `400` (`allOf` over the above) |
+ * | `<Entity>ValidationError`| the entity-scoped `400` — an `allOf` over `KavoProblemDetails` with no field enumeration (see `applyValidationErrorDoc`) |
  *
  * Only inline schemas Kavo actually constructed are moved: the filter is
  * "carries `x-kavo-entity` or `x-kavo-error`". A schema that is already a
@@ -36,13 +38,26 @@
  * own component), so a decorated/declarative DTO keeps the name Swagger gave
  * it and this helper does not double it up.
  *
- * **Name collisions.** When two structurally different schemas want the same
- * name (e.g. entity `Ad`'s list element and an entity literally named
- * `AdListItem`), the first wins the bare name and later ones get `_2`, `_3`,
- * … Iteration follows `document.paths` insertion order, which Nest builds
- * deterministically, so the assignment is stable across runs. Structurally
- * identical schemas (the common case — five routes serving `<Entity>Item`)
- * collapse onto one component.
+ * **Response naming is operation-aware.** A single-row / `many` success
+ * response whose shape is the entity's *root* `item` / `list` slot takes the
+ * shared `<Entity>Item` / `<Entity>List` name, so the standard operations
+ * that serve the same shape collapse onto one component. A response flagged
+ * `x-kavo-operation-scoped` (by `successBodyFor`, when `descriptor.output`
+ * is set — a per-operation override or a custom operation's own
+ * `dto.output`) is named `<Entity><Operation>` instead, so a genuinely
+ * different shape gets a meaningful stable name rather than racing the root
+ * one for `<Entity>Item` and losing to a positional `_2`.
+ *
+ * **Name collisions.** After that, a still-genuine clash — two structurally
+ * different schemas under one name (e.g. entity `Ad`'s list element and an
+ * entity literally named `AdListItem`) — resolves first-wins, then `_2`,
+ * `_3`, … in `document.paths` order. That order is stable within one build
+ * but shifts if entities are added or `controllers: [...]` is reordered, so
+ * a `_2` in the output is a prompt to disambiguate with an explicit DTO
+ * class, not a name to depend on. Structurally identical schemas requested
+ * under the same name (five routes serving `<Entity>Item`) collapse onto one
+ * component; the same shape under two names (`<Entity>Update` /
+ * `<Entity>Patch` when no `dto.patch` is set) is emitted under both.
  *
  * The helper mutates and returns the document, so it composes inline:
  *
@@ -156,20 +171,33 @@ function hoistResponses(registry: SchemaRegistry, operation: OperationObject, en
       continue;
     }
 
+    // A per-operation output shape — an `item`/`list` override (issue #131)
+    // or a custom operation's own `dto.output`, flagged
+    // `x-kavo-operation-scoped` by `successBodyFor` — is named for its
+    // operation (`<Entity><Operation>`) so it never competes with the
+    // entity's root `item`/`list` component and lose to a positional `_2`.
+    const opName = pascalCase(String(operation["x-kavo-operation"] ?? ""));
+    const scoped = schema["x-kavo-operation-scoped"] === true && opName !== "";
+
     if (isMany) {
       const items = schema.properties?.items;
       if (items?.items !== undefined && isHoistable(items.items)) {
-        items.items = registry.register(items.items, `${entity}ListItem`);
+        items.items = registry.register(items.items, scoped ? `${entity}${opName}ListItem` : `${entity}ListItem`);
       }
       const meta = schema.properties?.meta;
       if (meta !== undefined && isHoistable(meta)) {
-        schema.properties!.meta = registry.register(meta, `${entity}ListMeta`);
+        schema.properties!.meta = registry.register(meta, scoped ? `${entity}${opName}ListMeta` : `${entity}ListMeta`);
       }
-      media.schema = registry.register(schema, `${entity}List`);
+      media.schema = registry.register(schema, scoped ? `${entity}${opName}List` : `${entity}List`);
     } else {
-      media.schema = registry.register(schema, `${entity}Item`);
+      media.schema = registry.register(schema, scoped ? `${entity}${opName}` : `${entity}Item`);
     }
   }
+}
+
+/** Capitalise the first character of a camelCase operation id. */
+function pascalCase(id: string): string {
+  return id.length === 0 ? id : id.charAt(0).toUpperCase() + id.slice(1);
 }
 
 /**
@@ -222,10 +250,13 @@ class SchemaRegistry {
    * Store `schema` under `preferredName` (or a `_N`-suffixed variant on a
    * genuine collision) and return the `$ref` that should replace it. The
    * stored copy drops `title` — the component key supersedes it, and keeping
-   * it would leave the un-`$ref`'d name visible twice.
+   * it would leave the un-`$ref`'d name visible twice — and the internal
+   * `x-kavo-operation-scoped` plumbing marker, which has done its job once
+   * the name is chosen (the `x-kavo-entity` / `x-kavo-error` links back to
+   * Kavo are kept, per #294).
    */
   register(schema: SchemaObject, preferredName: string): SchemaObject {
-    const stored = stripTitle(clone(schema));
+    const stored = stripInternal(clone(schema));
     const json = stableStringify(stored);
 
     let name = preferredName;
@@ -245,8 +276,9 @@ class SchemaRegistry {
   }
 }
 
-function stripTitle(schema: SchemaObject): SchemaObject {
+function stripInternal(schema: SchemaObject): SchemaObject {
   delete schema.title;
+  delete schema["x-kavo-operation-scoped"];
   return schema;
 }
 

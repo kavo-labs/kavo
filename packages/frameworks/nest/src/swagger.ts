@@ -593,61 +593,38 @@ export function applyPaginationDocs(
 }
 
 /**
- * Narrows the always-present `400` response (applied by `applySwaggerMetadata`
- * at decoration time with the bare `PROBLEM_DETAILS_SCHEMA`) to an
- * entity-scoped variant that names, in a `description`, which fields a
- * validation error's `errors[]` entries can reference. `registerKavoSchemas`
- * hoists it to `<Entity>ValidationError` (an `allOf` over `KavoProblemDetails`),
- * keyed off the `x-kavo-entity` marker this adds.
+ * Retags the always-present `400` response (applied by `applySwaggerMetadata`
+ * at decoration time with the bare `PROBLEM_DETAILS_SCHEMA`) as an
+ * entity-scoped variant, so `registerKavoSchemas` can hoist it to
+ * `<Entity>ValidationError` — an `allOf` over `KavoProblemDetails` — instead
+ * of collapsing every entity's `400` onto the one shared component. The only
+ * thing entity-specific it can add is the `x-kavo-entity` marker and a
+ * name-scoping `description`; it deliberately does **not** enumerate the
+ * fields a validation error may reference:
  *
- * Deferred to bind time for the reason ADR-0012 gives the other functions in
- * this file: the allowlists it reads (`creatable`/`updatable` for writes, the
- * union of `filterable`/`sortable`/`selectable` for a list) are only fully
- * resolved once `KavoBinder.onModuleInit` has entity metadata. An app with no
- * `KavoModule.forRoot`/`forRootAsync` never reaches this, so its `400`s keep
- * the bare shape and hoist to `KavoProblemDetails` instead — the same
+ * - an `enum` on `errors[].field` would be a lie — a validation error can
+ *   name a nested relation path (`owner.name`) or a non-column key, the same
+ *   reason `applyBodySchemaDocs` refuses `additionalProperties: false`; and
+ * - a `description` listing the resolved write/query allowlist would disagree
+ *   with the request-body schema on the very same route, which is projected
+ *   through the resolved `create`/`update` DTO when one is registered
+ *   (`DefaultDeserializer`: an explicit DTO *replaces* the allowlist,
+ *   ADR-0026's precedent) — publishing the wider allowlist would disclose
+ *   internal column names the DTO boundary exists to hide.
+ *
+ * Deferred to bind time only so it rides the same `KavoBinder.onModuleInit`
+ * pass as the other retag functions here; an app with no
+ * `KavoModule.forRoot`/`forRootAsync` never reaches it, so its `400`s keep
+ * the bare shape and hoist to `KavoProblemDetails` — the same
  * graceful-degradation the sibling deferred functions accept.
- *
- * A `description`, not an `enum` on `errors[].field`: a validation error can
- * name a nested relation path (`owner.name`) or a non-column key, so a closed
- * enum would tell a client a body Kavo legitimately emits is invalid — the
- * same reason `applyBodySchemaDocs` refuses `additionalProperties: false`.
  */
 const alreadyValidationErrorDocumented = new WeakSet<object>();
-
-export function validationErrorFieldsFor(
-  descriptor: OperationDescriptor<object>,
-  allowlists: {
-    readonly creatable: readonly string[];
-    readonly updatable: readonly string[];
-    readonly filterable: readonly string[];
-    readonly sortable: readonly string[];
-    readonly selectable: readonly string[];
-  },
-): readonly string[] | null {
-  switch (descriptor.id) {
-    case "createOne":
-      return allowlists.creatable;
-    case "updateOne":
-    case "patchOne":
-      return allowlists.updatable;
-    default:
-      if (descriptor.kind === "read" && descriptor.cardinality === "many") {
-        return [...new Set([...allowlists.filterable, ...allowlists.sortable, ...allowlists.selectable])].sort();
-      }
-      return null;
-  }
-}
 
 export function applyValidationErrorDoc(
   prototype: Record<string, unknown>,
   methodName: string,
   entityName: string,
-  fields: readonly string[] | null,
 ): void {
-  if (fields === null) {
-    return;
-  }
   const swagger = loadSwagger();
   if (swagger === null) {
     return;
@@ -672,9 +649,8 @@ export function applyValidationErrorDoc(
       "x-kavo-entity": entityName,
       allOf: [PROBLEM_DETAILS_SCHEMA],
       description:
-        fields.length === 0
-          ? "Validation errors reference no field of this entity."
-          : `Each \`errors[]\` entry's \`field\` names one of: ${fields.join(", ")}.`,
+        `Request validation failed for the ${entityName} entity (RFC 9457 problem details). ` +
+        "Each `errors[]` entry identifies the offending field.",
     },
   })(prototype, methodName, propertyDescriptor);
 }
@@ -856,10 +832,20 @@ function successBodyFor(
   // would advertise a shape no response actually has.
   const resolve = (slot: "item" | "list"): ClassRef =>
     (descriptor.output as ClassRef | null) ?? (dtoResolver.resolve(slot, descriptor.id) as ClassRef | null) ?? entity;
+  // A per-operation `descriptor.output` override (issue #131) or a custom
+  // operation's own `dto.output` produces a shape that is *not* the entity's
+  // root `item`/`list` slot, so `registerKavoSchemas` must name its
+  // component per operation (`<Entity><Operation>`) rather than fold it onto
+  // the shared `<Entity>Item`/`<Entity>List` and hand the loser a
+  // positional `_2`. This marker is that signal; it rides the same
+  // `withKavoEntity` stamp #294 already applies.
+  const operationScoped = descriptor.output !== null;
   if (descriptor.cardinality === "many") {
     // `list` falls back to `item` inside the resolver.
     const listDto = resolve("list");
-    return { schema: listEnvelopeSchema(schemaFromDto(listDto, entity.name), listDto.name, entity.name) };
+    return {
+      schema: listEnvelopeSchema(schemaFromDto(listDto, entity.name), listDto.name, entity.name, operationScoped),
+    };
   }
   // Restore reuses the `item` slot — no dedicated restore shape — and so
   // does every custom single-row operation that registers no `dto.output`.
@@ -867,7 +853,12 @@ function successBodyFor(
   const schema = schemaFromDto(itemDto, entity.name);
   return schema === null
     ? { type: itemDto }
-    : { schema: withKavoEntity({ title: itemDto.name, ...schema }, entity.name) };
+    : {
+        schema: withKavoEntity(
+          { title: itemDto.name, ...(operationScoped ? { "x-kavo-operation-scoped": true } : {}), ...schema },
+          entity.name,
+        ),
+      };
 }
 
 /**
@@ -890,10 +881,12 @@ function listEnvelopeSchema(
   element: { type: "object"; properties: Record<string, object> } | null,
   title: string,
   entityName: string,
+  operationScoped = false,
 ): object {
   return withKavoEntity(
     {
       title: `${title}List`,
+      ...(operationScoped ? { "x-kavo-operation-scoped": true } : {}),
       type: "object",
       required: ["items", "limit", "offset", "total"],
       properties: {
