@@ -30,27 +30,30 @@ release-please bumps all nine `package.json` versions together;
 `PACKAGE_DIRS`.
 
 `release-please-action` runs on every push to `main`
-(`.github/workflows/release-please.yml`, default `GITHUB_TOKEN`) and keeps one
-release PR open with the pending bump and changelog. Merging that PR lets the
-next run cut the `vX.Y.Z` tag + GitHub Release, and `publish.yml` publishes
-that release to npm.
+(`.github/workflows/release-please.yml`) and keeps one release PR open with
+the pending bump and changelog. Merging that PR cuts the `vX.Y.Z` tag +
+GitHub Release, and `publish.yml` publishes that release to npm — both
+automatically.
 
-**Two hops in that chain do not fire on their own, because a
-`GITHUB_TOKEN`-authored event never cascades into another workflow:**
+**That automation depends on a GitHub App token, not `GITHUB_TOKEN`.** GitHub
+suppresses workflow triggers from `GITHUB_TOKEN`-authored events to avoid
+recursion, so with the default token the release PR's merge fired nothing and
+the tag it created fired nothing — every release needed two manual
+`workflow_dispatch` kicks. `release-please.yml` therefore mints an
+installation token from a GitHub App (`actions/create-github-app-token`,
+secrets `RELEASE_PLEASE_APP_ID` / `RELEASE_PLEASE_APP_PRIVATE_KEY`) and passes
+it to `release-please-action` as `token:`. An App's pushes and releases *do*
+cascade, so:
 
-- Merging the release PR fires neither `release-please.yml`'s `push` nor its
-  `pull_request: closed` — the PR branch was pushed by `GITHUB_TOKEN`. Re-run
-  `release-please.yml` via `workflow_dispatch` after merging (or wait for the
-  next unrelated push to `main`) to cut the tag.
-- The tag + Release that release-please then creates fire neither
-  `publish.yml`'s `push: tags` nor its `release: published`, for the same
-  reason. Re-run `publish.yml` via `workflow_dispatch` against the tag
-  (`gh workflow run publish.yml --ref vX.Y.Z`) to publish to npm.
+- Merging the release PR fires `release-please.yml`'s `push` (the release
+  branch is App-authored) → the tag + GitHub Release are cut.
+- That Release fires `publish.yml`'s `release: published` → npm publish.
 
-Both `workflow_dispatch` hatches exist for this. The permanent fix is to give
-`release-please-action` a PAT or GitHub App token as `token:` so its refs are
-authored by a real identity and both hops fire automatically; that is a
-deliberate open decision, not yet taken (issue TBD).
+A GitHub App was chosen over a PAT: it is repo-owned rather than tied to a
+person, its per-run token is short-lived, and it has no yearly expiry to
+renew. The App needs only **Contents: write** and **Pull requests: write** on
+this repo. The `workflow_dispatch` hatches on both workflows are kept as a
+fallback for when the token or a run fails.
 
 The release PR's title is `chore: release${component} v${version}`, which
 renders `chore: release v0.15.0` (see the empty `${component}` below), so the

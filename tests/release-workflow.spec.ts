@@ -811,10 +811,18 @@ describe("release-please workflow", () => {
     expect(wf).toContain("googleapis/release-please-action@v4");
   });
 
-  it("also cuts the release when the release PR is merged (push is suppressed for GITHUB_TOKEN commits)", () => {
-    // Merging release-please's own PR does not fire `on: push` — its commits
-    // are authored by github-actions[bot] via the default GITHUB_TOKEN. The
-    // `pull_request: closed` event fires on the human merge instead.
+  it("authenticates release-please with a GitHub App token, not GITHUB_TOKEN", () => {
+    // A GITHUB_TOKEN-authored push/release does not trigger downstream
+    // workflows, so merging the release PR (and the tag it creates) would fire
+    // nothing. An App installation token cascades, so both hops auto-run. See
+    // docs/internals/adr/0041-*.
+    expect(wf).toContain("actions/create-github-app-token@v2");
+    expect(wf).toContain("RELEASE_PLEASE_APP_ID");
+    expect(wf).toContain("RELEASE_PLEASE_APP_PRIVATE_KEY");
+    expect(wf).toMatch(/token:\s*\$\{\{\s*steps\.app-token\.outputs\.token\s*\}\}/);
+  });
+
+  it("also handles the merge as a pull_request closed event", () => {
     expect(wf).toMatch(/pull_request:\s*\n\s*types:\s*\[?\s*closed/);
     expect(wf).toContain("github.event.pull_request.merged == true");
     expect(wf).toContain("release-please--branches--main");

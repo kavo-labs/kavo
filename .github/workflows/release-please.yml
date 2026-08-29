@@ -1,14 +1,14 @@
 name: release-please
 
 on:
-  # Opens / updates the standing release PR as feature commits land on main.
+  # Opens / updates the standing release PR as commits land on main, and —
+  # because the release PR branch is now authored by the GitHub App, not the
+  # default GITHUB_TOKEN — this same `push` fires on the release PR's own
+  # squash-merge, which is what cuts the tag + GitHub Release. A GITHUB_TOKEN
+  # push is suppressed to avoid recursion; an App push is not.
   push:
     branches: [main]
-  # Cuts the tag + GitHub Release once the release PR is merged. A separate
-  # trigger because merging the release PR does NOT fire `on: push` — its
-  # commits are authored by github-actions[bot] via the default GITHUB_TOKEN,
-  # and GitHub suppresses push workflows for those to avoid recursion. The
-  # `pull_request` event fires on the human merge instead, so no PAT is needed.
+  # Belt-and-braces: the merge also arrives as a pull_request `closed` event.
   pull_request:
     types: [closed]
   # Manual escape hatch: re-run to reconcile a release that never got cut
@@ -27,7 +27,19 @@ jobs:
       (github.event.pull_request.merged == true &&
        github.event.pull_request.head.ref == 'release-please--branches--main')
     steps:
+      # A GitHub App installation token, not a PAT: minted fresh per run
+      # (~1h lifetime), owned by the repo rather than a person, and — unlike
+      # GITHUB_TOKEN — its pushes/commits DO trigger downstream workflows, so
+      # merging the release PR auto-cuts the tag and that tag's Release
+      # auto-triggers publish.yml. Needs repo secrets RELEASE_PLEASE_APP_ID
+      # and RELEASE_PLEASE_APP_PRIVATE_KEY (see docs/internals/adr/0041-*).
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.RELEASE_PLEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLEASE_APP_PRIVATE_KEY }}
       - uses: googleapis/release-please-action@v4
         with:
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
