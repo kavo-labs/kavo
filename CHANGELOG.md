@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.15.0](https://github.com/kavo-labs/kavo/compare/v0.14.7...v0.15.0) (2026-08-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** `query.search.enabled` is removed. Set `query.search` to an object (`{}` for the defaults) to turn search on, or `false` to disable it.
+
+### Features
+
+* **core:** reshape query.search to SearchSettings | false ([6b91896](https://github.com/kavo-labs/kavo/commit/6b918968385e4c0f5e8483e57dce91846d14cae6))
+
+
+### Documentation
+
+* document query.search as an object-or-false setting ([7c46be7](https://github.com/kavo-labs/kavo/commit/7c46be7fa70b0db92e4a201cb334a6d2c11d99cd))
+
+
+### CI
+
+* cut releases without a PAT and credit release-please[bot] ([#300](https://github.com/kavo-labs/kavo/issues/300)) ([1970608](https://github.com/kavo-labs/kavo/commit/19706082201f6c420888ebf699f2ed015b12377a))
+* cut the release without a PAT when the release PR merges ([#299](https://github.com/kavo-labs/kavo/issues/299)) ([071202e](https://github.com/kavo-labs/kavo/commit/071202ee9b8de977203e56d927be3a070441217f))
+
 ## [0.14.7](https://github.com/kavo-labs/kavo/compare/v0.14.6...v0.14.7) (2026-08-29)
 
 ### Features
