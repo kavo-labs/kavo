@@ -3141,9 +3141,9 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
       new DocumentBuilder().setTitle("t").setVersion("0").build(),
     ) as unknown as Doc;
 
-    // The list route carries all three slots.
+    // The list route carries all five slots.
     const listBlob = raw.paths["/todos"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
-    expect(Object.keys(listBlob ?? {}).sort()).toEqual(["include", "pagination", "sort"]);
+    expect(Object.keys(listBlob ?? {}).sort()).toEqual(["filter", "include", "pagination", "query", "sort"]);
     expect(listBlob?.sort?.items?.enum).toEqual(["title", "-title"]);
 
     // A single-row read carries `include` only — `pagination`/`sort` are
@@ -3151,5 +3151,133 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
     const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
     expect(Object.keys(itemBlob ?? {})).toEqual(["include"]);
     expect(itemBlob?.include?.items?.enum).toEqual(["list"]);
+  });
+});
+
+describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #314, ADR-0042)", () => {
+  type OperatorMap = {
+    type?: string;
+    properties?: Record<string, { type?: string; format?: string }>;
+  };
+  type Schema = {
+    type?: string;
+    description?: string;
+    properties?: Record<string, unknown>;
+    items?: { $ref?: string; type?: string; enum?: string[] };
+    "x-kavo-entity"?: string;
+    $ref?: string;
+  };
+  type Doc = {
+    components?: { schemas?: Record<string, Schema> };
+    paths: Record<string, Record<string, { "x-kavo-query-schemas"?: unknown }>>;
+  };
+
+  const build = (): Doc =>
+    registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+  const schemas = (doc: Doc): Record<string, Schema> => doc.components?.schemas ?? {};
+
+  it("produces <Entity>Filter with one operator map per filterable own column, and <Entity>Query referencing its siblings", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title"] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    const filter = schemas(doc).TodoFilter;
+    expect(filter?.["x-kavo-entity"]).toBe("Todo");
+    // Unconfigured `filterable` resolves to every own column, mirroring
+    // `sortable`'s own default (soft-delete marker included).
+    expect(Object.keys(filter?.properties ?? {}).sort()).toEqual([
+      "and",
+      "deletedAt",
+      "done",
+      "id",
+      "not",
+      "or",
+      "priority",
+      "title",
+    ]);
+
+    const idOps = filter?.properties?.id as OperatorMap;
+    expect(idOps.properties?.eq).toEqual({ type: "number" });
+    expect(idOps.properties?.between).toBeDefined();
+    // like/ilike are string-kind only (doc 05 §1's one kind-specific rule).
+    expect(idOps.properties?.like).toBeUndefined();
+
+    const titleOps = filter?.properties?.title as OperatorMap;
+    expect(titleOps.properties?.like).toEqual({ type: "string" });
+    expect(titleOps.properties?.ilike).toEqual({ type: "string" });
+
+    const doneOps = filter?.properties?.done as OperatorMap;
+    expect(doneOps.properties?.eq).toEqual({ type: "boolean" });
+    expect(doneOps.properties?.like).toBeUndefined();
+
+    // and/or/not self-reference the entity's own expected Filter name.
+    const filterRef = { $ref: "#/components/schemas/TodoFilter" };
+    expect((filter?.properties?.and as { items?: unknown })?.items).toEqual(filterRef);
+    expect((filter?.properties?.or as { items?: unknown })?.items).toEqual(filterRef);
+    expect(filter?.properties?.not).toEqual(filterRef);
+
+    const query = schemas(doc).TodoQuery;
+    expect(query?.["x-kavo-entity"]).toBe("Todo");
+    expect(query?.properties?.filter).toEqual(filterRef);
+    expect(query?.properties?.sort).toEqual({ $ref: "#/components/schemas/TodoSort" });
+    expect(query?.properties?.pagination).toEqual({ $ref: "#/components/schemas/TodoPagination" });
+    expect(query?.properties?.include).toEqual({ $ref: "#/components/schemas/TodoInclude" });
+    // `search` isn't a component of its own — inlined only.
+    const fields = query?.properties?.fields as { items?: { enum?: string[] } };
+    expect(fields.items?.enum).toEqual(["id", "title", "done", "priority", "deletedAt"]);
+    // `query.search` resolves `false` by default — no `search` property.
+    expect(query?.properties?.search).toBeUndefined();
+  });
+
+  it("documents an explicit empty filterable allowlist as a closed door", async () => {
+    @Kavo(Todo, { allowlists: { filterable: [] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoFilter?.properties).toEqual({
+      and: { type: "array", items: { $ref: "#/components/schemas/TodoFilter" } },
+      or: { type: "array", items: { $ref: "#/components/schemas/TodoFilter" } },
+      not: { $ref: "#/components/schemas/TodoFilter" },
+    });
+    expect(schemas(doc).TodoFilter?.description).toBe("No field is filterable.");
+  });
+
+  it("inlines a search property on <Entity>Query only when query.search resolves to an object", async () => {
+    @Kavo(Todo, { query: { search: { mode: "words" } }, allowlists: { searchable: ["title"] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    const search = schemas(doc).TodoQuery?.properties?.search as {
+      type?: string;
+      properties?: Record<string, { type?: string; enum?: string[] }>;
+    };
+    expect(search.type).toBe("object");
+    expect(search.properties?.query).toEqual({ type: "string" });
+    expect(search.properties?.mode).toEqual({ type: "string", enum: ["substring", "words"] });
+    expect(search.properties?.fields).toEqual({ type: "array", items: { type: "string", enum: ["title"] } });
+  });
+
+  it("omits <Entity>Filter/<Entity>Query from a single-row read — both are list-only", async () => {
+    @Kavo(Todo, {
+      operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
+    })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const raw = SwaggerModule.createDocument(app, new DocumentBuilder().build()) as unknown as Doc;
+    const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, unknown> | undefined;
+    expect(itemBlob).toBeUndefined();
   });
 });
