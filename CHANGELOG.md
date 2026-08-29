@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.2](https://github.com/kavo-labs/kavo/compare/v0.15.1...v0.15.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* **nest:** include computed fields in the synthesized Swagger response schema ([#306](https://github.com/kavo-labs/kavo/issues/306)) ([d5095c0](https://github.com/kavo-labs/kavo/commit/d5095c0bdf513c146ce9f18e82f6adf14e0d894d))
+
+
+### CI
+
+* pass --repo to the publish.yml hand-off ([0d41ea0](https://github.com/kavo-labs/kavo/commit/0d41ea0532d93682f90887a9c2ea28402bdbc517))
+
 ## [0.15.1](https://github.com/kavo-labs/kavo/compare/v0.15.0...v0.15.1) (2026-08-29)
 
 ### Documentation
