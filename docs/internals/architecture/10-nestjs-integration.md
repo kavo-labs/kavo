@@ -471,50 +471,64 @@ the finished document — the same "the app splices this in" shape as
 lifts the inline schemas Kavo built into `components.schemas`, leaving a
 `$ref`:
 
-| Component                     | Source                                              |
-| ----------------------------- | --------------------------------------------------- |
-| `<Entity>Create/Update/Patch` | the `createOne`/`updateOne`/`patchOne` request body |
-| `<Entity>Item`                | a single-row (`"one"`) success response             |
-| `<Entity>List`                | a `"many"` success response (the envelope)          |
-| `<Entity>ListItem`            | that envelope's `items[]` element                   |
-| `<Entity>ListMeta`            | that envelope's `meta` bag                          |
-| `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)          |
-| `KavoProblemDetailError`      | one entry of its `errors[]` array                   |
-| `<Entity>ValidationError`     | the entity-scoped `400`                             |
+| Component                     | Source                                                       |
+| ----------------------------- | ------------------------------------------------------------ |
+| `<Entity>Create/Update/Patch` | the `createOne`/`updateOne`/`patchOne` request body          |
+| `<Entity>Item`                | a single-row success serving the root `item` slot            |
+| `<Entity>List`                | a `"many"` success serving the root `list` slot              |
+| `<Entity>ListItem`            | that envelope's `items[]` element                            |
+| `<Entity>ListMeta`            | that envelope's `meta` bag                                   |
+| `<Entity><Operation>`         | a single-row success with its own `dto.output`               |
+| `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside) |
+| `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)                   |
+| `KavoProblemDetailError`      | one entry of its `errors[]` array                            |
+| `<Entity>ValidationError`     | the entity-scoped `400`                                      |
 
-Names are derived entirely from the `x-kavo-*` extensions already on the
-document (#294) plus position — no new marker. The filter for hoisting is
-"the inline schema carries `x-kavo-entity` or `x-kavo-error`"; a schema
-that is already a `$ref` (the `{ type: DtoClass }` introspection path,
-where `@nestjs/swagger` names its own component) is left untouched, so that
-path is a no-op here rather than a special case. `title` is dropped as a
-schema is hoisted — the component key supersedes it — which keeps the
-un-processed document byte-identical for an app that never calls the
+Names come from the `x-kavo-*` extensions already on the document (#294)
+plus position, plus one new internal marker: `successBodyFor` stamps
+`x-kavo-operation-scoped` on a success schema when `descriptor.output` is
+set (a per-operation override, issue #131, or a custom operation's own
+`dto.output`), and `registerKavoSchemas` names those `<Entity><Operation>`
+so a genuinely different shape does not race the root `<Entity>Item` /
+`<Entity>List` name and lose to a positional `_2`. That marker is stripped
+as the schema is hoisted (along with `title` — the component key supersedes
+it); the `x-kavo-entity` / `x-kavo-error` links back to Kavo are kept. The
+filter for hoisting is "the inline schema carries `x-kavo-entity` or
+`x-kavo-error`"; a schema already a `$ref` (the `{ type: DtoClass }`
+introspection path, where `@nestjs/swagger` names its own component) is left
+untouched, so that path is a no-op here rather than a special case, and the
+un-processed document stays byte-identical for an app that never calls the
 helper.
 
-`<Entity>ValidationError` is the one shape not present at decoration time.
+`<Entity>ValidationError` retags the always-present `400`.
 `applySwaggerMetadata` applies a bare `400` (the inline `PROBLEM_DETAILS_SCHEMA`)
 on every route; `KavoBinder.onModuleInit` then re-applies it via
 `applyValidationErrorDoc` as an `allOf` over that same shape, tagged
-`x-kavo-entity`, whose `description` names the fields a validation error's
-`errors[]` can reference — `creatable` for `createOne`, `updatable` for
-`updateOne`/`patchOne`, the union of `filterable`/`sortable`/`selectable`
-for a list. A `description`, not an `enum` on `errors[].field`: a
-validation error can name a nested relation path (`owner.name`) or a
-non-column key, so a closed enum would reject a body Kavo legitimately
-emits — the same reason `applyBodySchemaDocs` refuses
-`additionalProperties: false`. An app with no
-`KavoModule.forRoot`/`forRootAsync` never reaches that pass, so its `400`s
-stay bare and hoist to `KavoProblemDetails`.
+`x-kavo-entity`, so each entity gets its own named `400` component instead
+of every route collapsing onto the shared `KavoProblemDetails`. It does
+**not** enumerate the fields a validation error may reference: an `enum` on
+`errors[].field` would be a lie (a validation error can name a nested path
+`owner.name` or a non-column key, the same reason `applyBodySchemaDocs`
+refuses `additionalProperties: false`), and a `description` listing the
+resolved write/query allowlist would both disagree with the request-body
+schema on the same route — projected through the resolved `create`/`update`
+DTO, which _replaces_ the allowlist (`DefaultDeserializer`, ADR-0026's
+precedent) — and disclose internal column names the DTO boundary exists to
+hide. An app with no `KavoModule.forRoot`/`forRootAsync` never reaches that
+pass, so its `400`s stay bare and hoist to `KavoProblemDetails`.
 
 Dedup is by name **and** shape: a schema requested under a name already
 holding a byte-identical shape (five routes serving `<Entity>Item`) reuses
 that component; a genuinely different shape wanting a taken name gets `_2`,
-`_3`, … in `document.paths` order, which Nest builds deterministically. The
-same shape requested under _different_ names is emitted under each —
-`<Entity>Update` / `<Entity>Patch` are identical when no `dto.patch` is
-configured, `<Entity>Item` / `<Entity>ListItem` when `list` falls back to
-`item` — so every slot keeps its own stable name.
+`_3`, … in `document.paths` order. That order is deterministic within one
+build but shifts when an entity is added or `controllers: [...]` is
+reordered, so a `_2` in the output is a prompt to disambiguate with an
+explicit DTO class, not a name to rely on — and after the operation-aware
+naming above a real clash needs two entities whose names collide
+(`AdListItem` the entity vs `Ad`'s list element). The same shape requested
+under _different_ names is emitted under each — `<Entity>Update` /
+`<Entity>Patch` are identical when no `dto.patch` is configured — so every
+slot keeps its own stable name.
 
 Each hoisted schema is cloned first: `applySwaggerMetadata` hands out the
 module-level `PROBLEM_DETAILS_SCHEMA` by reference on every error response,
