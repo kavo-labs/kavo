@@ -768,20 +768,19 @@ describe("release-please config", () => {
 
   it("titles the release PR with the version so the squash commit carries it", () => {
     // The pattern is bidirectional: release-please writes the PR title with it
-    // AND parses the merged title back through it to recover ${component} +
-    // ${version} when cutting the release. The configured component is "kavo"
-    // (from the root package.json name, via release-type "node") and cannot be
-    // emptied from config, so ${component} must stay in the pattern and the
-    // rendered title must literally contain "kavo". Dropping it fails release
-    // cutting with "Expected 1 releases, only found 0" (see ADR-0041).
-    expect(config["pull-request-title-pattern"]).toBe("chore: release ${component} v${version}");
+    // AND parses the merged title back through it to recover ${version} when
+    // cutting the release, so ${component} has to stay in the pattern even
+    // though it renders empty here. Dropping it fails release cutting with
+    // "Expected 1 releases, only found 0" (see ADR-0041).
+    expect(config["pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
     // separate-pull-requests:false makes this a grouped PR, whose title comes
     // from group-pull-request-title-pattern (default: "chore: release ${branch}").
-    expect(config["group-pull-request-title-pattern"]).toBe("chore: release ${component} v${version}");
-    // The rendered ${component} is the root package.json name; if that is
-    // renamed, the pattern's literal "kavo" expectation above must move with it.
-    const rootPkg = JSON.parse(readFileSync(resolve(REPO_ROOT, "package.json"), "utf8"));
-    expect(rootPkg.name).toBe("kavo");
+    expect(config["group-pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
+    // package-name MUST be "" (empty string), not absent: it short-circuits the
+    // branch-component lookup before release-please reads the root package.json
+    // name, so createReleases' component check is "" === "" instead of
+    // "" !== "kavo" and the tag actually gets cut (see ADR-0041).
+    expect(config.packages["."]["package-name"]).toBe("");
   });
 });
 

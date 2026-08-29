@@ -37,28 +37,32 @@ GitHub Release. `publish.yml` runs on `release: published` — a tag pushed by
 `GITHUB_TOKEN` does not fire `on: push: tags`, but the Release does. The
 `push: tags: v*.*.*` trigger is kept as a manual escape hatch.
 
-The release PR's title is `chore: release ${component} v${version}` — which
-renders `chore: release kavo v0.16.0` — so the squash-merge commit on `main`
-reads `chore: release kavo vX.Y.Z (#NNN)`. The `kavo` in the title is
-load-bearing, not decoration:
+The release PR's title is `chore: release${component} v${version}`, which
+renders `chore: release v0.15.0` (see the empty `${component}` below), so the
+squash-merge commit on `main` reads `chore: release vX.Y.Z (#NNN)`. Three
+config details are load-bearing, and they were all found the hard way:
 
-- The pattern is **bidirectional**. release-please writes the PR title with
-  it and, when the merged PR is what triggers the release, parses the title
-  back through it to recover `${component}` and `${version}`. If the parsed
-  component does not equal the configured component, release-please logs
-  `PR component: … does not match configured component: kavo`, finds zero
-  releases, and never cuts the tag (`Expected 1 releases, only found 0`).
-- The configured component is **`kavo`, taken from the root `package.json`
-  `name` field** by the `node` release type. It cannot be emptied from
-  config: removing `package-name` just moves the lookup to `package.json`,
-  which still says `kavo`. So the title pattern must carry `${component}`
-  and the rendered title must literally contain `kavo`. Dropping
-  `${component}` to get a cleaner `chore: release v${version}` is what
-  breaks release cutting — do not "simplify" it out.
+- **`package-name` is set to `""`** on the `.` package. This is the one that
+  makes `createReleases` work. When a merged release PR is what triggers the
+  release, release-please's node strategy computes a "branch component" and
+  compares it to the component parsed from the head branch name
+  (`release-please--branches--main`, which has none → empty). The branch
+  component resolves via `this.packageName ?? <read package.json name>`; an
+  **absent** `package-name` falls through to the root `package.json` `name`
+  (`kavo`), so the comparison is `"" !== "kavo"` and release-please bails with
+  `PR component: undefined does not match configured component: kavo` →
+  `Expected 1 releases, only found 0` → no tag. An **empty-string**
+  `package-name` is non-nullish, short-circuits the `??` before
+  `package.json` is read, and the comparison becomes `"" === ""`. Do not
+  remove this key or give it a real value.
+- **`${component}` stays in both title patterns.** The pattern is
+  bidirectional — release-please parses the merged PR title back through it
+  to recover `${version}`. With `package-name: ""` the component renders
+  empty, so `chore: release${component} v${version}` → `chore: release
+  v0.15.0`; the token still has to be present for the parse to line up.
 - With `separate-pull-requests: false` the repo produces a single **grouped**
   PR, so `group-pull-request-title-pattern` (default `chore: release ${branch}`
-  → `chore: release main`) also has to be set to the same value; both keys
-  are set explicitly.
+  → `chore: release main`) also has to be set to the same value.
 
 The nine package versions are bumped through `extra-files`, independent of
 all of the above.
