@@ -3006,22 +3006,65 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
 
     expect(schemas(doc).TodoInclude).toBeUndefined();
     expect(schemas(doc).TodoPagination).toBeDefined();
-    // Unconfigured `sortable` resolves to the entity's own columns — the
-    // same fully-resolved allowlist `applySearchQueryDocs` publishes for
-    // `searchable`. Pinned here so a change to that default set is a
-    // visible diff rather than a silent one.
-    const sortEnum = schemas(doc).TodoSort?.items?.enum ?? [];
-    expect(sortEnum).toContain("title");
-    expect(sortEnum).toContain("-priority");
-    expect(sortEnum).toEqual(
-      expect.arrayContaining(["id", "title", "done", "priority", "-id", "-title", "-done", "-priority"]),
-    );
-    // `<Entity>Sort` mirrors the *resolved* `allowlists.sortable` verbatim —
-    // whatever the flat `sort` param would accept, including the soft-delete
-    // column when the entity's config leaves it in. It never widens or
-    // narrows that set, the same contract `applySearchQueryDocs` keeps for
-    // `searchable`.
-    expect(sortEnum).toContain("deletedAt");
+    // Unconfigured `sortable` resolves to every own column — the same
+    // fully-resolved allowlist `applySearchQueryDocs` publishes for
+    // `searchable`, and the same set the fallback `item`/`list` response
+    // schema documents ("documents every own column when selectable is left
+    // unconfigured" elsewhere in this file). `<Entity>Sort` mirrors it
+    // verbatim (soft-delete column included) with the `-` descending forms
+    // appended — pinned exactly so a change to that default set is a visible
+    // diff, never a silent one.
+    expect(schemas(doc).TodoSort?.items?.enum).toEqual([
+      "id",
+      "title",
+      "done",
+      "priority",
+      "deletedAt",
+      "-id",
+      "-title",
+      "-done",
+      "-priority",
+      "-deletedAt",
+    ]);
+  });
+
+  it("emits no Pagination/Sort when the entity has no list route, but still Include on the single-row read", async () => {
+    // `operations` is an explicit whitelist once declared — naming everything
+    // except `findMany` keeps `findOne` (a single-row read) with no list
+    // route. `pagination`/`sort` are list-only, so only `<Entity>Include`
+    // survives.
+    @Kavo(Todo, {
+      operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
+      allowlists: { includable: ["list"] },
+    })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoInclude?.items?.enum).toEqual(["list"]);
+    expect(schemas(doc).TodoPagination).toBeUndefined();
+    expect(schemas(doc).TodoSort).toBeUndefined();
+  });
+
+  it("stamps no extension at all when a non-list read has nothing includable", async () => {
+    // Same no-list-route shape, but `includable` unconfigured — every slot
+    // is empty, so `applyQuerySchemaDocs` hits its empty-slots early return.
+    @Kavo(Todo, {
+      operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
+    })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const raw = SwaggerModule.createDocument(app, new DocumentBuilder().build()) as unknown as Doc;
+    const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"];
+    expect(itemBlob).toBeUndefined();
+    const doc = build();
+    expect(schemas(doc).TodoInclude).toBeUndefined();
+    expect(schemas(doc).TodoPagination).toBeUndefined();
+    expect(schemas(doc).TodoSort).toBeUndefined();
   });
 
   it("annotates <Entity>Pagination as unsupported under pagination.strategy: 'none'", async () => {
@@ -3087,8 +3130,8 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
     expect(schemas(doc).TodoListInclude).toBeUndefined();
   });
 
-  it("leaves the raw blob on the route when registerKavoSchemas is not run", async () => {
-    @Kavo(Todo, { allowlists: { sortable: ["title"] } })
+  it("leaves the raw blob on the route when registerKavoSchemas is not run, split by route cardinality", async () => {
+    @Kavo(Todo, { allowlists: { sortable: ["title"], includable: ["list"] } })
     @Controller("todos")
     class C {}
 
@@ -3097,7 +3140,16 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
       app,
       new DocumentBuilder().setTitle("t").setVersion("0").build(),
     ) as unknown as Doc;
-    const blob = raw.paths["/todos"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
-    expect(blob?.sort?.items?.enum).toEqual(["title", "-title"]);
+
+    // The list route carries all three slots.
+    const listBlob = raw.paths["/todos"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
+    expect(Object.keys(listBlob ?? {}).sort()).toEqual(["include", "pagination", "sort"]);
+    expect(listBlob?.sort?.items?.enum).toEqual(["title", "-title"]);
+
+    // A single-row read carries `include` only — `pagination`/`sort` are
+    // list-only (`descriptor.cardinality === "many"`).
+    const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
+    expect(Object.keys(itemBlob ?? {})).toEqual(["include"]);
+    expect(itemBlob?.include?.items?.enum).toEqual(["list"]);
   });
 });

@@ -469,6 +469,41 @@ describe("registerKavoSchemas", () => {
       expect(doc.paths["/ads"]?.get?.["x-kavo-query-schemas"]).toBeUndefined();
     });
 
+    it("splits <Entity>Pagination into _2 when two list routes resolve different pagination.strategy", () => {
+      // `applyQuerySchemaDocs` takes `pagination.strategy` from
+      // `settingsFor(descriptor.id)` — per-operation — so an entity with a
+      // custom list op configured `strategy: "none"` alongside a paginating
+      // `findMany` emits two structurally different `pagination` blobs. The
+      // second loses the name race and takes `_2`; the unpaginated one keeps
+      // its description.
+      const paginating: Record<string, Schema> = {
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          "x-kavo-entity": "Ad",
+        },
+      };
+      const unpaginated: Record<string, Schema> = {
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          description: "Not supported: this entity does not paginate ('pagination.strategy' is 'none').",
+          "x-kavo-entity": "Ad",
+        },
+      };
+      const doc: Doc = {
+        paths: {
+          "/ads": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": paginating } },
+          "/ads/archived": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": unpaginated } },
+        },
+      };
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdPagination?.description).toBeUndefined();
+      expect(schemasOf(doc).AdPagination_2?.description).toContain("does not paginate");
+    });
+
     it("collapses the identical blob repeated across an entity's read routes onto one component", () => {
       const blob: Record<string, Schema> = {
         include: { type: "array", items: { type: "string", enum: ["owner"] }, "x-kavo-entity": "Ad" },

@@ -640,6 +640,12 @@ export function applyPaginationDocs(
  *   "no field is sortable" description — the closed-door reading
  *   `allowedFieldsDescription` gives an explicit empty selector.
  *
+ * `pagination` and `sort` are emitted even when unusable (an unpaginated
+ * entity, an empty `sortable`) because their flat params are always present
+ * on a list route; `include` is *omitted* when nothing is includable
+ * because its flat param is too (ADR-0028). The asymmetry mirrors the flat
+ * surface rather than being an oversight.
+ *
  * `pagination`/`sort` ride list routes only (`cardinality: "many"`);
  * `include` rides every read route. Every enabled read route is stamped;
  * `registerKavoSchemas` collapses structurally-identical repeats onto one
@@ -698,14 +704,25 @@ export function applyQuerySchemaDocs(
   }
 
   if (isList) {
+    const unpaginated = resolved.strategy === "none";
     slots.pagination = withKavoEntity(
       {
         type: "object",
+        // Under `strategy: "none"` the object-level description says the
+        // entity doesn't paginate, so the per-property blurbs are dropped
+        // rather than left to contradict it (`applyPaginationDocs` makes the
+        // same choice for the flat `limit`/`offset` params).
         properties: {
-          limit: { type: "integer", description: "Page size, clamped to the configured maximum." },
-          offset: { type: "integer", description: "Zero-based index of the first returned row." },
+          limit: {
+            type: "integer",
+            ...(unpaginated ? {} : { description: "Page size, clamped to the configured maximum." }),
+          },
+          offset: {
+            type: "integer",
+            ...(unpaginated ? {} : { description: "Zero-based index of the first returned row." }),
+          },
         },
-        ...(resolved.strategy === "none" ? { description: UNPAGINATED_DESCRIPTION } : {}),
+        ...(unpaginated ? { description: UNPAGINATED_DESCRIPTION } : {}),
       },
       entityName,
     );
