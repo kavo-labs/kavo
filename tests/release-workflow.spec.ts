@@ -768,6 +768,9 @@ describe("release-please config", () => {
 
   it("titles the release PR with the version so the squash commit carries it", () => {
     expect(config["pull-request-title-pattern"]).toBe("chore: release v${version}");
+    // separate-pull-requests:false makes this a grouped PR, whose title comes
+    // from group-pull-request-title-pattern (default: "chore: release ${branch}").
+    expect(config["group-pull-request-title-pattern"]).toBe("chore: release v${version}");
   });
 });
 

@@ -4,6 +4,7 @@
   "include-component-in-tag": false,
   "separate-pull-requests": false,
   "pull-request-title-pattern": "chore: release v${version}",
+  "group-pull-request-title-pattern": "chore: release v${version}",
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
