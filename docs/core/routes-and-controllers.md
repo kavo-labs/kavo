@@ -115,7 +115,9 @@ import { registerKavoSchemas } from "@kavo/nest";
 SwaggerModule.setup("docs", app, registerKavoSchemas(SwaggerModule.createDocument(app, config)));
 ```
 
-For an entity `Ad` you get `AdCreate` / `AdUpdate` / `AdPatch` (request bodies), `AdItem` (single-row response), `AdList` with its `items[]` element `AdListItem` and its `meta` bag `AdListMeta`, the shared `KavoProblemDetails` / `KavoProblemDetailError` error bodies, and `AdValidationError` (the entity-scoped `400`, an `allOf` over `KavoProblemDetails`). Each component keeps its `x-kavo-entity` / `x-kavo-error` extension.
+The `nest-typeorm` example wires exactly this in its `src/main.ts`.
+
+For an entity `Ad` you get `AdCreate` / `AdUpdate` / `AdPatch` (request bodies), `AdItem` (single-row response), `AdList` with its `items[]` element `AdListItem` and its `meta` bag `AdListMeta`, the shared `KavoProblemDetails` / `KavoProblemDetailError` error bodies, and `AdValidationError` (the entity-scoped `400`, an `allOf` over `KavoProblemDetails`). Each component keeps its `x-kavo-entity` / `x-kavo-error` extension. This holds for an entity with no `dto` block at all — the schemas synthesized from its columns (see [DTOs](/core/dtos)) are hoisted the same way.
 
 Response naming is operation-aware. The standard operations that serve the entity's root `item` / `list` shape all collapse onto `AdItem` / `AdList`. An operation with its own `dto.output` — a per-operation override or a [custom operation](/core/custom-operations) — serves a different shape and gets its own `Ad<Operation>` component (`AdArchiveOne`, …) rather than racing the root name.
 
