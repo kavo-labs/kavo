@@ -1,6 +1,6 @@
 {
   "name": "@kavo/prisma",
-  "version": "0.15.0",
+  "version": "0.15.1",
   "description": "Kavo Prisma adapter — implements @kavo/core's RepositoryAdapter over Prisma Client.",
   "license": "Apache-2.0",
   "engines": {
