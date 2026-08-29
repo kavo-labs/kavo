@@ -37,6 +37,10 @@ GitHub Release. `publish.yml` runs on `release: published` — a tag pushed by
 `GITHUB_TOKEN` does not fire `on: push: tags`, but the Release does. The
 `push: tags: v*.*.*` trigger is kept as a manual escape hatch.
 
+The release PR's title is `chore: release v${version}`
+(`pull-request-title-pattern`), so the squash-merge commit on `main` reads
+`chore: release vX.Y.Z (#NNN)`.
+
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking
 change on `0.x` at a minor bump rather than `1.0.0`, and
 `bump-patch-for-minor-pre-major` makes a plain `feat:` a **patch** bump. The

@@ -765,6 +765,10 @@ describe("release-please config", () => {
       expect(KNOWN.has(section.type), `unknown changelog type: ${section.type}`).toBe(true);
     }
   });
+
+  it("titles the release PR with the version so the squash commit carries it", () => {
+    expect(config["pull-request-title-pattern"]).toBe("chore: release v${version}");
+  });
 });
 
 describe("release-please workflow", () => {
