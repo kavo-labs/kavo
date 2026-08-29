@@ -391,8 +391,9 @@ an operation, or a generated DTO schema, back to the Kavo entity/operation
 it came from. Every inline schema this module builds — `schemaFromDto`
 request/response bodies, a list envelope's element, the `issue #264`
 fallback body/response schemas, and each `oneOf` variant (schema hints,
-below) — carries the same `x-kavo-entity` (`withKavoEntity`). The one
-exception is the `{ type: DtoClass }` fallback path, where
+below) — carries the same `x-kavo-entity` (`withKavoEntity`), and the
+problem-details body plus its `errors[]` entry carry an `x-kavo-error`
+marker. The one exception is the `{ type: DtoClass }` fallback path, where
 `@nestjs/swagger`'s own introspection builds the schema instead of this
 module: there is no inline schema object to stamp. `operationId`'s value
 and format are unchanged.
@@ -459,14 +460,77 @@ time by handler code Kavo never sees. It is therefore published as
 whether it is merely documentation or an enforced projection; the GraphQL
 binding has the same open question (doc 13 §"Out of scope").
 
+### Named component schemas (`registerKavoSchemas`)
+
+Everything above emits schemas **inline** on the route — the only identity
+available at decoration or bind time is a `title` string, which a client
+generator names anonymously. `registerKavoSchemas` (`register-schemas.ts`,
+exported from the barrel, ADR-0010) is an app-invoked post-processor over
+the finished document — the same "the app splices this in" shape as
+`KAVO_API_GUIDE` — that walks every operation carrying `x-kavo-entity` and
+lifts the inline schemas Kavo built into `components.schemas`, leaving a
+`$ref`:
+
+| Component                     | Source                                              |
+| ----------------------------- | --------------------------------------------------- |
+| `<Entity>Create/Update/Patch` | the `createOne`/`updateOne`/`patchOne` request body |
+| `<Entity>Item`                | a single-row (`"one"`) success response             |
+| `<Entity>List`                | a `"many"` success response (the envelope)          |
+| `<Entity>ListItem`            | that envelope's `items[]` element                   |
+| `<Entity>ListMeta`            | that envelope's `meta` bag                          |
+| `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)          |
+| `KavoProblemDetailError`      | one entry of its `errors[]` array                   |
+| `<Entity>ValidationError`     | the entity-scoped `400`                             |
+
+Names are derived entirely from the `x-kavo-*` extensions already on the
+document (#294) plus position — no new marker. The filter for hoisting is
+"the inline schema carries `x-kavo-entity` or `x-kavo-error`"; a schema
+that is already a `$ref` (the `{ type: DtoClass }` introspection path,
+where `@nestjs/swagger` names its own component) is left untouched, so that
+path is a no-op here rather than a special case. `title` is dropped as a
+schema is hoisted — the component key supersedes it — which keeps the
+un-processed document byte-identical for an app that never calls the
+helper.
+
+`<Entity>ValidationError` is the one shape not present at decoration time.
+`applySwaggerMetadata` applies a bare `400` (the inline `PROBLEM_DETAILS_SCHEMA`)
+on every route; `KavoBinder.onModuleInit` then re-applies it via
+`applyValidationErrorDoc` as an `allOf` over that same shape, tagged
+`x-kavo-entity`, whose `description` names the fields a validation error's
+`errors[]` can reference — `creatable` for `createOne`, `updatable` for
+`updateOne`/`patchOne`, the union of `filterable`/`sortable`/`selectable`
+for a list. A `description`, not an `enum` on `errors[].field`: a
+validation error can name a nested relation path (`owner.name`) or a
+non-column key, so a closed enum would reject a body Kavo legitimately
+emits — the same reason `applyBodySchemaDocs` refuses
+`additionalProperties: false`. An app with no
+`KavoModule.forRoot`/`forRootAsync` never reaches that pass, so its `400`s
+stay bare and hoist to `KavoProblemDetails`.
+
+Dedup is by name **and** shape: a schema requested under a name already
+holding a byte-identical shape (five routes serving `<Entity>Item`) reuses
+that component; a genuinely different shape wanting a taken name gets `_2`,
+`_3`, … in `document.paths` order, which Nest builds deterministically. The
+same shape requested under _different_ names is emitted under each —
+`<Entity>Update` / `<Entity>Patch` are identical when no `dto.patch` is
+configured, `<Entity>Item` / `<Entity>ListItem` when `list` falls back to
+`item` — so every slot keeps its own stable name.
+
+Each hoisted schema is cloned first: `applySwaggerMetadata` hands out the
+module-level `PROBLEM_DETAILS_SCHEMA` by reference on every error response,
+so mutating in place would let one `createDocument` call's hoist bleed into
+the next one's.
+
 ## 5. Testing
 
 `tests/binding.e2e.spec.ts` runs a real Nest app over an in-memory fake
 infrastructure (no ORM in this package): all six routes, envelope shape,
 grammar wiring, problem-details mapping, disabled operations,
 manual-method-wins, custom + service-only operations, the service token,
-the soft-delete routes, relation includes, and the
-Swagger body/hint schemas. The full-stack paths are the reference apps'
+the soft-delete routes, relation includes, and the Swagger body/hint
+schemas; `register-schemas.spec.ts` covers the `registerKavoSchemas`
+transform in isolation (collision suffixing, idempotency, the `$ref`
+skip). The full-stack paths are the reference apps'
 suites: Nest → engine → TypeORM → SQLite/Postgres in
 `examples/nest-typeorm`, Nest → engine → Mongoose → MongoDB in
 `examples/nest-mongoose`, and Nest → engine → MikroORM → SQLite/Postgres in

@@ -104,3 +104,17 @@ export class AppModule {}
 When `@nestjs/swagger` is installed, every generated route — standard, custom, and `@Override`d alike — carries an `operationId` (`Book_findOne`), a `tags: ["Book"]` entry, and `x-kavo-entity`/`x-kavo-operation` vendor extensions on the operation object. Every inline DTO schema Kavo builds for a request or response body carries the same `x-kavo-entity`, so a generated OpenAPI document lets tooling recover which Kavo entity/operation an operation or schema came from without parsing `operationId`.
 
 A client generator that splits output by `tags` — [Orval](https://orval.dev) and `openapi-generator` both do — will produce one module per entity out of the box; point it at the app's `/docs-json` (or wherever `SwaggerModule.setup` serves the document) with no extra configuration.
+
+### Named component schemas
+
+By default those DTO schemas are emitted **inline** on each route, so a generator names them anonymously. Wrap the built document in `registerKavoSchemas` (exported from `@kavo/nest`) to hoist every shape Kavo generated into `components.schemas` under a stable, entity-prefixed name and leave a `$ref` behind:
+
+```ts
+import { registerKavoSchemas } from "@kavo/nest";
+
+SwaggerModule.setup("docs", app, registerKavoSchemas(SwaggerModule.createDocument(app, config)));
+```
+
+For an entity `Ad` you get `AdCreate` / `AdUpdate` / `AdPatch` (request bodies), `AdItem` (single-row response), `AdList` with its `items[]` element `AdListItem` and its `meta` bag `AdListMeta`, the shared `KavoProblemDetails` / `KavoProblemDetailError` error bodies, and `AdValidationError` (the entity-scoped `400`, an `allOf` over `KavoProblemDetails` whose `description` names the fields a validation error can reference). Each component keeps its `x-kavo-entity` / `x-kavo-error` extension.
+
+The helper is opt-in and purely additive — it imports nothing from `@nestjs/swagger`, and a schema that is already a `$ref` (a `@ApiProperty`-decorated or declared-only DTO class, where `@nestjs/swagger` builds and names the schema itself) is left exactly as it is. When two structurally different schemas want the **same** name, the first wins it and the next gets `AdItem_2`, `AdItem_3`, … in document order. The same shape requested under two names — `AdUpdate` and `AdPatch` are byte-identical when no `dto.patch` is set, as are `AdItem` and `AdListItem` when `list` falls back to `item` — is emitted under both, so every slot keeps a stable name.
