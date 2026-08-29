@@ -772,12 +772,15 @@ describe("release-please config", () => {
     // ${version} when cutting the release. Drop ${component} and the parser
     // reads component as undefined, fails to match the configured component,
     // and aborts with "Expected 1 releases, only found 0" (see ADR-0041).
-    // ${component} renders empty here because the root package sets component "".
+    // ${component} renders empty because the root package has no component.
     expect(config["pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
     // separate-pull-requests:false makes this a grouped PR, whose title comes
     // from group-pull-request-title-pattern (default: "chore: release ${branch}").
     expect(config["group-pull-request-title-pattern"]).toBe("chore: release${component} v${version}");
-    expect(config.packages["."].component).toBe("");
+    // No package-name / component on the root package, so the configured
+    // component is undefined and round-trips against the parsed undefined.
+    expect(config.packages["."]["package-name"]).toBeUndefined();
+    expect(config.packages["."].component).toBeUndefined();
   });
 });
 

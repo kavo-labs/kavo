@@ -9,8 +9,6 @@
   "bump-patch-for-minor-pre-major": true,
   "packages": {
     ".": {
-      "package-name": "kavo",
-      "component": "",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },

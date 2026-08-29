@@ -54,10 +54,14 @@ config details have to line up for that:
   `Expected 1 releases, only found 0` and aborts without cutting the tag.
   `${component}` must stay in the pattern even though this repo has only one
   package — do not "simplify" it out.
-- The root package sets `component: ""`, so `${component}` renders empty on
+- The root package sets **neither `package-name` nor `component`**, so the
+  configured component is `undefined`. `${component}` then renders empty on
   the write side (`chore: release v0.15.0`, not `chore: release kavo v0.15.0`)
-  and the parse side compares empty-to-empty. `package-name: "kavo"` stays
-  for changelog/npm references; `component` is what the title pattern round-trips.
+  and the parse side compares `undefined` to `undefined`. Adding
+  `package-name: "kavo"` back makes the configured component `kavo`, which no
+  longer matches the empty component parsed from the title — release-please
+  aborts with `Expected 1 releases, only found 0`. The nine package versions
+  are bumped through `extra-files`, not `package-name`, so nothing needs it.
 
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking
 change on `0.x` at a minor bump rather than `1.0.0`, and
