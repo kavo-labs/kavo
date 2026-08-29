@@ -212,6 +212,7 @@ export function applySwaggerMetadata(
   // otherwise have to reverse-engineer it from that string.
   apply(swagger.ApiExtension("x-kavo-entity", entity.name));
   apply(swagger.ApiExtension("x-kavo-operation", descriptor.id));
+  apply(swagger.ApiExtension("x-kavo-cardinality", descriptor.cardinality));
 
   if (route.hasIdParam) {
     apply(swagger.ApiParam({ name: "id", required: true }));

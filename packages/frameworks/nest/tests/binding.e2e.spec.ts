@@ -776,6 +776,7 @@ describe("@Kavo custom operations (issue #145)", () => {
           tags?: string[];
           "x-kavo-entity"?: string;
           "x-kavo-operation"?: string;
+          "x-kavo-cardinality"?: string;
           responses?: Record<string, { content?: Record<string, { schema?: object }> }>;
         };
       }
@@ -787,6 +788,7 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(operation?.tags).toEqual(["Todo"]);
     expect(operation?.["x-kavo-entity"]).toBe("Todo");
     expect(operation?.["x-kavo-operation"]).toBe("publishOne");
+    expect(operation?.["x-kavo-cardinality"]).toBe("one");
     // The response schema follows `dto.output`, the same class the engine
     // actually serializes through, and carries the same x-kavo-entity link.
     expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
@@ -1090,6 +1092,7 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
           tags?: string[];
           "x-kavo-entity"?: string;
           "x-kavo-operation"?: string;
+          "x-kavo-cardinality"?: string;
           parameters?: { name: string; in: string }[];
           responses?: Record<string, unknown>;
         }
@@ -1105,6 +1108,7 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
     expect(getItem?.tags).toEqual(["Todo"]);
     expect(getItem?.["x-kavo-entity"]).toBe("Todo");
     expect(getItem?.["x-kavo-operation"]).toBe("findOne");
+    expect(getItem?.["x-kavo-cardinality"]).toBe("one");
   });
 
   it("leaves plain manual-method-wins (no @Override) exactly as before", async () => {
