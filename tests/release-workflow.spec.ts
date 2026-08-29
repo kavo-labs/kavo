@@ -394,6 +394,16 @@ describe("optional protocol peers", () => {
 });
 
 describe("publish.yml wiring", () => {
+  it("triggers on a published GitHub Release (release-please creates it with GITHUB_TOKEN)", () => {
+    // A tag pushed by GITHUB_TOKEN does not fire `on: push: tags`; the
+    // Release event does. See docs/internals/adr/0041-*.
+    expect(workflow).toMatch(/release:\s*\n\s*types:\s*\[\s*published\s*\]/);
+  });
+
+  it("still triggers on a manually pushed vX.Y.Z tag as an escape hatch", () => {
+    expect(workflow).toMatch(/push:\s*\n\s*tags:\s*\n\s*-\s*"v\*\.\*\.\*"/);
+  });
+
   it("declares a non-empty PACKAGE_DIRS list of directories that exist", () => {
     expect(packageDirs.length).toBeGreaterThan(0);
     for (const dir of packageDirs) {
