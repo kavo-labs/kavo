@@ -1,6 +1,6 @@
 # Release automation with release-please
 
-**Status:** design approved (2026-08-29)
+**Status:** implemented (2026-08-29) — see the plan at `docs/superpowers/plans/2026-08-29-release-please.md`
 **Scope:** architectural — replaces the routine-release path currently driven by the `/publish` skill.
 
 ## Goal
