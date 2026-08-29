@@ -102,12 +102,23 @@ interface OpenApiDocument {
 const HTTP_METHODS = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
 const JSON_MEDIA = "application/json";
 
-export function registerKavoSchemas<T extends OpenApiDocument>(document: T): T {
-  const components = (document.components ??= {});
+/**
+ * `T` is deliberately just `object`, not `OpenApiDocument`: `@nestjs/swagger`'s
+ * own `OpenAPIObject` type does not structurally satisfy the interface below
+ * (its `PathItemObject` has no string index signature), which would break
+ * inference on the one call that matters —
+ * `registerKavoSchemas(SwaggerModule.createDocument(...))` — and force the
+ * caller to cast. The document is mutated in place and handed straight back,
+ * so the exact input type is preserved; the structural view is applied
+ * internally.
+ */
+export function registerKavoSchemas<T extends object>(document: T): T {
+  const doc = document as OpenApiDocument;
+  const components = (doc.components ??= {});
   const schemas = (components.schemas ??= {});
   const registry = new SchemaRegistry(schemas);
 
-  for (const pathItem of Object.values(document.paths ?? {})) {
+  for (const pathItem of Object.values(doc.paths ?? {})) {
     if (pathItem === undefined) {
       continue;
     }
