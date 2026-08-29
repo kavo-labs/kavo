@@ -14,7 +14,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  # Read-only checkout is all this job needs: it publishes to npm and nothing
+  # else. The GitHub Release is release-please's to create (ADR-0041), so no
+  # `contents: write` here. `id-token: write` is for npm OIDC trusted
+  # publishing (and the provenance attestation that comes with it).
+  contents: read
   id-token: write
 
 jobs:
@@ -177,14 +181,12 @@ jobs:
             fi
           done
 
-      # Only runs once every publish above succeeded. Attaches the exact
-      # published tarballs as release assets and lets GitHub generate the
-      # notes from merged PRs since the previous tag.
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            $TARBALL_DIR/*.tgz \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+      # No GitHub Release step here on purpose. release-please owns the
+      # Release: it creates it, with notes from CHANGELOG.md, as part of
+      # cutting the tag (ADR-0041). This job's one job is to get the packages
+      # onto npm — the distribution channel — and `npm publish` runs with
+      # `id-token: write`, so each package carries an npm provenance
+      # attestation pointing back at this workflow and commit. Attaching the
+      # .tgz files to the Release as well would duplicate that for artifacts
+      # nobody installs from GitHub, and force this job to coordinate on a
+      # Release object another workflow made.
