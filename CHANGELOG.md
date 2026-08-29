@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.4](https://github.com/kavo-labs/kavo/compare/v0.15.3...v0.15.4) (2026-08-29)
+
+
+### Features
+
+* **nest:** register generated DTO schemas as named components/schemas ([#310](https://github.com/kavo-labs/kavo/issues/310)) ([ff674b5](https://github.com/kavo-labs/kavo/commit/ff674b5d9467896a32f9f2fffcd54414f1111a0d))
+
 ## [0.15.3](https://github.com/kavo-labs/kavo/compare/v0.15.2...v0.15.3) (2026-08-29)
 
 
