@@ -28,6 +28,7 @@ type SwaggerModule = {
   ApiHeader(options: object): MethodDecorator;
   ApiBody(options: object): MethodDecorator;
   ApiResponse(options: object): MethodDecorator;
+  ApiExtension(extensionKey: string, extensionProperties: unknown): MethodDecorator;
 };
 
 let cached: SwaggerModule | null | undefined;
@@ -167,6 +168,19 @@ function explicitAllowlist(selector: QueryFieldSelector<object> | undefined): re
   return selector;
 }
 
+/**
+ * Stamps `x-kavo-entity` on one inline schema this module built, linking a
+ * generated DTO schema back to the Kavo entity/operation it came from
+ * (issue #294) — additive to whatever OpenAPI keywords the schema already
+ * carries. Only ever applied to a schema this module actually constructed
+ * (`schemaFromDto` and the hand-built fallback/envelope schemas below); the
+ * `{ type: DtoClass }` fallback path, where `@nestjs/swagger`'s own
+ * introspection builds the schema, is a documented gap this can't reach.
+ */
+function withKavoEntity<T extends object>(schema: T, entityName: string): T & { "x-kavo-entity": string } {
+  return { ...schema, "x-kavo-entity": entityName };
+}
+
 export function applySwaggerMetadata(
   prototype: Record<string, unknown>,
   methodName: string,
@@ -189,8 +203,15 @@ export function applySwaggerMetadata(
     swagger.ApiOperation({
       operationId: `${entity.name}_${descriptor.id}`,
       summary: `${descriptor.id} (${entity.name})`,
+      tags: [entity.name],
     }),
   );
+  // Machine-readable link from this operation back to the Kavo
+  // entity/operation it was generated from (issue #294) — additive to the
+  // unchanged `operationId` above, for downstream tooling that would
+  // otherwise have to reverse-engineer it from that string.
+  apply(swagger.ApiExtension("x-kavo-entity", entity.name));
+  apply(swagger.ApiExtension("x-kavo-operation", descriptor.id));
 
   if (route.hasIdParam) {
     apply(swagger.ApiParam({ name: "id", required: true }));
@@ -271,7 +292,7 @@ export function applySwaggerMetadata(
 
   const bodyDto = bodyDtoFor(descriptor, dtoResolver);
   if (bodyDto !== null) {
-    apply(swagger.ApiBody(bodyOptionsFor(bodyDto)));
+    apply(swagger.ApiBody(bodyOptionsFor(bodyDto, entity.name)));
   }
 
   // The success response's ETag header and the conditional-request
@@ -632,12 +653,15 @@ export function applyBodySchemaDocs(
     properties[field.name] = fieldSchema(field);
   }
   swagger.ApiBody({
-    schema: {
-      title: `${metadata.name}${titleForBodyOperation(descriptor.id)}`,
-      type: "object",
-      properties,
-      ...(allowed.length === 0 ? { description: "No field is writable." } : {}),
-    },
+    schema: withKavoEntity(
+      {
+        title: `${metadata.name}${titleForBodyOperation(descriptor.id)}`,
+        type: "object",
+        properties,
+        ...(allowed.length === 0 ? { description: "No field is writable." } : {}),
+      },
+      metadata.name,
+    ),
   })(prototype, methodName, propertyDescriptor);
 }
 
@@ -697,12 +721,12 @@ function fieldSchema(field: FieldMetadata): object {
  * schema from them; when it does not (a `@ApiProperty`-decorated or purely
  * declarative class) we defer to Swagger's own `{ type }` introspection.
  */
-function bodyOptionsFor(bodyDto: ClassRef): object {
-  const schema = schemaFromDto(bodyDto);
+function bodyOptionsFor(bodyDto: ClassRef, entityName: string): object {
+  const schema = schemaFromDto(bodyDto, entityName);
   if (schema === null) {
     return { type: bodyDto };
   }
-  return { schema: { title: bodyDto.name, ...schema } };
+  return { schema: withKavoEntity({ title: bodyDto.name, ...schema }, entityName) };
 }
 
 /**
@@ -738,13 +762,15 @@ function successBodyFor(
   if (descriptor.cardinality === "many") {
     // `list` falls back to `item` inside the resolver.
     const listDto = resolve("list");
-    return { schema: listEnvelopeSchema(schemaFromDto(listDto), listDto.name) };
+    return { schema: listEnvelopeSchema(schemaFromDto(listDto, entity.name), listDto.name, entity.name) };
   }
   // Restore reuses the `item` slot — no dedicated restore shape — and so
   // does every custom single-row operation that registers no `dto.output`.
   const itemDto = resolve("item");
-  const schema = schemaFromDto(itemDto);
-  return schema === null ? { type: itemDto } : { schema: { title: itemDto.name, ...schema } };
+  const schema = schemaFromDto(itemDto, entity.name);
+  return schema === null
+    ? { type: itemDto }
+    : { schema: withKavoEntity({ title: itemDto.name, ...schema }, entity.name) };
 }
 
 /**
@@ -766,6 +792,7 @@ function successBodyFor(
 function listEnvelopeSchema(
   element: { type: "object"; properties: Record<string, object> } | null,
   title: string,
+  entityName: string,
 ): object {
   return {
     title: `${title}List`,
@@ -774,7 +801,7 @@ function listEnvelopeSchema(
     properties: {
       items: {
         type: "array",
-        items: element ?? { type: "object" },
+        items: element === null ? { type: "object" } : withKavoEntity(element, entityName),
       },
       limit: { type: "integer" },
       offset: { type: "integer" },
@@ -868,7 +895,9 @@ export function applyResponseSchemaDocs(
     properties[field.name] = fieldSchema(field);
   }
   const element = { type: "object" as const, properties };
-  const schema = isList ? listEnvelopeSchema(element, metadata.name) : { title: metadata.name, ...element };
+  const schema = isList
+    ? listEnvelopeSchema(element, metadata.name, metadata.name)
+    : withKavoEntity({ title: metadata.name, ...element }, metadata.name);
   // `type: undefined` clears whatever `type` decoration time's `{ type:
   // itemDto }` fallback left on this status's response entry — see this
   // function's doc comment for why a lingering `type` would otherwise win
@@ -876,7 +905,10 @@ export function applyResponseSchemaDocs(
   swagger.ApiResponse({ status: route.status, schema, type: undefined })(prototype, methodName, propertyDescriptor);
 }
 
-function schemaFromDto(bodyDto: ClassRef): { type: "object"; properties: Record<string, object> } | null {
+function schemaFromDto(
+  bodyDto: ClassRef,
+  entityName: string,
+): { type: "object"; properties: Record<string, object> } | null {
   let instance: Record<string, unknown>;
   try {
     instance = new (bodyDto as new () => Record<string, unknown>)();
@@ -889,15 +921,15 @@ function schemaFromDto(bodyDto: ClassRef): { type: "object"; properties: Record<
   }
   const properties: Record<string, object> = {};
   for (const key of keys) {
-    properties[key] = jsonSchemaForValue(instance[key]);
+    properties[key] = jsonSchemaForValue(instance[key], entityName);
   }
   return { type: "object", properties };
 }
 
 /** Infer a JSON-schema fragment from a DTO field's initializer value. */
-function jsonSchemaForValue(value: unknown): object {
+function jsonSchemaForValue(value: unknown, entityName: string): object {
   if (isSchemaHint(value)) {
-    return schemaForHint(readSchemaHint(value));
+    return schemaForHint(readSchemaHint(value), entityName);
   }
   switch (typeof value) {
     case "string":
@@ -925,7 +957,7 @@ function jsonSchemaForValue(value: unknown): object {
 }
 
 /** Expand a schema hint (enum / oneOf array) into its OpenAPI fragment. */
-function schemaForHint(hint: SchemaHint): object {
+function schemaForHint(hint: SchemaHint, entityName: string): object {
   switch (hint.kind) {
     case "enum":
       return {
@@ -938,8 +970,10 @@ function schemaForHint(hint: SchemaHint): object {
         type: "array",
         items: {
           oneOf: hint.variants.map((variant) => {
-            const schema = schemaFromDto(variant);
-            return schema === null ? { type: "object" } : { title: variant.name, ...schema };
+            const schema = schemaFromDto(variant, entityName);
+            return schema === null
+              ? { type: "object" }
+              : withKavoEntity({ title: variant.name, ...schema }, entityName);
           }),
         },
       };

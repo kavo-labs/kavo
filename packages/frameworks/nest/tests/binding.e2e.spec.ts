@@ -771,14 +771,27 @@ describe("@Kavo custom operations (issue #145)", () => {
 
     const operation = (
       document.paths["/todos/{id}/publish"] as {
-        post?: { operationId?: string; responses?: Record<string, { content?: Record<string, { schema?: object }> }> };
+        post?: {
+          operationId?: string;
+          tags?: string[];
+          "x-kavo-entity"?: string;
+          "x-kavo-operation"?: string;
+          responses?: Record<string, { content?: Record<string, { schema?: object }> }>;
+        };
       }
     )?.post;
     expect(operation?.operationId).toBe("Todo_publishOne");
+    // A custom operation carries the same tag/vendor extensions a standard
+    // one does (issue #294) — derived from `entity.name`/`descriptor.id`,
+    // not the operation's own custom route shape.
+    expect(operation?.tags).toEqual(["Todo"]);
+    expect(operation?.["x-kavo-entity"]).toBe("Todo");
+    expect(operation?.["x-kavo-operation"]).toBe("publishOne");
     // The response schema follows `dto.output`, the same class the engine
-    // actually serializes through.
+    // actually serializes through, and carries the same x-kavo-entity link.
     expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
       title: "TodoReceiptDto",
+      "x-kavo-entity": "Todo",
     });
   });
 });
@@ -1072,13 +1085,26 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
     const getItem = (
       document.paths["/todos/{id}"] as Record<
         string,
-        { operationId?: string; parameters?: { name: string; in: string }[]; responses?: Record<string, unknown> }
+        {
+          operationId?: string;
+          tags?: string[];
+          "x-kavo-entity"?: string;
+          "x-kavo-operation"?: string;
+          parameters?: { name: string; in: string }[];
+          responses?: Record<string, unknown>;
+        }
       >
     )?.get;
     expect(getItem?.operationId).toBe("Todo_findOne");
     expect(getItem?.parameters).toEqual(expect.arrayContaining([expect.objectContaining({ name: "id", in: "path" })]));
     expect(getItem?.responses).toHaveProperty("200");
     expect(getItem?.responses).toHaveProperty("404");
+    // An @Override'd route still carries the same tag/vendor extensions as a
+    // generated one (issue #294) — applySwaggerMetadata runs identically for
+    // both, keyed off entity.name/descriptor.id, not the method it binds to.
+    expect(getItem?.tags).toEqual(["Todo"]);
+    expect(getItem?.["x-kavo-entity"]).toBe("Todo");
+    expect(getItem?.["x-kavo-operation"]).toBe("findOne");
   });
 
   it("leaves plain manual-method-wins (no @Override) exactly as before", async () => {
@@ -2014,6 +2040,7 @@ describe("@Kavo Swagger request-body schemas", () => {
     required?: string[];
     additionalProperties?: boolean;
     description?: string;
+    "x-kavo-entity"?: string;
   };
 
   const responseSchema = (op: string, status: string): Schema | undefined =>
@@ -2044,6 +2071,8 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(schema?.properties?.title).toEqual({ type: "string" });
     expect(schema?.properties?.priority).toEqual({ type: "integer" });
     expect(schema?.properties?.done).toEqual({ type: "boolean" });
+    // Links the schema back to the entity it belongs to (issue #294).
+    expect(schema?.["x-kavo-entity"]).toBe("Todo");
   });
 
   it("distinguishes the JSON number types a field initializer can imply", async () => {
@@ -2151,6 +2180,8 @@ describe("@Kavo Swagger request-body schemas", () => {
     expect(Object.keys(schema?.properties ?? {})).toEqual(["items", "limit", "offset", "total", "meta"]);
     // Envelope items use the leaner `list` DTO projection.
     expect(Object.keys(schema?.properties?.items?.items?.properties ?? {})).toEqual(["id", "title"]);
+    // The list-envelope element carries the entity link too (issue #294).
+    expect(schema?.properties?.items?.items?.["x-kavo-entity"]).toBe("Todo");
   });
 
   it("marks meta as the one envelope field a client cannot assume is present", () => {
@@ -2265,6 +2296,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     properties?: Record<string, Schema>;
     additionalProperties?: boolean;
     description?: string;
+    "x-kavo-entity"?: string;
   };
 
   const bodySchema = (path: string, verb: string): Schema | undefined =>
@@ -2300,6 +2332,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       // itself closed — that would tell a validating client a body Kavo
       // actually accepts is invalid.
       expect(schema?.additionalProperties).toBeUndefined();
+      // The fallback schema still links back to the entity (issue #294).
+      expect(schema?.["x-kavo-entity"]).toBe("Todo");
     }
   });
 
@@ -2361,7 +2395,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
 });
 
 describe("@Kavo Swagger fallback success-response schema when no item/list DTO is configured (issue #264)", () => {
-  type Schema = { type?: string; properties?: Record<string, Schema>; items?: Schema };
+  type Schema = { type?: string; properties?: Record<string, Schema>; items?: Schema; "x-kavo-entity"?: string };
 
   const itemBody = (path: string, verb: string, status: string): Schema | undefined =>
     (
@@ -2386,7 +2420,11 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       ["patch", "/todos/{id}", "200"],
       ["get", "/todos/{id}", "200"],
     ] as const) {
-      expect(Object.keys(itemBody(path, verb, status)?.properties ?? {})).toEqual(["id", "title"]);
+      const schema = itemBody(path, verb, status);
+      expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title"]);
+      // The fallback response schema still links back to the entity
+      // (issue #294).
+      expect(schema?.["x-kavo-entity"]).toBe("Todo");
     }
   });
 
@@ -2399,6 +2437,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
 
     const items = itemBody("/todos", "get", "200")?.properties?.items;
     expect(Object.keys(items?.items?.properties ?? {})).toEqual(["id", "title"]);
+    expect(items?.items?.["x-kavo-entity"]).toBe("Todo");
   });
 
   it("documents every own column when selectable is left unconfigured, relations excluded", async () => {
@@ -2595,6 +2634,7 @@ describe("@Kavo Swagger schema hints (enum, oneOf)", () => {
     example?: string | number;
     oneOf?: readonly HintSchema[];
     title?: string;
+    "x-kavo-entity"?: string;
   };
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
@@ -2631,8 +2671,18 @@ describe("@Kavo Swagger schema hints (enum, oneOf)", () => {
     const children = itemSchema()?.properties?.children;
     expect(children?.type).toBe("array");
     expect(children?.items?.oneOf).toEqual([
-      { title: "VariantA", type: "object", properties: { id: { type: "integer" }, a: { type: "string" } } },
-      { title: "VariantB", type: "object", properties: { id: { type: "integer" }, b: { type: "integer" } } },
+      {
+        title: "VariantA",
+        type: "object",
+        properties: { id: { type: "integer" }, a: { type: "string" } },
+        "x-kavo-entity": "Todo",
+      },
+      {
+        title: "VariantB",
+        type: "object",
+        properties: { id: { type: "integer" }, b: { type: "integer" } },
+        "x-kavo-entity": "Todo",
+      },
     ]);
   });
 });
