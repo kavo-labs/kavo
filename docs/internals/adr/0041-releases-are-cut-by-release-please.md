@@ -59,7 +59,7 @@ config details are load-bearing, and they were all found the hard way:
   bidirectional — release-please parses the merged PR title back through it
   to recover `${version}`. With `package-name: ""` the component renders
   empty, so `chore: release${component} v${version}` → `chore: release
-  v0.15.0`; the token still has to be present for the parse to line up.
+v0.15.0`; the token still has to be present for the parse to line up.
 - With `separate-pull-requests: false` the repo produces a single **grouped**
   PR, so `group-pull-request-title-pattern` (default `chore: release ${branch}`
   → `chore: release main`) also has to be set to the same value.
