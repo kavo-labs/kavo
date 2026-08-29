@@ -2299,6 +2299,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
   type Schema = {
     type?: string;
     properties?: Record<string, Schema>;
+    required?: string[];
     additionalProperties?: boolean;
     description?: string;
     "x-kavo-entity"?: string;
@@ -2310,6 +2311,84 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     ]?.requestBody?.content?.["application/json"]?.schema;
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
+
+  // A tiny entity whose writable columns cover both nullability cases and an
+  // all-nullable case, so `required` derivation can be pinned without
+  // touching the shared `Todo` fixture every other test asserts exact keys
+  // against.
+  const withMetadata = async (fields: EntityMetadata<object>["fields"]) => {
+    class Note {}
+    const metadata: EntityMetadata<object> = {
+      entity: Note,
+      name: "Note",
+      idField: "id",
+      fields,
+      relations: [],
+    };
+    const adapter = {
+      findOneById: async () => null,
+      findOne: async () => null,
+      findMany: async () => [],
+      count: async () => 0,
+      create: async (data: unknown) => data,
+      update: async (_id: unknown, data: unknown) => data,
+      patch: async (_id: unknown, data: unknown) => data,
+      delete: async () => {},
+      restore: async () => {
+        throw new Error("not exercised");
+      },
+      purge: async () => {},
+    } as unknown as RepositoryAdapter<object>;
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: () => metadata as never,
+      adapterFor: () => adapter as never,
+    };
+
+    @Kavo(Note)
+    @Controller("notes")
+    class NoteController {}
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([NoteController])],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+  };
+
+  it("lists non-nullable writable columns in `required` for create/update, but never for patch", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class NoDtoController {}
+    await bootstrap(NoDtoController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // Every writable `Todo` column (`title`/`done`/`priority`) is non-nullable.
+    expect(bodySchema("/todos", "post")?.required).toEqual(["title", "done", "priority"]);
+    expect(bodySchema("/todos/{id}", "put")?.required).toEqual(["title", "done", "priority"]);
+    // A partial update requires nothing regardless of nullability.
+    expect(bodySchema("/todos/{id}", "patch")?.required).toBeUndefined();
+  });
+
+  it("omits a nullable writable column from `required`", async () => {
+    await withMetadata([
+      { name: "id", kind: "number", nullable: false, generated: true },
+      { name: "title", kind: "string", nullable: false, generated: false },
+      { name: "note", kind: "string", nullable: true, generated: false },
+    ]);
+    expect(Object.keys(bodySchema("/notes", "post")?.properties ?? {})).toEqual(["title", "note"]);
+    expect(bodySchema("/notes", "post")?.required).toEqual(["title"]);
+  });
+
+  it("omits `required` entirely when every writable column is nullable", async () => {
+    await withMetadata([
+      { name: "id", kind: "number", nullable: false, generated: true },
+      { name: "note", kind: "string", nullable: true, generated: false },
+    ]);
+    const schema = bodySchema("/notes", "post");
+    expect(Object.keys(schema?.properties ?? {})).toEqual(["note"]);
+    expect(schema?.required).toBeUndefined();
+  });
 
   it("documents create/update/patch bodies from creatable/updatable when no DTO is registered", async () => {
     @Kavo(Todo)
@@ -2400,7 +2479,13 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
 });
 
 describe("@Kavo Swagger fallback success-response schema when no item/list DTO is configured (issue #264)", () => {
-  type Schema = { type?: string; properties?: Record<string, Schema>; items?: Schema; "x-kavo-entity"?: string };
+  type Schema = {
+    type?: string;
+    properties?: Record<string, Schema>;
+    items?: Schema;
+    required?: string[];
+    "x-kavo-entity"?: string;
+  };
 
   const itemBody = (path: string, verb: string, status: string): Schema | undefined =>
     (
@@ -2463,6 +2548,35 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       "priority",
       "deletedAt",
     ]);
+  });
+
+  it("lists non-nullable selectable columns in `required` on the item and list-element schemas", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class UnconfiguredController {}
+    await bootstrap(UnconfiguredController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `deletedAt` is the one nullable `Todo` column, so it stays optional.
+    const single = itemBody("/todos/{id}", "get", "200");
+    expect(single?.required).toEqual(["id", "title", "done", "priority"]);
+
+    const envelope = itemBody("/todos", "get", "200");
+    // The envelope's own `required` is unchanged.
+    expect(envelope?.required).toEqual(["items", "limit", "offset", "total"]);
+    expect(envelope?.properties?.items?.items?.required).toEqual(["id", "title", "done", "priority"]);
+  });
+
+  it("keeps an untyped computed field out of the synthesized response `required` (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+    })
+    @Controller("todos")
+    class ComputedController {}
+    await bootstrap(ComputedController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    expect(itemBody("/todos/{id}", "get", "200")?.required).not.toContain("titleUpper");
   });
 
   it("leaves a configured item DTO's own documented response untouched", async () => {

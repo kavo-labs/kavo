@@ -78,6 +78,31 @@ describe("registerKavoSchemas", () => {
     expect(schemasOf(doc).AdCreate?.title).toBeUndefined();
   });
 
+  it("carries a request body's `required` array through hoisting unchanged", () => {
+    const doc = postDoc({
+      "x-kavo-entity": "Ad",
+      "x-kavo-operation": "createOne",
+      "x-kavo-cardinality": "one",
+      requestBody: {
+        content: {
+          [json]: {
+            schema: {
+              title: "CreateAdDto",
+              type: "object",
+              properties: { id: { type: "string" }, name: { type: "string" } },
+              required: ["name"],
+              "x-kavo-entity": "Ad",
+            },
+          },
+        },
+      },
+    });
+
+    registerKavoSchemas(doc);
+
+    expect(schemasOf(doc).AdCreate?.required).toEqual(["name"]);
+  });
+
   it("names the success response from x-kavo-cardinality: List / ListItem / ListMeta for many", () => {
     const element: Schema = {
       title: "AdListDto",
