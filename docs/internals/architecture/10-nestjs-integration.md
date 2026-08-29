@@ -480,7 +480,7 @@ lifts the inline schemas Kavo built into `components.schemas`, leaving a
 | `<Entity>ListMeta`            | that envelope's `meta` bag                                                                                    |
 | `<Entity><Operation>`         | a single-row success with its own `dto.output`                                                                |
 | `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside)                                                  |
-| `<Entity>Pagination`          | the `{ limit, offset }` page controls (issue #313)                                                            |
+| `<Entity>Pagination`          | the page controls for the resolved `pagination.strategy` (issue #313, #319)                                   |
 | `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313)                                                  |
 | `<Entity>Sort`                | the sortable keys (bare + `-`-prefixed), as `array<enum>`                                                     |
 | `<Entity>Filter`              | the structured filter predicate (issue #314, ADR-0042)                                                        |
@@ -524,7 +524,10 @@ pass, so its `400`s stay bare and hoist to `KavoProblemDetails`.
 
 `<Entity>Pagination` / `<Entity>Include` / `<Entity>Sort` (issue #313) are
 the query shapes fully derivable from an entity's _resolved_ config — the
-`{ limit, offset }` page controls, the top-level `allowlists.includable`
+page controls for the resolved `pagination.strategy` (`{ limit, offset }`
+for `offset`, `{ page[number], page[size] }` for `page`, `{ limit, cursor }`
+for `cursor`, `{ limit, since }` for `since`, issue #319), the top-level
+`allowlists.includable`
 relation names (ADR-0028 — `IncludePath<_, 1>`, so a nested path is dotted
 into one and is not enumerated), and the `allowlists.sortable` keys. Like
 `<Entity>ValidationError` they ride `KavoBinder.onModuleInit`, not
@@ -552,9 +555,9 @@ enum }` would reject `include=a,b`); `sort` carries every token bare and
 `-`-prefixed so the sign stays inside the machine-checkable enum.
 `<Entity>Include` is **omitted** when nothing is includable, matching the
 flat `include` param's own "omit it" path; `<Entity>Pagination` is still
-emitted under `pagination.strategy: "none"`, carrying the same
-`UNPAGINATED_DESCRIPTION` `applyPaginationDocs` puts on `limit`/`offset` —
-annotate, don't drop. These are purely additive: the flat bracket params
+emitted under `pagination.strategy: "none"` as `{ limit, offset }`, carrying
+the same `UNPAGINATED_DESCRIPTION` `applyPaginationDocs` puts on
+`limit`/`offset` — annotate, don't drop. These are purely additive: the flat bracket params
 and `KAVO_API_GUIDE` grammar are untouched.
 
 `<Entity>Filter` and `<Entity>Query` (issue #314, ADR-0042) ride the same

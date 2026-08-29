@@ -616,10 +616,14 @@ export function applyPaginationDocs(
  *
  * Slot rules, each matching its flat-param counterpart:
  *
- * - **`pagination`** — `{ limit, offset }` integers. Under
- *   `pagination.strategy: "none"` it is still emitted, carrying
- *   `UNPAGINATED_DESCRIPTION`, exactly as `applyPaginationDocs` annotates
- *   rather than drops `limit`/`offset` (ADR-0030).
+ * - **`pagination`** — the wire keys the resolved `pagination.strategy`'s
+ *   `normalize` actually reads, via {@link paginationSlotSchema} (issue #319):
+ *   `{ limit, offset }` for `offset`, `{ page[number], page[size] }` for
+ *   `page`, `{ limit, cursor }` for `cursor` (opaque string, ADR-0021),
+ *   `{ limit, since }` for `since` (plain string, ADR-0022). Under
+ *   `pagination.strategy: "none"` it is still emitted as `{ limit, offset }`
+ *   carrying `UNPAGINATED_DESCRIPTION`, exactly as `applyPaginationDocs`
+ *   annotates rather than drops `limit`/`offset` (ADR-0030).
  * - **`include`** — an array whose items enum the resolved
  *   `allowlists.includable` **top-level** relation names (`IncludePath<_, 1>`
  *   — `blog`, not `blog.name`; `entity-config.ts` §"the unit `includable`
@@ -684,6 +688,77 @@ export function applyPaginationDocs(
  *   components. `search` is omitted when `query.search` doesn't resolve
  *   to an object, the same gate `applySearchQueryDocs` uses.
  */
+const LIMIT_DESCRIPTION = "Page size, clamped to the configured maximum.";
+
+/**
+ * The `<Entity>Pagination` shape for one resolved `pagination.strategy`
+ * (issue #319). Its properties are the literal wire keys the matching
+ * `PaginationStrategy.normalize` reads (`packages/core/src/query/
+ * pagination-strategies.ts`), so a generated client types the page controls
+ * it will actually send:
+ *
+ * - **`offset`** (the default) — `{ limit, offset }` integers.
+ * - **`page`** — `{ page[number], page[size] }` integers, 1-indexed.
+ * - **`cursor`** — `{ limit, cursor }`; `cursor` is an opaque string echoed
+ *   back from the previous page's `meta.nextCursor` (ADR-0021).
+ * - **`since`** — `{ limit, since }`; `since` is a plain string echoed back
+ *   from the previous poll's `meta.nextSince` (ADR-0022).
+ * - **`none`** — `{ limit, offset }` integers with no per-property blurb,
+ *   carrying `UNPAGINATED_DESCRIPTION` at the object level (ADR-0030), exactly
+ *   as `applyPaginationDocs` annotates rather than drops the flat params.
+ * - an unrecognized custom strategy name falls back to the `offset` shape.
+ */
+function paginationSlotSchema(strategy: string): Record<string, unknown> {
+  const integer = (description: string): Record<string, unknown> => ({ type: "integer", description });
+
+  switch (strategy) {
+    case "none":
+      return {
+        type: "object",
+        properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+        description: UNPAGINATED_DESCRIPTION,
+      };
+    case "page":
+      return {
+        type: "object",
+        properties: {
+          "page[number]": integer("1-based page number."),
+          "page[size]": integer(LIMIT_DESCRIPTION),
+        },
+      };
+    case "cursor":
+      return {
+        type: "object",
+        properties: {
+          limit: integer(LIMIT_DESCRIPTION),
+          cursor: {
+            type: "string",
+            description: "Opaque page token — pass back `meta.nextCursor` from the previous page verbatim.",
+          },
+        },
+      };
+    case "since":
+      return {
+        type: "object",
+        properties: {
+          limit: integer(LIMIT_DESCRIPTION),
+          since: {
+            type: "string",
+            description: "Seek boundary — pass back `meta.nextSince` from the previous poll verbatim.",
+          },
+        },
+      };
+    default:
+      return {
+        type: "object",
+        properties: {
+          limit: integer(LIMIT_DESCRIPTION),
+          offset: integer("Zero-based index of the first returned row."),
+        },
+      };
+  }
+}
+
 const alreadyQuerySchemaDocumented = new WeakSet<object>();
 
 export function applyQuerySchemaDocs(
@@ -735,28 +810,7 @@ export function applyQuerySchemaDocs(
   }
 
   if (isList) {
-    const unpaginated = resolved.strategy === "none";
-    slots.pagination = withKavoEntity(
-      {
-        type: "object",
-        // Under `strategy: "none"` the object-level description says the
-        // entity doesn't paginate, so the per-property blurbs are dropped
-        // rather than left to contradict it (`applyPaginationDocs` makes the
-        // same choice for the flat `limit`/`offset` params).
-        properties: {
-          limit: {
-            type: "integer",
-            ...(unpaginated ? {} : { description: "Page size, clamped to the configured maximum." }),
-          },
-          offset: {
-            type: "integer",
-            ...(unpaginated ? {} : { description: "Zero-based index of the first returned row." }),
-          },
-        },
-        ...(unpaginated ? { description: UNPAGINATED_DESCRIPTION } : {}),
-      },
-      entityName,
-    );
+    slots.pagination = withKavoEntity(paginationSlotSchema(resolved.strategy), entityName);
     slots.sort = withKavoEntity(
       {
         type: "array",

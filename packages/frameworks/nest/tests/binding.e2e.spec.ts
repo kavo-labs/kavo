@@ -3093,6 +3093,66 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
     expect(schemas(doc).TodoPagination?.description).toContain("does not paginate");
   });
 
+  it("shapes <Entity>Pagination to the page strategy's wire keys", async () => {
+    @Kavo(Todo, { pagination: { strategy: "page" } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination).toEqual({
+      type: "object",
+      properties: {
+        "page[number]": { type: "integer", description: "1-based page number." },
+        "page[size]": { type: "integer", description: "Page size, clamped to the configured maximum." },
+      },
+      "x-kavo-entity": "Todo",
+    });
+  });
+
+  it("shapes <Entity>Pagination to the cursor strategy's wire keys, cursor as an opaque string", async () => {
+    @Kavo(Todo, { pagination: { strategy: "cursor" } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination).toEqual({
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Page size, clamped to the configured maximum." },
+        cursor: {
+          type: "string",
+          description: "Opaque page token — pass back `meta.nextCursor` from the previous page verbatim.",
+        },
+      },
+      "x-kavo-entity": "Todo",
+    });
+  });
+
+  it("shapes <Entity>Pagination to the since strategy's wire keys, since as a plain string", async () => {
+    @Kavo(Todo, { pagination: { strategy: "since", since: { field: "title" } } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination).toEqual({
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Page size, clamped to the configured maximum." },
+        since: {
+          type: "string",
+          description: "Seek boundary — pass back `meta.nextSince` from the previous poll verbatim.",
+        },
+      },
+      "x-kavo-entity": "Todo",
+    });
+  });
+
   it("documents an explicit empty sortable allowlist as a closed door", async () => {
     @Kavo(Todo, { allowlists: { sortable: [] } })
     @Controller("todos")
