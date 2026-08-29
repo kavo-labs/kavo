@@ -32,14 +32,14 @@ release-please bumps all nine `package.json` versions together;
 `release-please-action` runs from `.github/workflows/release-please.yml` on
 the default `GITHUB_TOKEN` — no PAT, no GitHub App. `GITHUB_TOKEN` is enough
 for release-please to open the release PR and to create the tag + GitHub
-Release; what it *cannot* do is make those events start another workflow run.
+Release; what it _cannot_ do is make those events start another workflow run.
 GitHub suppresses workflow triggers from `GITHUB_TOKEN`-authored events to
 avoid recursion, and that suppression is why two hops need help:
 
 - **Merging the release PR triggers nothing.** The release PR branch is
   `GITHUB_TOKEN`-authored, so its squash-merge fires neither `push` nor
   `pull_request`. The workflow therefore also runs `on: schedule` (a cron
-  tick every 15 min, which is *not* suppressed); the first tick after the
+  tick every 15 min, which is _not_ suppressed); the first tick after the
   merge is what cuts the tag. `on: push: main` still runs it too, so an
   unrelated commit landing sooner cuts the tag sooner; `workflow_dispatch`
   forces it immediately.
