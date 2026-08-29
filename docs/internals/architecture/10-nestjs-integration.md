@@ -372,12 +372,30 @@ between Kavo's hierarchy and HTTP: catalog status +
 
 Optional and zero-cost when absent (`createRequire` probe, cached).
 When `@nestjs/swagger` is installed, generated routes get: operation ids
-(`User_findMany`), the `:id` param, the query params documented on list
-routes (doc 5), registered DTO classes as body schemas (`ApiBody`),
-problem-details response schemas for 400/404, and the conditional-request
-surface (ADR-0020) — the `ETag` response header, `If-None-Match` + `304`
-on single-item reads, `If-Match` + `412` on single-row writes, gated on
-`cache.etag`.
+(`User_findMany`), a `tags: [entity.name]` entry, `x-kavo-entity`/
+`x-kavo-operation` vendor extensions on the operation object, the `:id`
+param, the query params documented on list routes (doc 5), registered DTO
+classes as body schemas (`ApiBody`), problem-details response schemas for
+400/404, and the conditional-request surface (ADR-0020) — the `ETag`
+response header, `If-None-Match` + `304` on single-item reads, `If-Match` +
+`412` on single-row writes, gated on `cache.etag`.
+
+The tag and both vendor extensions are derived only from `entity.name` and
+`OperationDescriptor` (ADR-0012), so they apply identically to a standard
+route, a custom operation (issue #145), and an `@Override`d route —
+`applySwaggerMetadata` runs the same way for all three. They exist because
+client generators like Orval and `openapi-generator` key file/module
+splitting off `tags` (with none, every operation across every entity lands
+in one flat client module), and because nothing else in the document links
+an operation, or a generated DTO schema, back to the Kavo entity/operation
+it came from. Every inline schema this module builds — `schemaFromDto`
+request/response bodies, a list envelope's element, the `issue #264`
+fallback body/response schemas, and each `oneOf` variant (schema hints,
+below) — carries the same `x-kavo-entity` (`withKavoEntity`). The one
+exception is the `{ type: DtoClass }` fallback path, where
+`@nestjs/swagger`'s own introspection builds the schema instead of this
+module: there is no inline schema object to stamp. `operationId`'s value
+and format are unchanged.
 
 Unlike the rest of this list, that gate can't be applied at decoration
 time (ADR-0012): whether it's on depends on `cache.etag` resolved
