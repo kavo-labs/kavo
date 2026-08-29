@@ -549,13 +549,15 @@ describe("publish.yml wiring", () => {
     expect(step).not.toContain('"-*.tgz');
   });
 
-  it("keeps /publish's package table in the order PACKAGE_DIRS publishes", () => {
-    // publish.md names PACKAGE_DIRS the authority and calls a disagreement
-    // "a bug to fix in the same pass" — this is what notices.
+  it("keeps /publish scoped to bootstrapping a brand-new package, not routine releases", () => {
+    // Routine releases are a merged release-please PR (ADR-0041). /publish is
+    // now only the first-publish bootstrap, and must not have regrown the
+    // version-bump / commit-to-main / tag-push machinery release-please owns.
     const doc = readFileSync(PUBLISH_COMMAND_PATH, "utf8");
-    const rows = [...doc.matchAll(/^\s*\|\s*`(packages\/[^`]+)`\s*\|/gm)].map((match) => match[1]!);
 
-    expect(rows).toEqual(packageDirs);
+    expect(doc).toMatch(/bootstrap/i);
+    expect(doc).not.toContain("git tag -a");
+    expect(doc).not.toContain("chore(release):");
   });
 });
 
