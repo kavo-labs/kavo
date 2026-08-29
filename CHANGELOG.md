@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.3](https://github.com/kavo-labs/kavo/compare/v0.15.2...v0.15.3) (2026-08-29)
+
+
+### CI
+
+* let release-please own the GitHub Release, drop it from publish.yml ([#308](https://github.com/kavo-labs/kavo/issues/308)) ([ae014fb](https://github.com/kavo-labs/kavo/commit/ae014fbe209ce0b99e99cd1d55466f0f21ac09b5))
+
 ## [0.15.2](https://github.com/kavo-labs/kavo/compare/v0.15.1...v0.15.2) (2026-08-29)
 
 
