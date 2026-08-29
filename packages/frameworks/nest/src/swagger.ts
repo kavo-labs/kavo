@@ -593,6 +593,162 @@ export function applyPaginationDocs(
 }
 
 /**
+ * The three query shapes a client generator can type straight off an
+ * entity's *resolved* config — `<Entity>Pagination`, `<Entity>Include`,
+ * `<Entity>Sort` (issue #313). Emitted as an `x-kavo-query-schemas`
+ * extension on the route, keyed by slot (`pagination`/`include`/`sort`);
+ * `registerKavoSchemas` reads that blob, names each entry
+ * `<Entity><Slot-in-PascalCase>` from the operation's own `x-kavo-entity`,
+ * hoists it into `components.schemas` through the same `_N`/clone rules the
+ * DTO schemas use (#310), and deletes the extension. A caller that never
+ * runs `registerKavoSchemas` sees the raw blob on the route instead.
+ *
+ * Deferred to bind time for the same reason as `applyPaginationDocs`: the
+ * resolved `allowlists.sortable` / `allowlists.includable` and the
+ * precedence-merged `pagination.strategy` only exist once
+ * `KavoBinder.onModuleInit` runs, never at `@Kavo` decoration (ADR-0012,
+ * ADR-0028, ADR-0030). An app with no `KavoModule.forRoot`/`forRootAsync`
+ * gets none of these components — the same graceful-degradation the sibling
+ * deferred doc passes accept.
+ *
+ * These are purely additive: the flat bracket params (`limit`/`offset`,
+ * `include`, `sort`) and the `KAVO_API_GUIDE` grammar are untouched.
+ *
+ * Slot rules, each matching its flat-param counterpart:
+ *
+ * - **`pagination`** — `{ limit, offset }` integers. Under
+ *   `pagination.strategy: "none"` it is still emitted, carrying
+ *   `UNPAGINATED_DESCRIPTION`, exactly as `applyPaginationDocs` annotates
+ *   rather than drops `limit`/`offset` (ADR-0030).
+ * - **`include`** — an array whose items enum the resolved
+ *   `allowlists.includable` **top-level** relation names (`IncludePath<_, 1>`
+ *   — `blog`, not `blog.name`; `entity-config.ts` §"the unit `includable`
+ *   grants"). A nested path is formed by dotting into one at request time,
+ *   governed by the target entity's own config and `relations.maxIncludeDepth`,
+ *   so nested paths are deliberately *not* enumerated — the description says
+ *   as much rather than let a client reject `include=a.b` that Kavo accepts.
+ *   Omitted entirely when nothing is includable, matching
+ *   `applySwaggerMetadata`'s "omit the `include` param" path (ADR-0028). The
+ *   wire value is a comma-separated *string*, so a bare
+ *   `{ type: "string", enum }` would be a lie (`include=a,b` matches no
+ *   member) — modelling the parsed value as `array<enum>` is honest.
+ * - **`sort`** — the same `array<enum>` form over `allowlists.sortable`,
+ *   with each token present both bare (ascending) and `-`-prefixed
+ *   (descending) so the enum stays machine-checkable rather than pushing the
+ *   sign into a `pattern` a generator would ignore. An explicit empty
+ *   `sortable` still emits the component, with an empty enum and a
+ *   "no field is sortable" description — the closed-door reading
+ *   `allowedFieldsDescription` gives an explicit empty selector.
+ *
+ * `pagination` and `sort` are emitted even when unusable (an unpaginated
+ * entity, an empty `sortable`) because their flat params are always present
+ * on a list route; `include` is *omitted* when nothing is includable
+ * because its flat param is too (ADR-0028). The asymmetry mirrors the flat
+ * surface rather than being an oversight.
+ *
+ * `pagination`/`sort` ride list routes only (`cardinality: "many"`);
+ * `include` rides every read route. Every enabled read route is stamped;
+ * `registerKavoSchemas` collapses structurally-identical repeats onto one
+ * component. The `include`/`sort` shapes are entity-scoped, so they always
+ * match across an entity's routes; `pagination.strategy` is the one
+ * per-operation input (`settingsFor(id)`) that can differ — an entity with
+ * a custom list op configured `strategy: "none"` alongside a paginating
+ * `findMany` gets `<Entity>Pagination` *and* `<Entity>Pagination_2`, the
+ * same positional `_N` any genuine `registerKavoSchemas` clash produces.
+ * Idempotent per method function via `alreadyQuerySchemaDocumented`, the
+ * same guard the other bind-time passes use against a second bootstrap of
+ * one controller class (routine in this package's tests).
+ */
+const alreadyQuerySchemaDocumented = new WeakSet<object>();
+
+export function applyQuerySchemaDocs(
+  prototype: Record<string, unknown>,
+  methodName: string,
+  descriptor: OperationDescriptor<object>,
+  entityName: string,
+  resolved: {
+    readonly strategy: string;
+    readonly includable: readonly string[];
+    readonly sortable: readonly string[];
+  },
+): void {
+  if (descriptor.kind !== "read") {
+    return;
+  }
+  const swagger = loadSwagger();
+  if (swagger === null) {
+    return;
+  }
+
+  const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
+  const method = propertyDescriptor.value as object;
+  if (alreadyQuerySchemaDocumented.has(method)) {
+    return;
+  }
+  alreadyQuerySchemaDocumented.add(method);
+
+  const isList = descriptor.cardinality === "many";
+  const slots: Record<string, object> = {};
+
+  if (resolved.includable.length > 0) {
+    slots.include = withKavoEntity(
+      {
+        type: "array",
+        items: { type: "string", enum: [...resolved.includable] },
+        description:
+          "Top-level relation names embeddable via `include=` (comma-separated). " +
+          "A nested path is formed by dotting into one (e.g. `owner.pets`); nested paths are not enumerated here.",
+      },
+      entityName,
+    );
+  }
+
+  if (isList) {
+    const unpaginated = resolved.strategy === "none";
+    slots.pagination = withKavoEntity(
+      {
+        type: "object",
+        // Under `strategy: "none"` the object-level description says the
+        // entity doesn't paginate, so the per-property blurbs are dropped
+        // rather than left to contradict it (`applyPaginationDocs` makes the
+        // same choice for the flat `limit`/`offset` params).
+        properties: {
+          limit: {
+            type: "integer",
+            ...(unpaginated ? {} : { description: "Page size, clamped to the configured maximum." }),
+          },
+          offset: {
+            type: "integer",
+            ...(unpaginated ? {} : { description: "Zero-based index of the first returned row." }),
+          },
+        },
+        ...(unpaginated ? { description: UNPAGINATED_DESCRIPTION } : {}),
+      },
+      entityName,
+    );
+    slots.sort = withKavoEntity(
+      {
+        type: "array",
+        items: {
+          type: "string",
+          enum: [...resolved.sortable, ...resolved.sortable.map((token) => `-${token}`)],
+        },
+        description:
+          resolved.sortable.length === 0
+            ? "No field is sortable."
+            : "Sort keys, as passed to `sort=` (comma-separated). Prefix a key with `-` for descending order.",
+      },
+      entityName,
+    );
+  }
+
+  if (Object.keys(slots).length === 0) {
+    return;
+  }
+  swagger.ApiExtension("x-kavo-query-schemas", slots)(prototype, methodName, propertyDescriptor);
+}
+
+/**
  * Retags the always-present `400` response (applied by `applySwaggerMetadata`
  * at decoration time with the bare `PROBLEM_DETAILS_SCHEMA`) as an
  * entity-scoped variant, so `registerKavoSchemas` can hoist it to

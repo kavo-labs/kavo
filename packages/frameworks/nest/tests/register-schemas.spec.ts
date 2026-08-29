@@ -18,6 +18,7 @@ type Schema = {
   allOf?: Schema[];
   properties?: Record<string, Schema>;
   items?: Schema;
+  enum?: string[];
   "x-kavo-entity"?: string;
   "x-kavo-error"?: boolean;
   "x-kavo-operation-scoped"?: boolean;
@@ -27,6 +28,7 @@ type Operation = {
   "x-kavo-entity"?: string;
   "x-kavo-operation"?: string;
   "x-kavo-cardinality"?: string;
+  "x-kavo-query-schemas"?: Record<string, Schema>;
   requestBody?: { content?: Record<string, Media> };
   responses?: Record<string, { content?: Record<string, Media> }>;
 };
@@ -433,5 +435,158 @@ describe("registerKavoSchemas", () => {
     const once = JSON.stringify(doc);
     registerKavoSchemas(doc);
     expect(JSON.stringify(doc)).toBe(once);
+  });
+
+  describe("query-shape components (issue #313)", () => {
+    const withQuerySchemas = (schemas: Record<string, Schema>): Doc => ({
+      paths: {
+        "/ads": {
+          get: { "x-kavo-entity": "Ad", "x-kavo-operation": "findMany", "x-kavo-query-schemas": schemas },
+        },
+      },
+    });
+
+    it("hoists pagination/include/sort into <Entity><Slot> and drops the extension", () => {
+      const doc = withQuerySchemas({
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          "x-kavo-entity": "Ad",
+        },
+        include: { type: "array", items: { type: "string", enum: ["owner"] }, "x-kavo-entity": "Ad" },
+        sort: { type: "array", items: { type: "string", enum: ["name", "-name"] }, "x-kavo-entity": "Ad" },
+      });
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdPagination).toEqual({
+        type: "object",
+        properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+        "x-kavo-entity": "Ad",
+      });
+      expect(schemasOf(doc).AdInclude?.items?.enum).toEqual(["owner"]);
+      expect(schemasOf(doc).AdSort?.items?.enum).toEqual(["name", "-name"]);
+      expect(doc.paths["/ads"]?.get?.["x-kavo-query-schemas"]).toBeUndefined();
+    });
+
+    it("splits <Entity>Pagination into _2 when two list routes resolve different pagination.strategy", () => {
+      // `applyQuerySchemaDocs` takes `pagination.strategy` from
+      // `settingsFor(descriptor.id)` — per-operation — so an entity with a
+      // custom list op configured `strategy: "none"` alongside a paginating
+      // `findMany` emits two structurally different `pagination` blobs. The
+      // second loses the name race and takes `_2`; the unpaginated one keeps
+      // its description.
+      const paginating: Record<string, Schema> = {
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          "x-kavo-entity": "Ad",
+        },
+      };
+      const unpaginated: Record<string, Schema> = {
+        pagination: {
+          type: "object",
+          properties: { limit: { type: "integer" }, offset: { type: "integer" } },
+          description: "Not supported: this entity does not paginate ('pagination.strategy' is 'none').",
+          "x-kavo-entity": "Ad",
+        },
+      };
+      const doc: Doc = {
+        paths: {
+          "/ads": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": paginating } },
+          "/ads/archived": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": unpaginated } },
+        },
+      };
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdPagination?.description).toBeUndefined();
+      expect(schemasOf(doc).AdPagination_2?.description).toContain("does not paginate");
+    });
+
+    it("collapses the identical blob repeated across an entity's read routes onto one component", () => {
+      const blob: Record<string, Schema> = {
+        include: { type: "array", items: { type: "string", enum: ["owner"] }, "x-kavo-entity": "Ad" },
+      };
+      const doc: Doc = {
+        paths: {
+          "/ads": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": { ...blob } } },
+          "/ads/{id}": { get: { "x-kavo-entity": "Ad", "x-kavo-query-schemas": { ...blob } } },
+        },
+      };
+
+      registerKavoSchemas(doc);
+
+      expect(Object.keys(schemasOf(doc))).toEqual(["AdInclude"]);
+    });
+
+    it("namespaces the components per entity", () => {
+      const doc: Doc = {
+        paths: {
+          "/ads": {
+            get: {
+              "x-kavo-entity": "Ad",
+              "x-kavo-query-schemas": {
+                sort: { type: "array", items: { type: "string", enum: ["a"] }, "x-kavo-entity": "Ad" },
+              },
+            },
+          },
+          "/users": {
+            get: {
+              "x-kavo-entity": "User",
+              "x-kavo-query-schemas": {
+                sort: { type: "array", items: { type: "string", enum: ["b"] }, "x-kavo-entity": "User" },
+              },
+            },
+          },
+        },
+      };
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdSort?.items?.enum).toEqual(["a"]);
+      expect(schemasOf(doc).UserSort?.items?.enum).toEqual(["b"]);
+    });
+
+    it("suffixes _N when one <Entity><Slot> name covers two structurally different shapes", () => {
+      // Entity `Ad` with a `sort` slot and an entity literally named `AdSor`
+      // with a `t`-prefixed… no such thing exists; the realistic clash is an
+      // entity `Ad` whose `sort` component races a differently-shaped `sort`
+      // component the same registry already holds under `AdSort` (e.g. a
+      // hand-registered schema). First-wins, then `_2`.
+      const doc: Doc = {
+        components: { schemas: { AdSort: { type: "string" } } },
+        paths: {
+          "/ads": {
+            get: {
+              "x-kavo-entity": "Ad",
+              "x-kavo-query-schemas": {
+                sort: { type: "array", items: { type: "string", enum: ["a"] }, "x-kavo-entity": "Ad" },
+              },
+            },
+          },
+        },
+      };
+
+      registerKavoSchemas(doc);
+
+      expect(schemasOf(doc).AdSort).toEqual({ type: "string" });
+      expect(schemasOf(doc).AdSort_2?.items?.enum).toEqual(["a"]);
+    });
+
+    it("does not mutate the schema on the source operation blob", () => {
+      const doc = withQuerySchemas({
+        sort: { type: "array", items: { type: "string", enum: ["name"] }, "x-kavo-entity": "Ad", title: "x" },
+      });
+
+      registerKavoSchemas(doc);
+
+      // The stored component drops `title` (#310's rule); the registry works
+      // off a clone, so re-running is stable.
+      expect(schemasOf(doc).AdSort?.title).toBeUndefined();
+      const once = JSON.stringify(doc);
+      registerKavoSchemas(doc);
+      expect(JSON.stringify(doc)).toBe(once);
+    });
   });
 });

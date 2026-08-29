@@ -34,7 +34,7 @@ import {
   oneOfArray,
   registerKavoSchemas,
 } from "@kavo/nest";
-import { InMemoryTodoAdapter, Todo, fakeInfrastructure } from "./support/fake-infrastructure.js";
+import { InMemoryTodoAdapter, Todo, TodoList, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 let app: INestApplication;
@@ -2945,5 +2945,211 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     expect(
       raw.paths["/todos/{id}"]?.["get"]?.responses?.["200"]?.content?.["application/json"]?.schema?.properties,
     ).toBeDefined();
+  });
+});
+
+describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
+  type Schema = {
+    type?: string;
+    description?: string;
+    properties?: Record<string, Schema>;
+    items?: Schema;
+    enum?: string[];
+    "x-kavo-entity"?: string;
+  };
+  type Doc = {
+    components?: { schemas?: Record<string, Schema> };
+    paths: Record<string, Record<string, { "x-kavo-query-schemas"?: unknown }>>;
+  };
+
+  const build = (): Doc =>
+    registerKavoSchemas(
+      SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build()) as unknown as Doc,
+    );
+  const schemas = (doc: Doc): Record<string, Schema> => doc.components?.schemas ?? {};
+
+  it("produces <Entity>Pagination/Include/Sort from the resolved config at bind time", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title", "priority"] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination).toEqual({
+      type: "object",
+      properties: {
+        limit: { type: "integer", description: "Page size, clamped to the configured maximum." },
+        offset: { type: "integer", description: "Zero-based index of the first returned row." },
+      },
+      "x-kavo-entity": "Todo",
+    });
+    expect(schemas(doc).TodoInclude?.items?.enum).toEqual(["list"]);
+    expect(schemas(doc).TodoInclude?.["x-kavo-entity"]).toBe("Todo");
+    expect(schemas(doc).TodoSort?.items?.enum).toEqual(["title", "priority", "-title", "-priority"]);
+    expect(schemas(doc).TodoSort?.["x-kavo-entity"]).toBe("Todo");
+    // The plumbing extension is gone from every route once hoisted.
+    for (const pathItem of Object.values(doc.paths)) {
+      for (const op of Object.values(pathItem)) {
+        expect(op["x-kavo-query-schemas"]).toBeUndefined();
+      }
+    }
+  });
+
+  it("omits <Entity>Include when nothing is includable, still emits Pagination and Sort", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoInclude).toBeUndefined();
+    expect(schemas(doc).TodoPagination).toBeDefined();
+    // Unconfigured `sortable` resolves to every own column — the same
+    // fully-resolved allowlist `applySearchQueryDocs` publishes for
+    // `searchable`, and the same set the fallback `item`/`list` response
+    // schema documents ("documents every own column when selectable is left
+    // unconfigured" elsewhere in this file). `<Entity>Sort` mirrors it
+    // verbatim (soft-delete column included) with the `-` descending forms
+    // appended — pinned exactly so a change to that default set is a visible
+    // diff, never a silent one.
+    expect(schemas(doc).TodoSort?.items?.enum).toEqual([
+      "id",
+      "title",
+      "done",
+      "priority",
+      "deletedAt",
+      "-id",
+      "-title",
+      "-done",
+      "-priority",
+      "-deletedAt",
+    ]);
+  });
+
+  it("emits no Pagination/Sort when the entity has no list route, but still Include on the single-row read", async () => {
+    // `operations` is an explicit whitelist once declared — naming everything
+    // except `findMany` keeps `findOne` (a single-row read) with no list
+    // route. `pagination`/`sort` are list-only, so only `<Entity>Include`
+    // survives.
+    @Kavo(Todo, {
+      operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
+      allowlists: { includable: ["list"] },
+    })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoInclude?.items?.enum).toEqual(["list"]);
+    expect(schemas(doc).TodoPagination).toBeUndefined();
+    expect(schemas(doc).TodoSort).toBeUndefined();
+  });
+
+  it("stamps no extension at all when a non-list read has nothing includable", async () => {
+    // Same no-list-route shape, but `includable` unconfigured — every slot
+    // is empty, so `applyQuerySchemaDocs` hits its empty-slots early return.
+    @Kavo(Todo, {
+      operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
+    })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const raw = SwaggerModule.createDocument(app, new DocumentBuilder().build()) as unknown as Doc;
+    const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"];
+    expect(itemBlob).toBeUndefined();
+    const doc = build();
+    expect(schemas(doc).TodoInclude).toBeUndefined();
+    expect(schemas(doc).TodoPagination).toBeUndefined();
+    expect(schemas(doc).TodoSort).toBeUndefined();
+  });
+
+  it("annotates <Entity>Pagination as unsupported under pagination.strategy: 'none'", async () => {
+    @Kavo(Todo, { pagination: { strategy: "none" } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination?.description).toBe(
+      "Not supported: this entity does not paginate ('pagination.strategy' is 'none') — every request serves the whole match set.",
+    );
+    // Still carries the shape and the entity marker.
+    expect(Object.keys(schemas(doc).TodoPagination?.properties ?? {})).toEqual(["limit", "offset"]);
+  });
+
+  it("reads a global-default pagination.strategy through the precedence chain", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C, { defaults: { pagination: { strategy: "none" } } });
+    const doc = build();
+
+    expect(schemas(doc).TodoPagination?.description).toContain("does not paginate");
+  });
+
+  it("documents an explicit empty sortable allowlist as a closed door", async () => {
+    @Kavo(Todo, { allowlists: { sortable: [] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const doc = build();
+
+    expect(schemas(doc).TodoSort?.items?.enum).toEqual([]);
+    expect(schemas(doc).TodoSort?.description).toBe("No field is sortable.");
+  });
+
+  it("namespaces the three components per entity across a multi-entity document", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title"] } })
+    @Controller("todos")
+    class TodoC {}
+    @Kavo(TodoList, { allowlists: { sortable: ["name"] } })
+    @Controller("lists")
+    class ListC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: fakeInfrastructure(adapter) }),
+        KavoModule.forFeature([TodoC as never, ListC as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    const doc = build();
+
+    expect(schemas(doc).TodoSort?.items?.enum).toEqual(["title", "-title"]);
+    expect(schemas(doc).TodoListSort?.items?.enum).toEqual(["name", "-name"]);
+    expect(schemas(doc).TodoInclude?.items?.enum).toEqual(["list"]);
+    expect(schemas(doc).TodoListInclude).toBeUndefined();
+  });
+
+  it("leaves the raw blob on the route when registerKavoSchemas is not run, split by route cardinality", async () => {
+    @Kavo(Todo, { allowlists: { sortable: ["title"], includable: ["list"] } })
+    @Controller("todos")
+    class C {}
+
+    await bootstrap(C);
+    const raw = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("t").setVersion("0").build(),
+    ) as unknown as Doc;
+
+    // The list route carries all three slots.
+    const listBlob = raw.paths["/todos"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
+    expect(Object.keys(listBlob ?? {}).sort()).toEqual(["include", "pagination", "sort"]);
+    expect(listBlob?.sort?.items?.enum).toEqual(["title", "-title"]);
+
+    // A single-row read carries `include` only — `pagination`/`sort` are
+    // list-only (`descriptor.cardinality === "many"`).
+    const itemBlob = raw.paths["/todos/{id}"]?.["get"]?.["x-kavo-query-schemas"] as Record<string, Schema> | undefined;
+    expect(Object.keys(itemBlob ?? {})).toEqual(["include"]);
+    expect(itemBlob?.include?.items?.enum).toEqual(["list"]);
   });
 });
