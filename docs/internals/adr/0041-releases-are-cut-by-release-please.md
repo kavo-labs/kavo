@@ -39,7 +39,9 @@ GitHub Release. `publish.yml` runs on `release: published` — a tag pushed by
 
 The release PR's title is `chore: release v${version}`
 (`pull-request-title-pattern`), so the squash-merge commit on `main` reads
-`chore: release vX.Y.Z (#NNN)`.
+`chore: release vX.Y.Z (#NNN)`. `pull-request-footer` ends the PR body with a
+`Co-authored-by: release-please[bot]` trailer, so the squash-merge commit
+attributes the release to the bot.
 
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking
 change on `0.x` at a minor bump rather than `1.0.0`, and

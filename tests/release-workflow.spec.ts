@@ -769,6 +769,12 @@ describe("release-please config", () => {
   it("titles the release PR with the version so the squash commit carries it", () => {
     expect(config["pull-request-title-pattern"]).toBe("chore: release v${version}");
   });
+
+  it("ends the PR body with a Co-authored-by trailer so the squash commit credits the bot", () => {
+    expect(config["pull-request-footer"]).toBe(
+      "Co-authored-by: release-please[bot] <55107282+release-please[bot]@users.noreply.github.com>",
+    );
+  });
 });
 
 describe("release-please workflow", () => {
