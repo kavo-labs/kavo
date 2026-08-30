@@ -31,5 +31,11 @@ export interface KavoAppContextRequest {
  * database read. Throwing from it fails the request as an unhandled error
  * (a 500 problem-details document), which is deliberate — an extractor that
  * cannot answer must not quietly answer an empty context.
+ *
+ * Return **plain, shallow data** — the fields policies and computed fields
+ * read, not `request.user` passed straight through. With the result cache
+ * on, `KavoContext.app` is canonicalized into the cache key: a framework/ORM
+ * object with prototype getters hashes the same for every caller (bucket
+ * collapse) and a cyclic one throws a `RangeError` on the read.
  */
 export type KavoAppContextExtractor = (request: KavoAppContextRequest) => KavoAppContext;

@@ -51,6 +51,13 @@ export const KAVO_APP_CONTEXT_PROPERTY = "__kavoAppContext";
 const serviceTokens = new Map<ClassRef, string>();
 
 /**
+ * Handed back when no `app` extractor is configured — frozen and shared so
+ * an `@Override` that forwards it as `KavoCallOptions.app` cannot mutate a
+ * per-request bag, matching core's own `EMPTY_APP_CONTEXT` default.
+ */
+const EMPTY_APP_CONTEXT: KavoAppContext = Object.freeze({});
+
+/**
  * The injection token of the `KavoService` bound to one entity. Stable per
  * entity class, usable in consumer constructors:
  * `@Inject(getKavoServiceToken(UserEntity))`.
@@ -110,5 +117,5 @@ export function boundKavoAppContext(controller: object, request: KavoAppContextR
   }
   const extractAppContext = (controller as Record<string, unknown>)[KAVO_APP_CONTEXT_PROPERTY] as
     KavoAppContextExtractor | undefined;
-  return extractAppContext === undefined ? {} : extractAppContext(request);
+  return extractAppContext === undefined ? EMPTY_APP_CONTEXT : extractAppContext(request);
 }
