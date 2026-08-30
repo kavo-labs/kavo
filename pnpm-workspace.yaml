@@ -7,10 +7,10 @@ packages:
   - examples/*
 
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
-  '@scarf/scarf': false
-  '@swc/core': true
+  "@prisma/client": true
+  "@prisma/engines": true
+  "@scarf/scarf": false
+  "@swc/core": true
   better-sqlite3: true
   cpu-features: false
   esbuild: true
