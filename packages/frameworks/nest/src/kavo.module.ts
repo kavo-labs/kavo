@@ -19,7 +19,6 @@ import {
 import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
-import { resolvePrincipalExtractor } from "./principal.js";
 import {
   applyBodySchemaDocs,
   applyConditionalRequestDocs,
@@ -35,7 +34,7 @@ import {
   KAVO_MODULE_OPTIONS,
   KAVO_CONDITIONAL_DOCS_METADATA,
   KAVO_CONTROLLER_METADATA,
-  KAVO_PRINCIPAL_PROPERTY,
+  KAVO_APP_CONTEXT_PROPERTY,
   KAVO_SERVICE_PROPERTY,
   getKavoServiceToken,
 } from "./tokens.js";
@@ -382,7 +381,7 @@ function requireArrayMutationRouteReachable(
  * the generated route methods need (they read `KAVO_SERVICE_PROPERTY` at
  * request time, never at construction time).
  *
- * The `principal` extractor rides along on the same pass, for the same
+ * The `app` context extractor rides along on the same pass, for the same
  * reason: routes are generated at decoration time (ADR-0012), long before
  * this module's options exist, so a per-request value that depends on them
  * cannot be baked into the generated method. Binding the *function* here
@@ -398,7 +397,7 @@ class KavoBinder implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    const extractPrincipal = resolvePrincipalExtractor(this.options.principal);
+    const extractAppContext = this.options.app;
     for (const wrapper of this.discovery.getControllers()) {
       const metatype = wrapper.metatype;
       const instance = wrapper.instance as Record<string, unknown> | undefined;
@@ -412,7 +411,7 @@ class KavoBinder implements OnModuleInit {
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
       requireArrayMutationRouteReachable(metadata, service);
       instance[KAVO_SERVICE_PROPERTY] = service;
-      instance[KAVO_PRINCIPAL_PROPERTY] = extractPrincipal;
+      instance[KAVO_APP_CONTEXT_PROPERTY] = extractAppContext;
 
       // The conditional-request Swagger docs (ADR-0020) decoration time
       // couldn't finish — see `applyConditionalRequestDocs`'s doc comment

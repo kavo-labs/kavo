@@ -4,6 +4,9 @@
 the `PolicyNode` DSL this ADR introduced (node constructors, `and`/`or`/`not`
 composition, `policyNeedsEntity`-driven pre-fetch) is gone; `policy` is now a
 single plain function, still resolved at the three scopes ADR-0036 added.
+[ADR-0043](/internals/adr/0043-app-context-replaces-principal) then removed
+`KavoContext.principal` outright (and with it the `KavoPrincipal` cast
+target §217 describes), replacing it with the app-defined `KavoContext.app`.
 Kept for history. (While it stood, this ADR was amended by
 [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only) —
 `operations.<id>.policy` as the only configuration surface — by

@@ -1,6 +1,6 @@
 # Custom operations
 
-Kavo has no separate lifecycle-hook system, no `beforeCreate`/`afterUpdate`. The two extension points below cover that ground: replace a standard operation's behavior, or declare an entirely new operation of your own. Both go through the exact same pipeline every built-in route does: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `principal`.
+Kavo has no separate lifecycle-hook system, no `beforeCreate`/`afterUpdate`. The two extension points below cover that ground: replace a standard operation's behavior, or declare an entirely new operation of your own. Both go through the exact same pipeline every built-in route does: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
 
 ## Replacing a standard operation's handler
 

@@ -3,6 +3,7 @@ import type {
   CacheStore,
   EntityId,
   EntityMetadata,
+  KavoAppContext,
   KavoRequest,
   KavoResponse,
   NormalizedQueryContext,
@@ -183,25 +184,41 @@ describe("cache settings resolution", () => {
     expect(adapter.reads).toBe(readsAfterMiss + 1);
   });
 
-  it("keys by principal: one caller's response never serves a different principal", async () => {
+  it("keys by app context: one caller's response never serves a different caller", async () => {
     const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
     await execute(crud, { operation: "createOne", body: ADA });
-    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 1 } } });
+    await execute(crud, { operation: "findOne", id: 1, options: { app: { id: 1 } as KavoAppContext } });
     const readsAfterMiss = adapter.reads;
 
-    // A different principal with the same query misses: no cross-caller leak.
-    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 2 } } });
+    // A different app context with the same query misses: no cross-caller leak.
+    await execute(crud, { operation: "findOne", id: 1, options: { app: { id: 2 } as KavoAppContext } });
     expect(adapter.reads).toBe(readsAfterMiss + 1);
 
-    // The same principal hits.
-    await execute(crud, { operation: "findOne", id: 1, options: { principal: { id: 1 } } });
+    // The same app context hits.
+    await execute(crud, { operation: "findOne", id: 1, options: { app: { id: 1 } as KavoAppContext } });
     expect(adapter.reads).toBe(readsAfterMiss + 1);
 
-    // Anonymous calls (no principal) share one bucket and miss against a
-    // principal'd entry.
+    // Calls with no app context share one bucket and miss against an
+    // entry keyed by a populated context.
     await execute(crud, { operation: "findOne", id: 1 });
     await execute(crud, { operation: "findOne", id: 1 });
     expect(adapter.reads).toBe(readsAfterMiss + 2);
+  });
+
+  it("keys on the normalized app context, so `{ app: {} }` and no options share one bucket", async () => {
+    const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
+    await execute(crud, { operation: "createOne", body: ADA });
+
+    // Warm with an explicit empty app context.
+    await execute(crud, { operation: "findOne", id: 1, options: { app: {} as KavoAppContext } });
+    const readsAfterMiss = adapter.reads;
+
+    // A call with no options at all hits it — the engine normalizes a
+    // missing app context to the same `{}` the key is built from, so this
+    // would break if the key were built from `request.options?.app` instead
+    // of `context.app`.
+    await execute(crud, { operation: "findOne", id: 1 });
+    expect(adapter.reads).toBe(readsAfterMiss);
   });
 
   it("rejects a malformed 'cache' override at bootstrap, naming the key", () => {

@@ -110,8 +110,25 @@ export async function computeEtag(representation: unknown): Promise<string> {
  * but carries `{ d, e, s }`) would otherwise hash two different wire forms
  * to the same tag — an ETag collision, which for `If-Match` is a lost
  * update.
+ *
+ * A reference cycle (or absurdly deep nesting) throws a `RangeError` with
+ * an actionable message at `MAX_DEPTH` rather than recursing to an opaque
+ * stack overflow. No real DTO or `KavoAppContext` comes near that depth;
+ * hitting it means a cyclic object reached the ETag/cache-key path.
  */
+const MAX_DEPTH = 512;
+
 export function canonicalize(input: unknown): string {
+  return canonicalizeAt(input, 0);
+}
+
+function canonicalizeAt(input: unknown, depth: number): string {
+  if (depth > MAX_DEPTH) {
+    throw new RangeError(
+      `canonicalize: value nested past ${MAX_DEPTH} levels — a reference cycle, or an object too deep to hash. ` +
+        "A KavoAppContext used with the result cache must be plain, shallow, acyclic data.",
+    );
+  }
   const value = unwrapToJson(input);
   if (value === null || value === undefined) {
     return "null";
@@ -135,7 +152,7 @@ export function canonicalize(input: unknown): string {
     return JSON.stringify(value.toISOString());
   }
   if (Array.isArray(value)) {
-    return `[${value.map(canonicalize).join(",")}]`;
+    return `[${value.map((element) => canonicalizeAt(element, depth + 1)).join(",")}]`;
   }
   const source = value as Record<string, unknown>;
   const members: string[] = [];
@@ -144,7 +161,7 @@ export function canonicalize(input: unknown): string {
     if (member === undefined) {
       continue;
     }
-    members.push(`${JSON.stringify(key)}:${canonicalize(member)}`);
+    members.push(`${JSON.stringify(key)}:${canonicalizeAt(member, depth + 1)}`);
   }
   return `{${members.join(",")}}`;
 }

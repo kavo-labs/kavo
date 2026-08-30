@@ -59,18 +59,25 @@ default, validated once in `createKavo`, and reached at runtime through
 in-process store; a Redis or other shared backend is a caller-registered
 object, keeping core at zero runtime dependencies (ADR-0005).
 
-**2. The key is entity + operation + target id + principal + canonicalized
+**2. The key is entity + operation + target id + app context + canonicalized
 query fingerprint.** The entity name is a separate parameter the store keys
 on, so invalidation stays a whole-entity map delete. The in-key parts are
-`${operationId}:${requestId}:${canonicalize(principal)}:${canonicalize(queryFingerprint(query))}`
+`${operationId}:${requestId}:${canonicalize(app)}:${canonicalize(queryFingerprint(query))}`
 (`kavo-engine.ts` `cacheKey`). `requestId` is empty on a `findMany`, where
-there is no target row. The principal half is the review fix for
+there is no target row. The app-context half is the review fix for
 cross-caller leakage: computed fields and custom handlers may legitimately
-vary by `context.principal`, so a response baked for one principal must
-never be served to a different one — `canonicalize(undefined)` and
-`canonicalize(null)` both yield `"null"`, so anonymous calls share one
-bucket while each authenticated principal gets its own entries (whole-entity
-invalidation still covers them all). `queryFingerprint` is a plain-data
+vary by `context.app` (ADR-0043), so a response baked for one caller must
+never be served to a different one — an empty `KavoAppContext`
+canonicalizes to `"{}"`, so calls that carry no app context share one
+bucket while each distinct context gets its own entries (whole-entity
+invalidation still covers them all). Because `context.app` is canonicalized
+into the key, it must be **plain, shallow, JSON-serializable** data whenever
+the result cache is on. `canonicalize` walks own-enumerable keys only, so a
+framework/ORM object with prototype getters (a Passport user, a TypeORM
+entity) hashes identically for every caller and collapses them onto one
+bucket; a cyclic value throws a `RangeError` at a 512-level depth guard
+rather than overflowing the stack. No escape hatch; the constraint is
+documented in the result-cache and auth guides. `queryFingerprint` is a plain-data
 projection of the normalized query — `filter`, `sort`, `pagination`,
 `fields`, `include`, `withDeleted`, `onlyDeleted`, `count` — folding each
 include node down to its query-decided parts, `fields` and `children` (the

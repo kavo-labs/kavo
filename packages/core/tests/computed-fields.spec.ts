@@ -4,6 +4,7 @@ import type {
   DefaultKavoService,
   EntityConfig,
   EntityMetadata,
+  KavoAppContext,
   KavoContext,
   ListResultDto,
 } from "@kavo/core";
@@ -134,12 +135,14 @@ describe("computed fields — default projection (ADR-0019)", () => {
         viewer: {
           resolve: (_user: User, context: KavoContext<User>) => {
             seen = context;
-            return (context.principal as { id: string } | null)?.id ?? "anonymous";
+            return (context.app as { id?: string }).id ?? "anonymous";
           },
         },
       },
     } as never);
-    const item = (await crud.findOne(1, undefined, { principal: { id: "u-7" } })) as User & { viewer: string };
+    const item = (await crud.findOne(1, undefined, { app: { id: "u-7" } as KavoAppContext })) as User & {
+      viewer: string;
+    };
     expect(item.viewer).toBe("u-7");
     expect(seen).toMatchObject({ entityName: "User", operation: "findOne" });
     expect((seen as unknown as KavoContext<User>).correlationId).toEqual(expect.any(String));
@@ -651,9 +654,9 @@ describe("computed fields — on an included relation target", () => {
         },
       },
     });
-    await posts.findOne(10, { include: ["author"] }, { principal: { id: "u-7" } });
+    await posts.findOne(10, { include: ["author"] }, { app: { id: "u-7" } as KavoAppContext });
     // Request-scoped members are the caller's, and true from anywhere …
-    expect(seen).toMatchObject({ principal: { id: "u-7" } });
+    expect(seen).toMatchObject({ app: { id: "u-7" } });
     // … while the entity-scoped ones describe the *root* operation.
     expect(seen).toMatchObject({ entityName: "Post", operation: "findOne" });
     // `repository` is entity-scoped too, and it is the one that can act:

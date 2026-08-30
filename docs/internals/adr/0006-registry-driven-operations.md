@@ -51,7 +51,7 @@ consumer registered a handler that never ran, so removing it removed a
 trick rather than a capability. But the capability was the point. Without
 it, the moment an application needs `markPaidOne` or `publishOne` it leaves
 the framework for a native route, and loses DTO resolution, serialization,
-the engine pipeline, and (since issue #142) the automatic principal along
+the engine pipeline, and (since issue #142) the automatic app context along
 with it. Those are what a registry entry buys, and refusing to let an
 application name one was refusing them for nothing.
 

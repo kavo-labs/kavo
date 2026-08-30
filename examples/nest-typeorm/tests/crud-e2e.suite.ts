@@ -310,7 +310,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const created = await request(server()).post("/owners").send({ name: "Zoe", email: "zoe@x.io" }).expect(201);
       const id = created.body.id as number;
 
-      // No `x-permissions` header at all: `context.principal` is `null`,
+      // No `x-permissions` header at all: `context.app` is `{}`,
       // same as every other route in this app — hasPermission() denies it.
       const anonymous = await request(server()).delete(`/owners/${id}`).expect(403);
       expect(anonymous.body).toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });

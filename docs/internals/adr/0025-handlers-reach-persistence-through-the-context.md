@@ -24,7 +24,7 @@ Building a module-scope `DataSource` gives up `forRootAsync`. Casting
 outside a transaction, and couples the handler to one ORM, which is the
 coupling `@kavo/core` exists to prevent. Writing the route by hand gives up
 the registry identity, per-operation config, generated OpenAPI and
-automatic principal that a registry entry buys, which is what issue #145
+automatic app context that a registry entry buys, which is what issue #145
 set out to stop people doing.
 
 Core cannot reach for anything to fix this (ADR-0001, ADR-0005). It does

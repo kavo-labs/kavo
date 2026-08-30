@@ -29,10 +29,10 @@ Every generic parameter defaults from the entity, so the zero-config path needs 
 The second argument every method accepts, for anything that isn't part of the entity's own shape:
 
 ```ts
-await books.findOne(1, undefined, { principal: currentUser });
+await books.findOne(1, undefined, { app: { userId: currentUser.id } });
 ```
 
-- **`principal`**: the authenticated caller, opaque to Kavo. See [Wiring your own auth](/guides/wiring-your-own-auth).
+- **`app`**: the application's request-scoped context (`KavoAppContext`), opaque to Kavo. See [Wiring your own auth](/guides/wiring-your-own-auth).
 - **`preconditions`**: `If-Match`/`If-None-Match` tokens for [conditional writes](/features/caching-and-etags).
 - **`transaction`**: an opaque adapter-supplied handle, for a caller that already has one open.
 

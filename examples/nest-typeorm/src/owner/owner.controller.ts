@@ -3,7 +3,7 @@ import { Kavo, Override, getKavoServiceToken } from "@kavo/nest";
 import type { DefaultKavoService, EntityId, RequestPreconditions } from "@kavo/core";
 import { Owner } from "./owner.entity.js";
 import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
-import { OwnerPrincipalGuard } from "./owner-principal.guard.js";
+import { OwnerAppContextGuard } from "./owner-app-context.guard.js";
 import { hasPermission } from "./owner.policy.js";
 
 /**
@@ -47,11 +47,11 @@ import { hasPermission } from "./owner.policy.js";
  *
  * Authorization: `DELETE /owners/:id` additionally requires the
  * `owner:delete` permission (ADR-0037) — `hasPermission('owner:delete')`
- * (`owner.policy.ts`), a one-line `Policy<Owner>`. `OwnerPrincipalGuard`
+ * (`owner.policy.ts`), a one-line `Policy<Owner>`. `OwnerAppContextGuard`
  * stands in for a real app's auth layer, reading a comma-separated
  * `x-permissions` header into the shape `hasPermission` reads off
- * `context.principal`; `AppModule`'s `principal: true` is what moves it
- * from `request.user` onto `context.principal`. No other route on this
+ * `context.app`; `AppModule`'s `app` extractor is what moves it from
+ * `request.user` onto `context.app`. No other route on this
  * controller, and no other controller in this app, is gated — see
  * `docs/guides/wiring-your-own-auth` for more on writing a policy function.
  */
@@ -92,7 +92,7 @@ import { hasPermission } from "./owner.policy.js";
   },
 })
 @Controller("owners")
-@UseGuards(OwnerPrincipalGuard)
+@UseGuards(OwnerAppContextGuard)
 export class OwnerController {
   constructor(@Inject(getKavoServiceToken(Owner)) private readonly base: DefaultKavoService<Owner>) {}
 

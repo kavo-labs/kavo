@@ -16,5 +16,7 @@
       "@kavo/sse": ["../../packages/realtime/sse/src/index.ts"]
     }
   },
-  "include": ["tests"]
+  // The `KavoAppContext` augmentation the app ships in src/ — tests read
+  // `context.app` with the same typing the app does.
+  "include": ["tests", "src/kavo-app-context.d.ts"]
 }

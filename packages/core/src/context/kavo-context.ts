@@ -24,6 +24,50 @@ export interface KavoContextState {
 }
 
 /**
+ * The application's own request-scoped context — an interface Kavo carries
+ * on `KavoContext.app` but never populates, inspects or shapes. It is `{}`
+ * until the app widens it by declaration merging:
+ *
+ * ```ts
+ * declare module "@kavo/core" {
+ *   interface KavoAppContext {
+ *     userId?: string;
+ *     roles?: string[];
+ *     tenantId?: string;
+ *   }
+ * }
+ * ```
+ *
+ * One shape per process (the `Express.Request` pattern), not per entity:
+ * `@Kavo` is a decorator and cannot infer a generic from a module option,
+ * so a global augmented interface is what types every `context.app.*` read.
+ * Unaugmented it stays `{}`, and any field read is a compile error — the
+ * signal to declare the fields the app actually uses. This is the caller
+ * slot the pre-ADR-0043 context carried untyped (ADR-0043).
+ *
+ * **Declare every field optional** unless an extractor is guaranteed to fill
+ * it: Kavo types `context.app` as fully populated regardless of what the
+ * request carried, so a required field is a `string` at compile time and
+ * `undefined` at run time on any request with no (or a partial) `app`
+ * extractor — including every GraphQL/MCP call.
+ *
+ * **Put only plain, shallow data here** — the fields policies and computed
+ * fields read, not a framework/ORM object passed straight through. With the
+ * result cache on, `context.app` is walked by `canonicalize` into the cache
+ * key on every cacheable read: a value with prototype getters (a Passport
+ * user class, a TypeORM entity, a class-transformer instance) canonicalizes
+ * to the same string for every caller, collapsing them onto one cache
+ * bucket; a deeply nested or cyclic value is a per-read cost or a stack
+ * overflow. Build a plain object in the extractor / `KavoCallOptions.app`.
+ *
+ * Treat it as read-only inside a handler: a request that carries no app
+ * context is handed a shared frozen `{}`, so a write either throws or is a
+ * silent no-op depending on the caller's strict-mode.
+ */
+// oxlint-disable-next-line no-empty-interface -- widened by app declaration merging
+export interface KavoAppContext {}
+
+/**
  * The per-request context threaded through the whole pipeline —
  * one object carrying identity, resolved config, and request-scoped state.
  */
@@ -58,20 +102,19 @@ export interface KavoContext<Entity = unknown> {
    */
   readonly repository: RepositoryAdapter<Entity>;
   /**
-   * The authenticated caller — opaque to core, and available to custom
-   * operation handlers and computed-field resolvers. Core never inspects
-   * it and never populates it: it is whatever the caller put in
-   * `KavoCallOptions.principal`, and `null` when nothing did.
+   * The application's request-scoped context (`KavoAppContext`) — available
+   * to custom operation handlers, computed-field resolvers and policies.
+   * Core never inspects, populates or shapes it: it is whatever the caller
+   * put in `KavoCallOptions.app`, and an empty object when nothing did.
    *
    * A programmatic caller passes it per call
-   * (`crud.findOne(id, query, { principal })`). Over HTTP it is the
-   * framework layer's job, and `@kavo/nest` does it only when the app has
-   * said where the caller lives — `KavoModule.forRoot({ principal: true })`
-   * for `request.user`, or an extractor function for anything else.
+   * (`crud.findOne(id, query, { app })`). Over HTTP it is the framework
+   * layer's job, and `@kavo/nest` fills it only when the app configures an
+   * extractor — `KavoModule.forRoot({ app: (request) => request.user })`.
    * Without that option a generated route sends no options at all and this
-   * stays `null`.
+   * stays `{}`.
    */
-  readonly principal: unknown;
+  readonly app: KavoAppContext;
   /** Active transaction, if any; `null` outside transactions. */
   readonly transaction: TransactionContext | null;
   /** Parsed, validated query — read operations only; `null` for writes. */

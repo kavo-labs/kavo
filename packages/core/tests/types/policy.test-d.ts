@@ -29,7 +29,7 @@ kavo.createCrud(Post, {
 
 // A plain function still type-checks, at every scope.
 const hasPermission: Policy<Post> = ({ context }) =>
-  ((context.principal as { permissions?: readonly string[] } | null)?.permissions ?? []).includes("post:update");
+  ((context.app as { permissions?: readonly string[] }).permissions ?? []).includes("post:update");
 
 kavo.createCrud(Post, {
   operations: { updateOne: { policy: hasPermission } },
@@ -49,6 +49,6 @@ kavo.createCrud(Post, {
 // concrete Policy<Post> is a narrower function type and not assignable to
 // it (contravariant parameter), so the global default is written generic.
 const globalHasPermission: Policy = ({ context }) =>
-  ((context.principal as { permissions?: readonly string[] } | null)?.permissions ?? []).includes("post:update");
+  ((context.app as { permissions?: readonly string[] }).permissions ?? []).includes("post:update");
 
 createKavo({ policy: globalHasPermission });

@@ -16,8 +16,8 @@ the natural way to write an override is to delegate to the typed service:
 ```ts
 @Override()
 async patchOne(id: EntityId, body: Partial<Todo>, _p: RequestPreconditions | null, request: Request) {
-  const principal = boundKavoPrincipal(this, request);
-  return this.base.patchOne(id, body, { principal });
+  const app = boundKavoAppContext(this, request);
+  return this.base.patchOne(id, body, { app });
 }
 ```
 

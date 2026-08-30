@@ -155,7 +155,7 @@ outside it.
 Out of scope for `@kavo/sse`, deliberately, since #154/#155:
 `RealtimeTransport`'s own doc comment is the authoritative statement — a
 transport that fans `channel`/`entity` into a pub/sub topic without
-checking, per subscriber, whether that principal could have read the row
+checking, per subscriber, whether that caller could have read the row
 over REST leaks it to every subscriber of that channel, filtered or not.
 Row/tenant-level subscriber scoping (`authorize`) is future work.
 

@@ -26,8 +26,8 @@ export interface OverrideMetadata {
  * The two trailing parameters are what an override needs to keep behavior a
  * generated route would have given it for free: `preconditions` carries the
  * `If-Match`/`If-None-Match` tokens the engine enforces (ADR-0020), and
- * `request` is what `boundKavoPrincipal(this, request)` runs the module's
- * configured `principal` extractor against.
+ * `request` is what `boundKavoAppContext(this, request)` runs the module's
+ * configured `app` context extractor against.
  *
  * For a read operation, `query` arrives already wrapped in `WireQuery` — the
  * same `Query(new WireQueryPipe())` decorator `@Kavo` applies to a generated

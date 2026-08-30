@@ -6,7 +6,7 @@ import type {
   PaginationStrategy,
   RealtimeTransport,
 } from "@kavo/core";
-import type { KavoPrincipalOption } from "./principal.js";
+import type { KavoAppContextExtractor } from "./app-context.js";
 
 /**
  * `KavoModule.forRoot` options — the NestJS skin over core's
@@ -50,17 +50,16 @@ export interface KavoModuleOptions {
    */
   readonly cacheStore?: CacheStore;
   /**
-   * Where a generated route finds the authenticated caller to put on
-   * `KavoContext.principal` — `true` for `request.user`, or a function for
-   * anything else. Module scope rather than an assumption, because a Nest
-   * app's guard may leave the caller anywhere; and an option rather than a
-   * default, because populating it silently would change what every
-   * existing `principal`-reading computed field or handler returns on
-   * upgrade. Unset means `principal` stays `null`, as it always has.
+   * Builds the application's request-scoped context (`KavoAppContext`) that
+   * every generated route puts on `KavoContext.app` — a function off the
+   * incoming request, e.g. `(request) => request.user as KavoAppContext`.
+   * Module scope rather than an assumption, because a Nest app's guard may
+   * leave the caller anywhere and the context's shape is the app's to
+   * define. Unset means `KavoContext.app` stays `{}`.
    *
    * It is `@kavo/nest`'s own concern and never reaches `createKavo`: core
-   * takes the principal per call (`KavoCallOptions.principal`) and has no
-   * idea what an HTTP request is (ADR-0005).
+   * takes the app context per call (`KavoCallOptions.app`) and has no idea
+   * what an HTTP request is (ADR-0005).
    */
-  readonly principal?: KavoPrincipalOption;
+  readonly app?: KavoAppContextExtractor;
 }

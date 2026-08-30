@@ -1,3 +1,4 @@
+import type { KavoAppContext } from "../context/kavo-context.js";
 import type { KavoSettings } from "../config/settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { RequestPreconditions } from "../caching/etag.js";
@@ -11,8 +12,8 @@ import type { TransactionContext } from "../persistence/transaction-manager.js";
 export interface KavoCallOptions {
   /** Join an existing transaction (the explicit `{ ctx }` parameter). */
   readonly transaction?: TransactionContext;
-  /** Caller identity to expose on `KavoContext.principal`. */
-  readonly principal?: unknown;
+  /** The application's request-scoped context to expose on `KavoContext.app`. */
+  readonly app?: KavoAppContext;
   /** Per-call settings overrides (e.g. a one-off `pagination.count`). */
   readonly settings?: DeepPartial<KavoSettings>;
   /**

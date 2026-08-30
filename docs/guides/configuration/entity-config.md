@@ -39,12 +39,13 @@ Authorization (ADR-0037), resolved nearest-scope-wins across `operations.<id>.po
 ```ts
 import type { Policy } from "@kavo/core";
 
+// `context.app` is typed by the interface your app declares — see Wiring your own auth.
 function hasPermission(name: string): Policy<Post> {
-  return ({ context }) => ((context.principal as { permissions?: readonly string[] } | null)?.permissions ?? []).includes(name);
+  return ({ context }) => (context.app.permissions ?? []).includes(name);
 }
 
 const isOwner: Policy<Post> = ({ context, entity }) => {
-  const userId = (context.principal as { userId?: string } | null)?.userId;
+  const { userId } = context.app;
   return userId != null && entity?.authorId === userId;
 };
 
@@ -62,4 +63,4 @@ const isOwner: Policy<Post> = ({ context, entity }) => {
 })
 ```
 
-A single-row operation (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) with a resolved policy always gets the loaded row as `entity`, whether the policy is declared on the operation directly or inherited from an entity/global default; `createOne`/`findMany` always call the policy with `entity: undefined`, since neither has a single row to load. See [Policy](/features/policy) for the full shape, the scope-resolution rules, and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for getting the caller onto `context.principal`.
+A single-row operation (`findOne`/`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) with a resolved policy always gets the loaded row as `entity`, whether the policy is declared on the operation directly or inherited from an entity/global default; `createOne`/`findMany` always call the policy with `entity: undefined`, since neither has a single row to load. See [Policy](/features/policy) for the full shape, the scope-resolution rules, and how the stage behaves, and [Wiring your own auth](/guides/wiring-your-own-auth) for building `context.app` and typing it.

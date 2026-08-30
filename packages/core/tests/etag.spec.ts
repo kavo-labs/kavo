@@ -63,6 +63,21 @@ describe("canonicalize", () => {
     const wrapped = { toJSON: () => ({ b: 2, a: 1 }) };
     expect(canonicalize(wrapped)).toBe(canonicalize({ a: 1, b: 2 }));
   });
+
+  it("throws an actionable RangeError on a reference cycle instead of overflowing the stack", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() => canonicalize(cyclic)).toThrow(RangeError);
+    expect(() => canonicalize(cyclic)).toThrow(/nested past 512 levels/);
+  });
+
+  it("still handles genuinely deep-but-finite data (well under the limit)", () => {
+    let nested: unknown = 1;
+    for (let i = 0; i < 100; i++) {
+      nested = { inner: nested };
+    }
+    expect(() => canonicalize(nested)).not.toThrow();
+  });
 });
 
 describe("computeEtag", () => {
