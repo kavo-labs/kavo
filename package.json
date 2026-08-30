@@ -39,7 +39,7 @@
     "mermaid": "^11.16.1",
     "oxlint": "^1.79.0",
     "prettier": "^3.9.6",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "unplugin-swc": "^1.5.11",
     "vite": "^7.3.6",
     "vitepress": "^1.6.4",
