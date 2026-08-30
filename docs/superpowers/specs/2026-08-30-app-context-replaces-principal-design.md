@@ -73,7 +73,7 @@ export interface KavoAppContext {}
 export interface KavoContext<Entity = unknown> {
   // ...unchanged members: entityName, operation, config, repository,
   //    transaction, query, correlationId, state...
-  readonly app: KavoAppContext;   // replaces `readonly principal: unknown`
+  readonly app: KavoAppContext; // replaces `readonly principal: unknown`
 }
 ```
 
@@ -156,7 +156,7 @@ only uses `when()` needs no `policy.accessors` at all.
   - `KavoPrincipalRequest` → `KavoAppContextRequest` (kept as-is: structural
     request bag, `user?: unknown` + index signature).
   - `KavoPrincipalExtractor` → `KavoAppContextExtractor =
-    (request: KavoAppContextRequest) => KavoAppContext`.
+(request: KavoAppContextRequest) => KavoAppContext`.
   - `KavoPrincipalOption` (`boolean | extractor`) → **removed**. The module option
     becomes a bare function; `true` (meaning `request.user`) has no analogue — a
     plain object cannot imply which fields to pull.

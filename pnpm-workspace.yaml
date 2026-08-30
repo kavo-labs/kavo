@@ -6,6 +6,19 @@ packages:
   - packages/protocols/*
   - examples/*
 
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  "@scarf/scarf": false
+  "@swc/core": true
+  better-sqlite3: true
+  cpu-features: false
+  esbuild: true
+  mongodb-memory-server: true
+  prisma: true
+  protobufjs: true
+  ssh2: false
+
 overrides:
   "@mikro-orm/better-sqlite>better-sqlite3": "^13.0.2"
   "js-yaml@<5.2.2": "^5.2.3"
