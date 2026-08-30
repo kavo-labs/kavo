@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.15.5](https://github.com/kavo-labs/kavo/compare/v0.15.4...v0.15.5) (2026-08-30)
+
+
+### Features
+
+* **example:** add structured-JSON `vitals` column to Dog entity ([#324](https://github.com/kavo-labs/kavo/issues/324)) ([89bf64c](https://github.com/kavo-labs/kavo/commit/89bf64c8772a573bd44986023a1e9a1e4b594673))
+* **nest:** add &lt;Entity&gt;Filter/&lt;Entity&gt;Query component schemas ([#318](https://github.com/kavo-labs/kavo/issues/318)) ([29fd08a](https://github.com/kavo-labs/kavo/commit/29fd08a4d543623e488fa7796ca63ad9a2bf4993)), closes [#314](https://github.com/kavo-labs/kavo/issues/314)
+* **nest:** add &lt;Entity&gt;Pagination/Include/Sort query-param component schemas ([#317](https://github.com/kavo-labs/kavo/issues/317)) ([0347203](https://github.com/kavo-labs/kavo/commit/034720383fa9fbcbaebccfe23b9645f31d524bb4)), closes [#313](https://github.com/kavo-labs/kavo/issues/313)
+* **nest:** derive Swagger schema `required` from column nullability ([#322](https://github.com/kavo-labs/kavo/issues/322)) ([74f5fdc](https://github.com/kavo-labs/kavo/commit/74f5fdca71138651b9b35f10149ae59285e1224c))
+* **nest:** wire registerKavoSchemas into the nest-typeorm example ([#315](https://github.com/kavo-labs/kavo/issues/315)) ([a560e4e](https://github.com/kavo-labs/kavo/commit/a560e4e69ad4adb70550d341e1314f5871e8d09e))
+
+
+### Bug Fixes
+
+* **nest:** shape &lt;Entity&gt;Pagination schema to the resolved pagination strategy ([#320](https://github.com/kavo-labs/kavo/issues/320)) ([a8f0e36](https://github.com/kavo-labs/kavo/commit/a8f0e36a069a3fe07ecae9fd42522a60521d08a1)), closes [#319](https://github.com/kavo-labs/kavo/issues/319)
+
 ## [0.15.4](https://github.com/kavo-labs/kavo/compare/v0.15.3...v0.15.4) (2026-08-29)
 
 
