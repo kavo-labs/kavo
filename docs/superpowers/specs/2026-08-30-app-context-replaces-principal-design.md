@@ -79,7 +79,9 @@ export interface KavoContext<Entity = unknown> {
 
 - `packages/core/src/context/default-kavo-context.ts`: `KavoContextInit.principal?`
   → `app?: KavoAppContext`; `createKavoContext` sets
-  `app: Object.freeze(init.app ?? {})` (was `principal: init.principal ?? null`).
+  `app: init.app ?? EMPTY_APP_CONTEXT` — a caller-supplied `init.app` passes
+  through untouched; the shared frozen `EMPTY_APP_CONTEXT` singleton is used
+  only when none was given (was `principal: init.principal ?? null`).
 - `packages/core/src/service/kavo-call-options.ts`: `KavoCallOptions.principal?: unknown`
   → `app?: KavoAppContext`. JSDoc rewritten (no "authenticated caller …
   `request.user`" language; it is whatever object the caller passes).
@@ -212,8 +214,9 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
   this change (pre-1.0 developer release; breaking is fine).
 - No `cache.varyBy` escape hatch. The canonicalizability constraint is documented
   instead.
-- Policy DSL keeps its current helper set and single-predicate collapse
-  (ADR-0037); only the value source changes.
+- Policy stays a single `(args) => boolean` predicate (ADR-0037; no helper set,
+  no `KavoPrincipal` type); only the value source it reads changes
+  (`args.context.app`).
 - Core still does not authenticate, validate, or shape the app context
   (ADR-0032 §8 non-goal preserved).
 

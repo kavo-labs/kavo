@@ -11,6 +11,7 @@ declare module "@kavo/core" {
   interface KavoAppContext {
     userId?: string;
     roles?: string[];
+    permissions?: string[];
     tenantId?: string;
   }
 }

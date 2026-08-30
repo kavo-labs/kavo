@@ -89,5 +89,7 @@ error code.
 - **`KavoAppContext` must be plain, shallow data when the result cache is on.**
   The cache key canonicalizes it (§Result cache); a class instance with prototype
   getters canonicalizes identically for every caller and collapses the cache
-  bucket, and a cyclic value overflows the stack. Documented as an integrator
-  constraint (ADR-0031, the result-cache and auth guides), not enforced.
+  bucket, and a cyclic value throws a `RangeError` from `canonicalize`'s
+  512-level depth guard rather than serving a wrong hit. Documented as an
+  integrator constraint (ADR-0031, the result-cache and auth guides), not
+  otherwise enforced.
