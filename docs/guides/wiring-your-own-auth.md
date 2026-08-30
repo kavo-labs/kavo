@@ -9,14 +9,19 @@
 ```ts
 declare module "@kavo/core" {
   interface KavoAppContext {
-    userId: string;
-    roles: string[];
-    tenantId: string;
+    userId?: string;
+    roles?: string[];
+    tenantId?: string;
   }
 }
 ```
 
 One shape per process — `@Kavo` is a decorator and can't infer a per-entity type, so the augmented interface is what types `context.app` everywhere. Until you declare a field, reading it is a compile error: an unwired ownership check should not silently type-check.
+
+Two rules for what goes in it:
+
+- **Declare every field optional** unless your extractor is guaranteed to populate it. Kavo types `context.app` as fully populated no matter what the request carried, so a required `userId: string` is `undefined` at run time on any request with no `app` extractor — an anonymous REST call, and _every_ GraphQL/MCP call. A required field turns that into a silent bug (`context.app.userId === entity.ownerId` compiles clean and compares `undefined`); an optional one forces you to handle the missing case.
+- **Put plain, shallow data in it** — the fields your policies and computed fields read, not `request.user` passed straight through. When the [result cache](/features/result-cache) is on, `context.app` is walked into the cache key on every cacheable read: a class instance with getter-backed fields (a Passport user, a TypeORM entity, a class-transformer object) canonicalizes identically for every caller and collapses them onto one cache bucket, so one caller's response is served to another. Build a plain object: `{ userId: request.user?.id, roles: request.user?.roles }`, not `request.user`.
 
 ## Populate it
 
@@ -26,17 +31,21 @@ Getting `app` in place is two separate jobs, and only the second is Kavo's. Auth
 KavoModule.forRootAsync({
   useFactory: () => ({
     infrastructure: createInfrastructure(dataSource),
-    // `request.user`: where Passport and most hand-rolled guards leave it.
-    app: (request) => (request.user ?? {}) as KavoAppContext,
+    // Pull the plain fields you need off `request.user` — don't pass the
+    // guard's user object through as-is (see "Type it" above).
+    app: (request): KavoAppContext => {
+      const user = request.user as { id?: string; roles?: string[] } | undefined;
+      return { userId: user?.id, roles: user?.roles };
+    },
   }),
 });
 
 // Read from wherever your guard actually leaves things:
 KavoModule.forRoot({
   infrastructure: createInfrastructure(dataSource),
-  app: (request) => {
+  app: (request): KavoAppContext => {
     const session = request["session"] as Session | undefined;
-    return { userId: session?.account } as KavoAppContext;
+    return { userId: session?.account };
   },
 });
 ```
@@ -47,7 +56,7 @@ The extractor runs once per request, inside the generated route handler, and wha
 - It reaches standard and custom operations alike. One generated handler builds the request for every route, so a replacement handler on `POST /books/:id/claim` sees the same `context.app` a plain `GET /books/1` does.
 - It reaches the generated **REST** routes and nothing else. The GraphQL and MCP surfaces (`graphql`/`mcp` above, and controllers extending `BaseKavoGraphQLController`/`BaseKavoMcpController`) call the service directly, so `context.app` is `{}` there no matter what this option says. A computed field that varies by viewer answers for an empty context over `POST /graphql`.
 - Programmatic callers pass their own: `crud.findOne(id, query, { app })`. The module option is HTTP wiring, not a global; a background job has no request to extract from.
-- When the [result cache](/features/result-cache) is on, `KavoAppContext` must be JSON-canonicalizable — no reference cycles. The cache key includes `context.app`, so a request object or a logger stuffed into it would recurse forever. Put only plain data there, or keep the cache off.
+- When the [result cache](/features/result-cache) is on, the "plain, shallow data" rule above is load-bearing: the cache key is built from `context.app`. A cyclic value throws a `RangeError` on the read; a framework object silently collapses callers onto one bucket.
 - A method Kavo does not generate passes its own too. An `@Override`'d method or a fully custom route reaches the engine itself, so nothing fills `options` for it. `boundKavoAppContext(this, request)` runs the extractor the module configured, so the method does not restate where the caller lives:
 
   ```ts

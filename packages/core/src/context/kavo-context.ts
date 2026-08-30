@@ -31,9 +31,9 @@ export interface KavoContextState {
  * ```ts
  * declare module "@kavo/core" {
  *   interface KavoAppContext {
- *     userId: string;
- *     roles: string[];
- *     tenantId: string;
+ *     userId?: string;
+ *     roles?: string[];
+ *     tenantId?: string;
  *   }
  * }
  * ```
@@ -45,10 +45,24 @@ export interface KavoContextState {
  * signal to declare the fields the app actually uses. This is the caller
  * slot the pre-ADR-0043 context carried untyped (ADR-0043).
  *
+ * **Declare every field optional** unless an extractor is guaranteed to fill
+ * it: Kavo types `context.app` as fully populated regardless of what the
+ * request carried, so a required field is a `string` at compile time and
+ * `undefined` at run time on any request with no (or a partial) `app`
+ * extractor — including every GraphQL/MCP call.
+ *
+ * **Put only plain, shallow data here** — the fields policies and computed
+ * fields read, not a framework/ORM object passed straight through. With the
+ * result cache on, `context.app` is walked by `canonicalize` into the cache
+ * key on every cacheable read: a value with prototype getters (a Passport
+ * user class, a TypeORM entity, a class-transformer instance) canonicalizes
+ * to the same string for every caller, collapsing them onto one cache
+ * bucket; a deeply nested or cyclic value is a per-read cost or a stack
+ * overflow. Build a plain object in the extractor / `KavoCallOptions.app`.
+ *
  * Treat it as read-only inside a handler: a request that carries no app
  * context is handed a shared frozen `{}`, so a write either throws or is a
- * silent no-op depending on the caller's strict-mode. Build the object in
- * the extractor / `KavoCallOptions.app`, don't mutate it downstream.
+ * silent no-op depending on the caller's strict-mode.
  */
 // oxlint-disable-next-line no-empty-interface -- widened by app declaration merging
 export interface KavoAppContext {}

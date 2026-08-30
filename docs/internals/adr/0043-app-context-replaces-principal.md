@@ -80,3 +80,14 @@ error code.
   used to cast `context.principal`.
 - ADR-0032 §217's "`KavoContext.principal` stays `unknown`" no longer holds;
   ADR-0037's reference to a `KavoPrincipal` cast target is void.
+- **The type says more than the runtime guarantees.** `createKavoContext` and
+  `@kavo/nest`'s `boundKavoAppContext` hand out `{}` typed as `KavoAppContext`, so
+  a non-optional augmented field (`userId: string`) is `undefined` at run time on
+  any request with no or a partial `app` extractor — every GraphQL/MCP call
+  included. `wiring-your-own-auth.md` tells integrators to declare fields optional
+  unless an extractor is guaranteed to fill them.
+- **`KavoAppContext` must be plain, shallow data when the result cache is on.**
+  The cache key canonicalizes it (§Result cache); a class instance with prototype
+  getters canonicalizes identically for every caller and collapses the cache
+  bucket, and a cyclic value overflows the stack. Documented as an integrator
+  constraint (ADR-0031, the result-cache and auth guides), not enforced.

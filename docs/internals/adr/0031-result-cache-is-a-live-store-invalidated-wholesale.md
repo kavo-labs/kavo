@@ -71,10 +71,13 @@ never be served to a different one — an empty `KavoAppContext`
 canonicalizes to `"{}"`, so calls that carry no app context share one
 bucket while each distinct context gets its own entries (whole-entity
 invalidation still covers them all). Because `context.app` is canonicalized
-into the key, it must be JSON-serializable with no reference cycles whenever
-the result cache is on — a cyclic value (a request object, a logger)
-recurses until the stack overflows inside `cacheKey`. No escape hatch; the
-constraint is documented in the result-cache guide. `queryFingerprint` is a plain-data
+into the key, it must be **plain, shallow, JSON-serializable** data whenever
+the result cache is on. `canonicalize` walks own-enumerable keys only, so a
+framework/ORM object with prototype getters (a Passport user, a TypeORM
+entity) hashes identically for every caller and collapses them onto one
+bucket; a cyclic value throws a `RangeError` at a 512-level depth guard
+rather than overflowing the stack. No escape hatch; the constraint is
+documented in the result-cache and auth guides. `queryFingerprint` is a plain-data
 projection of the normalized query — `filter`, `sort`, `pagination`,
 `fields`, `include`, `withDeleted`, `onlyDeleted`, `count` — folding each
 include node down to its query-decided parts, `fields` and `children` (the
