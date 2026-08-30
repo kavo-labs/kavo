@@ -33,7 +33,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "cytoscape": "^3.33.3",
     "cytoscape-cose-bilkent": "^4.1.0",
-    "dayjs": "^1.11.20",
+    "dayjs": "^1.11.23",
     "debug": "^4.4.3",
     "dependency-cruiser": "^18.2.0",
     "mermaid": "^11.16.1",
