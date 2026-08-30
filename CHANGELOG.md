@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.1](https://github.com/kavo-labs/kavo/compare/v0.16.0...v0.16.1) (2026-08-30)
+
+
+### Documentation
+
+* design spec for app context replacing principal ([4e43730](https://github.com/kavo-labs/kavo/commit/4e437308f01b8200228f512c93c97b5aa35305de))
+* drop default policy accessors from app-context spec ([f8c5da4](https://github.com/kavo-labs/kavo/commit/f8c5da42365bf0a2d409f3f758aa4a288a9cd4ef))
+* full principal removal, no compat, in app-context spec ([c25ec87](https://github.com/kavo-labs/kavo/commit/c25ec8716d69d6631108d796d36f930ba3fb969a))
+
 ## [0.16.0](https://github.com/kavo-labs/kavo/compare/v0.15.5...v0.16.0) (2026-08-30)
 
 
