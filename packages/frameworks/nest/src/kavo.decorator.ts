@@ -40,7 +40,7 @@ import {
 } from "@kavo/core";
 import type { KavoHttpMethod, KavoRouteOptions } from "./operation-metadata.js";
 import type { OverrideMetadata } from "./override.decorator.js";
-import type { KavoPrincipalExtractor, KavoPrincipalRequest } from "./principal.js";
+import type { KavoAppContextExtractor, KavoAppContextRequest } from "./app-context.js";
 import { ConditionalRequest } from "./conditional-request.decorator.js";
 import { KavoResponseInterceptor, isKavoResponse } from "./kavo-response.interceptor.js";
 import {
@@ -48,7 +48,7 @@ import {
   KAVO_CONTROLLER_METADATA,
   KAVO_OPERATION_METADATA,
   KAVO_OVERRIDE_METADATA,
-  KAVO_PRINCIPAL_PROPERTY,
+  KAVO_APP_CONTEXT_PROPERTY,
   KAVO_SERVICE_PROPERTY,
 } from "./tokens.js";
 import { WireQueryPipe } from "./wire-query.pipe.js";
@@ -254,10 +254,10 @@ interface ResolvedRoute {
  * still serves the tag a generated route would (ADR-0027). Before that,
  * the header simply went missing and the host framework's own weak tag
  * stood in for it — which looked like working conditional requests and
- * guarded nothing (#186). The same goes for the
- * principal: a generated route resolves it from the module's `principal`
+ * guarded nothing (#186). The same goes for the app
+ * context: a generated route resolves it from the module's `app`
  * extractor per request, a replaced method must pass it on itself, and
- * `boundKavoPrincipal(this, request)` is how it reaches the extractor the
+ * `boundKavoAppContext(this, request)` is how it reaches the extractor the
  * app configured rather than re-deciding where the caller lives.
  *
  * Route generation happens at decoration time (class definition), which is
@@ -437,7 +437,7 @@ function collectOverrides(
  *
  * The interceptor that sets the header only acts on an engine envelope, and
  * the natural way to write an override is to delegate to the typed service
- * — `this.base.patchOne(id, body, { principal })` — which discards the
+ * — `this.base.patchOne(id, body, { app })` — which discards the
  * envelope by design. So the override returned a bare item, the interceptor
  * left it alone, and **the host framework filled in its own weak tag**.
  * Express's default is convincing: reads carry an `ETag`, `If-None-Match`
@@ -686,8 +686,8 @@ function applyRouteDecorators(
  * the others. They are last, and in this order, so that adding the request
  * left every signature written against the older layout intact.
  *
- * The request is here for one reason: the principal. Routes are generated
- * at decoration time (ADR-0012), so the module-scope `principal` extractor
+ * The request is here for one reason: the app context. Routes are generated
+ * at decoration time (ADR-0012), so the module-scope `app` extractor
  * cannot be baked into the generated method — the handler resolves it per
  * request from the controller instance instead, and needs the request to
  * run it against.
@@ -791,8 +791,8 @@ function usesBody(method: KavoHttpMethod): boolean {
 
 type BoundController = Record<string, unknown> & {
   [KAVO_SERVICE_PROPERTY]: DefaultKavoService<object>;
-  /** `undefined` unless `KavoModule` was configured with a `principal` option. */
-  [KAVO_PRINCIPAL_PROPERTY]?: KavoPrincipalExtractor | undefined;
+  /** `undefined` unless `KavoModule` was configured with an `app` option. */
+  [KAVO_APP_CONTEXT_PROPERTY]?: KavoAppContextExtractor | undefined;
 };
 
 /**
@@ -809,9 +809,10 @@ type BoundController = Record<string, unknown> & {
  * read from exactly one place, the one that wrote it.
  *
  * The `options` it builds are the one thing that is not read off a
- * parameter: `KavoCallOptions.principal` is core's only channel for the
- * caller's identity, and it is filled from the module-scope extractor the
- * binder left on this controller (`callOptionsFor`).
+ * parameter: `KavoCallOptions.app` is core's only channel for the
+ * application's request-scoped context, and it is filled from the
+ * module-scope extractor the binder left on this controller
+ * (`callOptionsFor`).
  */
 function makeHandler(
   descriptor: OperationDescriptor<object>,
@@ -829,7 +830,7 @@ function makeHandler(
     const query = isRead ? args[index++] : null;
     const body = hasBody ? args[index++] : null;
     const preconditions = (args[index++] ?? null) as RequestPreconditions | null;
-    const request = args[index] as KavoPrincipalRequest | undefined;
+    const request = args[index] as KavoAppContextRequest | undefined;
     return this[KAVO_SERVICE_PROPERTY].engine.execute({
       operation: id,
       id: requestId,
@@ -842,23 +843,23 @@ function makeHandler(
 }
 
 /**
- * The per-call scope a generated route contributes: the caller's
- * principal, and nothing else — everything else about the request is the
- * request's own data, not an override of configuration.
+ * The per-call scope a generated route contributes: the application's
+ * request-scoped context, and nothing else — everything else about the
+ * request is the request's own data, not an override of configuration.
  *
  * `null` when the app configured no extractor, which is the request an
- * unconfigured route has always sent, so `KavoContext.principal` stays
- * `null` for an app that never opts in. Resolved per request, from the
- * controller instance the binder wrote it onto: nothing here is memoized,
- * so one caller's identity cannot survive into the next caller's request.
+ * unconfigured route has always sent, so `KavoContext.app` stays `{}` for
+ * an app that never opts in. Resolved per request, from the controller
+ * instance the binder wrote it onto: nothing here is memoized, so one
+ * caller's context cannot survive into the next caller's request.
  */
 function callOptionsFor(
   controller: BoundController,
-  request: KavoPrincipalRequest | undefined,
+  request: KavoAppContextRequest | undefined,
 ): KavoCallOptions | null {
-  const extractPrincipal = controller[KAVO_PRINCIPAL_PROPERTY];
-  if (extractPrincipal === undefined || request === undefined) {
+  const extractAppContext = controller[KAVO_APP_CONTEXT_PROPERTY];
+  if (extractAppContext === undefined || request === undefined) {
     return null;
   }
-  return { principal: extractPrincipal(request) };
+  return { app: extractAppContext(request) };
 }
