@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.0](https://github.com/kavo-labs/kavo/compare/v0.15.5...v0.16.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* `KavoContext.principal`, `KavoContextInit.principal` and `KavoCallOptions.principal` are removed. Use `KavoContext.app` and declare `KavoAppContext`'s shape via module augmentation. See ADR-0043.
+
+### Refactoring
+
+* replace KavoContext.principal with an app-defined KavoContext.app ([#333](https://github.com/kavo-labs/kavo/issues/333)) ([aa73662](https://github.com/kavo-labs/kavo/commit/aa73662daf7b62832c3f4d4373d8c86a70949516))
+
 ## [0.15.5](https://github.com/kavo-labs/kavo/compare/v0.15.4...v0.15.5) (2026-08-30)
 
 
