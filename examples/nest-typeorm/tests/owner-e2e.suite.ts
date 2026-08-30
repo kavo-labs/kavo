@@ -8,7 +8,7 @@ import { boundServer, type SupertestTarget } from "./support/listen.js";
  * (`owner.controller.ts`) does that no other entity in this app does:
  *
  * - **policy** — `deleteOne` requires the `owner:delete` permission
- *   (ADR-0037), enforced through `OwnerPrincipalGuard` reading a real
+ *   (ADR-0037), enforced through `OwnerAppContextGuard` reading a real
  *   `x-permissions` header, over real HTTP. The deeper policy contract
  *   (ownership, 404-beats-403, the soft-delete pre-fetch) is already
  *   `policy.e2e.spec.ts`'s entire subject against a purpose-built entity —

@@ -3,19 +3,19 @@ import { Injectable, type CanActivate, type ExecutionContext } from "@nestjs/com
 /**
  * Stands in for whatever a real app's auth layer does — reads a
  * comma-separated `x-permissions` header into the shape `owner.policy.ts`'s
- * `hasPermission` reads off `context.principal`. A real app authenticates
- * with a JWT/session guard and derives permissions from the account it
- * resolves; this is the minimal stand-in that makes `OwnerController`'s
+ * `hasPermission` reads off `context.app`. A real app authenticates with a
+ * JWT/session guard and derives permissions from the account it resolves;
+ * this is the minimal stand-in that makes `OwnerController`'s
  * `policy.deleteOne` demonstrable over real HTTP without pulling an auth
  * library into the reference app.
  *
- * `KavoModule.forRootAsync`'s `principal: true` (`app.module.ts`) is what
- * moves `request.user` onto `context.principal` — this guard only ever
- * sets `request.user`, never reads `context` itself, so it composes with
- * that option rather than duplicating it (`docs/guides/wiring-your-own-auth`).
+ * `KavoModule.forRootAsync`'s `app` extractor (`app.module.ts`) is what
+ * moves `request.user` onto `context.app` — this guard only ever sets
+ * `request.user`, never reads `context` itself, so it composes with that
+ * option rather than duplicating it (`docs/guides/wiring-your-own-auth`).
  */
 @Injectable()
-export class OwnerPrincipalGuard implements CanActivate {
+export class OwnerAppContextGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<{
       headers: Record<string, string | undefined>;

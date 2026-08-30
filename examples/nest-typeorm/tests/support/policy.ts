@@ -1,34 +1,34 @@
-import type { KavoContext, Policy } from "@kavo/core";
+import type { KavoAppContext, KavoContext, Policy } from "@kavo/core";
 
-/** Reads `permissions`/`roles`/`userId` off `context.principal` — the shape a header-driven test guard writes there. */
-export interface Principal {
-  readonly userId?: string;
-  readonly roles?: readonly string[];
-  readonly permissions?: readonly string[];
-}
+/**
+ * The `context.app` shape a header-driven test guard writes — the same
+ * fields `src/kavo-app-context.d.ts` declares on `KavoAppContext`, so these
+ * helpers read them typed.
+ */
+export type AppContext = KavoAppContext;
 
-export function principalOf<Entity>(context: KavoContext<Entity>): Principal {
-  return (context.principal as Principal | null | undefined) ?? {};
+export function appContextOf<Entity>(context: KavoContext<Entity>): AppContext {
+  return context.app;
 }
 
 export function hasPermission<Entity>(name: string): Policy<Entity> {
-  return ({ context }) => (principalOf(context).permissions ?? []).includes(name);
+  return ({ context }) => (context.app.permissions ?? []).includes(name);
 }
 
 export function hasRole<Entity>(name: string): Policy<Entity> {
-  return ({ context }) => (principalOf(context).roles ?? []).includes(name);
+  return ({ context }) => (context.app.roles ?? []).includes(name);
 }
 
 export function isAuthenticated<Entity>(): Policy<Entity> {
-  return ({ context }) => principalOf(context).userId != null;
+  return ({ context }) => context.app.userId != null;
 }
 
 export function isOwner<Entity>(field: string): Policy<Entity> {
   return ({ context, entity }) => {
-    const principal = principalOf(context);
-    if (principal.userId == null || entity === undefined) {
+    const { userId } = context.app;
+    if (userId == null || entity === undefined) {
       return false;
     }
-    return (entity as unknown as Record<string, unknown>)[field] === principal.userId;
+    return (entity as unknown as Record<string, unknown>)[field] === userId;
   };
 }

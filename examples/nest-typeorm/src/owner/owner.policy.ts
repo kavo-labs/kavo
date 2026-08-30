@@ -1,14 +1,11 @@
 import type { Policy } from "@kavo/core";
 import { Owner } from "./owner.entity.js";
 
-interface OwnerPrincipal {
-  readonly permissions?: readonly string[];
-}
-
-/** `context.principal` shape `OwnerPrincipalGuard` writes — a comma-separated `x-permissions` header. */
+/**
+ * Reads the `permissions` this app declares on `KavoContext.app`
+ * (`src/kavo-app-context.d.ts`), which `OwnerAppContextGuard` writes as a
+ * comma-separated `x-permissions` header.
+ */
 export function hasPermission(name: string): Policy<Owner> {
-  return ({ context }) => {
-    const principal = context.principal as OwnerPrincipal | null | undefined;
-    return (principal?.permissions ?? []).includes(name);
-  };
+  return ({ context }) => (context.app.permissions ?? []).includes(name);
 }

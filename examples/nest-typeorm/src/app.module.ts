@@ -2,7 +2,7 @@ import { Module, ValidationPipe, type DynamicModule } from "@nestjs/common";
 import { APP_PIPE } from "@nestjs/core";
 import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
-import type { RealtimeTransport } from "@kavo/core";
+import type { KavoAppContext, RealtimeTransport } from "@kavo/core";
 import type { DataSource } from "typeorm";
 import { DATA_SOURCE, DatabaseModule, type SqlOptions } from "./database.module.js";
 import { OwnerController } from "./owner/owner.controller.js";
@@ -58,12 +58,13 @@ export class AppModule {
           provideServices: true,
           useFactory: (dataSource: DataSource) => ({
             infrastructure: createInfrastructure(dataSource),
-            // `request.user`: where `OwnerPrincipalGuard`
-            // (owner/owner-principal.guard.ts) leaves it, for
-            // OwnerController's `policy.deleteOne` — inert everywhere else,
+            // Copies `request.user` — where `OwnerAppContextGuard`
+            // (owner/owner-app-context.guard.ts) leaves it — onto
+            // `context.app` (shape in src/kavo-app-context.d.ts), for
+            // OwnerController's `policy.deleteOne`. Inert everywhere else,
             // since no other controller's guard populates `request.user`
             // (docs/guides/wiring-your-own-auth).
-            principal: true,
+            app: (request): KavoAppContext => (request.user as KavoAppContext | undefined) ?? {},
             ...(realtimeTransports !== undefined && { realtimeTransports }),
             defaults: {
               pagination: { defaultLimit: 20, maxLimit: 100 },

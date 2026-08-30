@@ -25,7 +25,7 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  * handler of its own and a route from `meta.routes`. Normalizing a stored
  * postal code is an action with an operation identity — one row in, one
  * row out — so it gets the registry entry, the generated route and Swagger
- * document, the per-operation settings scope, and the automatic principal
+ * document, the per-operation settings scope, and the app context
  * that come with one.
  *
  * Its handler reaches the database through `context.repository`

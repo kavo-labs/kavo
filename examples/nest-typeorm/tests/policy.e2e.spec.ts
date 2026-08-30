@@ -4,7 +4,7 @@ import request from "supertest";
 import { Column, DataSource, DeleteDateColumn, Entity, PrimaryGeneratedColumn } from "typeorm";
 import { Controller, UseGuards, type CanActivate, type ExecutionContext, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { PolicyArgs } from "@kavo/core";
+import type { KavoAppContext, PolicyArgs } from "@kavo/core";
 import { Kavo, KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
@@ -49,11 +49,11 @@ class Post {
  * Stands in for whatever an app's real auth guard does — reads
  * comma-separated `x-roles`/`x-permissions` and a bare `x-user` header into
  * the shape `./support/policy.js`'s `hasPermission`/`hasRole`/`isOwner`/
- * `isAuthenticated` read off `context.principal`. Absent `x-user`,
- * `request.user` is left unset, so `KavoModule`'s `principal: true` reports
- * `null` — the "nobody is signed in" case every policy test needs to deny.
+ * `isAuthenticated` read off `context.app`. Absent `x-user`,
+ * `request.user` is left unset, so `KavoModule`'s `app` extractor yields
+ * `{}` — the "nobody is signed in" case every policy test needs to deny.
  */
-class HeaderPrincipalGuard implements CanActivate {
+class HeaderAppContextGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const incoming = context.switchToHttp().getRequest<{
       headers: Record<string, string | undefined>;
@@ -89,7 +89,7 @@ class HeaderPrincipalGuard implements CanActivate {
   },
 } as never)
 @Controller("posts")
-@UseGuards(new HeaderPrincipalGuard())
+@UseGuards(new HeaderAppContextGuard())
 class PostController {}
 
 let dataSource: DataSource;
@@ -107,7 +107,10 @@ beforeAll(async () => {
 
   const moduleRef = await Test.createTestingModule({
     imports: [
-      KavoModule.forRoot({ infrastructure: createInfrastructure(dataSource), principal: true }),
+      KavoModule.forRoot({
+        infrastructure: createInfrastructure(dataSource),
+        app: (request): KavoAppContext => (request.user as KavoAppContext | undefined) ?? {},
+      }),
       KavoModule.forFeature([PostController]),
     ],
   }).compile();
@@ -150,7 +153,7 @@ describe("policy over real HTTP + SQLite (ADR-0037)", () => {
     expect(response.body).toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
   });
 
-  it("allows createOne once a principal is attached", async () => {
+  it("allows createOne once an app context is attached", async () => {
     await request(server()).post("/posts").set(asUser("u-1")).send({ title: "x", authorId: "u-1" }).expect(201);
   });
 
