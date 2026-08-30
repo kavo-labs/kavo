@@ -1,15 +1,7 @@
-import type { KavoAppContext, KavoContext, Policy } from "@kavo/core";
+import type { Policy } from "@kavo/core";
 
-/**
- * The `context.app` shape a header-driven test guard writes — the same
- * fields `src/kavo-app-context.d.ts` declares on `KavoAppContext`, so these
- * helpers read them typed.
- */
-export type AppContext = KavoAppContext;
-
-export function appContextOf<Entity>(context: KavoContext<Entity>): AppContext {
-  return context.app;
-}
+// The helpers read `context.app` typed via the fields `src/kavo-app-context.d.ts`
+// declares on `KavoAppContext` — a header-driven test guard writes that shape.
 
 export function hasPermission<Entity>(name: string): Policy<Entity> {
   return ({ context }) => (context.app.permissions ?? []).includes(name);

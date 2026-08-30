@@ -371,6 +371,20 @@ describe("KavoCallOptions — app context", () => {
     await crud.createOne({ ...ADA, email: "b@x.io" } as never);
     expect(adapter.last.app).not.toBe(appContext);
   });
+
+  it("is a frozen, shared empty object when the call supplies none (never null/undefined)", async () => {
+    const { crud, adapter } = makeCrud();
+    await crud.createOne(ADA as never);
+    const first = adapter.last.app;
+    await crud.createOne({ ...ADA, email: "b@x.io" } as never);
+    const second = adapter.last.app;
+
+    expect(first).toEqual({});
+    expect(Object.isFrozen(first)).toBe(true);
+    // Same singleton across requests — so it can never accumulate one
+    // caller's writes for the next (issue #142).
+    expect(first).toBe(second);
+  });
 });
 
 describe("KavoCallOptions — transaction (doc 07 §2)", () => {

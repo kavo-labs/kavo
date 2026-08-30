@@ -16,7 +16,3 @@ expectTypeOf<keyof KavoAppContext>().toEqualTypeOf<never>();
 declare const context: KavoContext;
 // @ts-expect-error — no field is declared on the bare KavoAppContext.
 export const appHasNoDeclaredField: unknown = context.app.userId;
-
-// The empty object is always assignable — that is what an unconfigured
-// request carries.
-expectTypeOf<{}>().toMatchTypeOf<KavoAppContext>();

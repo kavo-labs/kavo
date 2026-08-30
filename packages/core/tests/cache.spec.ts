@@ -205,6 +205,22 @@ describe("cache settings resolution", () => {
     expect(adapter.reads).toBe(readsAfterMiss + 2);
   });
 
+  it("keys on the normalized app context, so `{ app: {} }` and no options share one bucket", async () => {
+    const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
+    await execute(crud, { operation: "createOne", body: ADA });
+
+    // Warm with an explicit empty app context.
+    await execute(crud, { operation: "findOne", id: 1, options: { app: {} as KavoAppContext } });
+    const readsAfterMiss = adapter.reads;
+
+    // A call with no options at all hits it — the engine normalizes a
+    // missing app context to the same `{}` the key is built from, so this
+    // would break if the key were built from `request.options?.app` instead
+    // of `context.app`.
+    await execute(crud, { operation: "findOne", id: 1 });
+    expect(adapter.reads).toBe(readsAfterMiss);
+  });
+
   it("rejects a malformed 'cache' override at bootstrap, naming the key", () => {
     expect(() => makeCrud({ cache: { ttl: -1 } } as never)).toThrowError(ConfigurationException);
     expect(() => makeCrud({ cache: { ttl: 1.5 } } as never)).toThrowError(ConfigurationException);

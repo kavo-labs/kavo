@@ -194,6 +194,25 @@ describe("KavoContext.app over HTTP — operation handlers (issue #142)", () => 
     await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
     expect(seen).toEqual([{ id: "u-7" }]);
   });
+
+  it("hands the handler an empty object — not null/undefined — when the module configures no extractor", async () => {
+    const seen: unknown[] = [];
+    const createHandler: OperationHandler<Todo> = {
+      async execute(_input, context) {
+        seen.push(context.app);
+        return { id: 1, title: "x", done: false, priority: 0, deletedAt: null, list: null };
+      },
+    };
+
+    @Kavo(Todo, { operations: { createOne: { handler: createHandler } } })
+    @Controller("todos")
+    @UseGuards(new HeaderUserGuard())
+    class UnconfiguredController {}
+
+    await bootstrap(UnconfiguredController); // no `app` extractor
+    await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
+    expect(seen).toEqual([{}]);
+  });
 });
 
 describe("boundKavoAppContext — the methods Kavo does not generate", () => {

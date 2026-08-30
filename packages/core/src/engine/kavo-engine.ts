@@ -690,9 +690,11 @@ export class KavoEngine<Entity extends object> {
    * handlers may legitimately vary by `context.app`, so a response
    * baked for one caller must never be served to a different one —
    * an empty app context canonicalizes to `"{}"`, so calls that carry no
-   * app context share one bucket (ADR-0031). `KavoAppContext` must be
-   * JSON-canonicalizable (no reference cycles) when the result cache is
-   * enabled — a cyclic value recurses until the stack overflows here. The
+   * app context share one bucket (ADR-0031). `KavoAppContext` must be plain,
+   * shallow, JSON-canonicalizable data when the result cache is enabled: a
+   * value with prototype getters (a framework/ORM object) hashes the same
+   * for every caller and collapses the bucket, and a cyclic one throws a
+   * `RangeError` from `canonicalize` rather than serving a wrong hit. The
    * query half is a canonicalized plain-data fingerprint of the normalized
    * query. The entity name is a separate parameter the store keys on, so
    * invalidation stays a whole-entity map delete. `canonicalize` is what
