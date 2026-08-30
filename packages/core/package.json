@@ -1,6 +1,6 @@
 {
   "name": "@kavo/core",
-  "version": "0.15.5",
+  "version": "0.16.0",
   "description": "Kavo core — framework- and ORM-independent contracts and type system. Zero runtime dependencies.",
   "license": "Apache-2.0",
   "engines": {
