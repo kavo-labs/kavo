@@ -16,7 +16,7 @@
     "@mikro-orm/core": "^7.1.11",
     "@mikro-orm/decorators": "^7.1.11",
     "@mikro-orm/postgresql": "^7.1.11",
-    "@mikro-orm/sqlite": "^7.1.12",
+    "@mikro-orm/sqlite": "^7.1.14",
     "@nestjs/common": "^11.2.1",
     "@nestjs/core": "^11.2.1",
     "@nestjs/platform-express": "^11.2.1",
