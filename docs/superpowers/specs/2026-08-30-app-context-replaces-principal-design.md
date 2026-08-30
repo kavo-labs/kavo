@@ -115,30 +115,35 @@ put in `app`.
 ### 3. Policy DSL — `@kavo/core` (ADR-0032, ADR-0037)
 
 The built-in predicate helpers stop reading a fixed `KavoPrincipal` shape off
-`context.principal`. `createKavo(options)` gains optional `policy.accessors`,
-`createKavo`-scope only (the app-context shape is app-global; per-entity accessors
-would be re-declared in every policy block):
+`context.principal`. **Kavo assumes no field names on `KavoAppContext`** — the app
+designs the shape, and if it uses the helpers it wires accessors to that shape.
+`createKavo(options)` gains `policy.accessors`, `createKavo`-scope only (the
+app-context shape is app-global; per-entity accessors would be re-declared in
+every policy block):
 
 ```ts
 interface PolicyAccessors {
   /** Identity `owner(field)` compares against: entity[field] === subjectId(app). */
-  subjectId?: (app: KavoAppContext) => unknown;                // default: (a) => (a as any).userId
-  roles?: (app: KavoAppContext) => readonly string[];          // default: (a) => (a as any).roles ?? []
-  permissions?: (app: KavoAppContext) => readonly string[];    // default: (a) => (a as any).permissions ?? []
+  subjectId?: (app: KavoAppContext) => unknown;
+  roles?: (app: KavoAppContext) => readonly string[];
+  permissions?: (app: KavoAppContext) => readonly string[];
 }
 ```
 
 - `permission(name)` → `permissions(app).includes(name)`
 - `role(name)` → `roles(app).includes(name)`
-- `owner(field = 'userId')` → `get(entity, field) === subjectId(app)` (dotted path
-  support unchanged)
+- `owner(field = 'userId')` → `get(entity, field) === subjectId(app)` (the `field`
+  default is unchanged — it names an **entity** column, not an app-context field)
 - `authenticated()` → `subjectId(app) != null`
 - `when(predicate)` → predicate's first argument is now `app: KavoAppContext`
-  (was `principal`)
+  (was `principal`); needs no accessor
 
-Defaults reproduce today's conventional behavior with zero config. Nothing is
-enforced on `KavoAppContext` — an app whose context has no `userId`/`roles` either
-supplies accessors or does not use those helpers.
+**No defaults.** Each accessor is required only when a policy actually uses the
+helper that consumes it. At `createKavo` bootstrap, building a policy that calls
+`role()`/`permission()`/`owner()`/`authenticated()` without the matching accessor
+configured throws a `KavoConfigException` naming the missing accessor — a
+bootstrap-time failure, never a silent `undefined` at request time. A policy that
+only uses `when()` needs no `policy.accessors` at all.
 
 - `KavoPrincipal` type **deleted** (`packages/core/src/**` + barrel).
 - ADR-0037 §84 references `KavoPrincipal` and `evaluatePolicy` — ADR text updated,
@@ -184,7 +189,11 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 `app.module.ts`):
 
 - `src/owner/owner-principal.guard.ts` → `owner-app-context.guard.ts`
-- `src/owner/owner.policy.ts` — `owner()` / `when()` updated to `app`
+- `src/owner/owner.policy.ts` — `owner()` / `when()` updated to `app`; since it
+  uses `owner()`, `app.module.ts` must configure `policy.accessors.subjectId`
+- `src/app.module.ts` — `createKavo`/`KavoModule` options gain
+  `policy: { accessors: { subjectId: (app) => app.userId, ... } }` matching the
+  augmented `KavoAppContext`
 - `src/owner/owner.controller.ts`, `src/address/address.controller.ts` —
   `boundKavoAppContext`, injected `base` call options
 - `src/app.module.ts` — `KavoModule.forRootAsync({ ..., app: (req) => ... })`
@@ -195,7 +204,7 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 - **New ADR** via the `add-adr` skill: "App context replaces principal".
   - Records: the `principal` → `app` replacement, declaration-merging over a
     generic (decorator-inference reason), the cache canonicalizability
-    constraint, `policy.accessors` with defaults.
+    constraint, `policy.accessors` (no defaults; bootstrap-checked).
   - `## Amends`: ADR-0032 (§217 — `KavoContext.principal` no longer `unknown`, no
     longer exists; `KavoPrincipal` deleted), ADR-0037 (§84 — `KavoPrincipal`
     deleted, helpers now accessor-driven).
@@ -244,9 +253,10 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 - `packages/core/tests/kavo-service.spec.ts` / `cache.spec.ts`: cache key varies
   by `app`; two different `app` objects never share a cached read; identical `app`
   objects hit.
-- `packages/core/tests/policy.spec.ts` + `types/policy.test-d.ts`: default
-  accessors reproduce today's `permission`/`role`/`owner`/`authenticated`
-  behavior; custom accessors redirect the value source; `when` receives `app`.
+- `packages/core/tests/policy.spec.ts` + `types/policy.test-d.ts`: configured
+  accessors drive `permission`/`role`/`owner`/`authenticated`; a policy using one
+  of those helpers without its accessor throws `KavoConfigException` at bootstrap;
+  a `when()`-only policy needs no accessors; `when` receives `app`.
 - `packages/core/tests/computed-fields.spec.ts`: resolver reads `context.app`.
 - `packages/core/tests/core-barrel.spec.ts`: `KavoAppContext` exported,
   `KavoPrincipal` not.
