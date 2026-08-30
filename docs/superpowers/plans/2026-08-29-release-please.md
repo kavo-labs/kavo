@@ -6,7 +6,7 @@
 
 **Architecture:** `release-please` runs on every push to `main` (new `release-please.yml` workflow, default `GITHUB_TOKEN`). It is configured as a **single logical package at the repo root** — one tag `vX.Y.Z`, one root `CHANGELOG.md`, and the other eight published `package.json` versions bumped via `extra-files` JSON-path. `publish.yml` gains an `on: release: { types: [published] }` trigger (keeping its `push: tags` trigger) because a tag pushed by `GITHUB_TOKEN` does not fire `on: push: tags`. `/publish` is cut down to a brand-new-package bootstrap procedure only.
 
-**Tech Stack:** `googleapis/release-please-action@v4`, GitHub Actions, pnpm workspace, Vitest (`tests/release-workflow.spec.ts` is the wiring gate).
+**Tech Stack:** `googleapis/release-please-action@v5`, GitHub Actions, pnpm workspace, Vitest (`tests/release-workflow.spec.ts` is the wiring gate).
 
 **Spec:** `docs/superpowers/specs/2026-08-29-release-please-design.md`
 
@@ -189,7 +189,7 @@ describe("release-please workflow", () => {
   it("points release-please at the repo's config and manifest files", () => {
     expect(wf).toContain("release-please-config.json");
     expect(wf).toContain(".release-please-manifest.json");
-    expect(wf).toContain("googleapis/release-please-action@v4");
+    expect(wf).toContain("googleapis/release-please-action@v5");
   });
 });
 ```
@@ -216,7 +216,7 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
