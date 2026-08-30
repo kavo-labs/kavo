@@ -73,15 +73,13 @@ export interface KavoAppContext {}
 export interface KavoContext<Entity = unknown> {
   // ...unchanged members: entityName, operation, config, repository,
   //    transaction, query, correlationId, state...
-  readonly app: KavoAppContext; // replaces `readonly principal: unknown`
+  readonly app: KavoAppContext;   // replaces `readonly principal: unknown`
 }
 ```
 
 - `packages/core/src/context/default-kavo-context.ts`: `KavoContextInit.principal?`
   → `app?: KavoAppContext`; `createKavoContext` sets
-  `app: init.app ?? EMPTY_APP_CONTEXT` — a caller-supplied `init.app` passes
-  through untouched; the shared frozen `EMPTY_APP_CONTEXT` singleton is used
-  only when none was given (was `principal: init.principal ?? null`).
+  `app: Object.freeze(init.app ?? {})` (was `principal: init.principal ?? null`).
 - `packages/core/src/service/kavo-call-options.ts`: `KavoCallOptions.principal?: unknown`
   → `app?: KavoAppContext`. JSDoc rewritten (no "authenticated caller …
   `request.user`" language; it is whatever object the caller passes).
@@ -93,8 +91,7 @@ export interface KavoContext<Entity = unknown> {
   `context.app`.
 - `packages/core/src/realtime/realtime-transport.ts`: prose uses "principal"
   generically ("the writing principal's own REST response"); reword to "the
-  writing caller's" — no type change. Grep all of `packages/**/src` for stray
-  "principal" in comments/identifiers and remove every occurrence.
+  writing caller's" — no type change.
 
 ### 2. Result cache — `packages/core/src/engine/kavo-engine.ts` (ADR-0031)
 
@@ -115,21 +112,37 @@ read. This is called out in ADR-0031 and in the result-cache guide. Apps that
 need a rich, non-serializable app context keep the cache off or narrow what they
 put in `app`.
 
-### 3. Policy — `@kavo/core` (ADR-0037)
+### 3. Policy DSL — `@kavo/core` (ADR-0032, ADR-0037)
 
-> **Superseded by the implementation and ADR-0043.** This section was drafted
-> against ADR-0032's node-tree DSL (`permission()`/`role()`/`owner()`/
-> `authenticated()`, a `KavoPrincipal` cast type). ADR-0037 had already deleted
-> all of that: `policy` is a single `(args) => boolean` predicate, there is no
-> helper set, no `KavoPrincipal` type, and nothing in the core barrel to remove.
-> So no `policy.accessors` config, no `subjectId`/`roles`/`permissions`
-> accessors, and no `KavoConfigException` bootstrap check are added.
+The built-in predicate helpers stop reading a fixed `KavoPrincipal` shape off
+`context.principal`. `createKavo(options)` gains optional `policy.accessors`,
+`createKavo`-scope only (the app-context shape is app-global; per-entity accessors
+would be re-declared in every policy block):
 
-The only change: a `policy` function reads `args.context.app` where it read
-`args.context.principal`. `PolicyArgs.context` is `KavoContext`, so this follows
-from §1 with no policy-specific code. Test files and the example app that define
-their own `hasPermission`/`isOwner`-style helpers update those helpers to read
-`context.app` (typed via the app's own `KavoAppContext` augmentation).
+```ts
+interface PolicyAccessors {
+  /** Identity `owner(field)` compares against: entity[field] === subjectId(app). */
+  subjectId?: (app: KavoAppContext) => unknown;                // default: (a) => (a as any).userId
+  roles?: (app: KavoAppContext) => readonly string[];          // default: (a) => (a as any).roles ?? []
+  permissions?: (app: KavoAppContext) => readonly string[];    // default: (a) => (a as any).permissions ?? []
+}
+```
+
+- `permission(name)` → `permissions(app).includes(name)`
+- `role(name)` → `roles(app).includes(name)`
+- `owner(field = 'userId')` → `get(entity, field) === subjectId(app)` (dotted path
+  support unchanged)
+- `authenticated()` → `subjectId(app) != null`
+- `when(predicate)` → predicate's first argument is now `app: KavoAppContext`
+  (was `principal`)
+
+Defaults reproduce today's conventional behavior with zero config. Nothing is
+enforced on `KavoAppContext` — an app whose context has no `userId`/`roles` either
+supplies accessors or does not use those helpers.
+
+- `KavoPrincipal` type **deleted** (`packages/core/src/**` + barrel).
+- ADR-0037 §84 references `KavoPrincipal` and `evaluatePolicy` — ADR text updated,
+  not the helper names.
 
 ### 4. `@kavo/nest`
 
@@ -137,7 +150,7 @@ their own `hasPermission`/`isOwner`-style helpers update those helpers to read
   - `KavoPrincipalRequest` → `KavoAppContextRequest` (kept as-is: structural
     request bag, `user?: unknown` + index signature).
   - `KavoPrincipalExtractor` → `KavoAppContextExtractor =
-(request: KavoAppContextRequest) => KavoAppContext`.
+    (request: KavoAppContextRequest) => KavoAppContext`.
   - `KavoPrincipalOption` (`boolean | extractor`) → **removed**. The module option
     becomes a bare function; `true` (meaning `request.user`) has no analogue — a
     plain object cannot imply which fields to pull.
@@ -159,10 +172,10 @@ their own `hasPermission`/`isOwner`-style helpers update those helpers to read
 
 ### 5. Errors — `packages/core/src/errors/{error-catalog,exceptions}.ts`
 
-grep both files for `principal` / `PRINCIPAL`. The word goes entirely — messages,
-JSDoc, and any `KAVO_*_PRINCIPAL*` code string (renamed to the `APP_CONTEXT`
-equivalent). No backward-compat aliasing; this is a pre-1.0 developer release and
-the whole change is a deliberate break.
+Audit for `KAVO_*` code-name strings containing `PRINCIPAL`. Error **codes are a
+stable downstream contract** — keep every code string; update only messages and
+JSDoc that say "principal". (grep both files during implementation; if no code
+name contains `PRINCIPAL`, this step is message-only.)
 
 ### 6. Example app — `examples/nest-typeorm` (the adopter migration reference)
 
@@ -171,27 +184,21 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 `app.module.ts`):
 
 - `src/owner/owner-principal.guard.ts` → `owner-app-context.guard.ts`
-  (`OwnerPrincipalGuard` → `OwnerAppContextGuard`)
-- `src/kavo-app-context.d.ts` — new: `declare module "@kavo/core"` augmenting
-  `KavoAppContext` with `{ userId?, roles?, permissions? }`. Added to
-  `tsconfig.tests.json`'s `include` so tests read `context.app` typed too.
-- `src/owner/owner.policy.ts` — `hasPermission` reads `context.app.permissions`
-- `src/app.module.ts` — `principal: true` → `app: (request) => request.user as KavoAppContext`
-- `src/owner/owner.controller.ts`, `src/address/address.controller.ts` — comment
-  / guard-name updates
-- `tests/policy.e2e.spec.ts` (guard + module option), `tests/support/policy.ts`
-  (helpers read `context.app`), `tests/crud-e2e.suite.ts`, `tests/owner-e2e.suite.ts`,
-  `tests/realtime.e2e.spec.ts` — comment updates
+- `src/owner/owner.policy.ts` — `owner()` / `when()` updated to `app`
+- `src/owner/owner.controller.ts`, `src/address/address.controller.ts` —
+  `boundKavoAppContext`, injected `base` call options
+- `src/app.module.ts` — `KavoModule.forRootAsync({ ..., app: (req) => ... })`
+- `tests/policy.e2e.spec.ts`, `tests/support/policy.ts`, `tests/crud-e2e.suite.ts`
 
 ### 7. ADR + docs
 
-- **New ADR** — ADR-0043 "`KavoContext.app` (an app-defined context) replaces
-  `principal`".
+- **New ADR** via the `add-adr` skill: "App context replaces principal".
   - Records: the `principal` → `app` replacement, declaration-merging over a
     generic (decorator-inference reason), the cache canonicalizability
-    constraint.
-  - Amends ADR-0032 §217 (`KavoContext.principal` no longer `unknown` / exists)
-    and ADR-0037 (a `policy` function now reads `args.context.app`).
+    constraint, `policy.accessors` with defaults.
+  - `## Amends`: ADR-0032 (§217 — `KavoContext.principal` no longer `unknown`, no
+    longer exists; `KavoPrincipal` deleted), ADR-0037 (§84 — `KavoPrincipal`
+    deleted, helpers now accessor-driven).
 - **Update** (principal mentions → app, no behavior change unless noted):
   ADR-0006 §54, ADR-0019 §157, ADR-0025 §27, ADR-0027 §19-20,
   ADR-0031 §62-72 (add the canonicalizability constraint here),
@@ -209,45 +216,40 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 ## Non-goals
 
 - No per-entity or per-operation app-context type. `createKavo`-scope only.
-- No deprecated `principal` alias, no migration shim, no compat error codes. Hard
-  rename — the word "principal" does not survive anywhere in `packages/**` after
-  this change (pre-1.0 developer release; breaking is fine).
+- No deprecated `principal` alias, no migration shim. Hard rename.
 - No `cache.varyBy` escape hatch. The canonicalizability constraint is documented
   instead.
-- Policy stays a single `(args) => boolean` predicate (ADR-0037; no helper set,
-  no `KavoPrincipal` type); only the value source it reads changes
-  (`args.context.app`).
+- Policy DSL keeps its current helper set and single-predicate collapse
+  (ADR-0037); only the value source changes.
 - Core still does not authenticate, validate, or shape the app context
   (ADR-0032 §8 non-goal preserved).
 
 ## Commit sequence (for `/commit`)
 
 1. core contract — `KavoAppContext`, `KavoContext.app`, call option, barrel,
-   `createKavoContext`, computed-field / realtime JSDoc, cache key, `KAVO_FORBIDDEN`
-   message
-2. `@kavo/nest` — `app-context.ts`, module option, `override.decorator`, `tokens`,
-   barrel, tests
-3. `examples/nest-typeorm` — full migration
-4. core tests — `barrel.spec`, `policy.spec`, `cache.spec`, `computed-fields.spec`,
-   `kavo-service.spec`, type-d tests
-5. docs + ADR — ADR-0043, amended/updated ADRs, architecture docs, guides,
+   `createKavoContext`, computed-field / realtime JSDoc, cache key
+2. policy accessors — `policy.accessors`, helper retargeting, `KavoPrincipal`
+   deletion
+3. `@kavo/nest` — `app-context.ts`, module option, `override.decorator`, barrel,
+   tests
+4. `examples/nest-typeorm` — full migration
+5. docs + ADR — new ADR, amended/updated ADRs, architecture docs, guides,
    `wiring-your-own-auth.md` rewrite
 
 ## Test surface (see `write-tests`)
 
-- `packages/core/tests/types/app-context.test-d.ts` (new): `KavoContext["app"]`
-  is `KavoAppContext`; `KavoCallOptions["app"]` is `KavoAppContext | undefined`;
-  unaugmented `keyof KavoAppContext` is `never` and a `context.app.<field>` read
-  is `@ts-expect-error`. The merged/typed side is exercised by the example app.
-- `packages/core/tests/cache.spec.ts`: cache key varies by `context.app`; two
-  different app-context objects never share a cached read; identical ones hit;
-  calls with no app context share one bucket.
-- `packages/core/tests/policy.spec.ts` + `types/policy.test-d.ts`: policy helpers
-  read `context.app`; `KavoAppContext` cast target shape lives in the test file.
+- `packages/core/tests/types/*.test-d.ts`: `KavoAppContext` unaugmented is `{}`
+  (a `context.app.x` read is `@ts-expect-error`); augmented, the field is typed.
+  `KavoCallOptions.app` accepts the augmented shape.
+- `packages/core/tests/kavo-service.spec.ts` / `cache.spec.ts`: cache key varies
+  by `app`; two different `app` objects never share a cached read; identical `app`
+  objects hit.
+- `packages/core/tests/policy.spec.ts` + `types/policy.test-d.ts`: default
+  accessors reproduce today's `permission`/`role`/`owner`/`authenticated`
+  behavior; custom accessors redirect the value source; `when` receives `app`.
 - `packages/core/tests/computed-fields.spec.ts`: resolver reads `context.app`.
-- `packages/core/tests/kavo-service.spec.ts`: `KavoCallOptions.app` surfaces on
-  `context.app` and at the adapter boundary, unchanged and call-scoped.
-- `packages/core/tests/barrel.spec.ts`: `KavoAppContext` in the public manifest.
+- `packages/core/tests/core-barrel.spec.ts`: `KavoAppContext` exported,
+  `KavoPrincipal` not.
 - `packages/frameworks/nest/tests/app-context.e2e.spec.ts`: `app` extractor
   populates `context.app`; unset → `{}`; `boundKavoAppContext` forwards it through
   an override.
