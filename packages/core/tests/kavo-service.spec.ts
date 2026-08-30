@@ -77,7 +77,7 @@ const CALLS: readonly {
 
 /**
  * Records the `KavoContext` every adapter call receives, delegating the
- * persistence itself to the shared in-memory fixture. `principal` and
+ * persistence itself to the shared in-memory fixture. `app` and
  * `transaction` are opaque to core, so the adapter boundary is the only
  * place their arrival can be observed at all.
  */
@@ -331,8 +331,8 @@ describe("DefaultKavoService — the engine escape hatch", () => {
   });
 });
 
-describe("KavoCallOptions — principal", () => {
-  it("surfaces the caller's principal on the context, unchanged", async () => {
+describe("KavoCallOptions — app context", () => {
+  it("surfaces the caller's app context on the context, unchanged", async () => {
     const seen: KavoContext<User>[] = [];
     const { crud } = makeCrud({
       operations: {
@@ -346,24 +346,30 @@ describe("KavoCallOptions — principal", () => {
         },
       },
     } as never);
-    const principal = { sub: "user-1", roles: ["admin"] };
-    await crud.engine.execute({ operation: "findMany", id: null, body: null, query: null, options: { principal } });
-    expect(seen[0]?.principal).toBe(principal);
+    const appContext = { sub: "user-1", roles: ["admin"] };
+    await crud.engine.execute({
+      operation: "findMany",
+      id: null,
+      body: null,
+      query: null,
+      options: { app: appContext },
+    });
+    expect(seen[0]?.app).toBe(appContext);
   });
 
   it("reaches the built-in handlers' adapter calls too", async () => {
     const { crud, adapter } = makeCrud();
-    const principal = { sub: "user-1" };
-    await crud.createOne(ADA as never, { principal });
-    expect(adapter.last.principal).toBe(principal);
+    const appContext = { sub: "user-1" };
+    await crud.createOne(ADA as never, { app: appContext });
+    expect(adapter.last.app).toBe(appContext);
   });
 
   it("is scoped to the call that supplied it", async () => {
     const { crud, adapter } = makeCrud();
-    const principal = { sub: "user-1" };
-    await crud.createOne(ADA as never, { principal });
+    const appContext = { sub: "user-1" };
+    await crud.createOne(ADA as never, { app: appContext });
     await crud.createOne({ ...ADA, email: "b@x.io" } as never);
-    expect(adapter.last.principal).not.toBe(principal);
+    expect(adapter.last.app).not.toBe(appContext);
   });
 });
 

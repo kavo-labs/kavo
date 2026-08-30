@@ -28,7 +28,7 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    * (declaring `resolve` `async` is a bootstrap error). Returning
    * `undefined` omits the key; `null` emits it, the same distinction a
    * column draws. Keep it a pure function of `entity` (plus, where a field
-   * has to vary by caller, `context.principal`): a resolver that hits the
+   * has to vary by caller, `context.app`): a resolver that hits the
    * database or the network runs once per row and reintroduces exactly the
    * N+1 the include resolver exists to avoid.
    *
@@ -50,7 +50,7 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    * serving `GET /posts/1?include=author` hands an `Author` computed field
    * a context whose `entityName`, `operation`, `config`, `query` and
    * `repository` are Post's. Only the request-scoped members —
-   * `principal`, `correlationId`, `transaction`, `state` — mean what they
+   * `app`, `correlationId`, `transaction`, `state` — mean what they
    * say from a relation target (ADR-0019).
    *
    * `context.repository` is the sharpest of those, because it is the only

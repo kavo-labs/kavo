@@ -1,4 +1,4 @@
-import type { KavoContext, KavoContextState, StateKey } from "./kavo-context.js";
+import type { KavoAppContext, KavoContext, KavoContextState, StateKey } from "./kavo-context.js";
 import type { NormalizedQueryContext } from "../query/query-context.js";
 import type { OperationId } from "../operations/operation.js";
 import type { RepositoryAdapter } from "../persistence/repository-adapter.js";
@@ -44,11 +44,14 @@ export interface KavoContextInit<Entity> {
    * deferred failure this shape exists to make unrepresentable.
    */
   readonly repository: RepositoryAdapter<Entity>;
-  readonly principal?: unknown;
+  readonly app?: KavoAppContext;
   readonly transaction?: TransactionContext | null;
   readonly query?: NormalizedQueryContext<Entity> | null;
   readonly correlationId?: string;
 }
+
+/** The shared frozen `{}` handed out when a request carries no app context. */
+const EMPTY_APP_CONTEXT: KavoAppContext = Object.freeze({});
 
 /**
  * Build the per-request context. The correlation id is generated
@@ -61,7 +64,7 @@ export function createKavoContext<Entity>(init: KavoContextInit<Entity>): KavoCo
     operation: init.operation,
     config: init.config,
     repository: init.repository,
-    principal: init.principal ?? null,
+    app: init.app ?? EMPTY_APP_CONTEXT,
     transaction: init.transaction ?? null,
     query: init.query ?? null,
     correlationId: init.correlationId ?? randomUuid(),

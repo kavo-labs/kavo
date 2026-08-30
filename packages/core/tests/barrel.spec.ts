@@ -46,6 +46,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "CustomOperationId",
   "CustomOperationRequest",
   "CustomOperationResult",
+  "KavoAppContext",
   "KavoCallOptions",
   "KavoContext",
   "KavoContextInit",

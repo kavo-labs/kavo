@@ -14,14 +14,14 @@ import type { RealtimeEventDto } from "./realtime-event.js";
  * `publish` once per event, per transport.
  *
  * **Authorization is entirely this transport's responsibility.** `publish`
- * receives the same whole-item `RealtimeEventDto` the writing principal's
- * own REST response was serialized from — core attaches no principal,
+ * receives the same whole-item `RealtimeEventDto` the writing caller's
+ * own REST response was serialized from — core attaches no caller,
  * tenant, or per-subscriber scope to it, and `channel`/`entity` are bare
  * strings with no access-control meaning of their own (`subscribableFields`
  * bounds which *fields* a subscription may reach, not *who* may reach
  * them). A transport that fans `channel`/`entity` straight into a pub/sub
- * topic without checking, for each subscriber, whether that principal
- * could have read this row over REST will leak one principal's full item
+ * topic without checking, for each subscriber, whether that caller
+ * could have read this row over REST will leak one caller's full item
  * projection to every subscriber of that entity/id, or — once a
  * collection-channel subscriber can also scope itself with a `filter`
  * query string (issue #160, ADR-0024) — to every subscriber of a filtered view over

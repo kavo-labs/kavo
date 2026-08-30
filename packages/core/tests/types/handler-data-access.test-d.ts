@@ -54,4 +54,4 @@ expectTypeOf<KavoEngineDependencies<Author>["reader"]>().toBeNever();
 // without one would hand some handler a field that is not there.
 expectTypeOf<KavoContextInit<Author>["repository"]>().toEqualTypeOf<RepositoryAdapter<Author>>();
 // @ts-expect-error — `repository` is missing from the init.
-createKavoContext<Author>({ operation: "findOne", config: {} as ResolvedEntityConfig<Author>, principal: null });
+createKavoContext<Author>({ operation: "findOne", config: {} as ResolvedEntityConfig<Author>, app: {} });

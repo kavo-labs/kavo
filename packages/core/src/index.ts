@@ -149,7 +149,7 @@ export {
 } from "./relations/array-mutation-operations.js";
 
 // ── Request context & envelopes ───────────────────────────────────────
-export type { KavoContext, KavoContextState, StateKey } from "./context/kavo-context.js";
+export type { KavoAppContext, KavoContext, KavoContextState, StateKey } from "./context/kavo-context.js";
 export type { KavoRequest } from "./context/kavo-request.js";
 export type { KavoResponse } from "./context/kavo-response.js";
 

@@ -1,4 +1,4 @@
-import type { KavoContext } from "../context/kavo-context.js";
+import type { KavoAppContext, KavoContext } from "../context/kavo-context.js";
 import type { KavoRequest } from "../context/kavo-request.js";
 import type { KavoResponse } from "../context/kavo-response.js";
 import type { DtoClass, DtoSlot } from "../dto/dto.js";
@@ -262,7 +262,7 @@ export class KavoEngine<Entity extends object> {
       operation: descriptor.id,
       config: configView,
       repository: this.deps.repository,
-      principal: request.options?.principal,
+      app: request.options?.app,
       transaction: request.options?.transaction ?? null,
       query,
       correlationId,
@@ -271,7 +271,7 @@ export class KavoEngine<Entity extends object> {
     // Before preconditions and the cache: a denied request should never
     // learn whether its `If-Match` would have succeeded, and a cache hit
     // must not skip authorization just because some earlier request for
-    // the same principal already paid for it (ADR-0037).
+    // the same caller already paid for it (ADR-0037).
     await this.checkPolicy(descriptor, request, configView, context);
 
     const preconditions = request.preconditions ?? request.options?.preconditions ?? null;
@@ -292,7 +292,7 @@ export class KavoEngine<Entity extends object> {
     // for both the read below and the store after the handler runs.
     const cacheKey =
       query !== null && this.isCacheableRead(descriptor, configView)
-        ? this.cacheKey(descriptor.id, request.id, request.options?.principal, query)
+        ? this.cacheKey(descriptor.id, request.id, context.app, query)
         : null;
     if (cacheKey !== null) {
       const cached = await this.readCache(cacheKey, configView, preconditions);
@@ -682,29 +682,31 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
-   * The cache key for one read: `operation:id:principal:query`, where the
+   * The cache key for one read: `operation:id:app:query`, where the
    * id half names the row a `findOne` targets — `request.id` lives outside
    * the normalized query, so it has to be in the key or `findOne(1)` and
-   * `findOne(2)` would share one entry (ADR-0031). The principal half keeps
+   * `findOne(2)` would share one entry (ADR-0031). The app half keeps
    * one caller's values from leaking to another: computed fields and custom
-   * handlers may legitimately vary by `context.principal`, so a response
-   * baked for one principal must never be served to a different one —
-   * `undefined` and `null` both canonicalize to `"null"`, so anonymous
-   * calls share one bucket (ADR-0031). The query half is a canonicalized
-   * plain-data fingerprint of the normalized query. The entity name is a
-   * separate parameter the store keys on, so invalidation stays a
-   * whole-entity map delete. `canonicalize` is what makes the key
-   * deterministic — a key built from raw objects would depend on insertion
-   * order.
+   * handlers may legitimately vary by `context.app`, so a response
+   * baked for one caller must never be served to a different one —
+   * an empty app context canonicalizes to `"{}"`, so calls that carry no
+   * app context share one bucket (ADR-0031). `KavoAppContext` must be
+   * JSON-canonicalizable (no reference cycles) when the result cache is
+   * enabled — a cyclic value recurses until the stack overflows here. The
+   * query half is a canonicalized plain-data fingerprint of the normalized
+   * query. The entity name is a separate parameter the store keys on, so
+   * invalidation stays a whole-entity map delete. `canonicalize` is what
+   * makes the key deterministic — a key built from raw objects would depend
+   * on insertion order.
    */
   private cacheKey(
     operationId: OperationId,
     requestId: unknown,
-    principal: unknown,
+    app: KavoAppContext,
     query: NormalizedQueryContext<Entity>,
   ): string {
     const id = requestId === null || requestId === undefined ? "" : String(requestId);
-    return `${operationId}:${id}:${canonicalize(principal)}:${canonicalize(queryFingerprint(query))}`;
+    return `${operationId}:${id}:${canonicalize(app)}:${canonicalize(queryFingerprint(query))}`;
   }
 
   /**
@@ -864,7 +866,7 @@ export class KavoEngine<Entity extends object> {
       operation: "findOne",
       config,
       repository,
-      principal: request.options?.principal,
+      app: request.options?.app,
       transaction: request.options?.transaction ?? null,
       query,
       correlationId,

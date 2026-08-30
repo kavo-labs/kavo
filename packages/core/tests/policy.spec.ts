@@ -54,39 +54,42 @@ function makeAccountCrud(config?: Parameters<ReturnType<typeof createKavo>["crea
   return { crud, adapter, kavo };
 }
 
-const OWNER = { userId: "u-1" };
-const OTHER = { userId: "u-2" };
-
-/** Reads `permissions`/`roles` off `context.principal` — apps write this shape themselves; Kavo has no built-in principal type. */
-interface Principal {
+/**
+ * The `context.app` shape these tests write — apps declare their own
+ * `KavoAppContext` this way; Kavo ships it empty and never assumes a field.
+ */
+interface AppCtx {
   readonly userId?: string;
   readonly roles?: readonly string[];
   readonly permissions?: readonly string[];
 }
 
-function principalOf<Entity>(context: KavoContext<Entity>): Principal {
-  return (context.principal as Principal | null | undefined) ?? {};
+const OWNER: AppCtx = { userId: "u-1" };
+const OTHER: AppCtx = { userId: "u-2" };
+
+function appOf<Entity>(context: KavoContext<Entity>): AppCtx {
+  return context.app as AppCtx;
 }
 
 function hasPermission<Entity>(name: string): Policy<Entity> {
-  return ({ context }) => (principalOf(context).permissions ?? []).includes(name);
+  return ({ context }) => (appOf(context).permissions ?? []).includes(name);
 }
 
 function hasRole<Entity>(name: string): Policy<Entity> {
-  return ({ context }) => (principalOf(context).roles ?? []).includes(name);
+  return ({ context }) => (appOf(context).roles ?? []).includes(name);
 }
 
 function isAuthenticated<Entity>(): Policy<Entity> {
-  return ({ context }) => principalOf(context).userId != null;
+  return ({ context }) => appOf(context).userId != null;
 }
 
 function isOwner<Entity>(field: string): Policy<Entity> {
   return ({ context, entity }) => {
-    const principal = principalOf(context);
-    if (principal.userId == null || entity === undefined) {
+    const { userId } = appOf(context);
+    if (userId == null || entity === undefined) {
       return false;
     }
-    return (entity as unknown as Record<string, unknown>)[field] === principal.userId;
+    return (entity as unknown as Record<string, unknown>)[field] === userId;
   };
 }
 
@@ -97,7 +100,7 @@ describe("policy — a plain function per operation", () => {
     } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     const updated = await crud.updateOne(1, { title: "b" } as never, {
-      principal: { permissions: ["post:update"] },
+      app: { permissions: ["post:update"] } as AppCtx,
     });
     expect(updated).toMatchObject({ title: "b" });
   });
@@ -107,19 +110,19 @@ describe("policy — a plain function per operation", () => {
       operations: { updateOne: { policy: hasPermission("post:update") } },
     } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
-    const call = crud.updateOne(1, { title: "b" } as never, { principal: { permissions: [] } });
+    const call = crud.updateOne(1, { title: "b" } as never, { app: { permissions: [] } as AppCtx });
     await expect(call).rejects.toBeInstanceOf(ForbiddenException);
     await expect(call).rejects.toMatchObject({ code: "KAVO_FORBIDDEN", status: 403 });
   });
 
   it("combines multiple conditions with ordinary &&", async () => {
     const policy: Policy<Post> = ({ context }) => {
-      const principal = principalOf(context);
-      return (principal.permissions ?? []).includes("post:delete") && (principal.permissions ?? []).includes("admin");
+      const app = appOf(context);
+      return (app.permissions ?? []).includes("post:delete") && (app.permissions ?? []).includes("admin");
     };
     const { crud, adapter } = makeCrud({ operations: { deleteOne: { policy } } } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
-    await expect(crud.deleteOne(1, { principal: { permissions: ["post:delete"] } })).rejects.toBeInstanceOf(
+    await expect(crud.deleteOne(1, { app: { permissions: ["post:delete"] } as AppCtx })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
   });
@@ -130,7 +133,7 @@ describe("policy — a plain function per operation", () => {
     await expect(crud.updateOne(1, { title: "b" } as never)).resolves.toMatchObject({ title: "b" });
   });
 
-  it("an owner-style check reads the loaded entity against principal.userId", async () => {
+  it("an owner-style check reads the loaded entity against app.userId", async () => {
     const { crud, adapter } = makeCrud({
       operations: { updateOne: { policy: isOwner<Post>("authorId") } },
     } as never);
@@ -143,11 +146,11 @@ describe("policy — a plain function per operation", () => {
       deletedAt: null,
     } as unknown as Post);
 
-    await expect(crud.updateOne(1, { title: "mine" } as never, { principal: OWNER })).resolves.toMatchObject({
+    await expect(crud.updateOne(1, { title: "mine" } as never, { app: OWNER })).resolves.toMatchObject({
       title: "mine",
     });
 
-    await expect(crud.updateOne(1, { title: "not mine" } as never, { principal: OTHER })).rejects.toBeInstanceOf(
+    await expect(crud.updateOne(1, { title: "not mine" } as never, { app: OTHER })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
   });
@@ -173,28 +176,28 @@ describe("policy — a plain function per operation", () => {
     } as unknown as Post);
 
     await expect(
-      crud.updateOne(1, { title: "x" } as never, { principal: { userId: "u-9", roles: ["admin"] } }),
+      crud.updateOne(1, { title: "x" } as never, { app: { userId: "u-9", roles: ["admin"] } as AppCtx }),
     ).resolves.toMatchObject({ title: "x" });
 
     await expect(
       crud.updateOne(1, { title: "x" } as never, {
-        principal: { userId: "u-1", permissions: ["post:update"], roles: ["banned"] },
+        app: { userId: "u-1", permissions: ["post:update"], roles: ["banned"] } as AppCtx,
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     await expect(
-      crud.updateOne(1, { title: "x" } as never, { principal: { userId: "u-1", permissions: ["post:update"] } }),
+      crud.updateOne(1, { title: "x" } as never, { app: { userId: "u-1", permissions: ["post:update"] } as AppCtx }),
     ).resolves.toMatchObject({ title: "x" });
   });
 
-  it("checks principal.userId presence for authentication", async () => {
+  it("checks app.userId presence for authentication", async () => {
     const { crud } = makeCrud({ operations: { createOne: { policy: isAuthenticated() } } } as never);
-    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never, { principal: null })).rejects.toBeInstanceOf(
+    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never, { app: {} })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
-    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never, { principal: OWNER })).resolves.toMatchObject(
-      { title: "x" },
-    );
+    await expect(crud.createOne({ title: "x", authorId: "u-1" } as never, { app: OWNER })).resolves.toMatchObject({
+      title: "x",
+    });
   });
 
   it("runs an arbitrary predicate against context and the loaded entity", async () => {
@@ -253,7 +256,7 @@ describe("policy — single-row operations always get the loaded entity", () => 
     const { crud } = makeCrud({
       operations: { findOne: { policy: isOwner<Post>("authorId") } },
     } as never);
-    await expect(crud.findOne(1, undefined, { principal: OWNER })).rejects.toBeInstanceOf(NotFoundException);
+    await expect(crud.findOne(1, undefined, { app: OWNER })).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("updateOne pre-fetches the row before the policy runs, independent of what the handler itself does", async () => {
@@ -268,9 +271,7 @@ describe("policy — single-row operations always get the loaded entity", () => 
       comments: [],
       deletedAt: null,
     } as unknown as Post);
-    await expect(crud.updateOne(1, { title: "x" } as never, { principal: OTHER })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(crud.updateOne(1, { title: "x" } as never, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
     // Denied before the write: the row is unchanged.
     expect(adapter.rows[0]!.title).toBe("a");
   });
@@ -279,7 +280,7 @@ describe("policy — single-row operations always get the loaded entity", () => 
     const { crud } = makeCrud({
       operations: { updateOne: { policy: isOwner<Post>("authorId") } },
     } as never);
-    await expect(crud.updateOne(999, { title: "x" } as never, { principal: OWNER })).rejects.toBeInstanceOf(
+    await expect(crud.updateOne(999, { title: "x" } as never, { app: OWNER })).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -369,11 +370,11 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
 
     await expect(crud.updateOne(1, { title: "b" } as never)).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).resolves.toMatchObject({
+    await expect(crud.updateOne(1, { title: "b" } as never, { app: OWNER })).resolves.toMatchObject({
       title: "b",
     });
     await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(crud.findMany(undefined, { principal: OWNER })).resolves.toMatchObject({
+    await expect(crud.findMany(undefined, { app: OWNER })).resolves.toMatchObject({
       items: [{ title: "b" }],
     });
   });
@@ -386,11 +387,9 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
 
     // Merely authenticated is not enough for updateOne: its own rule wins.
-    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(crud.updateOne(1, { title: "b" } as never, { app: OWNER })).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["post:update"] } }),
+      crud.updateOne(1, { title: "b" } as never, { app: { permissions: ["post:update"] } as AppCtx }),
     ).resolves.toMatchObject({ title: "b" });
     // findMany still falls back to the entity-level default.
     await expect(crud.findMany(undefined)).rejects.toBeInstanceOf(ForbiddenException);
@@ -409,7 +408,7 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
     const { crud, adapter } = makeCrud(undefined, { policy: isAuthenticated() });
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
     await expect(crud.updateOne(1, { title: "b" } as never)).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(crud.updateOne(1, { title: "b" } as never, { principal: OWNER })).resolves.toMatchObject({
+    await expect(crud.updateOne(1, { title: "b" } as never, { app: OWNER })).resolves.toMatchObject({
       title: "b",
     });
   });
@@ -434,19 +433,21 @@ describe("policy — entity-level and global default (ADR-0037)", () => {
 
     // updateOne: operation-level wins over both entity and global.
     await expect(
-      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["operation:override"] } }),
+      crud.updateOne(1, { title: "b" } as never, { app: { permissions: ["operation:override"] } as AppCtx }),
     ).resolves.toMatchObject({ title: "b" });
     await expect(
-      crud.updateOne(1, { title: "b" } as never, { principal: { permissions: ["entity:default"] } }),
+      crud.updateOne(1, { title: "b" } as never, { app: { permissions: ["entity:default"] } as AppCtx }),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     // findMany has no operation-level entry: entity-level wins over global.
-    await expect(crud.findMany(undefined, { principal: { permissions: ["entity:default"] } })).resolves.toMatchObject({
+    await expect(
+      crud.findMany(undefined, { app: { permissions: ["entity:default"] } as AppCtx }),
+    ).resolves.toMatchObject({
       items: [{ title: "b" }],
     });
-    await expect(crud.findMany(undefined, { principal: { permissions: ["global:default"] } })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      crud.findMany(undefined, { app: { permissions: ["global:default"] } as AppCtx }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("an inherited entity-level default still always pre-fetches the row for a single-row operation", async () => {
@@ -487,8 +488,8 @@ describe("policy — findOne: the deny branch on an existing row", () => {
       comments: [],
       deletedAt: null,
     } as unknown as Post);
-    await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
+    await expect(crud.findOne(1, undefined, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findOne(1, undefined, { app: OWNER })).resolves.toMatchObject({ title: "a" });
   });
 });
 
@@ -497,10 +498,10 @@ describe("policy — findMany and patchOne runtime coverage", () => {
     const { crud } = makeCrud({
       operations: { findMany: { policy: hasPermission("post:list") } },
     } as never);
-    await expect(crud.findMany(undefined, { principal: { permissions: [] } })).rejects.toBeInstanceOf(
+    await expect(crud.findMany(undefined, { app: { permissions: [] } as AppCtx })).rejects.toBeInstanceOf(
       ForbiddenException,
     );
-    await expect(crud.findMany(undefined, { principal: { permissions: ["post:list"] } })).resolves.toMatchObject({
+    await expect(crud.findMany(undefined, { app: { permissions: ["post:list"] } as AppCtx })).resolves.toMatchObject({
       items: [],
     });
   });
@@ -517,22 +518,20 @@ describe("policy — findMany and patchOne runtime coverage", () => {
       comments: [],
       deletedAt: null,
     } as unknown as Post);
-    await expect(crud.patchOne(1, { title: "x" } as never, { principal: OTHER })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    await expect(crud.patchOne(1, { title: "x" } as never, { principal: OWNER })).resolves.toMatchObject({
+    await expect(crud.patchOne(1, { title: "x" } as never, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.patchOne(1, { title: "x" } as never, { app: OWNER })).resolves.toMatchObject({
       title: "x",
     });
   });
 });
 
-describe("policy — missing/undefined principal", () => {
-  it("denies (never throws) when options.principal is simply omitted", async () => {
+describe("policy — missing/empty app context", () => {
+  it("denies (never throws) when options.app is simply omitted", async () => {
     const policy: Policy<Post> = (args) => {
-      const principal = principalOf(args.context);
+      const app = appOf(args.context);
       return (
-        (principal.permissions ?? []).includes("post:update") ||
-        (principal.roles ?? []).includes("admin") ||
+        (app.permissions ?? []).includes("post:update") ||
+        (app.roles ?? []).includes("admin") ||
         isOwner<Post>("authorId")(args)
       );
     };
@@ -562,7 +561,7 @@ describe("policy — malformed id still gets the engine's usual 400, not a polic
       comments: [],
       deletedAt: null,
     } as unknown as Post);
-    const call = crud.updateOne("not-a-number" as never, { title: "x" } as never, { principal: OWNER });
+    const call = crud.updateOne("not-a-number" as never, { title: "x" } as never, { app: OWNER });
     await expect(call).rejects.toMatchObject({
       code: "KAVO_QUERY_INVALID",
       issues: [expect.objectContaining({ code: "KAVO_QUERY_INVALID_VALUE" })],
@@ -579,8 +578,8 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
 
-    await expect(crud.restoreOne(1, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
-    await expect(crud.restoreOne(1, { principal: OWNER })).resolves.toMatchObject({ id: 1, name: "u-1" });
+    await expect(crud.restoreOne(1, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.restoreOne(1, { app: OWNER })).resolves.toMatchObject({ id: 1, name: "u-1" });
     expect(adapter.rows[0]!.deletedAt).toBeNull();
   });
 
@@ -592,8 +591,8 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
     await crud.createOne({ name: "u-1" } as never);
     await crud.deleteOne(1);
 
-    await expect(crud.purgeOne(1, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
-    await crud.purgeOne(1, { principal: OWNER });
+    await expect(crud.purgeOne(1, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await crud.purgeOne(1, { app: OWNER });
     expect(adapter.rows).toHaveLength(0);
   });
 });
@@ -605,12 +604,12 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
       operations: { findOne: { policy: hasPermission("post:read") } },
     } as never);
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
-    const allowed = { principal: { permissions: ["post:read"] } };
-    const denied = { principal: { permissions: [] } };
+    const allowed = { app: { permissions: ["post:read"] } as AppCtx };
+    const denied = { app: { permissions: [] } as AppCtx };
 
-    // Warm the cache with an allowed principal.
+    // Warm the cache with an allowed app context.
     await expect(crud.findOne(1, undefined, allowed)).resolves.toMatchObject({ title: "a" });
-    // A denied principal must still be refused, not served whatever a
+    // A denied app context must still be refused, not served whatever a
     // same-shaped cache entry might otherwise hold.
     await expect(crud.findOne(1, undefined, denied)).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -631,8 +630,8 @@ describe("policy — cache never lets a policy-gated findOne outlive its own che
 
     // The owner reads it first — if this were cached, the next call would
     // reuse this response instead of re-checking ownership.
-    await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
-    await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findOne(1, undefined, { app: OWNER })).resolves.toMatchObject({ title: "a" });
+    await expect(crud.findOne(1, undefined, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 
@@ -675,11 +674,11 @@ describe("policy — authorization.required default-deny switch (ADR-0035)", () 
     adapter.rows.push({ id: 1, title: "a", authorId: 0, author: null, comments: [], deletedAt: null } as Post);
 
     await expect(
-      crud.updateOne(1, { title: "x" } as never, { principal: { permissions: ["post:update"] } }),
+      crud.updateOne(1, { title: "x" } as never, { app: { permissions: ["post:update"] } as AppCtx }),
     ).resolves.toMatchObject({ title: "x" });
-    await expect(crud.updateOne(1, { title: "x" } as never, { principal: { permissions: [] } })).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      crud.updateOne(1, { title: "x" } as never, { app: { permissions: [] } as AppCtx }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("an explicit findOne policy still governs when required is true — the deferred check isn't shadowed by the default-deny branch", async () => {
@@ -699,8 +698,8 @@ describe("policy — authorization.required default-deny switch (ADR-0035)", () 
     // The owner still passes — required:true must not have hoisted the
     // default-deny check ahead of (or in place of) the deferred evaluation
     // checkFindOnePolicy runs against the row the handler already fetched.
-    await expect(crud.findOne(1, undefined, { principal: OWNER })).resolves.toMatchObject({ title: "a" });
-    await expect(crud.findOne(1, undefined, { principal: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(crud.findOne(1, undefined, { app: OWNER })).resolves.toMatchObject({ title: "a" });
+    await expect(crud.findOne(1, undefined, { app: OTHER })).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("operations.<id>.authorization overrides the entity-level default per operation", async () => {
