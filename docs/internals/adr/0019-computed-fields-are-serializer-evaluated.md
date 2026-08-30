@@ -154,7 +154,7 @@ so rule 3 is a compile error before it is a bootstrap error.
   `GET /posts/1?include=author` gives an `Author` computed field a context
   whose `entityName`, `operation`, `config`, `query` and `repository`
   (ADR-0025) are Post's. Only
-  the request-scoped members — `principal`, `correlationId`,
+  the request-scoped members — `app`, `correlationId`,
   `transaction`, `state` — are meaningful from a relation target. A
   per-target context was rejected as a worse lie: it would have to invent
   an `operation` that no caller issued and a `query` that was never

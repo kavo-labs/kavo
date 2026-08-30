@@ -40,7 +40,7 @@ A query-validation failure additionally carries an `errors[]` array, so a client
 | `KAVO_QUERY_CONFLICTING_PARAMS`     | 400  | `withDeleted=true` and `onlyDeleted=true` set together                                                               |
 | `KAVO_ARRAY_MUTATION_INVALID_SHAPE` | 400  | A relation-replace body isn't an array of ids/`{id}` refs, or `null`                                                 |
 | `KAVO_JSON_PATCH_INVALID_DOCUMENT`  | 400  | `patchOne` array body isn't a well-formed RFC 6902 document within Kavo's subset                                     |
-| `KAVO_FORBIDDEN`                    | 403  | A configured `operations.<id>.policy` node evaluated to `false` for the current principal                            |
+| `KAVO_FORBIDDEN`                    | 403  | A configured `operations.<id>.policy` evaluated to `false` for the current request's `context.app`                   |
 | `KAVO_NOT_FOUND`                    | 404  | Target row missing on `findOne`/`updateOne`/`patchOne`/`deleteOne`                                                   |
 | `KAVO_JSON_PATCH_TARGET_NOT_FOUND`  | 404  | A `jsonPatch` `remove` op names a relation member id that isn't currently associated                                 |
 | `KAVO_CONFLICT`                     | 409  | Unique or foreign-key violation                                                                                      |

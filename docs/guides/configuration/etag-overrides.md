@@ -12,7 +12,7 @@ Shape the response with a per-operation `item` DTO instead. The engine serialize
 
 An `@Override`'d method gets the `ETag` automatically, but only enforces `If-Match` if it forwards the preconditions itself. The two halves come from different places ([ADR-0027](/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition)):
 
-- **The tag is automatic.** An override on a single-item operation can return the typed service's item, for example `this.base.patchOne(id, body, { principal })`, and `@Kavo` hashes it into the same strong `ETag` a generated route would serve. There's nothing to opt into.
+- **The tag is automatic.** An override on a single-item operation can return the typed service's item, for example `this.base.patchOne(id, body, { app })`, and `@Kavo` hashes it into the same strong `ETag` a generated route would serve. There's nothing to opt into.
 - **The precondition is not automatic.** `If-Match` is evaluated inside the engine, against a canonical read. It only runs if the method passes its `preconditions` parameter on, either as `{ preconditions }` on the typed service, or by returning `service.engine.execute({ …, preconditions })`.
 
 Before v0.9, the tag was not automatic either, and the host framework filled in its own weak one instead. If you're on an older version, that's the failure to watch for: reads carried an `ETag`, `If-None-Match` answered `304`, and the tag changed with the body. Everything worked except the `412` that protects data, so a route could look fully conditional while every guarded write was a silent lost update. Assert the tag's shape (`/^"[0-9a-f]{64}"$/`) in your tests, not just its presence.

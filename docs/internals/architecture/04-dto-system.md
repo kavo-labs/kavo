@@ -146,7 +146,7 @@ no ORM adapter is involved at all. It evaluates it even when the row
 _does_ carry that key (a class getter, or a column outside the metadata
 seam): resolving beats reading, or the feature would collapse back into
 the accident it replaced. `resolve` also receives the request's
-`KavoContext`, so a field may vary by `principal`; it is synchronous by
+`KavoContext`, so a field may vary by `context.app`; it is synchronous by
 design, because it runs once per served item — and must be **total**, not
 just pure, because one throwing row fails the entire list response
 ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).

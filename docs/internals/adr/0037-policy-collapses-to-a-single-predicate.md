@@ -1,6 +1,6 @@
 # ADR-0037 — `policy` collapses to a single predicate function, at three scopes
 
-**Status:** accepted — supersedes [ADR-0032](/internals/adr/0032-policy-authorization-dsl), [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only), [ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument), and [ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults)
+**Status:** accepted — supersedes [ADR-0032](/internals/adr/0032-policy-authorization-dsl), [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only), [ADR-0034](/internals/adr/0034-when-predicate-takes-a-single-object-argument), and [ADR-0036](/internals/adr/0036-policy-gains-entity-and-global-defaults); amended by [ADR-0043](/internals/adr/0043-app-context-replaces-principal) — a `policy` function now reads `args.context.app`, the app-defined context that replaced `context.principal`
 
 ## Context
 

@@ -35,7 +35,7 @@ Response fields with no backing column, derived from an entity that has already 
 @Kavo(Book, {
   computed: {
     displayTitle: { resolve: (book) => (book.title === null ? null : `${book.title} (${book.year})`) },
-    canEdit: { resolve: (book, context) => book.ownerId === (context.principal as User)?.id },
+    canEdit: { resolve: (book, context) => book.ownerId === context.app.userId },
   },
 })
 ```
@@ -48,9 +48,9 @@ A declared computed field is in the default `item`/`list` projection with no DTO
 
 **`resolve` must be total, not merely pure.** It runs once per served item and nothing catches it, so one row whose resolver throws turns the whole collection endpoint into a 500, not for that row, for every caller, until the row is fixed. Write it against everything the column can actually hold, including `null`: `resolve: (todo) => todo.title?.toLowerCase() ?? null`, never `todo.title.toLowerCase()` on a nullable column. A `POST` that sets `title: null` succeeds (computed fields are stripped from the payload; `title` is an ordinary column), and `GET /todos` is dead from then on. A throwing resolver surfaces as a 500 `KAVO_PERSISTENCE_FAILED` with the cause attached and the message not leaked.
 
-A resolver reading `context.principal`, like `canEdit` above, needs the module's [`principal`](/guides/wiring-your-own-auth) option set. Over HTTP that option is the only thing that fills the field, and without it the caller is `null` on every request, so `canEdit` is uniformly `false` and its inverse uniformly `true`.
+A resolver reading `context.app`, like `canEdit` above, needs the module's [`app`](/guides/wiring-your-own-auth) extractor set. Over HTTP that option is the only thing that fills the context, and without it `context.app` is `{}` on every request, so `canEdit` is uniformly `false` and its inverse uniformly `true`.
 
-Keep it a pure function of the entity as well (plus `context.principal` where a field has to vary by caller). It runs per row, so a resolver that queries the database or calls out over the network reintroduces exactly the N+1 that batched includes exist to avoid. Declaring it `async` is a bootstrap error rather than a slow success: the serializer never awaits, so the promise would be emitted as-is and serialize to `{}`.
+Keep it a pure function of the entity as well (plus `context.app` where a field has to vary by caller). It runs per row, so a resolver that queries the database or calls out over the network reintroduces exactly the N+1 that batched includes exist to avoid. Declaring it `async` is a bootstrap error rather than a slow success: the serializer never awaits, so the promise would be emitted as-is and serialize to `{}`.
 
 **`resolve` receives the full fetched row**, not the projected object. Selection is "kept internally, stripped late", so every column is present regardless of `fields=` or the registered `item` DTO. A computed field can therefore surface a value a narrowed DTO or `selectable` list deliberately hides. That is deliberate (`resolve` is server-authored code, the same trust level as `exposeInternals`), but it makes the resolver part of the exposure decision: narrowing the DTO does not narrow what the resolver can see.
 
@@ -58,7 +58,7 @@ Keep it a pure function of the entity as well (plus `context.principal` where a 
 
 The flag and an explicit `allowlists.selectable` list say different things, deliberately. The flag is a default about nameability and leaves the projection alone. An explicit list is a statement about the response, so a list that omits the field, or excludes it, drops it from responses too. Where both are present the explicit list wins, as it always has ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
-On an included relation target, `resolve` receives the root request's `KavoContext`: serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query`, and `repository` describe Post. Only `principal`, `correlationId`, `transaction`, and `state` mean what they say from a relation target, `principal` being whatever the module's [`principal`](/guides/wiring-your-own-auth) option extracted for the root request, or `null` when no option is set.
+On an included relation target, `resolve` receives the root request's `KavoContext`: serving `GET /posts/1?include=author` hands an `Author` computed field a context whose `entityName`, `operation`, `config`, `query`, and `repository` describe Post. Only `app`, `correlationId`, `transaction`, and `state` mean what they say from a relation target, `app` being whatever the module's [`app`](/guides/wiring-your-own-auth) extractor built for the root request, or `{}` when no option is set.
 
 The generated OpenAPI response schema lists every declared computed field that survives the resolved `selectable` allowlist, even with no `item`/`list` DTO registered: the synthesized `item`/`list` schema gets a property per computed name, emitted untyped and nullable since a computed descriptor carries no type information. An explicit `allowlists.selectable` that omits or `exclude`s the field, or a `selectable: false` descriptor, drops it from the schema too. Registering an `item`/`list` DTO naming the field is now only about the static response _type_ — the document already reflects the field.
 

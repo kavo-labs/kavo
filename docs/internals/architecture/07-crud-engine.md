@@ -12,7 +12,7 @@ KavoRequest
  → Operation Resolution   registry lookup; disabled/unknown → OperationDisabledException
  → Config Resolution      settingsFor(operation) + per-call overrides (parameters, never writes)
  → Query Resolution       reads only: WireQuery → normalizeWire, QueryContext → normalizeInput
- → Context Assembly       KavoContext: identity, config view, principal, transaction ⟨reserved⟩,
+ → Context Assembly       KavoContext: identity, config view, app context, transaction ⟨reserved⟩,
                           normalized query, correlationId, typed state bag
  → Policy                 configured operations.<id>.policy function, if any → 403 (ADR-0037);
                           no node + authorization.required → 403 too (ADR-0035)
@@ -165,10 +165,10 @@ routing decision rather than a dispatch one, and doc 10 covers it.
 Entity + operation identity, the resolved config view (with per-call
 settings already merged), `repository` (the entity's own
 `RepositoryAdapter`, which is how every handler reaches persistence,
-ADR-0025 and §1a), `principal` (opaque to core, copied from
-`KavoCallOptions.principal` and `null` when the caller sent none — the
-framework layer fills it per request from the module's `principal`
-extractor, doc 10 §1a), `transaction` (an opaque handle a programmatic caller may
+ADR-0025 and §1a), `app` (the application's request-scoped context
+`KavoAppContext`, opaque to core, copied from `KavoCallOptions.app` and
+`{}` when the caller sent none — the framework layer fills it per request
+from the module's `app` extractor, doc 10 §1a), `transaction` (an opaque handle a programmatic caller may
 pass through `KavoCallOptions`; `null` otherwise, and nothing in v6 creates
 one — the adapter-level hook is reserved), the normalized
 query for reads (`null` for writes), a `correlationId` (generated if the

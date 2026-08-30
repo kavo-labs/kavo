@@ -61,7 +61,7 @@ to `{ required: false }`.**
   `configView.policy[descriptor.id]` for a **standard** operation id (a
   custom operation's `descriptor.id` is never a `StandardOperationId`, so
   `isStandardOperationId` already excludes it upstream of this change). A
-  custom operation's handler still reaches `context.principal` directly and
+  custom operation's handler still reaches `context.app` directly and
   refuses a caller on its own terms (`ForbiddenException`, or its own
   exception) — exactly the boundary ADR-0032 already drew, and #182's
   concern, not this one's.

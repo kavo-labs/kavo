@@ -54,7 +54,7 @@ See [NestJS integration](/internals/architecture/10-nestjs-integration) for how 
 
 ## Custom operations
 
-An `operations` key that is not one of the eight standard ids declares an operation of your own. It's an ordinary registry entry, so it gets the same pipeline every built-in route gets: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `principal`.
+An `operations` key that is not one of the eight standard ids declares an operation of your own. It's an ordinary registry entry, so it gets the same pipeline every built-in route gets: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
 
 A custom id is exempt from the whitelist rule above — it's always registered when present — but declaring one still counts as declaring `operations`, so it still silences every standard operation you don't also name. The example below is deliberately CRUD-only-plus-one: if `Order` also needs `findOne`/`findMany`/etc., they need naming here too.
 

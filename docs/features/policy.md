@@ -1,24 +1,23 @@
 # Policy
 
-`policy` refuses a request before its handler runs. Each standard operation on an entity can carry a rule that is evaluated against `context.principal`, the request's query, and, when the row is available, the row itself; a rule that returns `false` answers 403 with `KAVO_FORBIDDEN`.
+`policy` refuses a request before its handler runs. Each standard operation on an entity can carry a rule that is evaluated against `context.app`, the request's query, and, when the row is available, the row itself; a rule that returns `false` answers 403 with `KAVO_FORBIDDEN`.
 
 ```ts
 import type { Policy } from "@kavo/core";
 
-interface Principal {
-  readonly userId?: string;
-  readonly roles?: readonly string[];
-  readonly permissions?: readonly string[];
+// Your app declares what `context.app` holds — see Wiring your own auth.
+declare module "@kavo/core" {
+  interface KavoAppContext {
+    userId?: string;
+    roles?: readonly string[];
+    permissions?: readonly string[];
+  }
 }
 
-function principalOf(context: { principal: unknown }): Principal {
-  return (context.principal as Principal | null) ?? {};
-}
-
-const isAdmin: Policy<Post> = ({ context }) => (principalOf(context).roles ?? []).includes("admin");
-const isAuthenticated: Policy<Post> = ({ context }) => principalOf(context).userId != null;
+const isAdmin: Policy<Post> = ({ context }) => (context.app.roles ?? []).includes("admin");
+const isAuthenticated: Policy<Post> = ({ context }) => context.app.userId != null;
 const isOwner: Policy<Post> = ({ context, entity }) => {
-  const { userId } = principalOf(context);
+  const { userId } = context.app;
   return userId != null && entity?.authorId === userId;
 };
 
@@ -27,7 +26,7 @@ const isOwner: Policy<Post> = ({ context, entity }) => {
   operations: {
     findOne: { policy: (args) => isAdmin(args) || isOwner(args) },
     updateOne: {
-      policy: (args) => (principalOf(args.context).permissions ?? []).includes("post:update") && isOwner(args),
+      policy: (args) => (args.context.app.permissions ?? []).includes("post:update") && isOwner(args),
     },
     findMany: { policy: false }, // explicitly public, opts out of the entity-level default
   },
@@ -42,13 +41,13 @@ That config makes `GET /posts/:id` pass for an `admin` or the row's author, `PUT
 
 | Field       | What it is                                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------- |
-| `context`   | the request's `KavoContext<Entity>` — `context.principal`, `context.query`, `context.repository`               |
+| `context`   | the request's `KavoContext<Entity>` — `context.app`, `context.query`, `context.repository`                     |
 | `entity`    | the loaded row, on a single-row operation; `undefined` on `createOne`/`findMany`, where there is no single row |
 | `resource`  | `context.entityName` surfaced at the top level                                                                 |
 | `operation` | `context.operation` surfaced at the top level                                                                  |
 | `params`    | `{ id }` — the request's own single-row target, coerced to the id column's kind, `null` when there isn't one   |
 
-Kavo never inspects, validates, or shapes `context.principal` — a policy function reads it however an application's auth layer fills it in. [Wiring your own auth](/guides/wiring-your-own-auth) is what moves the caller from the HTTP request onto `context.principal`. Without it `principal` is `null` on every request and a principal-reading policy denies everything, and over the GraphQL and MCP bindings it stays `null` unless a caller passes one per call.
+Kavo never inspects, validates, or shapes `context.app` — a policy function reads it however an application's auth layer fills it in. [Wiring your own auth](/guides/wiring-your-own-auth) is what builds `context.app` from the HTTP request. Without it `context.app` is `{}` on every request and a context-reading policy denies everything, and over the GraphQL and MCP bindings it stays `{}` unless a caller passes one per call.
 
 There is no combinator API — `and`/`or`/`not` composition is ordinary `&&`/`||`/`!` inside the function, and reusable checks (an ownership check, a permission check) are just functions that take `PolicyArgs` and get called from a larger one, as `isOwner` does in the intro example's `findOne`/`updateOne`. A policy that needs a value across a relation loads it itself through `context.repository`, the one place a policy can check a value across a relation.
 
@@ -72,7 +71,7 @@ KavoModule.forRoot({
   authorization: { required: true }, // this entity only
   operations: {
     updateOne: {
-      policy: (args) => (principalOf(args.context).permissions ?? []).includes("post:update"),
+      policy: (args) => (args.context.app.permissions ?? []).includes("post:update"),
     },
     findMany: { authorization: { required: false } }, // opt this one operation back out
   },
@@ -83,7 +82,7 @@ Unlike `policy` itself, `authorization` is an ordinary `KavoSettings` key: it me
 
 **Per-call is the one scope excluded.** A per-call `{ settings: { authorization: { required: false } } }` cannot loosen an entity that requires it, and — symmetrically, since the whole subtree is pinned rather than merged — a per-call override cannot tighten an entity that doesn't either. The reasoning is the same as `policy` itself: a per-call parameter able to loosen enforcement would let a caller weaken its own authorization.
 
-An operation whose `policy` resolved from any scope is unaffected by `authorization.required` either way — the switch only fills the gap where no rule resolved at all, it never overrides a resolved one. It also cannot gate an **ordinary custom operation**: a custom operation's id is never a standard operation id, so it never reaches the `policy[operation]` lookup this switch extends — its handler reaches `context.principal` directly and refuses a caller on its own terms ([Custom operations](/core/custom-operations)).
+An operation whose `policy` resolved from any scope is unaffected by `authorization.required` either way — the switch only fills the gap where no rule resolved at all, it never overrides a resolved one. It also cannot gate an **ordinary custom operation**: a custom operation's id is never a standard operation id, so it never reaches the `policy[operation]` lookup this switch extends — its handler reaches `context.app` directly and refuses a caller on its own terms ([Custom operations](/core/custom-operations)).
 
 It **does** gate a Kavo-synthesized array-mutation operation (`replace<Relation>` and friends, from `relations.edges.<name>.write` — see [Relations](/features/relations#arraymutation)), unlike an ordinary custom operation: that route can never carry a `policy.<id>` entry of its own either, but its handler is Kavo's own, not app-authored code, so there's no other place a check on it could live. There is no per-relation opt-out today — `operations.<id>.authorization` can't target an array-mutation id, since that id is synthesized after the point where `operations.<id>` entries are resolved. To exempt a relation, leave it out of `write`, or turn `authorization.required` off for the whole entity.
 
@@ -93,7 +92,7 @@ The policy stage runs after the context is built and before preconditions and th
 
 `findOne` is the exception to the pre-fetch, because it already loads the row as its own result — evaluating its policy earlier would fetch twice. A resolved `findOne` policy always runs after the handler returns, against the row it already fetched, and `findOne` is never cached for an entity with a resolved `findOne` policy: a cache hit would return before that deferred check ran.
 
-A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.principal` directly.
+A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.app` directly.
 
 `policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches — a policy that reads `context.query.filter` can deny a caller who omitted a scoping filter, but it doesn't add one. A class-based `policy: PostPolicy` form and a query-scope generator that rewrites the filter AST from a policy remain deferred ([ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate), which also argues the enforcement choices above; [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch) covers `authorization.required`); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
 
@@ -123,4 +122,4 @@ export class CaslGuard implements CanActivate {
 }
 ```
 
-Registered with `APP_GUARD`, that is an app-wide CASL/Casbin/audit seam that knows the resource and the action for every request, the Kavo routes' _operation id_ (`updateOne`, a custom operation's id, `replaceTags`) rather than just an HTTP method. This complements the `policy` config above rather than replacing it: `policy` runs inside Kavo's request pipeline and denies a request before its handler, while the guard runs earlier, still before the controller method, in the host framework's own chain. Kavo makes no authorization decision of its own either way; the guard's `.can()` call is application code just like a `policy` function. The `user` the guard reads is the same property [Wiring your own auth](/guides/wiring-your-own-auth) moves onto `KavoContext.principal`.
+Registered with `APP_GUARD`, that is an app-wide CASL/Casbin/audit seam that knows the resource and the action for every request, the Kavo routes' _operation id_ (`updateOne`, a custom operation's id, `replaceTags`) rather than just an HTTP method. This complements the `policy` config above rather than replacing it: `policy` runs inside Kavo's request pipeline and denies a request before its handler, while the guard runs earlier, still before the controller method, in the host framework's own chain. Kavo makes no authorization decision of its own either way; the guard's `.can()` call is application code just like a `policy` function. The `user` the guard reads is the same property [Wiring your own auth](/guides/wiring-your-own-auth) builds `KavoContext.app` from.
