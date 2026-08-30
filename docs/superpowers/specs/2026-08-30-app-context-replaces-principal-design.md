@@ -91,7 +91,8 @@ export interface KavoContext<Entity = unknown> {
   `context.app`.
 - `packages/core/src/realtime/realtime-transport.ts`: prose uses "principal"
   generically ("the writing principal's own REST response"); reword to "the
-  writing caller's" — no type change.
+  writing caller's" — no type change. Grep all of `packages/**/src` for stray
+  "principal" in comments/identifiers and remove every occurrence.
 
 ### 2. Result cache — `packages/core/src/engine/kavo-engine.ts` (ADR-0031)
 
@@ -177,10 +178,10 @@ only uses `when()` needs no `policy.accessors` at all.
 
 ### 5. Errors — `packages/core/src/errors/{error-catalog,exceptions}.ts`
 
-Audit for `KAVO_*` code-name strings containing `PRINCIPAL`. Error **codes are a
-stable downstream contract** — keep every code string; update only messages and
-JSDoc that say "principal". (grep both files during implementation; if no code
-name contains `PRINCIPAL`, this step is message-only.)
+grep both files for `principal` / `PRINCIPAL`. The word goes entirely — messages,
+JSDoc, and any `KAVO_*_PRINCIPAL*` code string (renamed to the `APP_CONTEXT`
+equivalent). No backward-compat aliasing; this is a pre-1.0 developer release and
+the whole change is a deliberate break.
 
 ### 6. Example app — `examples/nest-typeorm` (the adopter migration reference)
 
@@ -225,7 +226,9 @@ augmentation (in a single `src/kavo-app-context.d.ts` or inline in
 ## Non-goals
 
 - No per-entity or per-operation app-context type. `createKavo`-scope only.
-- No deprecated `principal` alias, no migration shim. Hard rename.
+- No deprecated `principal` alias, no migration shim, no compat error codes. Hard
+  rename — the word "principal" does not survive anywhere in `packages/**` after
+  this change (pre-1.0 developer release; breaking is fine).
 - No `cache.varyBy` escape hatch. The canonicalizability constraint is documented
   instead.
 - Policy DSL keeps its current helper set and single-predicate collapse
