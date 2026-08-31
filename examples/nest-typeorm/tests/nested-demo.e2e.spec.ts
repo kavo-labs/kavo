@@ -26,7 +26,10 @@ type Schema = {
 };
 type Document = {
   components?: { schemas?: Record<string, Schema> };
-  paths: Record<string, Record<string, { responses?: Record<string, { content?: Record<string, { schema?: Schema }> }> }> | undefined>;
+  paths: Record<
+    string,
+    Record<string, { responses?: Record<string, { content?: Record<string, { schema?: Schema }> }> }> | undefined
+  >;
 };
 
 let app: INestApplication;
@@ -99,7 +102,10 @@ describe("nested includable-relation $ref composition in the Pet example (issue 
   it("returns a nested tree over include=zones.landmarks that matches the advertised shape", async () => {
     const server = app.getHttpServer();
     const region = await request(server).post("/regions").send({ name: "North" }).expect(201);
-    const zone = await request(server).post("/zones").send({ name: "N-1", region: { id: region.body.id } }).expect(201);
+    const zone = await request(server)
+      .post("/zones")
+      .send({ name: "N-1", region: { id: region.body.id } })
+      .expect(201);
     await request(server)
       .post("/landmarks")
       .send({ name: "Tower", zone: { id: zone.body.id } })
