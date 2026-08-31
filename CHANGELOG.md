@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.3](https://github.com/kavo-labs/kavo/compare/v0.17.2...v0.17.3) (2026-08-31)
+
+
+### Features
+
+* **nest:** compose nested includable relations in the synthesized schema via shared $ref ([#358](https://github.com/kavo-labs/kavo/issues/358)) ([224edea](https://github.com/kavo-labs/kavo/commit/224edeab73cebd9f214b805e2ad1ff0aec4e479e))
+
 ## [0.17.2](https://github.com/kavo-labs/kavo/compare/v0.17.1...v0.17.2) (2026-08-31)
 
 

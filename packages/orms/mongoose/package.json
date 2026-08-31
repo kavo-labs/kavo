@@ -1,6 +1,6 @@
 {
   "name": "@kavo/mongoose",
-  "version": "0.17.2",
+  "version": "0.17.3",
   "description": "Kavo Mongoose adapter — implements @kavo/core's RepositoryAdapter over Mongoose models.",
   "license": "Apache-2.0",
   "engines": {
