@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.2](https://github.com/kavo-labs/kavo/compare/v0.16.1...v0.16.2) (2026-08-31)
+
+
+### Bug Fixes
+
+* **nest:** document relation properties in the synthesized fallback body schema ([#340](https://github.com/kavo-labs/kavo/issues/340)) ([ead5a23](https://github.com/kavo-labs/kavo/commit/ead5a23826be4b9b13bdf50c34c9767671ce28ba))
+
 ## [0.16.1](https://github.com/kavo-labs/kavo/compare/v0.16.0...v0.16.1) (2026-08-30)
 
 
