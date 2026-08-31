@@ -103,19 +103,28 @@ export class AppModule {}
 
 When `@nestjs/swagger` is installed, every generated route — standard, custom, and `@Override`d alike — carries an `operationId` (`Book_findOne`), a `tags: ["Book"]` entry, and `x-kavo-entity`/`x-kavo-operation` vendor extensions on the operation object. Every inline DTO schema Kavo builds for a request or response body carries the same `x-kavo-entity`, so a generated OpenAPI document lets tooling recover which Kavo entity/operation an operation or schema came from without parsing `operationId`.
 
-A client generator that splits output by `tags` — [Orval](https://orval.dev) and `openapi-generator` both do — will produce one module per entity out of the box; point it at the app's `/docs-json` (or wherever `SwaggerModule.setup` serves the document) with no extra configuration.
+A client generator that splits output by `tags` — [Orval](https://orval.dev) and `openapi-generator` both do — will produce one module per entity out of the box; point it at the app's `/docs-json` with no extra configuration.
+
+### Serving the document
+
+`setupKavoSwagger(app, { config })` (exported from `@kavo/nest`) is a one-call setup that gets both of Swagger's ordering rules right: it registers the `/docs` + `/docs-json` routes immediately (they must exist before `app.init()`), and defers building the document to the first request (it can't be built until after `KavoModule`'s module-init pass has attached the `search[...]` params, the conditional-request headers, and the query component schemas below).
+
+```ts
+import { DocumentBuilder } from "@nestjs/swagger";
+import { setupKavoSwagger } from "@kavo/nest";
+
+const app = await NestFactory.create(AppModule);
+setupKavoSwagger(app, {
+  config: new DocumentBuilder().setTitle("My API").setVersion("1.0.0").build(),
+});
+await app.listen(3000);
+```
+
+`path` defaults to `"docs"`. The helper throws a descriptive error — not a bare import failure — when the optional `@nestjs/swagger` peer is absent, and when it is called after `app.init()` (when its routes could no longer take effect). Every `nest-*` example wires it in its `src/main.ts`.
 
 ### Named component schemas
 
-By default those DTO schemas are emitted **inline** on each route, so a generator names them anonymously. Wrap the built document in `registerKavoSchemas` (exported from `@kavo/nest`) to hoist every shape Kavo generated into `components.schemas` under a stable, entity-prefixed name and leave a `$ref` behind:
-
-```ts
-import { registerKavoSchemas } from "@kavo/nest";
-
-SwaggerModule.setup("docs", app, registerKavoSchemas(SwaggerModule.createDocument(app, config)));
-```
-
-The `nest-typeorm` example wires exactly this in its `src/main.ts`.
+`setupKavoSwagger` runs the built document through `registerKavoSchemas` for you. By default the DTO schemas Kavo generates are emitted **inline** on each route, so a generator names them anonymously; `registerKavoSchemas` (also exported from `@kavo/nest`, for a hand-rolled `SwaggerModule.setup`) hoists every shape into `components.schemas` under a stable, entity-prefixed name and leaves a `$ref` behind.
 
 For an entity `Ad` you get `AdCreate` / `AdUpdate` / `AdPatch` (request bodies), `AdItem` (single-row response), `AdList` with its `items[]` element `AdListItem` and its `meta` bag `AdListMeta`, the shared `KavoProblemDetails` / `KavoProblemDetailError` error bodies, and `AdValidationError` (the entity-scoped `400`, an `allOf` over `KavoProblemDetails`). Each component keeps its `x-kavo-entity` / `x-kavo-error` extension. This holds for an entity with no `dto` block at all — the schemas synthesized from its columns (see [DTOs](/core/dtos)) are hoisted the same way. A synthesized schema also carries a `required` array derived from column nullability: a non-nullable column is `required` in `AdCreate`, `AdUpdate`, `AdItem`, and the `AdListItem` element, while a nullable column and a computed field stay optional. Database-generated columns aren't writable, so they never appear in `AdCreate` / `AdUpdate` at all; a non-nullable generated column (the primary key, a create-timestamp) _is_ `required` in `AdItem` / `AdListItem`, since every row carries it. `AdPatch` is the deliberate exception — a partial update requires no field, so it carries no `required`. Two documentation-only over-statements: a non-nullable column with a database `default:` is still reported `required` in `AdCreate` even though you may omit it, and the response `required` describes the full row — a [`select=`](/querying/field-selection)-narrowed read returns a subset. The synthesized schema stays open in both cases, so this never changes what the route accepts or returns.
 
