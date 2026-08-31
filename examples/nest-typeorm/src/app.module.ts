@@ -13,6 +13,7 @@ import { PhotoController } from "./photo/photo.controller.js";
 import { AddressController } from "./address/address.controller.js";
 import { PetTagController } from "./pet-tag/pet-tag.controller.js";
 import { OwnerSettingController } from "./owner-setting/owner-setting.controller.js";
+import { LandmarkController, RegionController, ZoneController } from "./nested-demo/nested-demo.controllers.js";
 
 /**
  * Reference wiring: the app hands `@kavo/nest` its infrastructure (here
@@ -86,6 +87,9 @@ export class AppModule {
         AddressController,
         PetTagController,
         OwnerSettingController,
+        RegionController,
+        ZoneController,
+        LandmarkController,
       ],
       providers: [
         {

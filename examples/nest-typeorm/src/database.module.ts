@@ -9,10 +9,11 @@ import { Photo } from "./photo/photo.entity.js";
 import { Address } from "./address/address.entity.js";
 import { PetTag } from "./pet-tag/pet-tag.entity.js";
 import { OwnerSetting } from "./owner-setting/owner-setting.entity.js";
+import { Landmark, Region, Zone } from "./nested-demo/nested-demo.entities.js";
 
 export const DATA_SOURCE = Symbol("DATA_SOURCE");
 
-const entities = [Owner, Pet, Cat, Dog, Tag, Photo, Address, PetTag, OwnerSetting];
+const entities = [Owner, Pet, Cat, Dog, Tag, Photo, Address, PetTag, OwnerSetting, Region, Zone, Landmark];
 
 interface ConnectionOptions {
   host: string;

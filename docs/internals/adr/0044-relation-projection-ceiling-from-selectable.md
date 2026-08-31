@@ -135,13 +135,21 @@ the same break ADR-0026 recorded for `projection` and ADR-0019 for
 decoration time (ADR-0012), because the ceiling is literal strings on
 `allowlists.selectable`, unlike an `{ exclude }` selector.
 
-**The synthesized response schema uses the ceiling too** (issue #349,
-follow-up). `@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem`
-schema — the path with no registered `item`/`list` DTO — emits an optional
-property for each `allowlists.includable` relation, and shapes it from
-`ResolvedEntityConfig.relationProjection`: an object limited to the ceiling
-fields when one is set, a generic object otherwise. It never enters
-`required` (present only under `include=`).
+**The synthesized response schema uses the ceiling too** (issue #349, then
+#356). `@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem` schema —
+the path with no registered `item`/`list` DTO — emits an optional property
+for each `allowlists.includable` relation. When the parent sets a one-hop
+`selectable` ceiling for that relation, the parent wins: an inline object
+limited to the ceiling fields, from `ResolvedEntityConfig.relationProjection`.
+When it sets **no** ceiling, the property defers wholly to the target and is
+composed by shared component — `registerKavoSchemas` resolves it to
+`{ $ref: "#/components/schemas/<Target>Item" }` (a degraded `{ type: "object" }`
+when the target publishes no synthesized item schema). Nested `include=a.b.c`
+therefore types transitively, bounded on the request side by the existing
+`relations.maxIncludeDepth` — there is no separate Swagger depth control.
+The property never enters `required` (present only under `include=`), and a
+`defaultInclude: true` relation is not promoted either: the shape is shared
+with write responses, which carry no relations (ADR-0020).
 
 ## References
 

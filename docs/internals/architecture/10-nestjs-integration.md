@@ -495,24 +495,40 @@ therefore gated on the synthesized schema ending up with zero properties,
 not on the allowlist being empty.
 
 The **response** fallback has the mirror case for `allowlists.includable`
-(ADR-0028, issue #349): a relation a client may `?include=` is emitted as
-an **optional** property on `<Entity>Item`/`<Entity>ListItem` — appended
-after the scalar columns and the computed fields, never in `required`,
-since it is only in the body when `include=` asks for it. Its shape is the
-per-relation ceiling a relation-dotted `allowlists.selectable` entry
-resolves to (`relationProjection`, ADR-0044) as an object limited to those
-fields — each typed from the target entity's own metadata (the same
-`infrastructure.metadataFor(relation.target())` resolution the body side
-uses), falling back to an untyped `{}` for a ceiling entry the target has
-no column for — or a generic `{ type: "object" }` with a prose description
-when the relation carries no ceiling. The target's own projection is
-governed by the target entity's config, not this one (ADR-0026), so it is
-not reproduced here. A `-to-many` relation wraps that object in
-`{ type: "array", items }`. The relation object is deliberately left
-unstamped by `withKavoEntity`, so `registerKavoSchemas` keeps it inline on
-`<Entity>Item` rather than hoisting it to its own component. Driven off the
-resolved `allowlists.includable` names, not `RelationDescriptor.includable`
-(which reflects ORM-derived metadata, not the config grant).
+(ADR-0028, issue #349, then #356): a relation a client may `?include=` is
+emitted as an **optional** property on `<Entity>Item`/`<Entity>ListItem` —
+appended after the scalar columns and the computed fields, never in
+`required`, since it is only in the body when `include=` asks for it, and
+the shape is shared with the write responses, which resolve no `include=`
+at all (ADR-0020). Its shape depends on whether the parent narrowed it:
+
+- **Parent one-hop `selectable` ceiling** (`relationProjection`, ADR-0044):
+  an inline object limited to those fields, each typed from the target
+  entity's own metadata (the same `infrastructure.metadataFor(relation.target())`
+  resolution the body side uses), falling back to an untyped `{}` for a
+  ceiling entry the target has no column for. Left unstamped by
+  `withKavoEntity`, so `registerKavoSchemas` keeps it inline rather than
+  hoisting it as its own component.
+- **No parent ceiling**: the relation defers wholly to the target, so
+  `applyResponseSchemaDocs` emits an unstamped `x-kavo-includable-ref`
+  marker carrying only the target entity's resolved name (bind time cannot
+  name the final component — `registerKavoSchemas` owns naming and a
+  cross-entity clash can bump `<Target>Item` to `<Target>Item_2`).
+  `registerKavoSchemas` then rewrites each marker, in a post-pass over
+  every registered component, to `{ $ref: "#/components/schemas/<Target>Item" }`
+  — or, when the target published no synthesized item schema (its own read
+  route registered an explicit `item` DTO, or it has no read route), to a
+  plain `{ type: "object" }` with a prose description, so the document never
+  carries a dangling `$ref`. Nested `include=a.b.c` types transitively this
+  way, and `$ref` cycles (mutual or self relations) are valid OpenAPI 3.x
+  and left as-is. A document that never runs `registerKavoSchemas` keeps
+  the marker inline — still a valid object schema, just not `$ref`-composed.
+
+A `-to-many` relation wraps whichever shape in `{ type: "array", items }`.
+The request-side nesting bound is the existing `relations.maxIncludeDepth`;
+there is no separate Swagger depth control. Driven off the resolved
+`allowlists.includable` names, not `RelationDescriptor.includable` (which
+reflects ORM-derived metadata, not the config grant).
 
 Two known over-statements, both narrowing documentation only — the schema
 stays open (no `additionalProperties: false`, matching `allowlists.md`'s

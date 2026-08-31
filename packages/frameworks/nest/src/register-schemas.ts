@@ -64,6 +64,18 @@
  * component; the same shape under two names (`<Entity>Update` /
  * `<Entity>Patch` when no `dto.patch` is set) is emitted under both.
  *
+ * **Includable-relation `$ref`s (issue #356).** `applyResponseSchemaDocs`
+ * leaves an `x-kavo-includable-ref: "<Target>"` marker on any includable
+ * relation the parent set no one-hop `selectable` ceiling for — bind time
+ * cannot name the target component, since naming happens here. After every
+ * response has hoisted, a final pass (`resolveIncludableRefs`) walks every
+ * registered component and rewrites each marker to a `$ref` to that entity's
+ * real `<Target>Item` (first-wins name, `_2` and all), or — when the target
+ * published no synthesized item schema (an explicit `item` DTO, or no read
+ * route) — to a plain `{ type: "object" }`, so the document never carries a
+ * dangling `$ref`. `$ref` cycles from mutual/self relations are valid
+ * OpenAPI 3.x and left as-is.
+ *
  * The helper mutates and returns the document, so it composes inline:
  *
  * ```ts
@@ -84,8 +96,17 @@ interface SchemaObject {
   properties?: Record<string, SchemaObject>;
   items?: SchemaObject;
   allOf?: SchemaObject[];
+  /**
+   * Bind-time marker (`applyResponseSchemaDocs`) on an includable relation
+   * the parent set no `selectable` ceiling for: the target entity's resolved
+   * name. `resolveIncludableRefs` swaps the whole object for a `$ref` to that
+   * entity's `<Target>Item` component once every component name is known.
+   */
+  "x-kavo-includable-ref"?: string;
   [key: string]: unknown;
 }
+
+const REF_PREFIX = "#/components/schemas/";
 
 interface MediaType {
   schema?: SchemaObject;
@@ -123,6 +144,11 @@ export function registerKavoSchemas<T extends object>(document: T): T {
   const components = (doc.components ??= {});
   const schemas = (components.schemas ??= {});
   const registry = new SchemaRegistry(schemas);
+  // Entity name -> the actual component name its synthesized single-row
+  // `<Entity>Item` landed on (`<Entity>Item`, or `<Entity>Item_2` on a
+  // cross-entity collision). Filled as responses hoist; read afterwards to
+  // resolve `x-kavo-includable-ref` markers to real `$ref`s.
+  const itemComponentByEntity = new Map<string, string>();
 
   for (const pathItem of Object.values(doc.paths ?? {})) {
     if (pathItem === undefined) {
@@ -137,12 +163,101 @@ export function registerKavoSchemas<T extends object>(document: T): T {
         continue;
       }
       hoistRequestBody(registry, operation, entity);
-      hoistResponses(registry, operation, entity);
+      hoistResponses(registry, operation, entity, itemComponentByEntity);
       hoistQuerySchemas(registry, operation, entity);
     }
   }
 
+  // Every `<Entity>Item` name is now known, so an includable-relation marker
+  // (`applyResponseSchemaDocs`, no parent ceiling) can be resolved to a
+  // `$ref` to its target's item component — or degraded to a plain object
+  // when that target has no synthesized item schema. Runs over every
+  // registered component so a marker on `<Entity>Item` and its structural
+  // twin on `<Entity>ListItem` are both rewritten.
+  resolveIncludableRefs(schemas, itemComponentByEntity);
+
   return document;
+}
+
+/**
+ * Rewrite the `x-kavo-includable-ref` markers `applyResponseSchemaDocs`
+ * leaves on includable relations that have no parent `selectable` ceiling.
+ * Bind time cannot name the target component (this pass owns naming, and a
+ * cross-entity clash can bump it to `<Target>Item_2`), so it records only
+ * the target entity name; here each marker becomes either a `$ref` to that
+ * entity's real item component or — when the entity published no synthesized
+ * item schema (an explicit `item` DTO, or no read route) — a plain
+ * `{ type: "object" }` with a prose description, so the document never
+ * carries a dangling `$ref`. `$ref` cycles (mutual or self relations) are
+ * valid OpenAPI 3.x and are left as-is.
+ */
+function resolveIncludableRefs(
+  schemas: Record<string, SchemaObject>,
+  itemComponentByEntity: Map<string, string>,
+): void {
+  for (const schema of Object.values(schemas)) {
+    walkIncludableRefs(schema, itemComponentByEntity);
+  }
+}
+
+function walkIncludableRefs(node: unknown, itemComponentByEntity: Map<string, string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      walkIncludableRefs(child, itemComponentByEntity);
+    }
+    return;
+  }
+  if (node === null || typeof node !== "object") {
+    return;
+  }
+  const record = node as Record<string, unknown>;
+  const properties = record.properties;
+  if (properties !== null && typeof properties === "object") {
+    for (const [key, value] of Object.entries(properties as Record<string, unknown>)) {
+      const replacement = resolvedIncludableRef(value, itemComponentByEntity);
+      if (replacement === undefined) {
+        walkIncludableRefs(value, itemComponentByEntity);
+      } else {
+        (properties as Record<string, unknown>)[key] = replacement;
+      }
+    }
+  }
+  // A `-to-many` relation is `{ type: "array", items: <marker> }`, so the
+  // marker can sit directly on `items` as well as on a `properties` entry.
+  if (record.items !== undefined) {
+    const replacement = resolvedIncludableRef(record.items, itemComponentByEntity);
+    if (replacement === undefined) {
+      walkIncludableRefs(record.items, itemComponentByEntity);
+    } else {
+      record.items = replacement;
+    }
+  }
+  for (const key of ["allOf", "anyOf", "oneOf"]) {
+    if (Array.isArray(record[key])) {
+      walkIncludableRefs(record[key], itemComponentByEntity);
+    }
+  }
+}
+
+function resolvedIncludableRef(value: unknown, itemComponentByEntity: Map<string, string>): SchemaObject | undefined {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  const target = (value as Record<string, unknown>)["x-kavo-includable-ref"];
+  if (typeof target !== "string") {
+    return undefined;
+  }
+  const component = itemComponentByEntity.get(target);
+  if (component !== undefined) {
+    return { $ref: `${REF_PREFIX}${component}` };
+  }
+  return {
+    type: "object",
+    description:
+      `Embedded when \`include=\` names this relation; its shape mirrors the ${target}Item component. ` +
+      `That component is not published — the ${target} entity has no synthesized item schema ` +
+      `(an explicit item DTO, or no read route).`,
+  };
 }
 
 function hoistRequestBody(registry: SchemaRegistry, operation: OperationObject, entity: string): void {
@@ -175,7 +290,12 @@ function detach(schema: SchemaObject): SchemaObject {
   return clone(schema);
 }
 
-function hoistResponses(registry: SchemaRegistry, operation: OperationObject, entity: string): void {
+function hoistResponses(
+  registry: SchemaRegistry,
+  operation: OperationObject,
+  entity: string,
+  itemComponentByEntity: Map<string, string>,
+): void {
   const isMany = operation["x-kavo-cardinality"] === "many";
   for (const response of Object.values(operation.responses ?? {})) {
     const media = response?.content?.[JSON_MEDIA];
@@ -208,7 +328,19 @@ function hoistResponses(registry: SchemaRegistry, operation: OperationObject, en
       }
       media.schema = registry.register(schema, scoped ? `${entity}${opName}List` : `${entity}List`);
     } else {
-      media.schema = registry.register(schema, scoped ? `${entity}${opName}` : `${entity}Item`);
+      const ref = registry.register(schema, scoped ? `${entity}${opName}` : `${entity}Item`);
+      media.schema = ref;
+      // The shared root `<Entity>Item` is what an includable-relation marker
+      // on another entity resolves a `$ref` to — record the name it actually
+      // landed on. A per-operation `<Entity><Operation>` shape is a different
+      // component and never a relation target. First-wins, to agree with
+      // `SchemaRegistry`'s own collision policy: two `@Kavo` classes over one
+      // entity with different configs (a pattern @kavo/nest's own tests use)
+      // register `<Entity>Item` then `<Entity>Item_2`, and a marker should
+      // point at the first.
+      if (!scoped && typeof ref.$ref === "string" && !itemComponentByEntity.has(entity)) {
+        itemComponentByEntity.set(entity, ref.$ref.slice(REF_PREFIX.length));
+      }
     }
   }
 }
