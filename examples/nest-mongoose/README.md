@@ -13,7 +13,7 @@ decorator, engine, and route generation working over MongoDB.
 
 ```bash
 docker run --rm -p 27017:27017 mongo:8
-pnpm build && MONGO_URL=mongodb://127.0.0.1:27017/kavo pnpm --filter @kavo/example-nest-mongoose start
+MONGO_URL=mongodb://127.0.0.1:27017/kavo pnpm --filter @kavo/example-nest-mongoose start
 # → http://localhost:3001/articles   (Swagger at /docs)
 ```
 

@@ -30,10 +30,13 @@ itself is `class-validator`-decorated) has nothing to fall back to either.
 
 ## SQLite (default)
 
-No setup required — an in-memory database is created fresh on every run.
+No setup required — an in-memory database is created fresh on every run. The
+`start` scripts compile first (`tsc -b --force`), so no separate `pnpm build`
+is needed; run `pnpm --filter @kavo/example-nest-typeorm clean` to reset the
+incremental build state.
 
 ```bash
-pnpm build && pnpm --filter @kavo/example-nest-typeorm start
+pnpm --filter @kavo/example-nest-typeorm start
 # → http://localhost:3000/cats   (Swagger at /docs)
 ```
 
@@ -44,7 +47,7 @@ with connection settings hardcoded to match a single local container:
 
 ```bash
 docker run --rm -e POSTGRES_PASSWORD=kavo -e POSTGRES_DB=kavo -p 5432:5432 postgres:18-alpine
-pnpm build && pnpm --filter @kavo/example-nest-typeorm start:postgres
+pnpm --filter @kavo/example-nest-typeorm start:postgres
 # → http://localhost:3000/cats   (Swagger at /docs)
 ```
 
@@ -62,7 +65,7 @@ connection settings hardcoded to match a single local container:
 
 ```bash
 docker run --rm -e MARIADB_ROOT_PASSWORD=kavo -e MARIADB_DATABASE=kavo -p 3306:3306 mariadb:12
-pnpm build && pnpm --filter @kavo/example-nest-typeorm start:mariadb
+pnpm --filter @kavo/example-nest-typeorm start:mariadb
 # → http://localhost:3000/cats   (Swagger at /docs)
 ```
 
@@ -77,7 +80,7 @@ with connection settings hardcoded to match a single local container:
 
 ```bash
 docker run --rm -e COCKROACH_DATABASE=kavo -e COCKROACH_USER=root -p 26257:26257 cockroachdb/cockroach:v25.2.22 start-single-node --insecure
-pnpm build && pnpm --filter @kavo/example-nest-typeorm start:cockroach
+pnpm --filter @kavo/example-nest-typeorm start:cockroach
 # → http://localhost:3000/cats   (Swagger at /docs)
 ```
 

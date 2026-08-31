@@ -13,7 +13,7 @@ behaves identically to `nest-typeorm`, that is the seam doing its job; where it
 differs, the difference is real and worth seeing.
 
 ```bash
-pnpm build && pnpm --filter @kavo/example-nest-mikroorm start
+pnpm --filter @kavo/example-nest-mikroorm start
 # → http://localhost:3002/cats   (Swagger at /docs)
 ```
 
@@ -23,7 +23,7 @@ it at a Postgres instead:
 
 ```bash
 docker run --rm -e POSTGRES_PASSWORD=kavo -p 5432:5432 postgres:18-alpine
-pnpm build && PGDATABASE=postgres PGPASSWORD=kavo pnpm --filter @kavo/example-nest-mikroorm start
+PGDATABASE=postgres PGPASSWORD=kavo pnpm --filter @kavo/example-nest-mikroorm start
 ```
 
 Unlike `nest-typeorm`, this app has no CockroachDB flavour: MikroORM has no

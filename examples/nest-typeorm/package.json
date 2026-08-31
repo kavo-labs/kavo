@@ -7,10 +7,11 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
-    "start": "node dist/main.js",
-    "start:postgres": "node dist/main-postgres.js",
-    "start:mariadb": "node dist/main-mariadb.js",
-    "start:cockroach": "node dist/main-cockroach.js"
+    "clean": "tsc -b --clean",
+    "start": "tsc -b --force && node dist/main.js",
+    "start:postgres": "tsc -b --force && node dist/main-postgres.js",
+    "start:mariadb": "tsc -b --force && node dist/main-mariadb.js",
+    "start:cockroach": "tsc -b --force && node dist/main-cockroach.js"
   },
   "dependencies": {
     "@kavo/core": "workspace:*",

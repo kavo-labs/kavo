@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
-    "start": "node dist/main.js"
+    "clean": "tsc -b --clean",
+    "start": "tsc -b --force && node dist/main.js"
   },
   "dependencies": {
     "@kavo/core": "workspace:*",
