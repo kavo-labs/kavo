@@ -476,6 +476,20 @@ update never requires a field, so its `<Entity>Patch` carries no
 `required` regardless of nullability. An empty `required` is omitted
 rather than emitted as `[]`.
 
+A `creatable`/`updatable` name that is a **relation** rather than a scalar
+column has no `metadata.fields` entry, so it is picked up from
+`metadata.relations` and documented as the association-by-id shape the
+deserializer accepts (ADR-0014): a `{ id }` reference object for a to-one,
+a nullable array of them for a to-many, `id` left untyped because the
+target entity's primary-key kind isn't reachable from the binding. A
+relation never joins the body's `required` (`RelationDescriptor` carries no
+nullability). Without this, an entity whose entire writable projection is
+relations — a pure join row associated by id — would synthesize an empty
+`properties: {}` a client generator reads as "this route takes no body"
+(issue #339). The description fallback ("No field is writable.") is
+therefore gated on the synthesized schema ending up with zero properties,
+not on the allowlist being empty.
+
 Two known over-statements, both narrowing documentation only — the schema
 stays open (no `additionalProperties: false`, matching `allowlists.md`'s
 "narrows silently"), so neither lies about what the route accepts or
