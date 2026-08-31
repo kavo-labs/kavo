@@ -389,7 +389,7 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
  * unless opted in explicitly. Anything outside the list is a 400 at query
  * time, never a silent drop.
  *
- * Computed fields join the `selectable` base set (so `fields=fullName`
+ * Computed fields join the `selectable` base set (so `select=fullName`
  * works with no further configuration) unless the descriptor opts out with
  * `selectable: false`, and are barred from `filterable`/`sortable`
  * outright — there is no column to translate to `WHERE`/`ORDER BY`
@@ -441,11 +441,11 @@ function resolveAllowlists<Entity extends object>(
   const configured = entityConfig?.allowlists;
   // Relation-dotted entries on an explicit `selectable` array carry the
   // per-relation projection ceiling (ADR-0044) — `resolveRelationProjection`
-  // reads them straight off the raw config. They are not root `fields=`
-  // paths (a relation is selected with `fields[<relation>]=`, never
-  // `fields=<relation>.<field>`), so they are stripped from the resolved
+  // reads them straight off the raw config. They are not root `select=`
+  // paths (a relation is selected with `select[<relation>]=`, never
+  // `select=<relation>.<field>`), so they are stripped from the resolved
   // `selectable` list, which documents exactly "what a request may name in
-  // `fields=`", and from the derived response `projection` built off it.
+  // `select=`", and from the derived response `projection` built off it.
   const relationHeads = new Set(relationNames as readonly string[]);
   const selectableResolved = resolveFieldSelector(selectableBase, configured?.selectable) as readonly string[];
   const selectableRootOnly = selectableResolved.filter(
@@ -676,7 +676,7 @@ function validateSincePagination<Entity extends object>(
  *
  * Resolving `{ exclude }` against the narrower base retires a contract the
  * author never touched: `selectable: false` is documented as keeping a field
- * in the projection while making its name a 400 in `fields=`, so
+ * in the projection while making its name a 400 in `select=`, so
  * `{ exclude: ["email"] }` would silently delete an unrelated audit field
  * from every response. That is the same "narrowing by a list nobody wrote"
  * this function exists to prevent, one level down.
@@ -721,7 +721,7 @@ function resolveProjection<Entity extends object>(
  * The *field* half of an entry is not checked here — the target's metadata is
  * not in scope at bootstrap, the same laxity `resolveAllowlists` documents for
  * relation paths on `searchable`. A request that names such a field in
- * `fields[<relation>]=` gets a 400 (it is not on the target's `selectable`);
+ * `select[<relation>]=` gets a 400 (it is not on the target's `selectable`);
  * on the default path — no request fieldset — a ceiling field that names no
  * real target column is simply omitted from the embed, not raised.
  */

@@ -123,14 +123,14 @@ registry's `includable` flag and the include-depth budget.
 
 ### `FieldSelectionInput` — three spellings, one normalized form
 
-`QueryContext.fields` accepts three shapes, all collapsing in
+`QueryContext.select` accepts three shapes, all collapsing in
 `QueryNormalizer.normalizeInput`:
 
 | Spelling                                       | Mirrors             |
 | ---------------------------------------------- | ------------------- |
-| `['id', 'name']`                               | `?fields=id,name`   |
+| `['id', 'name']`                               | `?select=id,name`   |
 | `{ root: [...], relations: { posts: [...] } }` | the structured form |
-| `{ posts: ['id', 'title'] }`                   | `?fields[posts]=…`  |
+| `{ posts: ['id', 'title'] }`                   | `?select[posts]=…`  |
 
 `root` and `relations` are therefore **reserved keys**: a relation
 genuinely named `root` or `relations` must use the structured form. This is
@@ -143,7 +143,7 @@ At runtime, `QueryNormalizer`'s collapse step rejects — rather than
 silently drops — any relation-keyed key mixed into a structured literal, so
 a caller who blends the two spellings gets a `KAVO_QUERY_INVALID_VALUE`
 issue naming the stray key, not a quietly ignored fieldset. A malformed
-`fields` value (not an array, not an object) is also an issue, never a
+`select` value (not an array, not an object) is also an issue, never a
 thrown error. The same guarantee holds one level down: a per-relation
 fieldset value that is not an array (reachable only by a programmatic
 caller bypassing `FieldSelectionInput`'s type, never through the wire path,

@@ -122,7 +122,7 @@ export function allowlistHint(
  *
  * The hint is not free: `suggestName` walks the whole allowlist per rejected
  * name, and the prose adds a few hundred bytes to each issue. A request
- * naming five thousand fields (`?fields=a1,…,a5000` is a legal query string)
+ * naming five thousand fields (`?select=a1,…,a5000` is a legal query string)
  * would otherwise turn one 400 into a megabyte of text and an O(names ×
  * allowlist) edit-distance sweep. Past a handful of problems the caller is
  * not fixing a typo anyway, so the leading sentence carries on alone.

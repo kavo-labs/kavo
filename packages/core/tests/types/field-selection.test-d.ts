@@ -7,8 +7,8 @@ import { Author } from "../support/blog-fixture.js";
  * in query-normalizer.spec.ts; these only pin what the compiler accepts.
  */
 
-// 1. Root-only sugar, mirroring `?fields=id,name`. This is the spelling the
-//    doc comment on `QueryContext.fields` promised while the type rejected it.
+// 1. Root-only sugar, mirroring `?select=id,name`. This is the spelling the
+//    doc comment on `QueryContext.select` promised while the type rejected it.
 const bare: FieldSelectionInput<Author> = ["id", "name"];
 void bare;
 
@@ -22,16 +22,16 @@ const relationsOnly: FieldSelectionInput<Author> = { relations: { posts: ["title
 void rootOnly;
 void relationsOnly;
 
-// 3. Relation-keyed, mirroring `?fields[posts]=title`. This is the spelling
+// 3. Relation-keyed, mirroring `?select[posts]=title`. This is the spelling
 //    from the issue's example that did not compile before.
 const relationKeyed: FieldSelectionInput<Author> = { posts: ["id", "title"] };
 void relationKeyed;
 
 // All three arrive through `QueryContext` with no manual generic argument.
 const queries: readonly QueryContext<Author>[] = [
-  { fields: ["id", "name"] },
-  { fields: { root: ["id"], relations: { posts: ["title"] } } },
-  { fields: { posts: ["id", "title"] } },
+  { select: ["id", "name"] },
+  { select: { root: ["id"], relations: { posts: ["title"] } } },
+  { select: { posts: ["id", "title"] } },
 ];
 void queries;
 

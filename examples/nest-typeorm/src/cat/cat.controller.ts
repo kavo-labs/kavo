@@ -77,8 +77,8 @@ import {
   },
   // The to-one side of the owner edge joins; `tags`/`photos` are to-many
   // (many-to-many) and batch, both `auto`'s default — no loading tuning
-  // needed. `fields[owner]=id,name` / `fields[tags]=id,name` /
-  // `fields[photos]=id,url` narrow each embedded relation. `tags.write`
+  // needed. `select[owner]=id,name` / `select[tags]=id,name` /
+  // `select[photos]=id,url` narrow each embedded relation. `tags.write`
   // opts that edge into array-mutation writes, inheriting the entity's own
   // `arrayMutation.strategy: "replace"` declared above: `PUT /cats/:id/tags`
   // replaces the full tag set in one call, without sending the rest of the

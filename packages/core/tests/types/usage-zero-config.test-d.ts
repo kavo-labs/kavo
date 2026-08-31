@@ -31,7 +31,7 @@ async function envelope(): Promise<void> {
   // and the relation-keyed fieldset, both inferred from `Author` alone.
   const { items, total, limit, offset } = await authors.findMany({
     include: ["posts.comments"],
-    fields: { posts: ["id", "title"] },
+    select: { posts: ["id", "title"] },
   });
 
   expectTypeOf(items).toEqualTypeOf<readonly Author[]>();

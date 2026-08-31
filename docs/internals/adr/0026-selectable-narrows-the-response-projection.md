@@ -4,13 +4,13 @@
 
 ## Context
 
-`allowlists.selectable` gated what a request could **name** in `fields=` and
+`allowlists.selectable` gated what a request could **name** in `select=` and
 nothing else. What a response actually carried came from somewhere else
 entirely: a registered `item`/`list` DTO if there was one, otherwise every
 scalar column plus every declared computed field.
 
 So a column left off `selectable`, or explicitly excluded from it, was still
-serialized into every response that did not send `fields=`.
+serialized into every response that did not send `select=`.
 
 An application on 0.7.2 found this the way it gets found (#149). A `User`
 entity had an `apiKey` credential column, `selectable` was written to omit
@@ -20,8 +20,8 @@ it, and `GET /users` returned it to every caller:
 | ---------------------------- | ------------------------------ |
 | `GET /users`                 | 200, every item has `apiKey`   |
 | `GET /users/:id`             | 200, has `apiKey`              |
-| `GET /users?fields=apiKey`   | 400 `KAVO_QUERY_INVALID_FIELD` |
-| `GET /users?fields=id,email` | 200, narrowed correctly        |
+| `GET /users?select=apiKey`   | 400 `KAVO_QUERY_INVALID_FIELD` |
+| `GET /users?select=id,email` | 200, narrowed correctly        |
 
 The narrow path was guarded and the wide path was open. As a confidentiality
 control the key was **vacuous**: a client that could not ask for `apiKey`
@@ -85,7 +85,7 @@ unless `allowlists.selectable` was written. It is not read back off
 `allowlists.selectable`, because unconfigured that list resolves to a base
 set which is _almost_ the derived projection and not quite: it drops computed
 fields declaring `selectable: false`, whose documented contract is to stay in
-the projection while being unnameable in `fields=`. Narrowing by a list
+the projection while being unnameable in `select=`. Narrowing by a list
 nobody wrote would silently retire that contract, and would break apps that
 never configured the key — the one group this change must not touch.
 
@@ -114,7 +114,7 @@ hold for the projection allowlist as it already does for the DTO. Without
 it, hiding a credential on `User` would leak it again the moment any other
 entity included `user`.
 
-**5. The `fields=` 400 message is left alone.** It enumerates the selectable
+**5. The `select=` 400 message is left alone.** It enumerates the selectable
 list as though that described what is served, and after decision 1 that is
 accurate in the case the message actually fires in: an explicitly configured
 list with no runtime-shaped `item` DTO. It stays inaccurate in two others —
@@ -196,7 +196,7 @@ field you still want". The response half is now one key; the filter, sort and
 write halves are still three more, and decision 6 is where that is stated
 rather than glossed.
 
-**`fields=` still narrows further and never wider**, unchanged: selection is
+**`select=` still narrows further and never wider**, unchanged: selection is
 applied after the projection resolves, so it can only subset what
 `selectable` already allows.
 

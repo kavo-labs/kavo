@@ -50,7 +50,7 @@ The `ETag` is the exception: an `@Override` on a single-item operation gets it w
 
 **The `If-Match` check is not atomic.** Kavo reads the row, compares the tag, and then writes. There is a real window between the check and the write in which another writer can slip in, so this narrows the last-write-wins race, it does not eliminate it. It is not a database-level compare-and-swap, and Kavo does not claim to be one. If you need that guarantee, enforce it in your own transaction.
 
-**An `If-Match` token has to come from an unnarrowed read.** An ETag identifies one representation, so `GET /books/1?fields=title` produces a different tag from `GET /books/1`. Preconditions are evaluated against the full default representation, so a tag taken from a `fields=`- or `include=`-narrowed read will 412. Use the tag from a plain `GET /books/1`.
+**An `If-Match` token has to come from an unnarrowed read.** An ETag identifies one representation, so `GET /books/1?select=title` produces a different tag from `GET /books/1`. Preconditions are evaluated against the full default representation, so a tag taken from a `select=`- or `include=`-narrowed read will 412. Use the tag from a plain `GET /books/1`.
 
 The tag on a write response works too; it is the tag of the body you just got back. But that's only true while that body is the same representation a plain `GET` returns, which stops being true once a relation is configured `defaultInclude`: a write resolves no query, so write responses never carry relations. On such an entity, take the token from a `GET`.
 

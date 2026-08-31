@@ -6,11 +6,11 @@ export interface IncludeNode {
   readonly relation: RelationDescriptor;
   /**
    * The wire path addressing this node (`posts.comments`) — the key
-   * `fields[…]` uses, and a stable handle for adapter join aliases.
+   * `select[…]` uses, and a stable handle for adapter join aliases.
    */
   readonly path: string;
   /**
-   * Sparse fieldset for this node (`fields[posts]=id,title`), validated
+   * Sparse fieldset for this node (`select[posts]=id,title`), validated
    * against the target entity's selectable allowlist; `null` = all fields
    * the target's resolved DTO allows. Keys needed for stitching are always
    * fetched internally and stripped at serialization if not selected.

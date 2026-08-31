@@ -11,7 +11,7 @@ out of both: the filter grammar (`filter[field][operator]=value`, `and`/
 `or`/`not` groups, the `filter={...}` JSON escape hatch — doc 05) and the
 aggregate "everything a read can be parameterized by" shape GraphQL/MCP
 and programmatic callers reason about (`filter` + `sort` + `pagination` +
-`fields` + `include` + `search`). #310 explicitly ruled out migrating the
+`select` + `include` + `search`). #310 explicitly ruled out migrating the
 REST query-param wiring to `style: deepObject` unless a later decision
 adopted it — this ADR is that decision point.
 
@@ -33,7 +33,7 @@ Two questions had no default the codebase implied:
 ## Decision
 
 **`Query` is a documented-only aggregate; REST is untouched.** `filter`,
-`sort`, `limit`/`offset`, `fields`, `include`, `search[...]` stay exactly
+`sort`, `limit`/`offset`, `select`, `include`, `search[...]` stay exactly
 the flat bracket query params `KAVO_API_GUIDE` and `05-query-grammar.md`
 already document — no `deepObject` migration, no change to
 `listQueryParams`/`applyPaginationDocs`/`applySearchQueryDocs`. `Query` is
@@ -80,7 +80,7 @@ a `_2` in the final document is a signal to disambiguate with an explicit
 name, not a case either bind time or hoist time computes for. `Query`
 composes the same way — `$ref`s to the entity's own expected
 `Filter`/`Sort`/`Pagination`/`Include` names, plus inline (non-hoisted)
-`fields`/`search` shapes built from the same resolved allowlists
+`select`/`search` shapes built from the same resolved allowlists
 `applySearchQueryDocs`/the response-projection docs already read.
 
 ## Consequences
@@ -101,3 +101,14 @@ composes the same way — `$ref`s to the entity's own expected
   `boolean`/`enum`) that doc 05 itself does not draw — a client that sends
   a nonsensical comparison still gets the same 400 doc 05 already
   documents, from the normalizer, not from the schema.
+
+## Amendment (2026-08-31, issue #344)
+
+The sparse-fieldset query parameter was renamed from `fields` to `select`
+(wire `select=` / `select[<relation>]=`, `QueryContext.select`,
+`NormalizedQueryContext.select`). This ADR's text and the `<Entity>Query`
+aggregate's property were updated in place to match. `search[fields]` (a
+sub-key of `search`, unrelated to projection) and the `allowlists.selectable`
+config key are unchanged. No backward-compatible `fields` alias was kept —
+a request still sending `fields=` is now an unrecognized query parameter and
+is ignored, so the response falls back to the default representation.

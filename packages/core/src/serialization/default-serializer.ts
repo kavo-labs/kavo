@@ -94,7 +94,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     return this.project(
       entity,
       narrowToDto(this.rootProjection, dto),
-      selectionSet(context.query?.fields.root as readonly string[] | null | undefined),
+      selectionSet(context.query?.select.root as readonly string[] | null | undefined),
       context.query?.include ?? {},
       context,
     ) as ItemDto;
@@ -112,7 +112,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     context: KavoContext<Entity>,
   ): readonly ListDto[] {
     const projection = narrowToDto(this.rootProjection, dto as DtoClass | null);
-    const selection = selectionSet(context.query?.fields.root as readonly string[] | null | undefined);
+    const selection = selectionSet(context.query?.select.root as readonly string[] | null | undefined);
     const include = context.query?.include ?? {};
     return entities.map((entity) => this.project(entity, projection, selection, include, context) as ListDto);
   }
@@ -138,7 +138,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
         continue;
       }
       // Before the computed branch: a deselected computed field's `resolve`
-      // must never run, or `fields=` would pay for work it discards.
+      // must never run, or `select=` would pay for work it discards.
       if (selection !== null && !selection.has(key)) {
         continue;
       }

@@ -112,7 +112,7 @@ shape** — the declared-only class `@kavo/nest` supports on purpose, so
 Swagger's decorators can answer — it names the missing initializers, since
 the projection has silently fallen back to the entity.
 
-**Two scopings.** The guard is skipped under an explicit `fields=`, which can
+**Two scopings.** The guard is skipped under an explicit `select=`, which can
 empty a projection on its own and would make the message blame the wrong
 thing; and it is scoped to custom ids, because a standard operation's empty
 projection is a different bug that `dto.output` does not fix.
@@ -213,7 +213,7 @@ is that response mapping **merges** what it finds there rather than
 discarding it (issue #122): an overriding or wrapping `findMany` handler
 returns `meta` alongside `entities`/`total`, and it lands on
 `ListResultDto.meta` verbatim. `meta` is caller data, not entity data, so
-it never passes through the serializer — no DTO projection, no `fields=`
+it never passes through the serializer — no DTO projection, no `select=`
 selection, no renaming.
 
 `ListResultDto.meta` is the envelope's one **optional** field, and the
@@ -265,7 +265,7 @@ them; `@kavo/nest` turns them into the `ETag` header and a `304`.
 it: `KavoEngineDependencies.repository` is what it reads through. The
 engine re-reads
 the target through that adapter, hashes the row's **canonical read
-representation** (what `findOne` with no `fields`/`include`/`sort`
+representation** (what `findOne` with no `select`/`include`/`sort`
 would return, `withDeleted` on a soft-deletable entity so the same read
 serves a deleted row), and raises `PreconditionFailedException` (412)
 when no supplied token matches. It runs on every standard write that
@@ -303,7 +303,7 @@ the entity name is a separate parameter the store keys on. The target id
 rides on `request.id`, outside the normalized query, so it must be a key
 part or `findOne(1)` and `findOne(2)` would share one entry.
 `queryFingerprint` is a plain-data projection (`filter`, `sort`,
-`pagination`, `fields`, `include`, `withDeleted`, `onlyDeleted`, `count`)
+`pagination`, `select`, `include`, `withDeleted`, `onlyDeleted`, `count`)
 folding each include node to its query-decided parts, because the include
 tree carries live `RelationDescriptor`s `canonicalize` must not serialize.
 Per-call settings are deliberately not in the key; the one known

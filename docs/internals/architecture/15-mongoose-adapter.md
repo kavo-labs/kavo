@@ -296,7 +296,7 @@ null }`).
 - **Virtual populate:** see §3 — needs a metadata source beyond
   `schema.paths`.
 - **Un-included reference ids:** see §1 — also a core-side change.
-- **Projections:** `query.fields` is applied by core's serializer, not
+- **Projections:** `query.select` is applied by core's serializer, not
   pushed down as a MongoDB projection. Correct today, and a clear
   optimization later; the same is true of `@kavo/prisma`.
 - **Composite primary keys:** out of scope, same as the other adapters.

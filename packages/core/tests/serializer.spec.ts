@@ -26,7 +26,7 @@ const EMPTY_QUERY = {
   filter: { root: null },
   sort: [],
   pagination: { limit: 20, offset: 0 },
-  fields: { root: null, relations: {} },
+  select: { root: null, relations: {} },
   include: {},
   withDeleted: false,
   onlyDeleted: false,
@@ -103,12 +103,12 @@ describe("DefaultSerializer — response projection", () => {
       id = 0;
       name = "";
     }
-    const context = readContext(userConfig, { fields: { root: ["name", "email"], relations: {} } as never });
+    const context = readContext(userConfig, { select: { root: ["name", "email"], relations: {} } as never });
     expect(serializer.serializeItem(ada(), UserItemDto, context)).toEqual({ name: "Ada" });
   });
 
   it("keeps a null column value — null is data, not absence", () => {
-    const context = readContext(userConfig, { fields: { root: ["name"], relations: {} } as never });
+    const context = readContext(userConfig, { select: { root: ["name"], relations: {} } as never });
     const row = ada({ name: null as never });
     expect(serializer.serializeItem(row, null, context)).toEqual({ name: null });
   });
@@ -126,7 +126,7 @@ describe("DefaultSerializer — response projection", () => {
       id = 0;
       name = "";
     }
-    const context = readContext(userConfig, { fields: { root: ["id"], relations: {} } as never });
+    const context = readContext(userConfig, { select: { root: ["id"], relations: {} } as never });
     const items = serializer.serializeList([ada(), ada({ id: 2, name: "Grace" })], UserListDto, context);
     expect(items).toEqual([{ id: 1 }, { id: 2 }]);
   });

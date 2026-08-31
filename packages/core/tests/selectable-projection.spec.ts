@@ -15,9 +15,9 @@ import {
 /**
  * `allowlists.selectable` narrows the response projection (ADR-0026).
  *
- * Before that decision it gated only what `fields=` could *name*, which
+ * Before that decision it gated only what `select=` could *name*, which
  * made it vacuous as a confidentiality control: a client that could not ask
- * for `email` received it anyway by sending no `fields=` at all. #149 found
+ * for `email` received it anyway by sending no `select=` at all. #149 found
  * this with a real credential column.
  *
  * The three axes that matter are the ones these tests are organized around:
@@ -119,19 +119,19 @@ describe("allowlists.selectable narrows the response projection", () => {
       expect(Object.keys((await crud.findOne(id)) as object).sort()).toEqual([...COLUMNS].sort());
     });
 
-    it("keeps rejecting an unlisted field in fields=, rather than dropping it", async () => {
+    it("keeps rejecting an unlisted field in select=, rather than dropping it", async () => {
       // The old behavior that was already correct, and has to survive: the
       // 400 is what tells a client it asked for something it cannot have.
       const { crud, id } = await seeded(HIDES_EMAIL);
-      await expect(crud.findOne(id, { fields: ["email"] } as never)).rejects.toMatchObject({
+      await expect(crud.findOne(id, { select: ["email"] } as never)).rejects.toMatchObject({
         code: "KAVO_QUERY_INVALID",
         issues: [{ field: "email", code: "KAVO_QUERY_INVALID_FIELD" }],
       });
     });
 
-    it("narrows further, never wider, when fields= is sent as well", async () => {
+    it("narrows further, never wider, when select= is sent as well", async () => {
       const { crud, id } = await seeded(HIDES_EMAIL);
-      expect(await crud.findOne(id, { fields: ["id", "name"] } as never)).toEqual({ id, name: "Ada" });
+      expect(await crud.findOne(id, { select: ["id", "name"] } as never)).toEqual({ id, name: "Ada" });
     });
   });
 

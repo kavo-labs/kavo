@@ -97,7 +97,7 @@ describe("@Kavo allowlists — filterable/sortable/selectable enforced over HTTP
   });
 
   it("400s a select field outside the allowlist", async () => {
-    const response = await request(server()).get("/todos?fields=priority").expect(400);
+    const response = await request(server()).get("/todos?select=priority").expect(400);
     expect(response.body).toMatchObject({
       code: "KAVO_QUERY_INVALID",
       errors: [{ field: "priority", code: "KAVO_QUERY_INVALID_FIELD" }],
@@ -105,7 +105,7 @@ describe("@Kavo allowlists — filterable/sortable/selectable enforced over HTTP
   });
 
   it("allows a filter/sort/select field that is on the allowlist", async () => {
-    await request(server()).get("/todos?filter[done][eq]=true&sort=priority&fields=id,title").expect(200);
+    await request(server()).get("/todos?filter[done][eq]=true&sort=priority&select=id,title").expect(200);
   });
 });
 

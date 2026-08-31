@@ -625,7 +625,7 @@ describe("registerKavoSchemas", () => {
             filter: filterRef,
             sort: { $ref: "#/components/schemas/AdSort" },
             pagination: { $ref: "#/components/schemas/AdPagination" },
-            fields: { type: "array", items: { type: "string", enum: ["name"] } },
+            select: { type: "array", items: { type: "string", enum: ["name"] } },
             include: { $ref: "#/components/schemas/AdInclude" },
           },
           "x-kavo-entity": "Ad",

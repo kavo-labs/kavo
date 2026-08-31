@@ -415,8 +415,8 @@ graph with no `KavoModule.forRoot`/`forRootAsync` — and so no working
 `@Kavo` service either — never reaches this pass, so no route is left
 half-documented.
 
-The generic syntax of `filter`/`sort`/`limit`/`offset`/`fields` (doc 5),
-`include`/`fields[relation]`, and `If-None-Match`/`If-Match` is documented
+The generic syntax of `filter`/`sort`/`limit`/`offset`/`select` (doc 5),
+`include`/`select[relation]`, and `If-None-Match`/`If-Match` is documented
 **once**, in the exported `KAVO_API_GUIDE` string (`swagger.ts`) — not
 repeated as identical boilerplate on every route of every entity. An app
 splices it into its own top-level document description
@@ -424,7 +424,7 @@ splices it into its own top-level document description
 do this. Per-route `ApiQuery`/`ApiHeader` descriptions then carry only what
 the guide can't say:
 
-- `filter`/`sort`/`fields` carry the entity's actual
+- `filter`/`sort`/`select` carry the entity's actual
   `allowlists.filterable`/`sortable`/`selectable` fields, when decoration
   time can tell (issue #171). An **explicit array** selector resolves to
   exactly the same value `resolveAllowlists` would produce, with no ORM
@@ -435,7 +435,7 @@ the guide can't say:
   description at all, deferring entirely to the shared guide rather than
   imply a narrower list than actually exists.
 - `include` carries which relations are actually includable on the entity,
-  the same way. `fields[relation]` carries no description at all — its
+  the same way. `select[relation]` carries no description at all — its
   relation name is already the param name.
 - `limit`/`offset` and `If-None-Match`/`If-Match` carry no per-route
   description at all, either way: none of the four ever varies by entity.
@@ -496,9 +496,9 @@ stays open (no `additionalProperties: false`, matching `allowlists.md`'s
 returns. `FieldMetadata` exposes no `hasDefault`, so a non-nullable column
 with a database `default:` is reported `required` in `<Entity>Create`
 even though the caller may omit it. And the response `required` describes
-the unprojected row; a `fields=`-narrowed read (ADR-0026) returns a
+the unprojected row; a `select=`-narrowed read (ADR-0026) returns a
 subset, so a strict client validating that response against `<Entity>Item`
-would see "missing required" — expected, the same way `fields=` already
+would see "missing required" — expected, the same way `select=` already
 diverges from the full schema's `properties`. The request side mirrors the
 explicit-DTO path, where `@nestjs/swagger` + class-validator derive
 `required` themselves.
@@ -527,7 +527,7 @@ lifts the inline schemas Kavo built into `components.schemas`, leaving a
 | `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313)                                                  |
 | `<Entity>Sort`                | the sortable keys (bare + `-`-prefixed), as `array<enum>`                                                     |
 | `<Entity>Filter`              | the structured filter predicate (issue #314, ADR-0042)                                                        |
-| `<Entity>Query`               | the documented-only `filter`+`sort`+`pagination`+`fields`+`include`+`search` aggregate (issue #314, ADR-0042) |
+| `<Entity>Query`               | the documented-only `filter`+`sort`+`pagination`+`select`+`include`+`search` aggregate (issue #314, ADR-0042) |
 | `KavoProblemDetails`          | the shared RFC 9457 body (400/404/409/412)                                                                    |
 | `KavoProblemDetailError`      | one entry of its `errors[]` array                                                                             |
 | `<Entity>ValidationError`     | the entity-scoped `400`                                                                                       |
@@ -621,13 +621,13 @@ arrays of `Filter`, `not` is one `Filter` — the wire parser's unary shape
 entity's own expected `<Entity>Filter` name, an assumption that holds
 absent a genuine cross-entity name collision (the same `_2` edge case
 `<Entity>Pagination` already lives with). `<Entity>Query` is the
-aggregate `filter`+`sort`+`pagination`+`fields`+`include`+`search` shape
+aggregate `filter`+`sort`+`pagination`+`select`+`include`+`search` shape
 a GraphQL/MCP resolver or a programmatic `QueryContext` caller reasons
 about — **documented-only**: no REST parameter `$ref`s it, and REST's
 flat query params are entirely unchanged (ADR-0042 explicitly rules out
 a `style: deepObject` migration). `sort`/`pagination`/`include`/`filter`
 on `<Entity>Query` `$ref` the entity's own other expected component
-names; `fields`/`search` are inlined rather than hoisted as their own
+names; `select`/`search` are inlined rather than hoisted as their own
 components, since only `Filter`/`Query` were asked for. `search` is
 omitted from `<Entity>Query` when `query.search` doesn't resolve to an
 object, the same gate `applySearchQueryDocs` uses for the flat

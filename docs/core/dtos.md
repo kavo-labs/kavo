@@ -43,7 +43,7 @@ class BadDto {
 
 This keeps DTO classes plain: no decorators, no reflection library. The cost is that fields need initializers for the narrowing to actually take effect.
 
-**DTO mapping happens before field selection.** A `fields=id,title` query string can only narrow what the resolved DTO already projects. Selection never widens a projection past what the DTO or the `selectable` allowlist already allows.
+**DTO mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved DTO already projects. Selection never widens a projection past what the DTO or the `selectable` allowlist already allows.
 
 ## Included relations
 

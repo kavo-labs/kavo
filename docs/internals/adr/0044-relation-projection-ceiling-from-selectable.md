@@ -10,7 +10,7 @@
 the entity doing the including — ADR-0026 decision 4 states it outright:
 "A relation is projected by its own target's `selectable`, never the
 root's." A caller could trim an include per request with
-`fields[<relation>]=`, but there was no way to say in config "an included
+`select[<relation>]=`, but there was no way to say in config "an included
 `dictionary` returns only `id`, always" — an adopter who includes a
 relation to surface one field ships the relation's whole row unless every
 caller remembers the sparse-fieldset param.
@@ -43,7 +43,7 @@ projection of `["id", "title"]` and a `relationProjection` of
 `{ dictionary: ["id"] }` on `ResolvedEntityConfig`.
 
 - **It is a default and a ceiling.** When a request sends no
-  `fields[<relation>]=` for that node, the ceiling _is_ the node's
+  `select[<relation>]=` for that node, the ceiling _is_ the node's
   fieldset. When it does, the requested fields are validated against the
   target's `selectable` **and** the ceiling; a field allowed by the target
   but outside the ceiling is a `KAVO_QUERY_INVALID_FIELD` 400, named
@@ -64,8 +64,8 @@ projection of `["id", "title"]` and a `relationProjection` of
   write-echo path to bound.
 - **Root residue is removed, not just tolerated.** The relation-dotted
   entries are stripped from the resolved `allowlists.selectable` (which
-  documents exactly "what a request may name in `fields=`") and from the
-  derived `projection`, so `fields=dictionary.id` no longer passes root
+  documents exactly "what a request may name in `select=`") and from the
+  derived `projection`, so `select=dictionary.id` no longer passes root
   field validation as a no-op.
 
 **Rejected shapes fail at bootstrap with a `ConfigurationException`, not
@@ -83,7 +83,7 @@ is not checked at bootstrap — the target's metadata is not in scope there,
 the same laxity `resolveAllowlists` already documents for relation paths
 on `searchable`. Its behaviour then splits by path:
 
-- a request that names the field in `fields[<relation>]=` gets a 400 if
+- a request that names the field in `select[<relation>]=` gets a 400 if
   the field is not on the target's own `selectable`;
 - with no request fieldset, the ceiling is used verbatim and a field that
   names no real target column is simply **omitted** from the projected
@@ -105,11 +105,11 @@ changelog note.
 
 **The resolved `allowlists.selectable` and `projection` are now narrower**
 for such a config: the relation-dotted entries are removed. Anything that
-reads the resolved list — `fields=` request validation, the
-`<Entity>Query.fields` component-schema enum, `@kavo/nest`'s
+reads the resolved list — `select=` request validation, the
+`<Entity>Query.select` component-schema enum, `@kavo/nest`'s
 `fallbackListSchema` — no longer sees a relation path it never did
 anything useful with anyway. This is deliberate: the entry means
-"relation ceiling", not "root `fields=` path".
+"relation ceiling", not "root `select=` path".
 
 **This amends ADR-0026 decision 4.** The root config _can_ now narrow an
 included relation — but only through `selectable` relation paths, and only
@@ -130,7 +130,7 @@ in-repo tests do) gets an object the compiler no longer checks. This is
 the same break ADR-0026 recorded for `projection` and ADR-0019 for
 `computed`.
 
-**Swagger gains a description.** `fields[<relation>]` carries
+**Swagger gains a description.** `select[<relation>]` carries
 `Restricted to: <fields>.` when the relation has a ceiling — resolvable at
 decoration time (ADR-0012), because the ceiling is literal strings on
 `allowlists.selectable`, unlike an `{ exclude }` selector.

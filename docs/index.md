@@ -26,7 +26,7 @@ import LayerEquation from "./.vitepress/theme/components/LayerEquation.vue";
 const queryGrammarTabs = [
   { id: "filter-sort", label: "Filter & sort" },
   { id: "includes", label: "Includes" },
-  { id: "fields", label: "Field selection" },
+  { id: "select", label: "Field selection" },
   { id: "pagination", label: "Pagination" },
   { id: "soft-delete", label: "Soft delete" },
 ];
@@ -189,12 +189,12 @@ GET /books/42
 ```
 
   </div>
-      <div v-show="activeQueryGrammarTab === 'fields'">
+      <div v-show="activeQueryGrammarTab === 'select'">
 
 ```http
 GET /books
-  ?fields=id,title,status
-  &fields[author]=id,name
+  ?select=id,title,status
+  &select[author]=id,name
 ```
 
   </div>
@@ -263,7 +263,7 @@ GET /books
 ```
 
   </div>
-      <div v-show="activeQueryGrammarTab === 'fields'">
+      <div v-show="activeQueryGrammarTab === 'select'">
 
 ```json
 {

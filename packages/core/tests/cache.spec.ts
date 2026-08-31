@@ -275,10 +275,10 @@ describe("findOne caching", () => {
     const { crud, adapter } = makeCrud({ cache: { ttl: 60 } } as never, createMemoryCacheStore());
     await execute(crud, { operation: "createOne", body: ADA });
     await execute(crud, { operation: "findOne", id: 1 });
-    await execute(crud, { operation: "findOne", id: 1, query: { fields: ["name"] } });
+    await execute(crud, { operation: "findOne", id: 1, query: { select: ["name"] } });
     const readsAfterMisses = adapter.reads;
 
-    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { fields: ["name"] } });
+    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { select: ["name"] } });
     expect(narrowed.item).toEqual({ name: "Ada" });
     expect(adapter.reads).toBe(readsAfterMisses);
   });

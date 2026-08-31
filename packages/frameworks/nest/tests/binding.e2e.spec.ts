@@ -930,7 +930,7 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
     // Regression: a wire-format query string must reach the override
     // normalized, not passed through raw — this is what auto-wiring buys
     // (issue #25). The override never calls flattenQuery/WireQuery itself.
-    const narrowed = await request(server()).get("/todos/1").query("fields=id,title").expect(200);
+    const narrowed = await request(server()).get("/todos/1").query("select=id,title").expect(200);
     expect(Object.keys(narrowed.body).sort()).toEqual(["id", "title", "viaOverride"]);
   });
 
@@ -951,10 +951,10 @@ describe("@Kavo @Override — controller-method overrides that keep generated ro
 
     await bootstrap(OverrideFindOneQueryShapeController);
     await request(server()).post("/todos").send({ title: "x" }).expect(201);
-    await request(server()).get("/todos/1").query("fields=id,title").expect(200);
+    await request(server()).get("/todos/1").query("select=id,title").expect(200);
 
     expect(received).toBeInstanceOf(WireQuery);
-    expect((received as WireQuery).params).toMatchObject({ fields: "id,title" });
+    expect((received as WireQuery).params).toMatchObject({ select: "id,title" });
   });
 
   it("passes an overridden findMany a WireQuery instance, not a raw query object (issue #25)", async () => {
@@ -1498,16 +1498,16 @@ describe("@Kavo relation includes", () => {
     expect(response.body.items[0]).toMatchObject({ title: "x", list: { id: 7 } });
   });
 
-  it("narrows an included node with fields[relation]", async () => {
+  it("narrows an included node with select[relation]", async () => {
     await request(server())
       .post("/todos")
       .send({ title: "x", list: { id: 7 } })
       .expect(201);
-    const response = await request(server()).get("/todos/1?include=list&fields[list]=id").expect(200);
+    const response = await request(server()).get("/todos/1?include=list&select[list]=id").expect(200);
     expect(response.body.list).toEqual({ id: 7 });
   });
 
-  it("caps an included relation to the allowlists.selectable ceiling with no fields[list] (ADR-0044)", async () => {
+  it("caps an included relation to the allowlists.selectable ceiling with no select[list] (ADR-0044)", async () => {
     @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
     @Controller("todos")
     class CeilingController {}
@@ -1526,7 +1526,7 @@ describe("@Kavo relation includes", () => {
 
     // A request may narrow within the ceiling, never past it: `name` is a
     // real TodoList column but off the ceiling.
-    const rejected = await request(server()).get("/todos/1?include=list&fields[list]=name").expect(400);
+    const rejected = await request(server()).get("/todos/1?include=list&select[list]=name").expect(400);
     expect(rejected.body).toMatchObject({ code: "KAVO_QUERY_INVALID" });
     expect(rejected.body.errors).toContainEqual(
       expect.objectContaining({ field: "list.name", code: "KAVO_QUERY_INVALID_FIELD" }),
@@ -1592,7 +1592,7 @@ describe("@Kavo relation includes", () => {
     }
   });
 
-  it("documents include and fields[relation] in the OpenAPI schema", async () => {
+  it("documents include and select[relation] in the OpenAPI schema", async () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     const include = params.find((param) => param.name === "include");
@@ -1600,14 +1600,14 @@ describe("@Kavo relation includes", () => {
     // lives only in `KAVO_API_GUIDE`; `include`'s own description
     // carries just the entity-specific allowlist.
     expect(include?.description).toBe("Includable: list.");
-    const fieldsList = params.find((param) => param.name === "fields[list]");
+    const fieldsList = params.find((param) => param.name === "select[list]");
     expect(fieldsList).toBeDefined();
-    // `fields[relation]`'s relation name is already the param name, so it
+    // `select[relation]`'s relation name is already the param name, so it
     // carries no description at all.
     expect(fieldsList?.description).toBeUndefined();
   });
 
-  it("names a per-relation projection ceiling on fields[relation] (ADR-0044)", async () => {
+  it("names a per-relation projection ceiling on select[relation] (ADR-0044)", async () => {
     @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
     @Controller("todos")
     class CeilingController {}
@@ -1616,7 +1616,7 @@ describe("@Kavo relation includes", () => {
     await bootstrap(CeilingController);
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
-    const fieldsList = params.find((param) => param.name === "fields[list]");
+    const fieldsList = params.find((param) => param.name === "select[list]");
     // The ceiling is literal strings on `allowlists.selectable` — resolvable
     // at decoration time (ADR-0012), unlike an `{ exclude }` selector.
     expect(fieldsList?.description).toBe("Restricted to: id.");
@@ -1632,7 +1632,7 @@ describe("@Kavo relation includes", () => {
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
     expect(params.find((param) => param.name === "include")).toBeUndefined();
-    expect(params.find((param) => param.name.startsWith("fields["))).toBeUndefined();
+    expect(params.find((param) => param.name.startsWith("select["))).toBeUndefined();
   });
 
   it("carries no description for an exclude-shaped includable allowlist, and no fields[relation] params", async () => {
@@ -1651,7 +1651,7 @@ describe("@Kavo relation includes", () => {
     const include = params.find((param) => param.name === "include");
     expect(include).toBeDefined();
     expect(include?.description).toBeUndefined();
-    expect(params.find((param) => param.name.startsWith("fields["))).toBeUndefined();
+    expect(params.find((param) => param.name.startsWith("select["))).toBeUndefined();
   });
 });
 
@@ -1684,8 +1684,8 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
     // entity really allows.
     const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
     const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
-    const fields = params.find((param) => param.name === "fields");
-    expect(fields?.description).toBeUndefined();
+    const select = params.find((param) => param.name === "select");
+    expect(select?.description).toBeUndefined();
   });
 
   it("carries no description for an exclude-shaped allowlist", async () => {
@@ -1828,7 +1828,7 @@ describe("KAVO_API_GUIDE", () => {
     expect(KAVO_API_GUIDE).toContain("sparse fieldset");
   });
 
-  it("documents the generic include/fields[relation] syntax", () => {
+  it("documents the generic include/select[relation] syntax", () => {
     expect(KAVO_API_GUIDE).toContain("dot-separated for nesting");
     expect(KAVO_API_GUIDE).toContain("sparse fieldset for an included relation node");
   });
@@ -1892,7 +1892,7 @@ describe("@Kavo computed fields over the wire (ADR-0019)", () => {
   });
 
   it("is selectable through the wire fieldset", async () => {
-    const response = await request(server()).get("/todos/1?fields=id,slug").expect(200);
+    const response = await request(server()).get("/todos/1?select=id,slug").expect(200);
     expect(response.body).toEqual({ id: 1, slug: "write-docs" });
   });
 
@@ -3525,8 +3525,8 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
     expect(query?.properties?.pagination).toEqual({ $ref: "#/components/schemas/TodoPagination" });
     expect(query?.properties?.include).toEqual({ $ref: "#/components/schemas/TodoInclude" });
     // `search` isn't a component of its own — inlined only.
-    const fields = query?.properties?.fields as { items?: { enum?: string[] } };
-    expect(fields.items?.enum).toEqual(["id", "title", "done", "priority", "deletedAt"]);
+    const select = query?.properties?.select as { items?: { enum?: string[] } };
+    expect(select.items?.enum).toEqual(["id", "title", "done", "priority", "deletedAt"]);
     // `query.search` resolves `false` by default — no `search` property.
     expect(query?.properties?.search).toBeUndefined();
   });

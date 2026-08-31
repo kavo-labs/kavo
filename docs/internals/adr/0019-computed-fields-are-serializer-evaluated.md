@@ -13,7 +13,7 @@ to expose as a getter: `DefaultSerializer` copied it because `key in
 source` was true. That is an accident of TypeORM handing the engine class
 instances. `@kavo/prisma`, `@kavo/mongoose`, and any adapter returning
 plain rows carry no getter, so the same config silently emitted nothing —
-and no ORM's rows made the field reachable through `fields=`, because the
+and no ORM's rows made the field reachable through `select=`, because the
 `selectable` allowlist derives from columns alone.
 
 Making such a field first-class raises one question with a wrong obvious
@@ -46,10 +46,10 @@ computed key by calling the descriptor's `resolve(entity, context)`,
 never by reading it off the row. That is the only stage involved, which
 is what makes computed fields behave identically for a TypeORM class
 instance and a Prisma/Mongoose plain object, and why **no ORM adapter
-changes**: no adapter consumes `query.fields` (selection is "kept
+changes**: no adapter consumes `query.select` (selection is "kept
 internally, stripped late"), so every row arrives fully hydrated and a
 computed field's source columns are always present, even under
-`fields=fullName`. There is no dependency declaration and none is needed.
+`select=fullName`. There is no dependency declaration and none is needed.
 
 `resolve` is **synchronous** and runs once per served item. An
 async or database-hitting resolver is not offered: it would reintroduce
@@ -87,7 +87,7 @@ computed field joins the entity-derived `item`/`list` projection with no
 DTO registration, and joins the `selectable` allowlist unless the
 descriptor sets `selectable: false`. Both narrowing mechanisms then apply
 unchanged: an explicit `item`/`list` DTO that omits it hides it, and
-`fields=` narrows it away. The normative order is untouched — DTO mapping
+`select=` narrows it away. The normative order is untouched — DTO mapping
 first, then field selection; selection never widens.
 
 **3. Never filterable, never sortable.** Not deferred — rejected. A
@@ -160,7 +160,7 @@ so rule 3 is a compile error before it is a bootstrap error.
   an `operation` that no caller issued and a `query` that was never
   normalized against that entity.
 - `selectable: false` narrows the allowlist, not the projection. The field
-  stays in the default response and its name becomes a 400 in `fields=`;
+  stays in the default response and its name becomes a 400 in `select=`;
   a request that sends any fieldset still drops it, with no way to ask for
   it back. That follows from rule 2 rather than contradicting it —
   selection narrows uniformly — but it is the one place the flag's name

@@ -118,7 +118,7 @@ function unfilteredQuery() {
     filter: { root: null },
     sort: [],
     include: {},
-    fields: { root: null, relations: {} },
+    select: { root: null, relations: {} },
     pagination: { limit: 10, offset: 0 },
     count: false,
     withDeleted: false,

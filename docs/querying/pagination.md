@@ -45,7 +45,7 @@ The next page's token comes back as `meta.nextCursor`, and is `null` on the last
 }
 ```
 
-Pass it straight back as `?cursor=…` to get the next page, and keep every other parameter (`sort`, `filter`, `include`, `fields`) identical.
+Pass it straight back as `?cursor=…` to get the next page, and keep every other parameter (`sort`, `filter`, `include`, `select`) identical.
 
 ### Things to know
 

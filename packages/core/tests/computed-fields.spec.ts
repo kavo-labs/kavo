@@ -170,14 +170,14 @@ describe("computed fields — DTO narrowing (doc 04 §5)", () => {
 });
 
 describe("computed fields — selection", () => {
-  it("is selectable by default, so fields= can name it", async () => {
+  it("is selectable by default, so select= can name it", async () => {
     const { crud } = await seeded({ computed: { shout } } as never);
-    expect(await crud.findOne(1, { fields: ["name", "shout"] } as never)).toEqual({ name: "Ada", shout: "ADA" });
+    expect(await crud.findOne(1, { select: ["name", "shout"] } as never)).toEqual({ name: "Ada", shout: "ADA" });
   });
 
   it("is selectable over the wire grammar too", async () => {
     const { crud } = await seeded({ computed: { shout } } as never);
-    const list = (await crud.findMany(new WireQuery({ fields: "shout" }) as never)) as unknown as ListResultDto<{
+    const list = (await crud.findMany(new WireQuery({ select: "shout" }) as never)) as unknown as ListResultDto<{
       shout: string;
     }>;
     expect(list.items).toEqual([{ shout: "ADA" }]);
@@ -185,7 +185,7 @@ describe("computed fields — selection", () => {
 
   it("is dropped by a fieldset that does not name it — selection narrows uniformly", async () => {
     const { crud } = await seeded({ computed: { shout } } as never);
-    expect(await crud.findOne(1, { fields: ["name"] } as never)).toEqual({ name: "Ada" });
+    expect(await crud.findOne(1, { select: ["name"] } as never)).toEqual({ name: "Ada" });
   });
 
   it("never runs a deselected field's resolver", async () => {
@@ -197,7 +197,7 @@ describe("computed fields — selection", () => {
     const resolve = vi.fn((user: User) => user.name.toUpperCase());
     const { crud, adapter } = makeCrud({ computed: { shout: { resolve } } } as never);
     adapter.rows.push(Object.assign(new User(), { id: 1, name: "Ada" }));
-    expect(await crud.findOne(1, { fields: ["name"] } as never)).toEqual({ name: "Ada" });
+    expect(await crud.findOne(1, { select: ["name"] } as never)).toEqual({ name: "Ada" });
     expect(resolve).not.toHaveBeenCalled();
   });
 
@@ -208,14 +208,14 @@ describe("computed fields — selection", () => {
     // Still present in the default projection …
     expect(await crud.findOne(1)).toMatchObject({ shout: "ADA" });
     // … but outside the allowlist, so naming it is rejected, never dropped.
-    await expect(crud.findOne(1, { fields: ["shout"] } as never)).rejects.toMatchObject({
+    await expect(crud.findOne(1, { select: ["shout"] } as never)).rejects.toMatchObject({
       code: "KAVO_QUERY_INVALID",
       issues: [{ field: "shout", code: "KAVO_QUERY_INVALID_FIELD" }],
     });
     // And the limit of what the flag buys: `selectable: false` narrows the
     // allowlist, not the projection, so any fieldset that omits the field
     // still drops it — with no way for the client to ask for it back.
-    expect(await crud.findOne(1, { fields: ["name"] } as never)).toEqual({ name: "Ada" });
+    expect(await crud.findOne(1, { select: ["name"] } as never)).toEqual({ name: "Ada" });
   });
 
   it("survives an `{ exclude }` selectable list, which resolves against columns *and* computed", async () => {
@@ -226,8 +226,8 @@ describe("computed fields — selection", () => {
       computed: { shout },
       allowlists: { selectable: { exclude: ["email"] } },
     } as never);
-    expect(await crud.findOne(1, { fields: ["shout"] } as never)).toEqual({ shout: "ADA" });
-    await expect(crud.findOne(1, { fields: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
+    expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
+    await expect(crud.findOne(1, { select: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
   });
 
   it("leaves the default projection when excluded by name, not just the allowlist", async () => {
@@ -246,7 +246,7 @@ describe("computed fields — selection", () => {
       allowlists: { selectable: { exclude: ["shout"] } },
     } as never);
     expect(await crud.findOne(1)).not.toHaveProperty("shout");
-    await expect(crud.findOne(1, { fields: ["shout"] } as never)).rejects.toMatchObject({
+    await expect(crud.findOne(1, { select: ["shout"] } as never)).rejects.toMatchObject({
       code: "KAVO_QUERY_INVALID",
       issues: [{ field: "shout", code: "KAVO_QUERY_INVALID_FIELD" }],
     });
@@ -277,7 +277,7 @@ describe("computed fields — selection", () => {
       computed: { shout: { ...shout, selectable: false } },
       allowlists: { selectable: ["id", "shout"] },
     } as never);
-    expect(await crud.findOne(1, { fields: ["shout"] } as never)).toEqual({ shout: "ADA" });
+    expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
   });
 
   it("never joins the filterable or sortable defaults", async () => {
@@ -375,8 +375,8 @@ describe("computed fields — bootstrap validation", () => {
       computed: { shout },
       allowlists: { selectable: ["id", "shout"] },
     } as never);
-    expect(await crud.findOne(1, { fields: ["shout"] } as never)).toEqual({ shout: "ADA" });
-    await expect(crud.findOne(1, { fields: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
+    expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
+    await expect(crud.findOne(1, { select: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
   });
 
   it("lists the declared names in the debug dump", () => {
@@ -573,11 +573,11 @@ describe("computed fields — on an included relation target", () => {
     expect(item.author).toMatchObject({ id: 1, name: "Ada", initials: "Ad" });
   });
 
-  it("honors the target's selectable allowlist for fields[author]", async () => {
+  it("honors the target's selectable allowlist for select[author]", async () => {
     const { posts } = blog();
     const item = (await posts.findOne(10, {
       include: ["author"],
-      fields: { author: ["initials"] },
+      select: { author: ["initials"] },
     } as never)) as Post & { author: { initials: string } };
     expect(item.author).toEqual({ initials: "Ad" });
   });

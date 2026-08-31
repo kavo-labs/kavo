@@ -69,8 +69,8 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
   readonly filterable?: QueryFieldSelector<Entity>;
   readonly sortable?: QueryFieldSelector<Entity>;
   /**
-   * What a request may name in `fields=`, **and** what a response carries
-   * when it sends no `fields=` at all (ADR-0026).
+   * What a request may name in `select=`, **and** what a response carries
+   * when it sends no `select=` at all (ADR-0026).
    *
    * The second half is what makes this a confidentiality control rather
    * than a validation list: a column left off is not served. Omit the key

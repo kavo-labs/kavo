@@ -92,7 +92,7 @@ describe("KavoEngine pipeline", () => {
   it("applies field selection after DTO mapping", async () => {
     const { crud } = makeCrud();
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
-    const list = await crud.findMany({ fields: { root: ["id", "name"] } } as never);
+    const list = await crud.findMany({ select: { root: ["id", "name"] } } as never);
     expect(Object.keys(list.items[0] as object)).toEqual(["id", "name"]);
   });
 
@@ -437,7 +437,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
     const { crud, seen } = withPromote({ kind: "read" });
     await crud.createOne({ name: "Ada", email: "ada@x.io", age: 36 } as never);
 
-    await crud.run("promoteOne", { id: 1, query: { fields: ["name"] } } as never);
+    await crud.run("promoteOne", { id: 1, query: { select: ["name"] } } as never);
 
     expect(seen).toMatchObject({ hasQuery: true });
     // A read has no request body to deserialize; its input is the target id.
@@ -528,13 +528,13 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
       await expect(crud.run("probeOne")).resolves.toBeNull();
     });
 
-    it("does not blame the operation when it was fields= that emptied the projection", async () => {
+    it("does not blame the operation when it was select= that emptied the projection", async () => {
       // A sparse fieldset can empty a projection on its own, and the message
       // would then point at a `dto.output` that is not the problem. The
       // client's request is the mistake here, and the operation trips the
       // real guard the moment the fieldset comes off.
       const { crud } = withShape({ id: 7, name: "Ada" }, { kind: "read" });
-      expect(await crud.run("probeOne", { query: { fields: ["email"] } } as never)).toEqual({});
+      expect(await crud.run("probeOne", { query: { select: ["email"] } } as never)).toEqual({});
     });
 
     it("checks a many-cardinality operation on its first row", async () => {

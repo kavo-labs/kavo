@@ -86,7 +86,7 @@ alone would have made the cursor path a way _around_ the other two:
   a field `?filter[email][gt]=…` is a 400 for — a value-extraction oracle
   reachable by binary search.
 - **`selectable`**, because `cursorValuesOf` reads the **raw entity**
-  (deliberately: a client selecting `fields=title` still needs `id` in its
+  (deliberately: a client selecting `select=title` still needs `id` in its
   cursor) and `meta` never passes through the serializer. Gated on
   `sortable` alone, excluding `passwordHash` via `selectable` or an item DTO
   while leaving `sortable` at its default — the natural configuration —

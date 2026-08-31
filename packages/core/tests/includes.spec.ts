@@ -276,7 +276,7 @@ describe("include serialization", () => {
     expect((list.items[0] as { posts: unknown[] }).posts[0]).toMatchObject({ id: 10, title: "First" });
   });
 
-  it("narrows an included node with fields[path], validated against the target", async () => {
+  it("narrows an included node with select[path], validated against the target", async () => {
     const fixture = blog({
       author: { allowlists: { includable: ["posts"] } },
     });
@@ -285,12 +285,12 @@ describe("include serialization", () => {
 
     const list = await authors.findMany({
       include: ["posts"],
-      fields: { relations: { posts: ["id", "title"] } },
+      select: { relations: { posts: ["id", "title"] } },
     });
     expect((list.items[0] as { posts: unknown[] }).posts[0]).toEqual({ id: 10, title: "First" });
   });
 
-  it("accepts the relation-keyed fields spelling identically", async () => {
+  it("accepts the relation-keyed select spelling identically", async () => {
     const fixture = blog({
       author: { allowlists: { includable: ["posts"] } },
     });
@@ -301,7 +301,7 @@ describe("include serialization", () => {
     // sugar has to survive include resolution, not just normalization.
     const list = await authors.findMany({
       include: ["posts"],
-      fields: { posts: ["id", "title"] },
+      select: { posts: ["id", "title"] },
     });
     expect((list.items[0] as { posts: unknown[] }).posts[0]).toEqual({ id: 10, title: "First" });
   });
@@ -313,7 +313,7 @@ describe("include serialization", () => {
     });
     const { authors } = fixture;
     await expect(
-      authors.findMany({ include: ["posts"], fields: { relations: { posts: ["title"] } } }),
+      authors.findMany({ include: ["posts"], select: { relations: { posts: ["title"] } } }),
     ).rejects.toMatchObject({
       issues: [{ field: "posts.title", code: "KAVO_QUERY_INVALID_FIELD" }],
     });
@@ -322,14 +322,14 @@ describe("include serialization", () => {
   it("rejects a non-array relation fieldset value rather than throwing", async () => {
     // Runtime strings — or, here, a caller bypassing the type entirely —
     // can hand the resolver a shape `IncludeRequest.fields` was never meant
-    // to carry. This must fail the same way a malformed top-level `fields`
+    // to carry. This must fail the same way a malformed top-level `select`
     // value does: one issue, never an uncaught error that surfaces as 500.
     const fixture = blog({
       author: { allowlists: { includable: ["posts"] } },
     });
     const { authors } = fixture;
     await expect(
-      authors.findMany({ include: ["posts"], fields: { relations: { posts: 5 as never } } }),
+      authors.findMany({ include: ["posts"], select: { relations: { posts: 5 as never } } }),
     ).rejects.toMatchObject({
       issues: [{ field: "posts", code: "KAVO_QUERY_INVALID_VALUE" }],
     });
@@ -491,7 +491,7 @@ describe("include rejection messages", () => {
       post: { allowlists: { selectable: ["id", "title"] } },
     });
     const detail = await detailOf(() =>
-      authors.findMany({ include: ["posts"], fields: { relations: { posts: ["titel"] } } }),
+      authors.findMany({ include: ["posts"], select: { relations: { posts: ["titel"] } } }),
     );
     expect(detail).toContain("Did you mean 'title'?");
     expect(detail).toContain("Selectable fields on Post: id, title.");
@@ -507,7 +507,7 @@ describe("relation projection ceiling — allowlists.selectable relation paths (
   it("derives relationProjection from the dotted selectable entries and strips them from the root list", () => {
     const config = resolveEntityConfig(authorMetadata, authorCeiling() as never, undefined);
     expect(config.relationProjection).toEqual({ posts: ["title"] });
-    // The relation path is the ceiling, not a root `fields=` path — it must
+    // The relation path is the ceiling, not a root `select=` path — it must
     // not leak into the resolved selectable list or the response projection.
     expect(config.allowlists.selectable).toEqual(["id", "name"]);
     expect(config.projection).toEqual(["id", "name"]);
@@ -522,7 +522,7 @@ describe("relation projection ceiling — allowlists.selectable relation paths (
     expect(config.relationProjection).toBeUndefined();
   });
 
-  it("projects an included relation to the ceiling with no fields[path] in the request", async () => {
+  it("projects an included relation to the ceiling with no select[path] in the request", async () => {
     const fixture = blog({ author: authorCeiling() });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -553,12 +553,12 @@ describe("relation projection ceiling — allowlists.selectable relation paths (
 
     const narrowed = await authors.findMany({
       include: ["posts"],
-      fields: { relations: { posts: ["id"] } },
+      select: { relations: { posts: ["id"] } },
     });
     expect((narrowed.items[0] as { posts: unknown[] }).posts[0]).toEqual({ id: 10 });
 
     await expect(
-      authors.findMany({ include: ["posts"], fields: { relations: { posts: ["title", "authorId"] } } }),
+      authors.findMany({ include: ["posts"], select: { relations: { posts: ["title", "authorId"] } } }),
     ).rejects.toMatchObject({
       // `title` is on the ceiling; `authorId` is a real Post column but off it.
       issues: [{ field: "posts.authorId", code: "KAVO_QUERY_INVALID_FIELD" }],
@@ -567,7 +567,7 @@ describe("relation projection ceiling — allowlists.selectable relation paths (
 
   it("blames the owner entity's config when a request escapes the ceiling", async () => {
     const { authors } = blog({ author: authorCeiling() });
-    const detail = await authors.findMany({ include: ["posts"], fields: { relations: { posts: ["authorId"] } } }).then(
+    const detail = await authors.findMany({ include: ["posts"], select: { relations: { posts: ["authorId"] } } }).then(
       () => {
         throw new Error("expected a QueryValidationException");
       },
@@ -651,7 +651,7 @@ describe("relation projection ceiling — allowlists.selectable relation paths (
   it("omits a ceiling field that names no real column on the target", async () => {
     // The field half of a ceiling entry is not checked at bootstrap (the
     // target's metadata is not in scope). On the default path — no
-    // `fields[posts]=` in the request — an unknown ceiling field is simply
+    // `select[posts]=` in the request — an unknown ceiling field is simply
     // dropped from the embed, not raised as an error.
     const fixture = blog({
       author: {
@@ -720,7 +720,7 @@ describe("defaultInclude", () => {
   });
 
   it("gives a nested defaultInclude relation its full dotted path", async () => {
-    // `path` is what `fields[...]` and every issue message key off, so a
+    // `path` is what `select[...]` and every issue message key off, so a
     // nested default that reported a bare name would be unaddressable.
     const fixture = blog({
       author: { allowlists: { includable: ["posts"] } },

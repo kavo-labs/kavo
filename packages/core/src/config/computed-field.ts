@@ -63,11 +63,11 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    */
   resolve(entity: Entity, context: KavoContext<Entity>): unknown;
   /**
-   * Whether the field joins the `selectable` allowlist, so `fields=` can
+   * Whether the field joins the `selectable` allowlist, so `select=` can
    * name it. Defaults to `true`; `false` keeps the field in the default
-   * projection while making its name a 400 in `fields=`.
+   * projection while making its name a 400 in `select=`.
    *
-   * Note what that does *not* buy: a request that sends any `fields=` at
+   * Note what that does *not* buy: a request that sends any `select=` at
    * all still drops the field, because selection narrows the projection
    * uniformly and there is no way to ask for it back. `false` means "not
    * individually selectable", not "always present".

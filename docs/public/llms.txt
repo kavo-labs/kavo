@@ -26,7 +26,7 @@ Source: https://github.com/kavo-labs/kavo
 - [Search](https://kavo.js.org/querying/search): Free-text search across allowlisted fields
 - [Sorting](https://kavo.js.org/querying/sorting): The `sort` query parameter
 - [Pagination](https://kavo.js.org/querying/pagination): Offset, cursor, since, and none pagination strategies
-- [Field Selection](https://kavo.js.org/querying/field-selection): `fields` on the wire
+- [Field Selection](https://kavo.js.org/querying/field-selection): `select` on the wire
 - [Includes](https://kavo.js.org/querying/includes): `include` on the wire
 
 ## Features
