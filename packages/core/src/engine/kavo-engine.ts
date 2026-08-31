@@ -921,6 +921,10 @@ export class KavoEngine<Entity extends object> {
       // outside the settings precedence chain, so a per-call override
       // cannot widen what a response serves.
       projection: config.projection,
+      // Structural like `projection`: a per-relation projection ceiling
+      // (ADR-0044) is derived from `allowlists.selectable`, outside the
+      // settings precedence chain, so a per-call scope cannot widen it.
+      relationProjection: config.relationProjection,
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
