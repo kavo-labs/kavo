@@ -1003,10 +1003,15 @@ const alreadyBodySchemaDocumented = new WeakSet<object>();
  * only — so they are picked up from `metadata.relations` instead and
  * documented as the reference-object shape the deserializer accepts:
  * `{ "id": ... }` for a to-one, an array of them for a to-many, either
- * nullable so `null` can disassociate. The related row's id *type* needs
- * the target entity's own metadata, which this function does not receive,
- * so `id` is left untyped rather than guessed, and a relation never joins
- * the outer `required` list (`RelationDescriptor` carries no nullability).
+ * nullable so `null` can disassociate. The related row's id *type* is taken
+ * from the target entity's own metadata via `relationTargetMetadata` (the
+ * binder resolves it through `infrastructure.metadataFor(relation.target())`);
+ * `id` stays untyped (`{}`) when the target is unresolvable — no
+ * infrastructure, or a root that cannot derive its metadata — and also when
+ * the target is a **composite-key** entity, where a single scalar `id` would
+ * be an outright wrong assertion rather than an honest blank. A relation
+ * never joins the outer `required` list (`RelationDescriptor` carries no
+ * nullability).
  */
 export function applyBodySchemaDocs(
   prototype: Record<string, unknown>,
@@ -1014,6 +1019,7 @@ export function applyBodySchemaDocs(
   descriptor: OperationDescriptor<object>,
   metadata: EntityMetadata<object>,
   allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
+  relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
 ): void {
   const allowed = allowedFieldsFor(descriptor.id, allowlists);
   if (allowed === null) {
@@ -1052,7 +1058,18 @@ export function applyBodySchemaDocs(
     if (!allowed.includes(relation.name)) {
       continue;
     }
-    properties[relation.name] = associationBodySchema(relation.cardinality);
+    const target = relationTargetMetadata[relation.name];
+    // A composite-key target has no single `id` column — `metadata.idField`
+    // is just its first key part — so a typed scalar `id` would be a wrong
+    // assertion; leave it `{}` for that case (finding #261).
+    const idField =
+      target !== undefined && target.compositeIdFields === undefined
+        ? target.fields.find((field) => field.name === target.idField)
+        : undefined;
+    properties[relation.name] = associationBodySchema(
+      relation.cardinality,
+      idField !== undefined ? fieldSchema(idField) : undefined,
+    );
   }
   // `patchOne` is a partial update — every field is optional regardless of
   // column nullability — so it never carries `required`. `createOne` and
@@ -1129,13 +1146,14 @@ function fieldSchema(field: FieldMetadata): object {
 /**
  * The request-body fragment for a write-side relation property (ADR-0014):
  * a `{ id }` reference object for a to-one, an array of them for a to-many,
- * either one nullable so `null` disassociates. `id` is left untyped — the
- * related entity's primary-key kind isn't reachable from here.
+ * either one nullable so `null` disassociates. `idSchema` is the target
+ * entity's primary-key fragment when the caller could resolve it; `{}` (an
+ * untyped id) otherwise.
  */
-function associationBodySchema(cardinality: RelationCardinality): object {
+function associationBodySchema(cardinality: RelationCardinality, idSchema?: object): object {
   const reference = {
     type: "object",
-    properties: { id: {} },
+    properties: { id: idSchema ?? {} },
     required: ["id"],
     description: "Associate by id (ADR-0014); pass `null` to disassociate.",
   };
@@ -1353,7 +1371,15 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * (`selectable: ["word.id"]`, ADR-0044) as an object limited to those
  * fields, or a generic object when the relation carries no ceiling — the
  * target's own projection is governed by the target entity's config, not
- * this one (`entity-catalog.ts`), so it is not reproduced here. A `-to-many`
+ * this one (`entity-catalog.ts`), so it is not reproduced here. Each ceiling
+ * field is typed from the target entity's own `metadata.fields`, passed in
+ * as `relationTargetMetadata` (the binder resolves it via
+ * `infrastructure.metadataFor(relation.target())`). A ceiling field falls
+ * back to an untyped `{}` rather than a guessed type in two cases: the
+ * target as a whole is unresolvable (no infrastructure, or a root that
+ * cannot derive its metadata), or the target resolves but carries no column
+ * of that name (a ceiling entry naming a field the target does not have).
+ * A `-to-many`
  * relation wraps that object in `{ type: "array", items }`. The relation
  * object is deliberately left unstamped by `withKavoEntity`: a stamped
  * nested schema would be hoisted to its own component by
@@ -1379,6 +1405,7 @@ export function applyResponseSchemaDocs(
   computedFieldNames: readonly string[],
   includable: readonly string[],
   relationProjection: Readonly<Record<string, readonly string[]>> | undefined,
+  relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
   dtoResolver: DtoResolver<object>,
 ): void {
   if (route.status === 204) {
@@ -1441,9 +1468,18 @@ export function applyResponseSchemaDocs(
       continue;
     }
     const ceiling = relationProjection?.[relationName];
+    const targetFields = relationTargetMetadata[relationName]?.fields;
     const object =
       ceiling !== undefined
-        ? { type: "object", properties: Object.fromEntries(ceiling.map((name) => [name, {}])) }
+        ? {
+            type: "object",
+            properties: Object.fromEntries(
+              ceiling.map((name) => {
+                const field = targetFields?.find((candidate) => candidate.name === name);
+                return [name, field !== undefined ? fieldSchema(field) : {}];
+              }),
+            ),
+          }
         : {
             type: "object",
             description:
