@@ -1,6 +1,6 @@
 {
   "name": "@kavo/mcp",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "description": "Kavo MCP binding — exposes a createCrud service's standard operations as MCP tools, delegating every call to the same engine REST uses.",
   "license": "Apache-2.0",
   "engines": {
