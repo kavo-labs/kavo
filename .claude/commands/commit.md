@@ -37,6 +37,11 @@ you would otherwise do by default:
   commits; `/pr` is what pushes.
 - **No co-author trailers** unless this repo's recent commits already use them
   — check `git log`, do not assume.
+- **Keep nested parentheses out of commit messages.** release-please parses
+  the whole message and a `outer(inner())` code span can defeat its parser
+  (`fix commit could not be parsed` → the commit is dropped from the
+  changelog). Write `metadataFor` of `relation.target()`, not
+  `metadataFor(relation.target())`.
 - Keep a file whole in its best-fitting commit rather than reaching for patch
   staging; split a single file across commits only when its changes are
   genuinely unrelated.

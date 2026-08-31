@@ -29,15 +29,30 @@ Close the loop on this PR. Argument: **$ARGUMENTS**
    issue it closes — and get the user's go-ahead before the merge itself. This
    is the irreversible step.
 
-3. **Merge with squash**, keeping history linear and one commit per issue:
+3. **Merge with squash**, keeping history linear and one commit per issue.
+   **Always pass an authored `--subject` and `--body`** — never let `gh` fall
+   back to its default squash body, which is the concatenated list of branch
+   commit messages (`* feat(scope): …` bullets and all). release-please parses
+   the whole merged message, and a body full of pseudo-headers and nested
+   `call(inner())` code spans has silently defeated its parser before
+   (`fix commit could not be parsed` → the commit is dropped from the
+   changelog and triggers no bump; commit 9fa1434 / #354).
 
    ```bash
-   gh pr merge <n> --squash --delete-branch
+   gh pr merge <n> --squash --delete-branch \
+     --subject "feat(core): …" \
+     --body "$(cat <<'EOF'
+   One or two plain-prose paragraphs summarizing the change.
+
+   Refs #<n>
+   EOF
+   )"
    ```
 
-   Write the squash commit subject as a Conventional Commit matching this repo's
-   style (`feat(core): …`), with the body summarizing the change and referencing
-   the issue.
+   Write the subject as a Conventional Commit matching this repo's style
+   (`feat(core): …`). Keep the body plain prose: no `* type(scope):` bullet
+   lines, and rephrase any `outer(inner())` nesting (`metadataFor` of
+   `relation.target()`, not `metadataFor(relation.target())`).
 
 4. **Return to a clean main.** If the session is inside a worktree created by
    `/implement` (`EnterWorktree`), exit it first — the merge already landed on
