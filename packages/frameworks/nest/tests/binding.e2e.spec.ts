@@ -34,7 +34,7 @@ import {
   oneOfArray,
   registerKavoSchemas,
 } from "@kavo/nest";
-import { InMemoryTodoAdapter, Todo, TodoList, fakeInfrastructure } from "./support/fake-infrastructure.js";
+import { InMemoryTodoAdapter, Todo, TodoList, TodoTag, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 let app: INestApplication;
@@ -3222,6 +3222,291 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     // `list` is a relation on `Todo` but not on `allowlists.includable`, so
     // the synthesized schema stays exactly the scalar `selectable` set.
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
+  });
+});
+
+describe("@Kavo Swagger recursive includable-relation $ref composition (issue #356)", () => {
+  type Schema = {
+    type?: string;
+    properties?: Record<string, Schema>;
+    items?: Schema;
+    required?: string[];
+    description?: string;
+    $ref?: string;
+    "x-kavo-entity"?: string;
+    "x-kavo-includable-ref"?: string;
+  };
+  type Doc = {
+    paths: Record<
+      string,
+      Record<string, { responses?: Record<string, { content?: Record<string, { schema?: Schema }> }> }>
+    >;
+    components?: { schemas?: Record<string, Schema> };
+  };
+
+  const stubAdapter = (): RepositoryAdapter<object> =>
+    ({
+      findOneById: async () => null,
+      findOne: async () => null,
+      findMany: async () => [],
+      count: async () => 0,
+      create: async (data: unknown) => data,
+      update: async (_id: unknown, data: unknown) => data,
+      patch: async (_id: unknown, data: unknown) => data,
+      delete: async () => {},
+      restore: async () => {
+        throw new Error("not exercised");
+      },
+      purge: async () => {},
+    }) as unknown as RepositoryAdapter<object>;
+
+  const buildDoc = async (infrastructure: KavoInfrastructure, controllers: unknown[]): Promise<Doc> => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature(controllers as never[])],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    return SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().setTitle("t").setVersion("0").build(),
+    ) as unknown as Doc;
+  };
+
+  const itemSchema = (doc: Doc, path: string, verb: string, status: string): Schema | undefined =>
+    doc.paths[path]?.[verb]?.responses?.[status]?.content?.["application/json"]?.schema;
+
+  /** Every `$ref` anywhere in the document points at a component that exists. */
+  const collectRefs = (node: unknown, acc: string[] = []): string[] => {
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        collectRefs(child, acc);
+      }
+      return acc;
+    }
+    if (node !== null && typeof node === "object") {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "$ref" && typeof value === "string") {
+          acc.push(value);
+        } else {
+          collectRefs(value, acc);
+        }
+      }
+    }
+    return acc;
+  };
+  const expectEveryRefResolves = (doc: Doc): void => {
+    const names = Object.keys(doc.components?.schemas ?? {});
+    for (const ref of collectRefs(doc)) {
+      expect(ref.startsWith("#/components/schemas/")).toBe(true);
+      expect(names).toContain(ref.slice("#/components/schemas/".length));
+    }
+  };
+
+  /** Follow a `{ $ref }` (or an array's `items.$ref`) to the named component. */
+  const deref = (doc: Doc, node: Schema | undefined): Schema | undefined => {
+    const ref = node?.$ref ?? node?.items?.$ref;
+    if (ref === undefined) {
+      return undefined;
+    }
+    return doc.components?.schemas?.[ref.slice("#/components/schemas/".length)];
+  };
+
+  it("resolves an unbounded includable relation to a $ref to the target's <Entity>Item, recursively", async () => {
+    // `Todo.list -> TodoList`, `TodoList.list -> TodoTag` — all three routed,
+    // none carries a relation-dotted `selectable` ceiling, so each relation
+    // defers wholly to its target and composes by shared component. Exact
+    // component names are not asserted: entity `TodoList` collides with
+    // `Todo`'s own `<Entity>ListItem` envelope element, so `registerKavoSchemas`
+    // legitimately lands `TodoList`'s item on `TodoListItem_2` — the marker
+    // resolution records whichever name it actually got.
+    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Controller("todos")
+    class TodoC {}
+    @Kavo(TodoList, { allowlists: { includable: ["list"] } })
+    @Controller("lists")
+    class ListC {}
+    @Kavo(TodoTag, {})
+    @Controller("tags")
+    class TagC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [TodoC, ListC, TagC]);
+    registerKavoSchemas(doc);
+
+    // `TodoItem.list` -> entity TodoList's item component (has `name`, TodoList's
+    // own scalar) -> its `list` -> entity TodoTag's item component.
+    const todoListItem = deref(doc, doc.components?.schemas?.TodoItem?.properties?.list);
+    expect(todoListItem?.["x-kavo-entity"]).toBe("TodoList");
+    expect(Object.keys(todoListItem?.properties ?? {})).toContain("name");
+
+    const todoTagItem = deref(doc, todoListItem?.properties?.list);
+    expect(todoTagItem?.["x-kavo-entity"]).toBe("TodoTag");
+
+    expectEveryRefResolves(doc);
+  });
+
+  it("keeps a parent-ceilinged relation inline and does not $ref the target (ADR-0044)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Controller("todos")
+    class CeilingC {}
+    @Kavo(TodoList, {})
+    @Controller("lists")
+    class ListC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [CeilingC, ListC]);
+    registerKavoSchemas(doc);
+
+    const list = doc.components?.schemas?.TodoItem?.properties?.list;
+    // Parent narrowed it to `{ id }`, so the parent wins: an inline object,
+    // never a `$ref` to `TodoListItem` (which would re-widen it).
+    expect(list?.$ref).toBeUndefined();
+    expect(list).toEqual({ type: "object", properties: { id: { type: "number" } } });
+    expectEveryRefResolves(doc);
+  });
+
+  it("degrades to a plain object when the relation target has no synthesized item component", async () => {
+    // `TodoList` is not routed, so no `TodoListItem` is ever registered.
+    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Controller("todos")
+    class TodoOnlyC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [TodoOnlyC]);
+    registerKavoSchemas(doc);
+
+    const list = doc.components?.schemas?.TodoItem?.properties?.list;
+    expect(list?.$ref).toBeUndefined();
+    expect(list?.type).toBe("object");
+    expect(list?.description).toContain("not published");
+    // No dangling reference anywhere.
+    expectEveryRefResolves(doc);
+  });
+
+  it("produces a valid document for a relation cycle (mutual $ref)", async () => {
+    class Author {}
+    class Book {}
+    const authorMetadata: EntityMetadata<object> = {
+      entity: Author,
+      name: "Author",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "name", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [{ name: "books", target: () => Book, cardinality: "many", includable: true, strategy: "auto" }],
+    };
+    const bookMetadata: EntityMetadata<object> = {
+      entity: Book,
+      name: "Book",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "title", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [{ name: "author", target: () => Author, cardinality: "one", includable: true, strategy: "auto" }],
+    };
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: ((entity: unknown) => (entity === Author ? authorMetadata : bookMetadata)) as never,
+      adapterFor: () => stubAdapter() as never,
+    };
+
+    @Controller("authors")
+    class AuthorC {}
+    @Controller("books")
+    class BookC {}
+    // `Author`/`Book` have no declared fields, so the config's relation-name
+    // types infer to `never`; apply the decorator as a plain cast call, the
+    // same escape hatch the fallback-schema blocks above use.
+    const authorConfig: unknown = { allowlists: { includable: ["books"] } };
+    const bookConfig: unknown = { allowlists: { includable: ["author"] } };
+    Kavo(Author, authorConfig as Parameters<typeof Kavo>[1])(AuthorC);
+    Kavo(Book, bookConfig as Parameters<typeof Kavo>[1])(BookC);
+
+    const doc = await buildDoc(infrastructure, [AuthorC, BookC]);
+    registerKavoSchemas(doc);
+
+    const schemas = doc.components?.schemas ?? {};
+    expect(schemas.AuthorItem?.properties?.books).toEqual({
+      type: "array",
+      items: { $ref: "#/components/schemas/BookItem" },
+    });
+    expect(schemas.BookItem?.properties?.author).toEqual({ $ref: "#/components/schemas/AuthorItem" });
+    // The component graph is cyclic — legal OpenAPI 3.x — and every ref still
+    // resolves.
+    expectEveryRefResolves(doc);
+  });
+
+  it("keeps a defaultInclude relation optional, still $ref'd (write responses carry no relations, ADR-0020)", async () => {
+    @Kavo(Todo, {
+      allowlists: { includable: ["list"] },
+      relations: { edges: { list: { defaultInclude: true } } },
+    })
+    @Controller("todos")
+    class DefaultIncludeC {}
+    @Kavo(TodoList, {})
+    @Controller("lists")
+    class ListC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [DefaultIncludeC, ListC]);
+    registerKavoSchemas(doc);
+
+    const item = doc.components?.schemas?.TodoItem;
+    expect(item?.properties?.list?.$ref).toBeDefined();
+    expect(deref(doc, item?.properties?.list)?.["x-kavo-entity"]).toBe("TodoList");
+    // Shared with the create/update/patch responses, which never resolve
+    // `include=`, so promoting it to `required` would make those lie.
+    expect(item?.required ?? []).not.toContain("list");
+    expectEveryRefResolves(doc);
+  });
+
+  it("composes to the target's configured item shape when it registers a plain-class item DTO", async () => {
+    // A plain-class `item` DTO is still hoisted by Kavo under the target's
+    // `<Entity>Item` name (from the DTO's runtime shape), so the marker
+    // resolves to it — the relation reflects whatever the target publishes,
+    // not the raw column set.
+    class TodoListItemDto {
+      id = 0;
+      name = "";
+    }
+    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Controller("todos")
+    class TodoC {}
+    @Kavo(TodoList, { dto: { item: TodoListItemDto } })
+    @Controller("lists")
+    class ListC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [TodoC, ListC]);
+    registerKavoSchemas(doc);
+
+    const list = doc.components?.schemas?.TodoItem?.properties?.list;
+    expect(list?.$ref).toBeDefined();
+    const target = deref(doc, list);
+    expect(target?.["x-kavo-entity"]).toBe("TodoList");
+    // The DTO's shape, not `TodoList`'s full column set.
+    expect(Object.keys(target?.properties ?? {})).toEqual(["id", "name"]);
+    expectEveryRefResolves(doc);
+  });
+
+  it("leaves the marker inline (and valid) when registerKavoSchemas is not run", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Controller("todos")
+    class TodoC {}
+    @Kavo(TodoList, {})
+    @Controller("lists")
+    class ListC {}
+
+    adapter = new InMemoryTodoAdapter();
+    const doc = await buildDoc(fakeInfrastructure(adapter), [TodoC, ListC]);
+
+    const list = itemSchema(doc, "/todos/{id}", "get", "200")?.properties?.list;
+    // Un-hoisted: the marker rides inline as a plain object schema plus a
+    // vendor extension — still a valid schema, just not `$ref`-composed.
+    expect(list?.["x-kavo-includable-ref"]).toBe("TodoList");
+    expect(list?.type).toBe("object");
+    expect(list?.description).toContain("include=list");
   });
 });
 

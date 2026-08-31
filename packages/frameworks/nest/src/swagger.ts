@@ -1367,33 +1367,51 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * A relation on `allowlists.includable` (ADR-0028) can be embedded in the
  * row (`?include=word`), so it is emitted as an **optional** property —
  * never in `required`, since it is only present when `include=` asks for
- * it. Its shape is the ceiling a relation-dotted `selectable` entry imposes
- * (`selectable: ["word.id"]`, ADR-0044) as an object limited to those
- * fields, or a generic object when the relation carries no ceiling — the
- * target's own projection is governed by the target entity's config, not
- * this one (`entity-catalog.ts`), so it is not reproduced here. Each ceiling
- * field is typed from the target entity's own `metadata.fields`, passed in
- * as `relationTargetMetadata` (the binder resolves it via
- * `infrastructure.metadataFor(relation.target())`). A ceiling field falls
- * back to an untyped `{}` rather than a guessed type in two cases: the
- * target as a whole is unresolvable (no infrastructure, or a root that
- * cannot derive its metadata), or the target resolves but carries no column
- * of that name (a ceiling entry naming a field the target does not have).
- * A `-to-many`
- * relation wraps that object in `{ type: "array", items }`. The relation
- * object is deliberately left unstamped by `withKavoEntity`: a stamped
- * nested schema would be hoisted to its own component by
- * `registerKavoSchemas` instead of staying inline on `<Entity>Item`.
+ * it, and this shape is shared with the write responses, which never
+ * resolve `include=` at all (ADR-0020: "a write resolves no query, so a
+ * write response never carries relations"). Its shape depends on whether
+ * the parent narrowed it:
+ *
+ * - **Parent one-hop `selectable` ceiling** (`selectable: ["word.id"]`,
+ *   ADR-0044) — an inline object limited to those fields, each typed from
+ *   the target entity's own `metadata.fields`, passed in as
+ *   `relationTargetMetadata` (the binder resolves it via
+ *   `infrastructure.metadataFor(relation.target())`). A ceiling field falls
+ *   back to an untyped `{}` in two cases: the target as a whole is
+ *   unresolvable (no infrastructure, or a root that cannot derive its
+ *   metadata), or the target resolves but carries no column of that name.
+ *   Left unstamped by `withKavoEntity` so `registerKavoSchemas` keeps it
+ *   inline rather than hoisting it as its own component.
+ *
+ * - **No parent ceiling** — the parent defers wholly to the target, so
+ *   this emits an unstamped marker (`x-kavo-includable-ref: "<Target>"`)
+ *   carrying only the target entity's resolved name. It is *not* a `$ref`
+ *   yet: bind time does not know the final component name
+ *   (`registerKavoSchemas` owns naming and may land on `<Target>Item_2` on
+ *   a collision). `registerKavoSchemas` resolves each marker in a post-pass
+ *   to `{ $ref: "#/components/schemas/<Target>Item" }`, or — when the
+ *   target has no synthesized item component (its own read route registered
+ *   an explicit DTO, or it has no read route) — to a degraded
+ *   `{ type: "object" }` with a prose description. A document that never
+ *   runs `registerKavoSchemas` keeps the marker inline, which is still a
+ *   valid schema (an object with a vendor extension and a description),
+ *   just not `$ref`-composed. When the target's name cannot be resolved at
+ *   bind time, no marker is emitted and the property stays a generic
+ *   `{ type: "object" }` with a description.
+ *
+ * A `-to-many` relation wraps whichever shape in `{ type: "array", items }`.
  *
  * The property rides the shared `item` shape, so it appears on the
- * `createOne`/`updateOne`/`patchOne` responses too, even though a write
- * never resolves `include=` (ADR-0044, "reads only"). That is deliberate:
+ * `createOne`/`updateOne`/`patchOne` responses too. That is deliberate:
  * gating it on `descriptor.kind === "read"` would make the read route's
  * schema structurally differ from the write routes', and
  * `registerKavoSchemas` only collapses structurally-identical repeats — so
  * every entity with an includable relation would publish both `<Entity>Item`
  * and `<Entity>Item_2`. The property is optional, so a write response that
- * omits it stays valid against the schema.
+ * omits it stays valid against the schema. For the same reason a
+ * `defaultInclude: true` relation is **not** promoted to `required`: it is
+ * carried only by reads, and a `required` property a write response omits
+ * would make the shared schema lie.
  */
 export function applyResponseSchemaDocs(
   prototype: Record<string, unknown>,
@@ -1468,24 +1486,45 @@ export function applyResponseSchemaDocs(
       continue;
     }
     const ceiling = relationProjection?.[relationName];
-    const targetFields = relationTargetMetadata[relationName]?.fields;
-    const object =
-      ceiling !== undefined
-        ? {
-            type: "object",
-            properties: Object.fromEntries(
-              ceiling.map((name) => {
-                const field = targetFields?.find((candidate) => candidate.name === name);
-                return [name, field !== undefined ? fieldSchema(field) : {}];
-              }),
-            ),
-          }
-        : {
-            type: "object",
-            description:
-              `Embedded when \`include=${relationName}\` is requested. Its projection is governed by ` +
-              `the ${relationName} target's own config (ADR-0026); no relation-dotted \`selectable\` ceiling is set here.`,
-          };
+    const targetMetadata = relationTargetMetadata[relationName];
+    const targetFields = targetMetadata?.fields;
+    let object: object;
+    if (ceiling !== undefined) {
+      // Parent narrowed this relation with a one-hop `selectable` ceiling
+      // (ADR-0044) — reproduce exactly those fields, typed from the target.
+      object = {
+        type: "object",
+        properties: Object.fromEntries(
+          ceiling.map((name) => {
+            const field = targetFields?.find((candidate) => candidate.name === name);
+            return [name, field !== undefined ? fieldSchema(field) : {}];
+          }),
+        ),
+      };
+    } else if (targetMetadata !== undefined) {
+      // No parent ceiling — defer wholly to the target. Emit a marker
+      // carrying the target entity's resolved name; `registerKavoSchemas`
+      // turns it into a `$ref` to `<Target>Item` (or a degraded object when
+      // that component was never synthesized). Unstamped by `withKavoEntity`
+      // so the marker itself is not hoisted as an entity component.
+      object = {
+        type: "object",
+        "x-kavo-includable-ref": targetMetadata.name,
+        description:
+          `Embedded when \`include=${relationName}\` is requested; its shape is the ` +
+          `${targetMetadata.name}Item component. Its projection is governed by the target entity's own ` +
+          `config (ADR-0026), not this one.`,
+      };
+    } else {
+      // Target metadata unresolvable from this root — no name to reference,
+      // so fall back to a generic object rather than a dangling marker.
+      object = {
+        type: "object",
+        description:
+          `Embedded when \`include=${relationName}\` is requested. Its projection is governed by ` +
+          `the ${relationName} target's own config (ADR-0026); no relation-dotted \`selectable\` ceiling is set here.`,
+      };
+    }
     properties[relationName] = relation.cardinality === "many" ? { type: "array", items: object } : object;
   }
   const element = { type: "object" as const, properties, ...(required.length > 0 ? { required } : {}) };
