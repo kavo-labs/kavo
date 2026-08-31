@@ -2316,14 +2316,18 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
   // all-nullable case, so `required` derivation can be pinned without
   // touching the shared `Todo` fixture every other test asserts exact keys
   // against.
-  const withMetadata = async (fields: EntityMetadata<object>["fields"]) => {
+  const withMetadata = async (
+    fields: EntityMetadata<object>["fields"],
+    relations: EntityMetadata<object>["relations"] = [],
+    config?: unknown,
+  ) => {
     class Note {}
     const metadata: EntityMetadata<object> = {
       entity: Note,
       name: "Note",
       idField: "id",
       fields,
-      relations: [],
+      relations,
     };
     const adapter = {
       findOneById: async () => null,
@@ -2344,9 +2348,9 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       adapterFor: () => adapter as never,
     };
 
-    @Kavo(Note)
     @Controller("notes")
     class NoteController {}
+    Kavo(Note, config as Parameters<typeof Kavo>[1])(NoteController);
 
     const moduleRef = await Test.createTestingModule({
       imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([NoteController])],
@@ -2407,10 +2411,24 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       ["patch", "/todos/{id}"],
     ] as const) {
       const schema = bodySchema(path, verb);
-      expect(Object.keys(schema?.properties ?? {})).toEqual(["title", "done", "priority"]);
+      // `list` is a to-one relation on `Todo` — it has no `metadata.fields`
+      // entry but is on the default `creatable`/`updatable` allowlist
+      // (associable by id, ADR-0014), so it must be documented, not dropped
+      // (issue #339).
+      expect(Object.keys(schema?.properties ?? {})).toEqual(["title", "done", "priority", "list"]);
       expect(schema?.properties?.title).toEqual({ type: "string" });
       expect(schema?.properties?.done).toEqual({ type: "boolean" });
       expect(schema?.properties?.priority).toEqual({ type: "number" });
+      expect(schema?.properties?.list).toEqual({
+        type: "object",
+        nullable: true,
+        properties: { id: {} },
+        required: ["id"],
+        description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+      });
+      // A relation never joins the outer `required` list — no nullability
+      // is derivable for it.
+      expect(schema?.required ?? []).not.toContain("list");
       // `creatable`/`updatable` narrow silently (an unknown body key is
       // dropped, not rejected), so the synthesized schema must not declare
       // itself closed — that would tell a validating client a body Kavo
@@ -2429,6 +2447,65 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     const schema = bodySchema("/todos", "post");
+    expect(schema?.properties).toEqual({});
+    expect(schema?.description).toBe("No field is writable.");
+  });
+
+  it("documents a relation-only writable projection instead of an empty, bodyless-looking schema (issue #339)", async () => {
+    await withMetadata(
+      // The whole entity is a generated id plus two relations — nothing the
+      // scalar-column loop can match.
+      [{ name: "id", kind: "string", nullable: false, generated: true }],
+      [
+        { name: "word", target: () => class {}, cardinality: "one", includable: false, strategy: "auto" },
+        { name: "tags", target: () => class {}, cardinality: "many", includable: false, strategy: "auto" },
+      ],
+    );
+
+    const schema = bodySchema("/notes", "post");
+    // Before #339 this was `{}` with no `description` — read by a client
+    // generator as "POST /notes takes no body", which is false.
+    expect(Object.keys(schema?.properties ?? {})).toEqual(["word", "tags"]);
+    expect(schema?.description).toBeUndefined();
+    expect(schema?.properties?.word).toEqual({
+      type: "object",
+      nullable: true,
+      properties: { id: {} },
+      required: ["id"],
+      description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+    });
+    // A to-many relation takes an array of reference objects (ADR-0014).
+    expect(schema?.properties?.tags).toEqual({
+      type: "array",
+      nullable: true,
+      items: {
+        type: "object",
+        properties: { id: {} },
+        required: ["id"],
+        description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+      },
+    });
+    // No nullability is derivable for a relation, so none joins `required`.
+    expect(schema?.required).toBeUndefined();
+    // Still not declared closed — an unknown body key is dropped, not rejected.
+    expect(schema?.additionalProperties).toBeUndefined();
+  });
+
+  it("still reads as closed when a non-empty allowlist resolves to zero documentable properties", async () => {
+    // `creatable` explicitly names a `generated` column — a real, non-empty
+    // allowlist — but the synthesized-schema loop skips generated columns,
+    // so it produces zero properties. The "no body" description must still
+    // appear: it is gated on the property count, not the allowlist length.
+    await withMetadata([{ name: "id", kind: "string", nullable: false, generated: true }], [], {
+      allowlists: { creatable: ["id"], updatable: ["id"] },
+    });
+
+    const schema = (
+      document.paths["/notes"] as Record<
+        string,
+        { requestBody?: { content?: Record<string, { schema?: { properties?: object; description?: string } }> } }
+      >
+    )?.post?.requestBody?.content?.["application/json"]?.schema;
     expect(schema?.properties).toEqual({});
     expect(schema?.description).toBe("No field is writable.");
   });
@@ -2459,7 +2536,12 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // run and, say, widen it back out to every writable column.
     expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title"]);
     // No DTO is registered for update/patch, so those still fall back.
-    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["title", "done", "priority"]);
+    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual([
+      "title",
+      "done",
+      "priority",
+      "list",
+    ]);
   });
 
   it("stays idempotent across repeated bootstraps of the same controller", async () => {
@@ -2474,7 +2556,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // A second `ApiBody` application would overwrite rather than duplicate
     // properties here, so this mainly documents that no crash/duplicate
     // registration happens across repeated `onModuleInit` runs.
-    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "priority"]);
+    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "priority", "list"]);
   });
 });
 

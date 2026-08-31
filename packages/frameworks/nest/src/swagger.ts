@@ -8,6 +8,7 @@ import type {
   OperationDescriptor,
   OperationDtoMap,
   QueryFieldSelector,
+  RelationCardinality,
   RelationFieldSelector,
 } from "@kavo/core";
 import { DefaultDtoResolver } from "@kavo/core";
@@ -984,17 +985,23 @@ const alreadyBodySchemaDocumented = new WeakSet<object>();
  * *silently* (`docs/features/allowlists.md`'s opening line), the same way an
  * unknown body key already does, so declaring the schema closed would tell a
  * validating client/gateway that a body Kavo actually accepts is invalid.
- * An empty allowlist still has to read as "no field is allowed" rather than
- * fall through to no documentation at all, so that case gets a `description`
- * saying so instead of a schema constraint — the same distinction
- * `allowedFieldsDescription` draws for an explicit empty selector.
+ * A schema that ends up with no properties at all still has to read as "no
+ * field is allowed" rather than fall through to no documentation — an empty
+ * `properties: {}` with no `description` reads to a client generator as
+ * "this route takes no body", which is a lie (issue #339). That case gets a
+ * `description` saying so instead of a schema constraint — the same
+ * distinction `allowedFieldsDescription` draws for an explicit empty
+ * selector.
  *
- * Relation names in `creatable`/`updatable` (associable by id, ADR-0014) are
- * not documented here: `metadata.fields` lists scalar columns only, so an
- * entity whose default allowlist includes a relation gets that one write
- * path silently left off the synthesized schema — the same "known gap, not
- * a lie" tradeoff `includableRelations`'s own doc comment accepts elsewhere
- * in this file.
+ * Relation names on `creatable`/`updatable` (associable by id, ADR-0014)
+ * have no `metadata.fields` entry — `metadata.fields` is scalar columns
+ * only — so they are picked up from `metadata.relations` instead and
+ * documented as the reference-object shape the deserializer accepts:
+ * `{ "id": ... }` for a to-one, an array of them for a to-many, either
+ * nullable so `null` can disassociate. The related row's id *type* needs
+ * the target entity's own metadata, which this function does not receive,
+ * so `id` is left untyped rather than guessed, and a relation never joins
+ * the outer `required` list (`RelationDescriptor` carries no nullability).
  */
 export function applyBodySchemaDocs(
   prototype: Record<string, unknown>,
@@ -1030,6 +1037,18 @@ export function applyBodySchemaDocs(
       required.push(field.name);
     }
   }
+  // A relation on the allowlist is associable by id (ADR-0014): it is
+  // written as a `{ "id": ... }` reference object — an array of them for a
+  // to-many — or `null` to disassociate. It has no `metadata.fields` entry,
+  // so it is emitted from `metadata.relations` here; without this, an entity
+  // whose entire writable projection is relations synthesizes an empty
+  // `properties: {}` that reads as "no body" (issue #339).
+  for (const relation of metadata.relations) {
+    if (!allowed.includes(relation.name)) {
+      continue;
+    }
+    properties[relation.name] = associationBodySchema(relation.cardinality);
+  }
   // `patchOne` is a partial update — every field is optional regardless of
   // column nullability — so it never carries `required`. `createOne` and
   // `updateOne` replace the row, so a non-nullable column the caller is
@@ -1045,7 +1064,7 @@ export function applyBodySchemaDocs(
         type: "object",
         properties,
         ...(emitRequired ? { required } : {}),
-        ...(allowed.length === 0 ? { description: "No field is writable." } : {}),
+        ...(Object.keys(properties).length === 0 ? { description: "No field is writable." } : {}),
       },
       metadata.name,
     ),
@@ -1100,6 +1119,24 @@ function fieldKindSchema(field: FieldMetadata): object {
 function fieldSchema(field: FieldMetadata): object {
   const base = fieldKindSchema(field);
   return field.nullable ? { ...base, nullable: true } : base;
+}
+
+/**
+ * The request-body fragment for a write-side relation property (ADR-0014):
+ * a `{ id }` reference object for a to-one, an array of them for a to-many,
+ * either one nullable so `null` disassociates. `id` is left untyped — the
+ * related entity's primary-key kind isn't reachable from here.
+ */
+function associationBodySchema(cardinality: RelationCardinality): object {
+  const reference = {
+    type: "object",
+    properties: { id: {} },
+    required: ["id"],
+    description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+  };
+  return cardinality === "many"
+    ? { type: "array", nullable: true, items: reference }
+    : { ...reference, nullable: true };
 }
 
 /**
