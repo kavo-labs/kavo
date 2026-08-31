@@ -1345,6 +1345,29 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * undefined` clears that key in the merge (an explicit `undefined` is still
  * an own property `Object.assign` copies over), so the narrowed `schema`
  * is what the document actually emits.
+ *
+ * A relation on `allowlists.includable` (ADR-0028) can be embedded in the
+ * row (`?include=word`), so it is emitted as an **optional** property —
+ * never in `required`, since it is only present when `include=` asks for
+ * it. Its shape is the ceiling a relation-dotted `selectable` entry imposes
+ * (`selectable: ["word.id"]`, ADR-0044) as an object limited to those
+ * fields, or a generic object when the relation carries no ceiling — the
+ * target's own projection is governed by the target entity's config, not
+ * this one (`entity-catalog.ts`), so it is not reproduced here. A `-to-many`
+ * relation wraps that object in `{ type: "array", items }`. The relation
+ * object is deliberately left unstamped by `withKavoEntity`: a stamped
+ * nested schema would be hoisted to its own component by
+ * `registerKavoSchemas` instead of staying inline on `<Entity>Item`.
+ *
+ * The property rides the shared `item` shape, so it appears on the
+ * `createOne`/`updateOne`/`patchOne` responses too, even though a write
+ * never resolves `include=` (ADR-0044, "reads only"). That is deliberate:
+ * gating it on `descriptor.kind === "read"` would make the read route's
+ * schema structurally differ from the write routes', and
+ * `registerKavoSchemas` only collapses structurally-identical repeats — so
+ * every entity with an includable relation would publish both `<Entity>Item`
+ * and `<Entity>Item_2`. The property is optional, so a write response that
+ * omits it stays valid against the schema.
  */
 export function applyResponseSchemaDocs(
   prototype: Record<string, unknown>,
@@ -1354,6 +1377,8 @@ export function applyResponseSchemaDocs(
   metadata: EntityMetadata<object>,
   selectable: readonly string[],
   computedFieldNames: readonly string[],
+  includable: readonly string[],
+  relationProjection: Readonly<Record<string, readonly string[]>> | undefined,
   dtoResolver: DtoResolver<object>,
 ): void {
   if (route.status === 204) {
@@ -1403,6 +1428,29 @@ export function applyResponseSchemaDocs(
       continue;
     }
     properties[name] = { nullable: true };
+  }
+  // An includable relation (ADR-0028) is embedded only when `include=` asks
+  // for it, so it is an *optional* property — appended after the column and
+  // computed loops so those keep their exact order, and never pushed to
+  // `required`. Driven off the resolved `allowlists.includable` names rather
+  // than `RelationDescriptor.includable`, which reflects the ORM-derived
+  // metadata, not the config grant.
+  for (const relationName of includable) {
+    const relation = metadata.relations.find((edge) => edge.name === relationName);
+    if (relation === undefined) {
+      continue;
+    }
+    const ceiling = relationProjection?.[relationName];
+    const object =
+      ceiling !== undefined
+        ? { type: "object", properties: Object.fromEntries(ceiling.map((name) => [name, {}])) }
+        : {
+            type: "object",
+            description:
+              `Embedded when \`include=${relationName}\` is requested. Its projection is governed by ` +
+              `the ${relationName} target's own config (ADR-0026); no relation-dotted \`selectable\` ceiling is set here.`,
+          };
+    properties[relationName] = relation.cardinality === "many" ? { type: "array", items: object } : object;
   }
   const element = { type: "object" as const, properties, ...(required.length > 0 ? { required } : {}) };
   const schema = isList

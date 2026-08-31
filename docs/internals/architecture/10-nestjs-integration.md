@@ -490,6 +490,23 @@ relations — a pure join row associated by id — would synthesize an empty
 therefore gated on the synthesized schema ending up with zero properties,
 not on the allowlist being empty.
 
+The **response** fallback has the mirror case for `allowlists.includable`
+(ADR-0028, issue #349): a relation a client may `?include=` is emitted as
+an **optional** property on `<Entity>Item`/`<Entity>ListItem` — appended
+after the scalar columns and the computed fields, never in `required`,
+since it is only in the body when `include=` asks for it. Its shape is the
+per-relation ceiling a relation-dotted `allowlists.selectable` entry
+resolves to (`relationProjection`, ADR-0044) as an object limited to those
+fields, or a generic `{ type: "object" }` with a prose description when the
+relation carries no ceiling — the target's own projection is governed by
+the target entity's config, not this one (ADR-0026), so it is not
+reproduced here. A `-to-many` relation wraps that object in
+`{ type: "array", items }`. The relation object is deliberately left
+unstamped by `withKavoEntity`, so `registerKavoSchemas` keeps it inline on
+`<Entity>Item` rather than hoisting it to its own component. Driven off the
+resolved `allowlists.includable` names, not `RelationDescriptor.includable`
+(which reflects ORM-derived metadata, not the config grant).
+
 Two known over-statements, both narrowing documentation only — the schema
 stays open (no `additionalProperties: false`, matching `allowlists.md`'s
 "narrows silently"), so neither lies about what the route accepts or

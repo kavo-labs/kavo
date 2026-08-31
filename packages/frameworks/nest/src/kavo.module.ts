@@ -439,7 +439,9 @@ class KavoBinder implements OnModuleInit {
           // Fallback success-response schema, narrowed to `selectable`
           // (issue #264's response-side counterpart) — `applyResponseSchemaDocs`
           // itself no-ops when a real `item`/`list` DTO or `descriptor.output`
-          // already documented this route at decoration time.
+          // already documented this route at decoration time. `includable` +
+          // `relationProjection` let it emit an optional property per
+          // embeddable relation, capped by any ADR-0044 ceiling (issue #349).
           applyResponseSchemaDocs(
             prototype,
             methodName,
@@ -448,6 +450,8 @@ class KavoBinder implements OnModuleInit {
             service.engine.metadata,
             service.engine.config.allowlists.selectable as readonly string[],
             Object.keys(service.engine.config.computed),
+            service.engine.config.allowlists.includable as readonly string[],
+            service.engine.config.relationProjection,
             dtoResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
