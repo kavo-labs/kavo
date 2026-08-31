@@ -135,6 +135,14 @@ the same break ADR-0026 recorded for `projection` and ADR-0019 for
 decoration time (ADR-0012), because the ceiling is literal strings on
 `allowlists.selectable`, unlike an `{ exclude }` selector.
 
+**The synthesized response schema uses the ceiling too** (issue #349,
+follow-up). `@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem`
+schema — the path with no registered `item`/`list` DTO — emits an optional
+property for each `allowlists.includable` relation, and shapes it from
+`ResolvedEntityConfig.relationProjection`: an object limited to the ceiling
+fields when one is set, a generic object otherwise. It never enters
+`required` (present only under `include=`).
+
 ## References
 
 - ADR-0026 (`allowlists.selectable` narrows the response), whose decision
