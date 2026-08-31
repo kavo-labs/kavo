@@ -42,7 +42,10 @@ cascade; the framework does not partially honor a deep write.
 Relations join the derived write shape by default, so association works
 with zero config. An entity with a registered `create`/`update` DTO opts
 in by declaring the property (`owner: number | null = null`), which also
-documents it in Swagger.
+documents it in Swagger. Without a write DTO, the synthesized fallback body
+schema documents the relation too — as a `{ id }` reference object, an
+array of them for a to-many — from `metadata.relations` (see
+`docs/internals/architecture/10-nestjs-integration.md`, issue #339).
 
 Deep nested writes are **out of scope**, not merely unimplemented.
 
