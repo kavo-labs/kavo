@@ -2607,8 +2607,26 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     properties?: Record<string, Schema>;
     items?: Schema;
     required?: string[];
+    description?: string;
+    $ref?: string;
     "x-kavo-entity"?: string;
   };
+
+  const stubAdapter = (): RepositoryAdapter<object> =>
+    ({
+      findOneById: async () => null,
+      findOne: async () => null,
+      findMany: async () => [],
+      count: async () => 0,
+      create: async (data: unknown) => data,
+      update: async (_id: unknown, data: unknown) => data,
+      patch: async (_id: unknown, data: unknown) => data,
+      delete: async () => {},
+      restore: async () => {
+        throw new Error("not exercised");
+      },
+      purge: async () => {},
+    }) as unknown as RepositoryAdapter<object>;
 
   const itemBody = (path: string, verb: string, status: string): Schema | undefined =>
     (
@@ -2662,8 +2680,9 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
 
     // `selectable`'s own unconfigured default is every own column
     // (`resolve-entity-config.ts`), and `list` (the to-one relation) isn't
-    // one of `EntityMetadata.fields` — item/list schemas never document
-    // relations, the same way a real `item`/`list` DTO never carries one.
+    // one of `EntityMetadata.fields`. A relation only appears here when it
+    // is on `allowlists.includable` (issue #349), which it is not here, so
+    // the synthesized item schema stays scalar-only.
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual([
       "id",
       "title",
@@ -2843,6 +2862,128 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     await bootstrap(DtoComputedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
+    expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
+  });
+
+  it("emits an optional property for an includable relation with no ceiling (issue #349)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Controller("todos")
+    class IncludableController {}
+    await bootstrap(IncludableController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const single = itemBody("/todos/{id}", "get", "200");
+    // Appended after the scalar columns, never reordering them.
+    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "done", "priority", "deletedAt", "list"]);
+    // Only present when `include=` asks for it, so it never joins `required`.
+    expect(single?.required ?? []).not.toContain("list");
+    // A to-one relation is documented as the object directly, no array wrap.
+    expect(single?.properties?.list?.type).toBe("object");
+    // No ADR-0044 ceiling here, so the target's own config governs its
+    // projection — this schema does not reproduce it.
+    expect(single?.properties?.list?.properties).toBeUndefined();
+    expect(single?.properties?.list?.description).toContain("include=list");
+
+    // The same optional property rides the list-envelope element (`<Entity>ListItem`).
+    const listElement = itemBody("/todos", "get", "200")?.properties?.items?.items;
+    expect(Object.keys(listElement?.properties ?? {})).toContain("list");
+    expect(listElement?.required ?? []).not.toContain("list");
+  });
+
+  it("caps an includable relation's emitted shape to the allowlists.selectable ceiling (ADR-0044, issue #349)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Controller("todos")
+    class CeilingController {}
+    await bootstrap(CeilingController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    for (const [verb, path, status] of [
+      ["get", "/todos/{id}", "200"],
+      ["post", "/todos", "201"],
+    ] as const) {
+      const schema = itemBody(path, verb, status);
+      // The relation-dotted `list.id` entry is stripped from the root
+      // projection (ADR-0044) and re-applied as the relation object's shape.
+      expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title", "list"]);
+      expect(schema?.properties?.list).toEqual({ type: "object", properties: { id: {} } });
+      expect(schema?.required ?? []).not.toContain("list");
+    }
+  });
+
+  it("wraps a -to-many includable relation in an array (issue #349)", async () => {
+    class Post {}
+    const postMetadata: EntityMetadata<object> = {
+      entity: Post,
+      name: "Post",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "title", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [
+        // `includable: false` on the descriptor deliberately disagrees with
+        // the config grant below — the synthesized schema must follow the
+        // resolved `allowlists.includable`, not the ORM-derived flag.
+        { name: "tags", target: () => class Tag {}, cardinality: "many", includable: false, strategy: "auto" },
+      ],
+    };
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: () => postMetadata as never,
+      adapterFor: () => stubAdapter() as never,
+    };
+
+    @Controller("posts")
+    class PostController {}
+    // `Post` has no declared fields, so the config's relation-name types
+    // infer to `never`; apply the decorator as a plain call with a cast, the
+    // same escape hatch the fallback-body-schema block uses.
+    const postConfig: unknown = { allowlists: { includable: ["tags"] } };
+    Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([PostController])],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const single = itemBody("/posts/{id}", "get", "200");
+    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "tags"]);
+    expect(single?.properties?.tags?.type).toBe("array");
+    expect(single?.properties?.tags?.items?.type).toBe("object");
+    expect(single?.required ?? []).not.toContain("tags");
+  });
+
+  it("keeps the embedded relation object inline — registerKavoSchemas hoists no extra component (issue #349)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Controller("todos")
+    class InlineController {}
+    await bootstrap(InlineController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+    registerKavoSchemas(document);
+
+    const schemas = (document.components?.schemas ?? {}) as Record<string, Schema>;
+    // The relation object stays on `TodoItem.properties.list` rather than
+    // being hoisted under a positional component name: it carries no
+    // `x-kavo-entity` stamp, so `registerKavoSchemas` leaves it alone.
+    expect(schemas.TodoItem?.properties?.list?.$ref).toBeUndefined();
+    expect(schemas.TodoItem?.properties?.list?.type).toBe("object");
+    // The list-envelope element is `withKavoEntity`-stamped, so
+    // `registerKavoSchemas` recurses into it — assert the relation object
+    // still resolved inline there, not just that a `$ref` is absent.
+    expect(schemas.TodoListItem?.properties?.list?.type).toBe("object");
+    expect(schemas.TodoListItem?.properties?.list?.$ref).toBeUndefined();
+  });
+
+  it("adds no relation property when nothing is includable (issue #349)", async () => {
+    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Controller("todos")
+    class NoIncludeController {}
+    await bootstrap(NoIncludeController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `list` is a relation on `Todo` but not on `allowlists.includable`, so
+    // the synthesized schema stays exactly the scalar `selectable` set.
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
 });
