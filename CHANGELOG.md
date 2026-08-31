@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.2](https://github.com/kavo-labs/kavo/compare/v0.17.1...v0.17.2) (2026-08-31)
+
+
+### Features
+
+* **nest:** one-call setupKavoSwagger with correct route-registration order ([fe2cab0](https://github.com/kavo-labs/kavo/commit/fe2cab068d88188156af11b102ac0ee7418bfa64))
+
+
+### Bug Fixes
+
+* **nest:** type relation reference fields in synthesized Swagger schemas ([ee0fdb3](https://github.com/kavo-labs/kavo/commit/ee0fdb3eacd8cb52bb64c00bb46868f1c48836c5))
+
 ## [0.17.1](https://github.com/kavo-labs/kavo/compare/v0.17.0...v0.17.1) (2026-08-31)
 
 
