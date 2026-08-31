@@ -520,6 +520,41 @@ diverges from the full schema's `properties`. The request side mirrors the
 explicit-DTO path, where `@nestjs/swagger` + class-validator derive
 `required` themselves.
 
+### Serving the document (`setupKavoSwagger`)
+
+Wiring `@nestjs/swagger` into a `@Kavo` app has two ordering rules that
+work against each other, and neither surfaces an error when you get it
+wrong:
+
+- `SwaggerModule.setup()` registers the `/docs` + `/docs-json` routes on
+  the HTTP adapter, and that has to run **before** `app.init()` /
+  `app.listen()` — a `setup()` afterwards registers routes the router scan
+  has already passed, and every `/docs` request then 404s silently;
+- the document itself can't be built until **after** `KavoBinder.onModuleInit`
+  — the `search[...]` params, the conditional-request headers, and the
+  `<Entity>Query`/`Filter`/`Sort`/`Pagination`/`ValidationError` component
+  schemas are all attached there, and that pass fires _inside_ `app.init()`.
+
+The only sequence that satisfies both is: register the routes now, and
+hand `setup()` a **factory** that defers `SwaggerModule.createDocument()`
+to the first request for the docs. `setupKavoSwagger(app, { config })`
+(`swagger-setup.ts`, exported from the barrel) is that sequence packaged as
+one call — it registers the routes, wraps a memoised
+`registerKavoSchemas(createDocument(...))` factory (built once, on first
+`/docs` hit, by which point every `onModuleInit` pass has completed), and
+passes it to `setup()`. The reference apps' `main.ts` use it; `path`
+defaults to `"docs"`, and `documentOptions` / `swaggerOptions` pass
+straight through to `createDocument` / `setup`.
+
+It loads `@nestjs/swagger` through the same `createRequire` probe as
+`swagger.ts`, so it stays a no-op dependency when the optional peer is
+absent — except that calling it then throws a descriptive
+`ConfigurationException` (`KAVO_CONFIG_INVALID`) naming the missing peer
+rather than a bare module-resolution error. Called _after_ the app has
+initialised (`app.isInitialized === true` — read defensively, since Nest
+omits the flag from its `.d.ts`), it throws the same exception naming the
+call-order rule, rather than registering dead routes.
+
 ### Named component schemas (`registerKavoSchemas`)
 
 Everything above emits schemas **inline** on the route — the only identity

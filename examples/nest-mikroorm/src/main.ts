@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { KAVO_API_GUIDE } from "@kavo/nest";
+import { DocumentBuilder } from "@nestjs/swagger";
+import { KAVO_API_GUIDE, setupKavoSwagger } from "@kavo/nest";
 import { AppModule } from "./app.module.js";
 import { createPostgresOrm, createSqliteOrm } from "./database.js";
 
@@ -29,29 +29,25 @@ async function bootstrap(): Promise<void> {
   // `$ilike` is PostgreSQL-only; on any other driver it is a syntax error.
   const app = await NestFactory.create(AppModule.forRoot({ orm, caseInsensitiveFilters: usePostgres }));
 
-  // `search[...]`/conditional-request Swagger docs finish in `KavoModule`'s
-  // discovery binder, an `onModuleInit` hook that hasn't run yet at this
-  // point in `bootstrap` — it fires inside `app.listen()` below. A factory
-  // here (rather than a plain document) defers `createDocument()` until the
-  // first request for the docs, by which point that hook has completed.
-  const buildDocument = (): ReturnType<typeof SwaggerModule.createDocument> =>
-    SwaggerModule.createDocument(
-      app,
-      new DocumentBuilder()
-        .setTitle("Kavo — Pet example (MikroORM)")
-        .setDescription(
-          "Cats, dogs, owners, tags and addresses: full CRUD over HTTP " +
-            "through @kavo/mikroorm, with single-table inheritance, filtering, " +
-            "sorting, pagination, layered config, RFC 9457 problem-details " +
-            "errors, `?include=owner`/`?include=pets`/`?include=tags` " +
-            "relations loaded by populate, filtering and sorting across a " +
-            "relation path, and soft delete with restore/purge on owners.\n\n" +
-            KAVO_API_GUIDE,
-        )
-        .setVersion("0.0.0")
-        .build(),
-    );
-  SwaggerModule.setup("docs", app, buildDocument);
+  // One call: registers `/docs` + `/docs-json` before `app.listen()`, and
+  // defers the document build to the first request — after `KavoModule`'s
+  // `onModuleInit` binder has attached the `search[...]` params, the
+  // conditional-request headers, and the `<Entity>Query` component schemas.
+  setupKavoSwagger(app, {
+    config: new DocumentBuilder()
+      .setTitle("Kavo — Pet example (MikroORM)")
+      .setDescription(
+        "Cats, dogs, owners, tags and addresses: full CRUD over HTTP " +
+          "through @kavo/mikroorm, with single-table inheritance, filtering, " +
+          "sorting, pagination, layered config, RFC 9457 problem-details " +
+          "errors, `?include=owner`/`?include=pets`/`?include=tags` " +
+          "relations loaded by populate, filtering and sorting across a " +
+          "relation path, and soft delete with restore/purge on owners.\n\n" +
+          KAVO_API_GUIDE,
+      )
+      .setVersion("0.0.0")
+      .build(),
+  });
 
   await app.listen(3002);
 }
