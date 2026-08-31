@@ -222,7 +222,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       issues.push({
         field: draft.path,
         code: "KAVO_QUERY_INVALID_VALUE",
-        detail: `'fields.${draft.path}' must be an array of field names.`,
+        detail: `'select.${draft.path}' must be an array of field names.`,
       });
       return null;
     }
