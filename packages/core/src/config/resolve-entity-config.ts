@@ -109,6 +109,7 @@ export function resolveEntityConfig<Entity extends object>(
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
   const allowlists = resolveAllowlists(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
+  const relationProjection = resolveRelationProjection(metadata, entityConfig, allowlists);
   const entitySettings = normalizeSearch(
     mergeSettings(
       BUILT_IN_DEFAULTS,
@@ -166,6 +167,7 @@ export function resolveEntityConfig<Entity extends object>(
     },
     allowlists,
     projection,
+    relationProjection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
     computed,
@@ -437,10 +439,22 @@ function resolveAllowlists<Entity extends object>(
           (name) => !compositeIdFields.includes(name),
         ) as unknown as readonly FieldPath<Entity, 1>[]);
   const configured = entityConfig?.allowlists;
+  // Relation-dotted entries on an explicit `selectable` array carry the
+  // per-relation projection ceiling (ADR-0044) — `resolveRelationProjection`
+  // reads them straight off the raw config. They are not root `fields=`
+  // paths (a relation is selected with `fields[<relation>]=`, never
+  // `fields=<relation>.<field>`), so they are stripped from the resolved
+  // `selectable` list, which documents exactly "what a request may name in
+  // `fields=`", and from the derived response `projection` built off it.
+  const relationHeads = new Set(relationNames as readonly string[]);
+  const selectableResolved = resolveFieldSelector(selectableBase, configured?.selectable) as readonly string[];
+  const selectableRootOnly = selectableResolved.filter(
+    (path) => !(path.includes(".") && relationHeads.has(path.split(".")[0]!)),
+  ) as unknown as readonly FieldPath<Entity>[];
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
-    selectable: resolveFieldSelector(selectableBase, configured?.selectable),
+    selectable: selectableRootOnly,
     includable: resolveIncludableSelector(metadata.name, relationNames, configured?.includable),
     // Unlike `filterable`/`sortable`, its unconfigured default is narrower
     // than "every own column" — a non-string column has nothing an `ILIKE`
@@ -686,6 +700,99 @@ function resolveProjection<Entity extends object>(
 }
 
 /**
+ * Per-relation projection ceilings (ADR-0044), derived from the
+ * relation-dotted entries of an explicitly configured `allowlists.selectable`.
+ *
+ * `selectable: ["id", "title", "dictionary.id"]` yields `{ dictionary: ["id"] }`:
+ * an included `dictionary` is projected to `id` and nothing else, whatever the
+ * `dictionary` entity's own config would otherwise expose. Bare entries stay
+ * the root projection's business (`resolveProjection`); this reads only the
+ * dotted ones. `undefined` when `selectable` names no relation path.
+ *
+ * Every rejected shape is a bootstrap `ConfigurationException` rather than a
+ * silently inert entry — the gap this ADR closes:
+ *   - the `{ exclude }` form cannot carry a relation path at all;
+ *   - a dotted entry whose head is not a real relation of the entity;
+ *   - more than one relation segment (`a.b.c`) — deep projection is out of
+ *     scope (issue #343);
+ *   - a relation that is not on `allowlists.includable`, so the ceiling could
+ *     never take effect.
+ *
+ * The *field* half of an entry is not checked here — the target's metadata is
+ * not in scope at bootstrap, the same laxity `resolveAllowlists` documents for
+ * relation paths on `searchable`. A request that names such a field in
+ * `fields[<relation>]=` gets a 400 (it is not on the target's `selectable`);
+ * on the default path — no request fieldset — a ceiling field that names no
+ * real target column is simply omitted from the embed, not raised.
+ */
+function resolveRelationProjection<Entity extends object>(
+  metadata: EntityMetadata<Entity>,
+  entityConfig: EntityConfig<Entity> | undefined,
+  allowlists: ResolvedQueryAllowlists<Entity>,
+): Readonly<Record<string, readonly string[]>> | undefined {
+  const selector = entityConfig?.allowlists?.selectable;
+  if (selector === undefined) {
+    return undefined;
+  }
+  const entityName = metadata.name;
+  const relationNames = new Set(metadata.relations.map((relation) => relation.name));
+  const isRelationPath = (entry: string): boolean => entry.includes(".") && relationNames.has(entry.split(".")[0]!);
+
+  if ("exclude" in selector) {
+    const offending = (selector.exclude as readonly string[]).find(isRelationPath);
+    if (offending !== undefined) {
+      throw new ConfigurationException(
+        entityName,
+        "allowlists.selectable.exclude",
+        `'${offending}' projects the '${offending.split(".")[0]}' relation, which the { exclude } form cannot ` +
+          `express — move relation projection to the array form of allowlists.selectable`,
+      );
+    }
+    return undefined;
+  }
+
+  const byRelation = new Map<string, string[]>();
+  for (const entry of selector as readonly string[]) {
+    if (!entry.includes(".")) {
+      continue;
+    }
+    const segments = entry.split(".");
+    const head = segments[0]!;
+    if (!relationNames.has(head)) {
+      throw new ConfigurationException(
+        entityName,
+        "allowlists.selectable",
+        `'${entry}' is a dotted path but '${head}' is not a relation of ${entityName} ` +
+          `(relations: ${[...relationNames].join(", ") || "none"})`,
+      );
+    }
+    if (segments.length > 2) {
+      throw new ConfigurationException(
+        entityName,
+        "allowlists.selectable",
+        `'${entry}' projects deeper than one relation segment — a selectable relation path names one ` +
+          `relation and one of its fields ('${head}.<field>'), not a nested path`,
+      );
+    }
+    if (!(allowlists.includable as readonly string[]).includes(head)) {
+      throw new ConfigurationException(
+        entityName,
+        "allowlists.selectable",
+        `'${entry}' projects the '${head}' relation, which is not on allowlists.includable — a relation ` +
+          `must be includable for its projection to ever apply`,
+      );
+    }
+    const fields = byRelation.get(head) ?? [];
+    fields.push(segments[1]!);
+    byRelation.set(head, fields);
+  }
+  if (byRelation.size === 0) {
+    return undefined;
+  }
+  return deepFreeze(Object.fromEntries(byRelation)) as Readonly<Record<string, readonly string[]>>;
+}
+
+/**
  * Generic over the path type so it serves both `QueryFieldSelector`
  * (depth-capped-3 `FieldPath`) and `WritableFieldSelector` (depth-1) — the
  * array-or-`{ exclude }` resolution logic is identical either way.
@@ -761,6 +868,7 @@ export function describeResolvedConfig<Entity>(
     entityName: config.entityName,
     settings: config.settings,
     allowlists: config.allowlists,
+    relationProjection: config.relationProjection ?? null,
     computed: Object.keys(config.computed),
     softDelete: config.softDelete,
     relations: config.relations.all().map((relation) => ({

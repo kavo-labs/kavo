@@ -284,11 +284,16 @@ export function applySwaggerMetadata(
         }),
       );
       for (const relation of includable) {
+        const ceiling = relationFieldCeiling(config, relation);
         apply(
           swagger.ApiQuery({
             name: `fields[${relation}]`,
             required: false,
             type: String,
+            // A per-relation projection ceiling (ADR-0044) is the one
+            // entity-specific thing worth saying here: the request may
+            // narrow `fields[<relation>]` further but not past this set.
+            ...(ceiling !== undefined ? { description: `Restricted to: ${ceiling.join(", ")}.` } : {}),
           }),
         );
       }
@@ -1508,6 +1513,32 @@ function includableRelations(config: EntityConfig<object> | undefined): readonly
     return null;
   }
   return selector;
+}
+
+/**
+ * The per-relation projection ceiling this entity's config imposes on an
+ * included `<relation>` (`allowlists.selectable: [..., "<relation>.<field>"]`,
+ * ADR-0044) — the field names `fields[<relation>]` is narrowed to, or
+ * `undefined` when the relation carries no ceiling.
+ *
+ * Like `includableRelations`, this is decoration-time-resolvable: the ceiling
+ * is literal strings on `allowlists.selectable`, no ORM metadata needed. The
+ * `{ exclude }` form of `selectable` never carries a relation path (core
+ * rejects it at bootstrap), so it simply yields no ceilings here.
+ */
+function relationFieldCeiling(
+  config: EntityConfig<object> | undefined,
+  relation: string,
+): readonly string[] | undefined {
+  const selector = (config?.allowlists as { selectable?: QueryFieldSelector<object> } | undefined)?.selectable;
+  if (selector === undefined || "exclude" in selector) {
+    return undefined;
+  }
+  const prefix = `${relation}.`;
+  const fields = (selector as readonly string[])
+    .filter((entry) => entry.startsWith(prefix) && !entry.slice(prefix.length).includes("."))
+    .map((entry) => entry.slice(prefix.length));
+  return fields.length > 0 ? fields : undefined;
 }
 
 export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {

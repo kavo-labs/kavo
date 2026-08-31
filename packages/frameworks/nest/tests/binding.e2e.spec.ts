@@ -1507,6 +1507,32 @@ describe("@Kavo relation includes", () => {
     expect(response.body.list).toEqual({ id: 7 });
   });
 
+  it("caps an included relation to the allowlists.selectable ceiling with no fields[list] (ADR-0044)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Controller("todos")
+    class CeilingController {}
+
+    await app.close();
+    await bootstrap(CeilingController);
+    await request(server())
+      .post("/todos")
+      .send({ title: "x", list: { id: 7 } })
+      .expect(201);
+
+    const list = await request(server()).get("/todos?include=list").expect(200);
+    expect(list.body.items[0].list).toEqual({ id: 7 });
+    const one = await request(server()).get("/todos/1?include=list").expect(200);
+    expect(one.body.list).toEqual({ id: 7 });
+
+    // A request may narrow within the ceiling, never past it: `name` is a
+    // real TodoList column but off the ceiling.
+    const rejected = await request(server()).get("/todos/1?include=list&fields[list]=name").expect(400);
+    expect(rejected.body).toMatchObject({ code: "KAVO_QUERY_INVALID" });
+    expect(rejected.body.errors).toContainEqual(
+      expect.objectContaining({ field: "list.name", code: "KAVO_QUERY_INVALID_FIELD" }),
+    );
+  });
+
   it("rejects a relation that is not includable, with problem details", async () => {
     @Kavo(Todo)
     @Controller("todos")
@@ -1579,6 +1605,21 @@ describe("@Kavo relation includes", () => {
     // `fields[relation]`'s relation name is already the param name, so it
     // carries no description at all.
     expect(fieldsList?.description).toBeUndefined();
+  });
+
+  it("names a per-relation projection ceiling on fields[relation] (ADR-0044)", async () => {
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Controller("todos")
+    class CeilingController {}
+
+    await app.close();
+    await bootstrap(CeilingController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
+    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
+    const fieldsList = params.find((param) => param.name === "fields[list]");
+    // The ceiling is literal strings on `allowlists.selectable` — resolvable
+    // at decoration time (ADR-0012), unlike an `{ exclude }` selector.
+    expect(fieldsList?.description).toBe("Restricted to: id.");
   });
 
   it("omits the include query parameter on an entity that opted nothing in", async () => {
