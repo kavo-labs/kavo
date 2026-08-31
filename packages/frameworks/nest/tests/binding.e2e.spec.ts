@@ -2463,7 +2463,9 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       expect(schema?.properties?.list).toEqual({
         type: "object",
         nullable: true,
-        properties: { id: {} },
+        // `id` is typed from `TodoList`'s own metadata (a number column),
+        // not left as a bare `{}` (issue #339 follow-up).
+        properties: { id: { type: "number" } },
         required: ["id"],
         description: "Associate by id (ADR-0014); pass `null` to disassociate.",
       });
@@ -2508,10 +2510,12 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // generator as "POST /notes takes no body", which is false.
     expect(Object.keys(schema?.properties ?? {})).toEqual(["word", "tags"]);
     expect(schema?.description).toBeUndefined();
+    // `id` is typed from the resolved target metadata (this fixture's
+    // `metadataFor` yields a string-id entity for every target).
     expect(schema?.properties?.word).toEqual({
       type: "object",
       nullable: true,
-      properties: { id: {} },
+      properties: { id: { type: "string" } },
       required: ["id"],
       description: "Associate by id (ADR-0014); pass `null` to disassociate.",
     });
@@ -2521,7 +2525,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       nullable: true,
       items: {
         type: "object",
-        properties: { id: {} },
+        properties: { id: { type: "string" } },
         required: ["id"],
         description: "Associate by id (ADR-0014); pass `null` to disassociate.",
       },
@@ -2599,6 +2603,149 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // registration happens across repeated `onModuleInit` runs.
     expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "priority", "list"]);
   });
+
+  // Boot a relation-only entity against an infrastructure that resolves the
+  // routed entity and each relation target separately, so the `{ id }`
+  // reference object's type can be pinned to the *target's* metadata rather
+  // than the source's (the pre-change code read neither — it emitted `{}`).
+  const withDiscriminatingMetadata = async (
+    source: EntityMetadata<object>,
+    resolve: (entity: unknown) => EntityMetadata<object>,
+    config?: unknown,
+  ) => {
+    const adapter = {
+      findOneById: async () => null,
+      findOne: async () => null,
+      findMany: async () => [],
+      count: async () => 0,
+      create: async (data: unknown) => data,
+      update: async (_id: unknown, data: unknown) => data,
+      patch: async (_id: unknown, data: unknown) => data,
+      delete: async () => {},
+      restore: async () => {
+        throw new Error("not exercised");
+      },
+      purge: async () => {},
+    } as unknown as RepositoryAdapter<object>;
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: ((entity: unknown) => (entity === source.entity ? source : resolve(entity))) as never,
+      adapterFor: () => adapter as never,
+    };
+    @Controller("notes")
+    class NoteController {}
+    Kavo(source.entity as new () => object, config as Parameters<typeof Kavo>[1])(NoteController);
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([NoteController])],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+  };
+
+  const relationOnlySource = (): EntityMetadata<object> => {
+    class Note {}
+    return {
+      entity: Note,
+      name: "Note",
+      idField: "id",
+      // A number id on the source, so a target with a string id proves the
+      // reference-object `id` is read from the target, not from here.
+      fields: [{ name: "id", kind: "number", nullable: false, generated: true }],
+      relations: [
+        { name: "word", target: () => class Word {}, cardinality: "one", includable: false, strategy: "auto" },
+      ],
+    };
+  };
+
+  it("types the reference-object `id` from the relation target's metadata, not the source entity's (issue #339)", async () => {
+    class Word {}
+    const wordMetadata: EntityMetadata<object> = {
+      entity: Word,
+      name: "Word",
+      idField: "id",
+      fields: [{ name: "id", kind: "string", nullable: false, generated: true }],
+      relations: [],
+    };
+    await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
+      allowlists: { creatable: ["word"], updatable: ["word"] },
+    });
+
+    expect(bodySchema("/notes", "post")?.properties?.word).toEqual({
+      type: "object",
+      nullable: true,
+      properties: { id: { type: "string" } },
+      required: ["id"],
+      description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+    });
+  });
+
+  it("leaves the reference-object `id` untyped when the relation target's metadata is unresolvable (issue #339)", async () => {
+    await withDiscriminatingMetadata(
+      relationOnlySource(),
+      () => {
+        throw new Error("no metadata for this relation target from this root");
+      },
+      { allowlists: { creatable: ["word"], updatable: ["word"] } },
+    );
+
+    // Bootstrap survived the throw, and the field falls back to the
+    // pre-change untyped shape rather than being dropped.
+    expect(bodySchema("/notes", "post")?.properties?.word).toEqual({
+      type: "object",
+      nullable: true,
+      properties: { id: {} },
+      required: ["id"],
+      description: "Associate by id (ADR-0014); pass `null` to disassociate.",
+    });
+  });
+
+  it("leaves the reference-object `id` untyped for a composite-key relation target (issue #339)", async () => {
+    class Word {}
+    const wordMetadata: EntityMetadata<object> = {
+      entity: Word,
+      name: "Word",
+      idField: "orgId",
+      compositeIdFields: ["orgId", "lemma"],
+      fields: [
+        { name: "orgId", kind: "string", nullable: false, generated: false },
+        { name: "lemma", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [],
+    };
+    await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
+      allowlists: { creatable: ["word"], updatable: ["word"] },
+    });
+
+    // A single scalar `id` would be a wrong assertion for a two-column key,
+    // so it stays `{}` — honestly vague beats confidently wrong.
+    expect(bodySchema("/notes", "post")?.properties?.word?.properties).toEqual({ id: {} });
+  });
+
+  it.each([
+    {
+      label: "date",
+      field: { name: "id", kind: "date", nullable: false, generated: true },
+      expected: { type: "string", format: "date-time" },
+    },
+    {
+      label: "enum",
+      field: { name: "id", kind: "enum", nullable: false, generated: false, enumValues: ["a", "b"] },
+      expected: { type: "string", enum: ["a", "b"] },
+    },
+  ])("types the reference-object `id` for a $label target id kind (issue #339)", async ({ field, expected }) => {
+    class Word {}
+    const wordMetadata: EntityMetadata<object> = {
+      entity: Word,
+      name: "Word",
+      idField: "id",
+      fields: [field as EntityMetadata<object>["fields"][number]],
+      relations: [],
+    };
+    await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
+      allowlists: { creatable: ["word"], updatable: ["word"] },
+    });
+    expect(bodySchema("/notes", "post")?.properties?.word?.properties?.id).toEqual(expected);
+  });
 });
 
 describe("@Kavo Swagger fallback success-response schema when no item/list DTO is configured (issue #264)", () => {
@@ -2637,6 +2784,19 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     )?.[verb]?.responses?.[status]?.content?.["application/json"]?.schema;
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
+
+  // Boot one `@Kavo` controller against a caller-supplied infrastructure —
+  // for the includable-relation tests that need `metadataFor` to resolve (or
+  // deliberately fail) per target entity, which the shared `fakeInfrastructure`
+  // can't express.
+  const buildDoc = async (infrastructure: KavoInfrastructure, controller: unknown): Promise<void> => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([controller as never])],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+  };
 
   it("narrows the item response to selectable when no item DTO is registered", async () => {
     @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
@@ -2891,7 +3051,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
   });
 
   it("caps an includable relation's emitted shape to the allowlists.selectable ceiling (ADR-0044, issue #349)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id", "list.name"] } })
     @Controller("todos")
     class CeilingController {}
     await bootstrap(CeilingController);
@@ -2902,16 +3062,33 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       ["post", "/todos", "201"],
     ] as const) {
       const schema = itemBody(path, verb, status);
-      // The relation-dotted `list.id` entry is stripped from the root
-      // projection (ADR-0044) and re-applied as the relation object's shape.
+      // The relation-dotted `list.*` entries are stripped from the root
+      // projection (ADR-0044) and re-applied as the relation object's shape,
+      // each field typed from `TodoList`'s own metadata — `id` is a number
+      // column and `name` a string, so a blind `string` guess would be wrong.
       expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title", "list"]);
-      expect(schema?.properties?.list).toEqual({ type: "object", properties: { id: {} } });
+      expect(schema?.properties?.list).toEqual({
+        type: "object",
+        properties: { id: { type: "number" }, name: { type: "string" } },
+      });
       expect(schema?.required ?? []).not.toContain("list");
     }
   });
 
-  it("wraps a -to-many includable relation in an array (issue #349)", async () => {
+  it("wraps a -to-many includable relation in an array, typing its ceiling fields from the target (issue #349)", async () => {
     class Post {}
+    class Tag {}
+    const tagMetadata: EntityMetadata<object> = {
+      entity: Tag,
+      name: "Tag",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "label", kind: "string", nullable: false, generated: false },
+        { name: "archived", kind: "boolean", nullable: false, generated: false },
+      ],
+      relations: [],
+    };
     const postMetadata: EntityMetadata<object> = {
       entity: Post,
       name: "Post",
@@ -2924,11 +3101,11 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
         // `includable: false` on the descriptor deliberately disagrees with
         // the config grant below — the synthesized schema must follow the
         // resolved `allowlists.includable`, not the ORM-derived flag.
-        { name: "tags", target: () => class Tag {}, cardinality: "many", includable: false, strategy: "auto" },
+        { name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
       ],
     };
     const infrastructure: KavoInfrastructure = {
-      metadataFor: () => postMetadata as never,
+      metadataFor: ((entity: unknown) => (entity === Tag ? tagMetadata : postMetadata)) as never,
       adapterFor: () => stubAdapter() as never,
     };
 
@@ -2937,21 +3114,81 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     // `Post` has no declared fields, so the config's relation-name types
     // infer to `never`; apply the decorator as a plain call with a cast, the
     // same escape hatch the fallback-body-schema block uses.
-    const postConfig: unknown = { allowlists: { includable: ["tags"] } };
+    const postConfig: unknown = {
+      allowlists: { includable: ["tags"], selectable: ["id", "title", "tags.label", "tags.archived"] },
+    };
     Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
-
-    const moduleRef = await Test.createTestingModule({
-      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([PostController])],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+    await buildDoc(infrastructure, PostController);
 
     const single = itemBody("/posts/{id}", "get", "200");
     expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "tags"]);
-    expect(single?.properties?.tags?.type).toBe("array");
-    expect(single?.properties?.tags?.items?.type).toBe("object");
+    // The ceiling object is array-wrapped, and each field carries the kind
+    // `Tag`'s own metadata gives it — a `string` guess would miss `archived`.
+    expect(single?.properties?.tags).toEqual({
+      type: "array",
+      items: {
+        type: "object",
+        properties: { label: { type: "string" }, archived: { type: "boolean" } },
+      },
+    });
     expect(single?.required ?? []).not.toContain("tags");
+  });
+
+  it("leaves an includable relation's ceiling fields untyped when the target's metadata is unresolvable (issue #349)", async () => {
+    class Post {}
+    const postMetadata: EntityMetadata<object> = {
+      entity: Post,
+      name: "Post",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "title", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [
+        { name: "author", target: () => class Author {}, cardinality: "one", includable: false, strategy: "auto" },
+      ],
+    };
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: ((entity: unknown) => {
+        if (entity === Post) {
+          return postMetadata;
+        }
+        throw new Error("no metadata for this relation target from this root");
+      }) as never,
+      adapterFor: () => stubAdapter() as never,
+    };
+
+    @Controller("posts")
+    class PostController {}
+    const postConfig: unknown = { allowlists: { includable: ["author"], selectable: ["id", "title", "author.id"] } };
+    Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
+    // `metadataFor` throwing for the target must not abort bootstrap.
+    await buildDoc(infrastructure, PostController);
+
+    const schema = itemBody("/posts/{id}", "get", "200");
+    // The ceiling still shapes the object, but its one field stays `{}`.
+    expect(schema?.properties?.author).toEqual({ type: "object", properties: { id: {} } });
+    expect(schema?.required ?? []).not.toContain("author");
+  });
+
+  it("leaves a ceiling entry untyped when the target has no such column, still typing its siblings (issue #349)", async () => {
+    // `list.phantom` is off `Todo`'s typed `selectable` union (no such
+    // `TodoList` column), so apply the decorator as a plain cast call.
+    const phantomConfig: unknown = {
+      allowlists: { includable: ["list"], selectable: ["id", "title", "list.id", "list.phantom"] },
+    };
+    @Controller("todos")
+    class PhantomCeilingController {}
+    Kavo(Todo, phantomConfig as Parameters<typeof Kavo>[1])(PhantomCeilingController);
+    await bootstrap(PhantomCeilingController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `phantom` is not a `TodoList` column, so its per-field lookup misses
+    // and it stays `{}` while `id` (a real number column) is typed.
+    expect(itemBody("/todos/{id}", "get", "200")?.properties?.list).toEqual({
+      type: "object",
+      properties: { id: { type: "number" }, phantom: {} },
+    });
   });
 
   it("keeps the embedded relation object inline — registerKavoSchemas hoists no extra component (issue #349)", async () => {

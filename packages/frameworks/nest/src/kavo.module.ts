@@ -1,7 +1,7 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, KavoInstance, OperationDtoMap } from "@kavo/core";
+import type { ClassRef, EntityMetadata, KavoInstance, OperationDtoMap } from "@kavo/core";
 import {
   ConfigurationException,
   DefaultDtoResolver,
@@ -422,6 +422,41 @@ class KavoBinder implements OnModuleInit {
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
         const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined);
+        // The target entity's own metadata for each relation a synthesized
+        // schema references — includable ones for `applyResponseSchemaDocs`'s
+        // ADR-0044 ceiling fields (issue #349), creatable/updatable ones for
+        // `applyBodySchemaDocs`'s `{ id }` reference object (issue #339) — so
+        // both can type those fields instead of emitting an untyped `{}`.
+        // Resolved once per controller, not per route. `metadataFor` may
+        // throw or return `undefined` for a target this root cannot derive
+        // metadata for (a `runtime.metadata` wiring, or an infrastructure
+        // that only knows routed entities); that relation is then left
+        // untyped rather than crashing bootstrap. A null-prototype map so a
+        // relation named `constructor`/`hasOwnProperty` can't resolve a
+        // bracket lookup to an inherited member and blow up outside the
+        // try/catch below.
+        const relationTargetMetadata: Record<string, EntityMetadata<object>> = Object.create(null) as Record<
+          string,
+          EntityMetadata<object>
+        >;
+        const schemaRelationNames = new Set<string>([
+          ...(service.engine.config.allowlists.includable as readonly string[]),
+          ...(service.engine.config.allowlists.creatable as readonly string[]),
+          ...(service.engine.config.allowlists.updatable as readonly string[]),
+        ]);
+        for (const relation of service.engine.metadata.relations) {
+          if (!schemaRelationNames.has(relation.name)) {
+            continue;
+          }
+          try {
+            const targetMetadata = this.options.infrastructure?.metadataFor(relation.target() as ClassRef<object>);
+            if (targetMetadata !== undefined) {
+              relationTargetMetadata[relation.name] = targetMetadata as EntityMetadata<object>;
+            }
+          } catch {
+            // Target metadata unresolvable from this root — leave untyped.
+          }
+        }
         for (const { methodName, descriptor, route } of conditionalDocs) {
           const settings = service.engine.config.settingsFor(descriptor.id);
           applyConditionalRequestDocs(prototype, methodName, descriptor, route, isEtagEnabled(settings.cache));
@@ -431,10 +466,17 @@ class KavoBinder implements OnModuleInit {
           // rather than stashed, since it's a pure function of the
           // decoration-time config already sitting in `metadata.config`.
           if (bodyDtoFor(descriptor, dtoResolver) === null) {
-            applyBodySchemaDocs(prototype, methodName, descriptor, service.engine.metadata, {
-              creatable: service.engine.config.allowlists.creatable as readonly string[],
-              updatable: service.engine.config.allowlists.updatable as readonly string[],
-            });
+            applyBodySchemaDocs(
+              prototype,
+              methodName,
+              descriptor,
+              service.engine.metadata,
+              {
+                creatable: service.engine.config.allowlists.creatable as readonly string[],
+                updatable: service.engine.config.allowlists.updatable as readonly string[],
+              },
+              relationTargetMetadata,
+            );
           }
           // Fallback success-response schema, narrowed to `selectable`
           // (issue #264's response-side counterpart) — `applyResponseSchemaDocs`
@@ -452,6 +494,7 @@ class KavoBinder implements OnModuleInit {
             Object.keys(service.engine.config.computed),
             service.engine.config.allowlists.includable as readonly string[],
             service.engine.config.relationProjection,
+            relationTargetMetadata,
             dtoResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
