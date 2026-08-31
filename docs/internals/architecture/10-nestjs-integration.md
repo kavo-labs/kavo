@@ -480,11 +480,15 @@ A `creatable`/`updatable` name that is a **relation** rather than a scalar
 column has no `metadata.fields` entry, so it is picked up from
 `metadata.relations` and documented as the association-by-id shape the
 deserializer accepts (ADR-0014): a `{ id }` reference object for a to-one,
-a nullable array of them for a to-many, `id` left untyped because the
-target entity's primary-key kind isn't reachable from the binding. A
-relation never joins the body's `required` (`RelationDescriptor` carries no
-nullability). Without this, an entity whose entire writable projection is
-relations — a pure join row associated by id — would synthesize an empty
+a nullable array of them for a to-many. `id` is typed from the target
+entity's own metadata, which the binder resolves through
+`infrastructure.metadataFor(relation.target())`; it stays untyped only when
+that target can't be resolved (no infrastructure, or a root that can't
+derive its metadata) or when the target has a composite key, where a single
+scalar `id` would be wrong rather than merely vague. A relation never joins
+the body's `required` (`RelationDescriptor` carries no nullability). Without
+this, an entity whose entire writable projection is relations — a pure join
+row associated by id — would synthesize an empty
 `properties: {}` a client generator reads as "this route takes no body"
 (issue #339). The description fallback ("No field is writable.") is
 therefore gated on the synthesized schema ending up with zero properties,
@@ -497,10 +501,13 @@ after the scalar columns and the computed fields, never in `required`,
 since it is only in the body when `include=` asks for it. Its shape is the
 per-relation ceiling a relation-dotted `allowlists.selectable` entry
 resolves to (`relationProjection`, ADR-0044) as an object limited to those
-fields, or a generic `{ type: "object" }` with a prose description when the
-relation carries no ceiling — the target's own projection is governed by
-the target entity's config, not this one (ADR-0026), so it is not
-reproduced here. A `-to-many` relation wraps that object in
+fields — each typed from the target entity's own metadata (the same
+`infrastructure.metadataFor(relation.target())` resolution the body side
+uses), falling back to an untyped `{}` for a ceiling entry the target has
+no column for — or a generic `{ type: "object" }` with a prose description
+when the relation carries no ceiling. The target's own projection is
+governed by the target entity's config, not this one (ADR-0026), so it is
+not reproduced here. A `-to-many` relation wraps that object in
 `{ type: "array", items }`. The relation object is deliberately left
 unstamped by `withKavoEntity`, so `registerKavoSchemas` keeps it inline on
 `<Entity>Item` rather than hoisting it to its own component. Driven off the
