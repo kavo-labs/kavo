@@ -2975,6 +2975,27 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(schemas.TodoListItem?.properties?.list?.$ref).toBeUndefined();
   });
 
+  it("does not add an includable relation when a configured item DTO owns the response schema", async () => {
+    class TodoItemDto {
+      id = 0;
+      title = "";
+    }
+    @Kavo(Todo, {
+      dto: { item: TodoItemDto },
+      allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] },
+    })
+    @Controller("todos")
+    class DtoIncludableController {}
+    await bootstrap(DtoIncludableController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    // `includable` and its relation projection only shape the synthesized
+    // fallback. A registered item DTO remains the complete response contract.
+    const single = itemBody("/todos/{id}", "get", "200");
+    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title"]);
+    expect(single?.properties?.list).toBeUndefined();
+  });
+
   it("adds no relation property when nothing is includable (issue #349)", async () => {
     @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
     @Controller("todos")
