@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.17.0](https://github.com/kavo-labs/kavo/compare/v0.16.2...v0.17.0) (2026-08-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** the `fields` / `fields[<relation>]` query parameter is renamed to `select` / `select[<relation>]` with no backward-compatible alias. `QueryContext.fields` and `NormalizedQueryContext.fields` are renamed to `select`.
+
+### Features
+
+* **core:** cap an included relation's projection from allowlists.selectable ([#345](https://github.com/kavo-labs/kavo/issues/345)) ([cf29d6b](https://github.com/kavo-labs/kavo/commit/cf29d6b5210c08c2b5c199a1175ba76d98b87eaf))
+* **core:** rename the `fields` query parameter to `select` ([#347](https://github.com/kavo-labs/kavo/issues/347)) ([a048236](https://github.com/kavo-labs/kavo/commit/a0482369ca8b690b5d2f608c28bb48a082b9c291))
+
 ## [0.16.2](https://github.com/kavo-labs/kavo/compare/v0.16.1...v0.16.2) (2026-08-31)
 
 
