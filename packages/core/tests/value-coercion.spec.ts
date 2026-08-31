@@ -137,7 +137,7 @@ describe("parseBracketKey — bracketed wire keys", () => {
   it("splits a key into its path segments", () => {
     expect(parseBracketKey("filter[age][gte]", "filter")).toEqual(["age", "gte"]);
     expect(parseBracketKey("filter[or][0][role][eq]", "filter")).toEqual(["or", "0", "role", "eq"]);
-    expect(parseBracketKey("fields[posts]", "fields")).toEqual(["posts"]);
+    expect(parseBracketKey("select[posts]", "select")).toEqual(["posts"]);
   });
 
   it("keeps the empty tail of the repeated-key form", () => {
@@ -149,14 +149,14 @@ describe("parseBracketKey — bracketed wire keys", () => {
   });
 
   it("returns null for the bare prefix — callers handle that form themselves", () => {
-    // `filter` alone is the JSON escape hatch; `fields` alone is the root
+    // `filter` alone is the JSON escape hatch; `select` alone is the root
     // fieldset. Neither is a bracket path.
     expect(parseBracketKey("filter", "filter")).toBeNull();
-    expect(parseBracketKey("fields", "fields")).toBeNull();
+    expect(parseBracketKey("select", "select")).toBeNull();
   });
 
   it("returns null for a key belonging to another parameter", () => {
-    expect(parseBracketKey("fields[posts]", "filter")).toBeNull();
+    expect(parseBracketKey("select[posts]", "filter")).toBeNull();
     expect(parseBracketKey("sort", "filter")).toBeNull();
     expect(parseBracketKey("filterish[age]", "filter")).toBeNull();
   });
@@ -181,25 +181,25 @@ describe("FieldSelection — sparse fieldsets", () => {
     }
   }
 
-  it("reports root: null when no fields param is sent — the DTO decides", () => {
+  it("reports root: null when no select param is sent — the DTO decides", () => {
     const query = new QueryNormalizer<User>(userMetadata).normalizeWire({}, config);
-    expect(query.fields).toEqual({ root: null, relations: {} });
+    expect(query.select).toEqual({ root: null, relations: {} });
   });
 
-  it("treats an empty fields value as absent, not as an empty selection", () => {
-    const query = new QueryNormalizer<User>(userMetadata).normalizeWire({ fields: "" }, config);
-    expect(query.fields.root).toBeNull();
+  it("treats an empty select value as absent, not as an empty selection", () => {
+    const query = new QueryNormalizer<User>(userMetadata).normalizeWire({ select: "" }, config);
+    expect(query.select.root).toBeNull();
   });
 
   it("narrows the root to the listed columns, in wire order", () => {
-    const query = new QueryNormalizer<User>(userMetadata).normalizeWire({ fields: "name,id" }, config);
-    expect(query.fields.root).toEqual(["name", "id"]);
+    const query = new QueryNormalizer<User>(userMetadata).normalizeWire({ select: "name,id" }, config);
+    expect(query.select.root).toEqual(["name", "id"]);
   });
 
   it("keys relation fieldsets by the relation path as it appeared on the wire", () => {
     const resolver = new RecordingIncludeResolver();
     const normalizer = new QueryNormalizer<User>(userMetadata, [], resolver);
-    normalizer.normalizeWire({ "fields[posts]": "id,title", "fields[posts.comments]": "body" }, config);
+    normalizer.normalizeWire({ "select[posts]": "id,title", "select[posts.comments]": "body" }, config);
     expect(resolver.request?.fields).toEqual({ posts: ["id", "title"], "posts.comments": ["body"] });
   });
 });

@@ -47,7 +47,7 @@ describe("QueryNormalizer — wire params", () => {
         sort: "-createdAt,name",
         limit: "20",
         offset: "20",
-        fields: "id,name,email",
+        select: "id,name,email",
       },
       config,
     );
@@ -57,7 +57,7 @@ describe("QueryNormalizer — wire params", () => {
       { field: "name", direction: "asc" },
     ]);
     expect(query.pagination).toEqual({ limit: 20, offset: 20 });
-    expect(query.fields.root).toEqual(["id", "name", "email"]);
+    expect(query.select.root).toEqual(["id", "name", "email"]);
     expect(query.include).toEqual({});
     expect(query.withDeleted).toBe(false);
     expect(query.count).toBe(true);
@@ -110,7 +110,7 @@ describe("QueryNormalizer — wire params", () => {
         {
           "filter[password][eq]": "x",
           sort: "-password",
-          fields: "password",
+          select: "password",
         },
         config,
       ),
@@ -476,8 +476,8 @@ describe("QueryNormalizer — the whole grammar in one request", () => {
     sort: "-id,title",
     limit: "5",
     offset: "10",
-    fields: "id,title",
-    "fields[comments]": "id,body",
+    select: "id,title",
+    "select[comments]": "id,body",
     include: "comments",
     onlyDeleted: "true",
   };
@@ -498,7 +498,7 @@ describe("QueryNormalizer — the whole grammar in one request", () => {
       { field: "title", direction: "asc" },
     ]);
     expect(query.pagination).toEqual({ limit: 5, offset: 10 });
-    expect(query.fields).toEqual({ root: ["id", "title"], relations: { comments: ["id", "body"] } });
+    expect(query.select).toEqual({ root: ["id", "title"], relations: { comments: ["id", "body"] } });
     expect(query.onlyDeleted).toBe(true);
     expect(query.withDeleted).toBe(false);
     expect(query.count).toBe(true);
@@ -521,7 +521,7 @@ describe("QueryNormalizer — the whole grammar in one request", () => {
     // reporting would produce the same multiset and pass.
     const issues = issuesOf(() =>
       postNormalizer.normalizeWire(
-        { ...wire, "filter[secretA][eq]": "x", sort: "-secretB", fields: "secretC", limit: "abc" },
+        { ...wire, "filter[secretA][eq]": "x", sort: "-secretB", select: "secretC", limit: "abc" },
         postConfig,
       ),
     );
@@ -652,28 +652,28 @@ describe("QueryNormalizer — programmatic input", () => {
  * each must collapse to the *same* `NormalizedQueryContext` before the
  * engine or any adapter sees it, and each must face the same validation.
  */
-describe("QueryNormalizer — the three fields spellings", () => {
+describe("QueryNormalizer — the three select spellings", () => {
   it("collapses root-only sugar and the structured form to one selection", () => {
-    const sugar = normalizer.normalizeInput({ fields: ["id", "name"] }, config);
-    const structured = normalizer.normalizeInput({ fields: { root: ["id", "name"] } }, config);
+    const sugar = normalizer.normalizeInput({ select: ["id", "name"] }, config);
+    const structured = normalizer.normalizeInput({ select: { root: ["id", "name"] } }, config);
 
-    expect(sugar.fields).toEqual({ root: ["id", "name"], relations: {} });
+    expect(sugar.select).toEqual({ root: ["id", "name"], relations: {} });
     expect(sugar).toEqual(structured);
   });
 
   it("treats an omitted and an empty selection alike", () => {
     const omitted = normalizer.normalizeInput({}, config);
-    expect(omitted.fields).toEqual({ root: null, relations: {} });
-    expect(normalizer.normalizeInput({ fields: {} }, config)).toEqual(omitted);
+    expect(omitted.select).toEqual({ root: null, relations: {} });
+    expect(normalizer.normalizeInput({ select: {} }, config)).toEqual(omitted);
   });
 
   it("reads a relation-keyed selection as relations, not as root fields", () => {
     // No include resolver here, so a relation fieldset is *unsupported* —
     // which is exactly the tell that `{ posts: [...] }` was routed to
     // `relations` rather than misread as a root field list.
-    const relationKeyed = issuesOf(() => normalizer.normalizeInput({ fields: { posts: ["title"] } }, config));
+    const relationKeyed = issuesOf(() => normalizer.normalizeInput({ select: { posts: ["title"] } }, config));
     const structured = issuesOf(() =>
-      normalizer.normalizeInput({ fields: { relations: { posts: ["title"] } } }, config),
+      normalizer.normalizeInput({ select: { relations: { posts: ["title"] } } }, config),
     );
 
     expect(relationKeyed).toEqual(structured);
@@ -685,7 +685,7 @@ describe("QueryNormalizer — the three fields spellings", () => {
 
   it("rejects a non-allowlisted root field in either root spelling", () => {
     for (const fields of [["password"], { root: ["password"] }] as const) {
-      const issues = issuesOf(() => normalizer.normalizeInput({ fields } as never, config));
+      const issues = issuesOf(() => normalizer.normalizeInput({ select: fields } as never, config));
       expect(issues[0]).toMatchObject({
         field: "password",
         code: "KAVO_QUERY_INVALID_FIELD",
@@ -694,13 +694,13 @@ describe("QueryNormalizer — the three fields spellings", () => {
   });
 
   // Runtime strings can defeat every one of these; the type system is not
-  // the only gate, and a malformed `fields` value must never throw — that
+  // the only gate, and a malformed `select` value must never throw — that
   // would surface as a 500, not a 400.
-  it("reports a non-object fields value as a query issue rather than throwing", () => {
+  it("reports a non-object select value as a query issue rather than throwing", () => {
     for (const bad of [null, "id,name", 42, true]) {
-      const issues = issuesOf(() => normalizer.normalizeInput({ fields: bad } as never, config));
+      const issues = issuesOf(() => normalizer.normalizeInput({ select: bad } as never, config));
       expect(issues[0]).toMatchObject({
-        field: "fields",
+        field: "select",
         code: "KAVO_QUERY_INVALID_VALUE",
       });
     }
@@ -708,10 +708,10 @@ describe("QueryNormalizer — the three fields spellings", () => {
 
   it("rejects mixing the structured and relation-keyed spellings rather than dropping the relation fieldset", () => {
     const issues = issuesOf(() =>
-      normalizer.normalizeInput({ fields: { root: ["id"], posts: ["title"] } } as never, config),
+      normalizer.normalizeInput({ select: { root: ["id"], posts: ["title"] } } as never, config),
     );
     expect(issues[0]).toMatchObject({
-      field: "fields.posts",
+      field: "select.posts",
       code: "KAVO_QUERY_INVALID_VALUE",
     });
   });
@@ -733,13 +733,13 @@ describe("allowlist rejection messages", () => {
   });
 
   it("stops appending the hint once a request is past a handful of problems", () => {
-    // `?fields=a1,…,a5000` is a legal query string, and the hint is not
+    // `?select=a1,…,a5000` is a legal query string, and the hint is not
     // free: it walks the whole allowlist per rejected name and adds a few
     // hundred bytes per issue. Uncapped, one request becomes a megabyte of
     // prose and an O(names × allowlist) sweep. The leading sentence — the
     // part that says what was refused — is never dropped.
     const many = Array.from({ length: 200 }, (_unused, index) => `bad${index}`).join(",");
-    const issues = issuesOf(() => normalizer.normalizeWire({ fields: many }, config));
+    const issues = issuesOf(() => normalizer.normalizeWire({ select: many }, config));
     expect(issues).toHaveLength(200);
     expect(issues.every((issue) => issue.detail.includes("cannot be used for selection"))).toBe(true);
     expect(issues.filter((issue) => issue.detail.includes("allowlists.selectable"))).toHaveLength(5);
@@ -753,7 +753,7 @@ describe("allowlist rejection messages", () => {
   });
 
   it("names allowlists.selectable for a selected field", () => {
-    const detail = issuesOf(() => normalizer.normalizeWire({ fields: "emial" }, config))[0]!.detail;
+    const detail = issuesOf(() => normalizer.normalizeWire({ select: "emial" }, config))[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
     expect(detail).toContain("allowlists.selectable on the User config");
   });
@@ -786,7 +786,7 @@ describe("allowlist rejection messages", () => {
   });
 
   it("collects every rejection into one round trip", () => {
-    const issues = issuesOf(() => normalizer.normalizeWire({ sort: "emial", fields: "nmae" }, config));
+    const issues = issuesOf(() => normalizer.normalizeWire({ sort: "emial", select: "nmae" }, config));
     expect(issues).toHaveLength(2);
     expect(issues.every((issue) => issue.detail.includes("Did you mean"))).toBe(true);
   });
@@ -977,21 +977,21 @@ describe("QueryNormalizer — repeated-key and malformed wire spellings", () => 
   });
 
   it("reports a repeated-key root fields instead of throwing, and selects nothing", () => {
-    const issues = issuesOf(() => normalizer.normalizeWire({ fields: ["id", "name"] } as never, config));
-    expect(issues[0]).toMatchObject({ field: "fields", code: "KAVO_QUERY_INVALID_VALUE" });
+    const issues = issuesOf(() => normalizer.normalizeWire({ select: ["id", "name"] } as never, config));
+    expect(issues[0]).toMatchObject({ field: "select", code: "KAVO_QUERY_INVALID_VALUE" });
   });
 
   it("skips an empty token inside fields", () => {
-    const query = normalizer.normalizeWire({ fields: "id,,name" }, config);
-    expect(query.fields.root).toEqual(["id", "name"]);
+    const query = normalizer.normalizeWire({ select: "id,,name" }, config);
+    expect(query.select.root).toEqual(["id", "name"]);
   });
 
   it("reports a non-string relation fieldset under its raw wire key", () => {
-    // The key is echoed verbatim (`fields[comments]`, not `comments`) so
+    // The key is echoed verbatim (`select[comments]`, not `comments`) so
     // the client can find the parameter it actually sent.
     const issues = issuesOf(() =>
-      postNormalizer.normalizeWire({ include: "comments", "fields[comments]": ["id"] } as never, postConfig),
+      postNormalizer.normalizeWire({ include: "comments", "select[comments]": ["id"] } as never, postConfig),
     );
-    expect(issues[0]).toMatchObject({ field: "fields[comments]", code: "KAVO_QUERY_INVALID_VALUE" });
+    expect(issues[0]).toMatchObject({ field: "select[comments]", code: "KAVO_QUERY_INVALID_VALUE" });
   });
 });

@@ -131,7 +131,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     });
 
     it("applies sparse fieldsets after DTO mapping", async () => {
-      const response = await request(server()).get("/cats").query("fields=id,name&sort=name&limit=1").expect(200);
+      const response = await request(server()).get("/cats").query("select=id,name&sort=name&limit=1").expect(200);
       expect(Object.keys(response.body.items[0])).toEqual(["id", "name"]);
     });
 
@@ -149,7 +149,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         expect.objectContaining({ field: "livesLeft", code: "KAVO_QUERY_INVALID_FIELD" }),
       ]);
 
-      const selected = await request(server()).get("/cats").query("fields=id,createdAt").expect(400);
+      const selected = await request(server()).get("/cats").query("select=id,createdAt").expect(400);
       expect(selected.body.errors).toEqual([
         expect.objectContaining({ field: "createdAt", code: "KAVO_QUERY_INVALID_FIELD" }),
       ]);
@@ -228,7 +228,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       // …and narrowed by a per-node fieldset.
       const narrowed = await request(server())
-        .get(`/cats?include=owner&fields[owner]=id,name&filter[name][eq]=Kit`)
+        .get(`/cats?include=owner&select[owner]=id,name&filter[name][eq]=Kit`)
         .expect(200);
       expect(narrowed.body.items[0].owner).toEqual({ id: ownerId, name: "Rae" });
 
@@ -273,7 +273,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       const document = SwaggerModule.createDocument(getApp(), new DocumentBuilder().build());
       const params = (document.paths["/cats"]?.get?.parameters ?? []) as { name: string; description?: string }[];
       expect(params.find((param) => param.name === "include")?.description).toContain("Includable: owner");
-      expect(params.map((param) => param.name)).toContain("fields[owner]");
+      expect(params.map((param) => param.name)).toContain("select[owner]");
     });
 
     it("soft-deletes, restores, and purges owners", async () => {
@@ -337,7 +337,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         expect.objectContaining({ field: "deletedAt", code: "KAVO_QUERY_INVALID_FIELD" }),
       ]);
 
-      const selected = await request(server()).get("/owners").query("fields=id,deletedAt").expect(400);
+      const selected = await request(server()).get("/owners").query("select=id,deletedAt").expect(400);
       expect(selected.body.errors).toEqual([
         expect.objectContaining({ field: "deletedAt", code: "KAVO_QUERY_INVALID_FIELD" }),
       ]);
@@ -420,7 +420,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       // …and narrowed by a per-node fieldset, same as the to-one `owner` edge on cats.
       const narrowed = await request(server())
-        .get(`/owners/${ownerId}?include=address&fields[address]=street,city`)
+        .get(`/owners/${ownerId}?include=address&select[address]=street,city`)
         .expect(200);
       expect(narrowed.body.address).toEqual({ street: "10 Elm St", city: "Ogdenville" });
     });
@@ -558,11 +558,11 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(detached.body.address).toBeNull();
     });
 
-    it("documents include=address and fields[address] in the OpenAPI schema", () => {
+    it("documents include=address and select[address] in the OpenAPI schema", () => {
       const document = SwaggerModule.createDocument(getApp(), new DocumentBuilder().build());
       const params = (document.paths["/owners"]?.get?.parameters ?? []) as { name: string; description?: string }[];
       expect(params.find((param) => param.name === "include")?.description).toContain("address");
-      expect(params.map((param) => param.name)).toContain("fields[address]");
+      expect(params.map((param) => param.name)).toContain("select[address]");
     });
 
     it("round-trips the nullable startedAt date on owners", async () => {
@@ -763,7 +763,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(fetched.body.tags).toHaveLength(2);
 
       // Narrowed by a per-node fieldset, same as the to-one `owner` edge.
-      const narrowed = await request(server()).get(`/cats/${catId}?include=tags&fields[tags]=id`).expect(200);
+      const narrowed = await request(server()).get(`/cats/${catId}?include=tags&select[tags]=id`).expect(200);
       expect(narrowed.body.tags).toEqual(expect.arrayContaining([{ id: tagIdA }, { id: tagIdB }]));
 
       // Replacing the tag set on update: this is the case that would fail if
@@ -1214,7 +1214,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
 
       const narrowed = await request(server())
         .get(`/addresses/${id}`)
-        .query("fields=street,city,postalCode")
+        .query("select=street,city,postalCode")
         .expect(200);
       expect(Object.keys(narrowed.body).sort()).toEqual(["city", "formattedAddress", "postalCode", "street"]);
     });

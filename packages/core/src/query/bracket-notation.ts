@@ -6,7 +6,7 @@
  *
  * Returns `null` when the key is not `<prefix>[...]...` — including the
  * bare prefix itself, which callers treat separately (`filter` alone is
- * the JSON escape hatch; `fields` alone is the root fieldset).
+ * the JSON escape hatch; `select` alone is the root fieldset).
  */
 export function parseBracketKey(key: string, prefix: string): readonly string[] | null {
   if (!key.startsWith(prefix + "[") || !key.endsWith("]")) {

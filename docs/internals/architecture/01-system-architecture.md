@@ -36,7 +36,7 @@ flowchart TB
 
     subgraph core["@kavo/core — the hub (zero dependencies)"]
         E["KavoEngine (request lifecycle)"]
-        Q[Query model: filter AST, pagination, sort, fields]
+        Q[Query model: filter AST, pagination, sort, select]
         D[DTO resolution + serialization]
         CF[Layered configuration]
         R["Operation registry (dispatch table)"]

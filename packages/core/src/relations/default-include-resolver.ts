@@ -192,7 +192,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
    *     ADR-0044), resolved on the config of the entity that declared the
    *     `include` edge, so a nested owner's ceiling applies at its level.
    *
-   * With a ceiling and no `fields[<path>]=` in the request, the ceiling *is*
+   * With a ceiling and no `select[<path>]=` in the request, the ceiling *is*
    * the node's fieldset — the "default and ceiling" the ADR promises. With a
    * request, a field outside the ceiling is a 400, the same as one outside
    * `selectable`. Stitching keys are not added here: they are fetched
@@ -211,12 +211,12 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       return ceiling === undefined ? null : [...ceiling];
     }
     // `IncludeRequest.fields` types this as `readonly string[]`, but the
-    // programmatic `QueryContext.fields` entry point can hand a caller's
-    // malformed value straight through — the wire path (`parseFields`)
+    // programmatic `QueryContext.select` entry point can hand a caller's
+    // malformed value straight through — the wire path (`parseSelect`)
     // guarantees an array of strings and never reaches this branch. A
     // shape this far from what was declared must become an issue, not an
     // uncaught `TypeError` from the loop below: that would surface as a
-    // 500, the same class of bug already closed for the top-level `fields`
+    // 500, the same class of bug already closed for the top-level `select`
     // value in `QueryNormalizer.collapseFieldSelection`.
     if (!Array.isArray(requested)) {
       issues.push({

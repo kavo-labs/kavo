@@ -832,11 +832,11 @@ describe("cursor pagination end to end", () => {
     const { crud } = cursorCrud();
     await seed(crud, 4);
 
-    const first = await crud.findMany({ limit: 2, fields: { root: ["name"] } } as never);
+    const first = await crud.findMany({ limit: 2, select: { root: ["name"] } } as never);
     expect(first.items[0]).not.toHaveProperty("id");
     const second = await crud.findMany({
       limit: 2,
-      fields: { root: ["name"] },
+      select: { root: ["name"] },
       cursor: nextCursorOf(first),
     } as never);
     expect(second.items.map((item) => (item as { name: string }).name)).toEqual(["user-3", "user-4"]);

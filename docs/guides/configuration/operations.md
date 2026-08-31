@@ -132,7 +132,7 @@ Worth knowing before you reach for one:
 
   Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing.
 
-  A result the projection empties raises, rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of three mistakes it is: no DTO and no field in common with the entity, a registered DTO the handler's keys don't match, or a registered DTO with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array (the last being what a handler that meant `cardinality: "many"` and left it at the default returns). It does not fire under an explicit `fields=`, which can empty a projection on its own.
+  A result the projection empties raises, rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of three mistakes it is: no DTO and no field in common with the entity, a registered DTO the handler's keys don't match, or a registered DTO with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array (the last being what a handler that meant `cardinality: "many"` and left it at the default returns). It does not fire under an explicit `select=`, which can empty a projection on its own.
 
   Two things follow from it being a request-time refusal. The handler has already run, so a write it made through `context.repository` stands. And a partial strip, a result mixing entity fields with its own, is still silent, because that's what a projection is for.
 
@@ -188,7 +188,7 @@ export class BookController {}
 - **Contributor input**: the wrapped handler's whole result (`entities`, `total`, and any `meta` it already set) plus the request `KavoContext`. It may be `async`.
 - **Merge precedence**: the contributor's keys win. The inner handler's `meta` is the base and the contributor merges over it, so the outermost wrap owns any key it names; keys it doesn't name pass through.
 - **Overriding that**: the inner bag is in hand, so return `{ ...mine, ...result.meta }` to let the inner handler win instead.
-- **Serialization**: none. `meta` is your data, not entity data: no DTO projection, no `fields=` selection, no renaming. It must be JSON-serializable.
+- **Serialization**: none. `meta` is your data, not entity data: no DTO projection, no `select=` selection, no renaming. It must be JSON-serializable.
 - **Nothing contributed**: the key is left off the response entirely. Judged on the merged bag, so `{}` from a contributor is the same as no contributor at all.
 - **Wrong-shaped handler**: wrapping a handler that doesn't return `{ entities, total }` raises `ConfigurationException` (`KAVO_CONFIG_INVALID`) naming the operation, rather than serving a malformed envelope.
 

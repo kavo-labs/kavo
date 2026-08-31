@@ -37,7 +37,7 @@ export interface QueryContext<Entity = unknown> {
    */
   readonly since?: string | null;
   /** Sparse fieldsets; a bare array is sugar for root-only selection. */
-  readonly fields?: FieldSelectionInput<Entity>;
+  readonly select?: FieldSelectionInput<Entity>;
   /**
    * Relation include paths (`['profile', 'posts.comments']`).
    *
@@ -66,7 +66,7 @@ export interface NormalizedQueryContext<Entity = unknown> {
    * deliberately does not carry.
    */
   readonly pagination: Pagination<Entity>;
-  readonly fields: FieldSelection<Entity>;
+  readonly select: FieldSelection<Entity>;
   /** Validated include tree; empty object when nothing is included. */
   readonly include: IncludeTree;
   readonly withDeleted: boolean;

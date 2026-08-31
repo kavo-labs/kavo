@@ -75,8 +75,8 @@ describe("SQL injection via the query grammar (identifier position)", () => {
     expect(await catCount()).toBeGreaterThanOrEqual(0); // table still exists — a dropped table would 500, not 400
   });
 
-  it("rejects an injected identifier in fields= (select) as an unknown field", async () => {
-    const response = await request(server()).get("/cats").query("fields=id,name); DROP TABLE cat; --").expect(400);
+  it("rejects an injected identifier in select= as an unknown field", async () => {
+    const response = await request(server()).get("/cats").query("select=id,name); DROP TABLE cat; --").expect(400);
     expect(response.body.errors).toEqual([expect.objectContaining({ code: "KAVO_QUERY_INVALID_FIELD" })]);
   });
 
@@ -84,7 +84,7 @@ describe("SQL injection via the query grammar (identifier position)", () => {
     const before = await catCount();
     await request(server())
       .get("/cats")
-      .query("filter[name][eq]=x&sort=name; DROP TABLE cat --&fields=id; DROP TABLE owner --")
+      .query("filter[name][eq]=x&sort=name; DROP TABLE cat --&select=id; DROP TABLE owner --")
       .expect(400);
     expect(await catCount()).toBe(before);
     // The table is not just present — it still serves ordinary reads.

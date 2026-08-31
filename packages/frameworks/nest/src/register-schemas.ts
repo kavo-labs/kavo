@@ -29,7 +29,7 @@
  * | `<Entity>Include`       | the includable relation paths (issue #313)        |
  * | `<Entity>Sort`          | the sortable keys, `-` = descending (issue #313)  |
  * | `<Entity>Filter`        | the structured filter predicate (issue #314, ADR-0042) |
- * | `<Entity>Query`         | the documented-only `filter`+`sort`+`pagination`+`fields`+`include`+`search` aggregate (issue #314, ADR-0042) |
+ * | `<Entity>Query`         | the documented-only `filter`+`sort`+`pagination`+`select`+`include`+`search` aggregate (issue #314, ADR-0042) |
  * | `<Entity><Operation>`   | a per-operation `dto.output` (issue #131) or a custom op's own output shape — single-row |
  * | `<Entity><Operation>List` | the same, `many` — plus `…ListItem` / `…ListMeta` |
  * | `KavoProblemDetails`    | shared RFC 9457 error body (400/404/409/412)      |

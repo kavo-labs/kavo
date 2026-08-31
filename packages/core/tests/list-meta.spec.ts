@@ -77,7 +77,7 @@ describe("ListResultDto.meta — the handler's contribution reaches the envelope
   it("leaves meta whole when field selection narrows the items", async () => {
     const { crud } = makeCrud(findManyHandler(fixedHandler({ entities: [], total: 0, meta: { keep: { me: true } } })));
 
-    const list = await crud.findMany({ fields: { root: ["id"] } } as never);
+    const list = await crud.findMany({ select: { root: ["id"] } } as never);
     expect(list.meta).toEqual({ keep: { me: true } });
   });
 

@@ -472,7 +472,7 @@ export class KavoEngine<Entity extends object> {
       filter: { root: null },
       sort: [],
       pagination: { limit: 1, offset: 0 },
-      fields: { root: null, relations: {} },
+      select: { root: null, relations: {} },
       include: {},
       withDeleted: true,
       onlyDeleted: false,
@@ -837,7 +837,7 @@ export class KavoEngine<Entity extends object> {
 
   /**
    * The ETag of the target row's **canonical read representation** — what
-   * `findOne` on that id with no `fields`/`include`/`sort` params would
+   * `findOne` on that id with no `select`/`include`/`sort` params would
    * return. That is the representation a client's `If-Match` token came
    * from, so it is the one the token is compared against; an ETag taken
    * from a field-narrowed read identifies a different representation and
@@ -1276,7 +1276,7 @@ export class KavoEngine<Entity extends object> {
       filter: { root: null },
       sort: [],
       pagination: { limit: 0, offset: 0 },
-      fields: { root: null, relations: {} },
+      select: { root: null, relations: {} },
       include: {},
       withDeleted: false,
       onlyDeleted: false,
@@ -1559,7 +1559,7 @@ function registeredIds<Entity extends object>(registry: OperationRegistry<Entity
  * The cache key's query half: a plain-data projection of the normalized
  * query, because the include tree carries live `RelationDescriptor` objects
  * (`IncludeNode.relation`) that `canonicalize` must not serialize — the
- * fingerprint folds each node down to its query-decided parts, `fields`
+ * fingerprint folds each node down to its query-decided parts, `select`
  * and `children` (the paths are the keys). Everything that changes a
  * `findOne`/`findMany` response is included. Per-call *settings* are
  * deliberately not (ADR-0031): the key is entity + operation + target id +
@@ -1573,7 +1573,7 @@ function queryFingerprint<Entity>(query: NormalizedQueryContext<Entity>): unknow
     filter: query.filter,
     sort: query.sort,
     pagination: query.pagination,
-    fields: query.fields,
+    select: query.select,
     include: includeFingerprint(query.include),
     withDeleted: query.withDeleted,
     onlyDeleted: query.onlyDeleted,
@@ -1640,7 +1640,7 @@ function cloneResponsePayload(response: KavoResponse): KavoResponse {
  * narrowing — a handler returning a row with a subset of the entity's
  * fields — is exactly what the projection is for and must stay silent.
  *
- * Skipped under an explicit `fields=`, because sparse selection can empty
+ * Skipped under an explicit `select=`, because sparse selection can empty
  * the projection on its own and the message would then blame the wrong
  * thing. That request is the client's mistake, and a narrowed read of an
  * operation whose shape is already wrong will trip this the moment the
@@ -1662,7 +1662,7 @@ function validateProjectedResult<Entity>(
   if (isStandardOperationId(descriptor.id)) {
     return;
   }
-  if (context.query?.fields.root != null) {
+  if (context.query?.select.root != null) {
     return;
   }
   if (!carriesSomething(source)) {

@@ -27,7 +27,7 @@ import { parseBracketKey } from "./bracket-notation.js";
  * same normalized shape, so the engine and adapters only ever see one
  * canonical, validated form.
  *
- * All issues from all sections (filter, sort, fields, pagination,
+ * All issues from all sections (filter, sort, select, pagination,
  * unsupported params) are collected into a single
  * `QueryValidationException`, so a client fixes its request in one round
  * trip.
@@ -78,8 +78,8 @@ export class QueryNormalizer<Entity = unknown> {
 
     const clientSort = parseSort(rawParams["sort"], config, issues);
     let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
-    const fields = parseFields(rawParams, config, issues);
-    const include = this.resolveIncludes(parseIncludePaths(rawParams["include"], issues), fields, config, issues);
+    const select = parseSelect(rawParams, config, issues);
+    const include = this.resolveIncludes(parseIncludePaths(rawParams["include"], issues), select, config, issues);
 
     let pagination: Pagination<Entity> = { limit: 0, offset: 0 };
     try {
@@ -128,7 +128,7 @@ export class QueryNormalizer<Entity = unknown> {
       filter,
       sort,
       pagination,
-      fields,
+      select,
       include,
       withDeleted,
       onlyDeleted,
@@ -165,17 +165,17 @@ export class QueryNormalizer<Entity = unknown> {
     }
     let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
 
-    const { root: rootFields, relations: relationFields } = collapseFieldSelection<Entity>(input.fields, issues);
+    const { root: rootFields, relations: relationFields } = collapseFieldSelection<Entity>(input.select, issues);
     if (rootFields != null) {
       for (const field of rootFields) {
         requireAllowlisted(field as string, config, "selection", issues);
       }
     }
-    const fields: FieldSelection<Entity> = {
+    const select: FieldSelection<Entity> = {
       root: rootFields,
       relations: relationFields,
     };
-    const include = this.resolveIncludes(input.include ?? [], fields, config, issues);
+    const include = this.resolveIncludes(input.include ?? [], select, config, issues);
 
     const { defaultLimit, maxLimit, strategy } = config.settings.pagination;
     // `NonePaginationStrategy` (`pagination-strategies.ts`) is never invoked
@@ -242,7 +242,7 @@ export class QueryNormalizer<Entity = unknown> {
       filter: { root },
       sort,
       pagination,
-      fields,
+      select,
       include,
       withDeleted,
       onlyDeleted,
@@ -767,9 +767,9 @@ function parseSort<Entity>(
 }
 
 /**
- * Collapse the three caller-facing `fields` spellings into the canonical
+ * Collapse the three caller-facing `select` spellings into the canonical
  * `{ root, relations }` pair — the programmatic mirror of what
- * {@link parseFields} does for wire params.
+ * {@link parseSelect} does for wire params.
  *
  * Discrimination is structural and in this order: an array is root-only
  * sugar; an object naming `root` or `relations` is the structured form;
@@ -778,9 +778,9 @@ function parseSort<Entity>(
  *
  * Shape validation *is* part of this function — unlike the rest of the
  * fieldset (which the caller allowlist-checks and the include resolver
- * validates), a malformed `fields` value has no later gate to catch it, so
+ * validates), a malformed `select` value has no later gate to catch it, so
  * this is the one place it can be. A non-object value or a structured
- * literal mixing in a relation-keyed key both fail the same way `parseFields`
+ * literal mixing in a relation-keyed key both fail the same way `parseSelect`
  * fails the equivalent wire input: an issue, not a thrown error — nothing
  * here may throw, or it surfaces as a 500 instead of a 400.
  */
@@ -799,9 +799,9 @@ function collapseFieldSelection<Entity>(
   }
   if (input === null || typeof input !== "object") {
     issues.push({
-      field: "fields",
+      field: "select",
       code: "KAVO_QUERY_INVALID_VALUE",
-      detail: "'fields' must be an array, or an object of relation fieldsets.",
+      detail: "'select' must be an array, or an object of relation fieldsets.",
     });
     return { root: null, relations: {} };
   }
@@ -810,9 +810,9 @@ function collapseFieldSelection<Entity>(
     const unknownKeys = Object.keys(structured).filter((key) => key !== "root" && key !== "relations");
     for (const key of unknownKeys) {
       issues.push({
-        field: `fields.${key}`,
+        field: `select.${key}`,
         code: "KAVO_QUERY_INVALID_VALUE",
-        detail: `'fields.${key}' cannot be mixed with 'root'/'relations' — use 'relations.${key}' instead.`,
+        detail: `'select.${key}' cannot be mixed with 'root'/'relations' — use 'relations.${key}' instead.`,
       });
     }
     return { root: structured.root ?? null, relations: structured.relations ?? {} };
@@ -820,12 +820,12 @@ function collapseFieldSelection<Entity>(
   return { root: null, relations: input as Readonly<Record<string, readonly string[]>> };
 }
 
-function parseFields<Entity>(
+function parseSelect<Entity>(
   rawParams: Readonly<Record<string, unknown>>,
   config: ResolvedEntityConfig<Entity>,
   issues: QueryIssueDto[],
 ): FieldSelection<Entity> {
-  // `fields[posts.comments]=id,body` — the key is the relation path. The
+  // `select[posts.comments]=id,body` — the key is the relation path. The
   // include resolver validates it against the *target* entity's allowlist,
   // so nothing beyond shape is checked here.
   //
@@ -835,7 +835,7 @@ function parseFields<Entity>(
   // silently vanishes instead of reaching the resolver and being rejected.
   const relations: Record<string, readonly string[]> = Object.create(null);
   for (const key of Object.keys(rawParams)) {
-    const segments = parseBracketKey(key, "fields");
+    const segments = parseBracketKey(key, "select");
     if (segments === null || segments.length !== 1 || segments[0] === "") {
       continue;
     }
@@ -851,15 +851,15 @@ function parseFields<Entity>(
     relations[segments[0]!] = value.split(",").filter((field) => field !== "");
   }
 
-  const raw = rawParams["fields"];
+  const raw = rawParams["select"];
   if (raw === undefined || raw === null || raw === "") {
     return { root: null, relations };
   }
   if (typeof raw !== "string") {
     issues.push({
-      field: "fields",
+      field: "select",
       code: "KAVO_QUERY_INVALID_VALUE",
-      detail: "'fields' must be a comma-separated field list.",
+      detail: "'select' must be a comma-separated field list.",
     });
     return { root: null, relations };
   }

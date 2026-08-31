@@ -130,7 +130,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
 
     it("applies sparse fieldsets after DTO mapping", async () => {
       await seed();
-      const list = await request(server()).get("/cats?fields=id,name&limit=1&sort=name").expect(200);
+      const list = await request(server()).get("/cats?select=id,name&limit=1&sort=name").expect(200);
       expect(Object.keys(list.body.items[0]).sort()).toEqual(["id", "name"]);
     });
 
@@ -139,7 +139,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       // `livesLeft` is returned by CatItemDto but is not on any allowlist.
       await request(server()).get("/cats?filter[livesLeft][eq]=9").expect(400);
       await request(server()).get("/cats?sort=livesLeft").expect(400);
-      await request(server()).get("/cats?fields=id,livesLeft").expect(400);
+      await request(server()).get("/cats?select=id,livesLeft").expect(400);
     });
 
     it("honors the entity-scope pagination override (defaultLimit 10, max 50)", async () => {
@@ -400,7 +400,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication, getOrm: () 
       // The allowlists use `{ exclude: ["deletedAt"] }`.
       await request(server()).get("/owners?filter[deletedAt][isNull]=true").expect(400);
       await request(server()).get("/owners?sort=deletedAt").expect(400);
-      await request(server()).get("/owners?fields=id,deletedAt").expect(400);
+      await request(server()).get("/owners?select=id,deletedAt").expect(400);
 
       const list = await request(server()).get("/owners").expect(200);
       expect(list.body.items[0]).not.toHaveProperty("deletedAt");

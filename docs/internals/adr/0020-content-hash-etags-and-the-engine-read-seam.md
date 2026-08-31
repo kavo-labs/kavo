@@ -33,11 +33,11 @@ Two further tensions come with the hash approach:
 - A hash depends on key order unless something makes it not. A DTO field
   reorder would otherwise silently invalidate every cached copy.
 - An ETag identifies a **representation**, not a resource (RFC 9110
-  §8.8.3). `GET /users/1?fields=name` and `GET /users/1` are different
+  §8.8.3). `GET /users/1?select=name` and `GET /users/1` are different
   representations, so hashing what is actually sent gives them different
   tags — which is correct, and also means the tag from a narrowed read
   cannot be used as an `If-Match` token, because a write has no
-  `fields` to narrow by.
+  `select` to narrow by.
 
 ## Decision
 
@@ -52,7 +52,7 @@ typed `globalThis` accessor, the way `randomUuid` already reaches
 fail `pnpm depcruise`, not merely bend a convention.
 
 **2. Tags are per representation.** A response's `etag` is the hash of
-that response's own serialized item, so `fields`/`include` change it.
+that response's own serialized item, so `select`/`include` change it.
 Collection responses (`findMany`) carry none — a list's identity spans
 pagination, sort and filter, which is a different feature.
 
@@ -60,7 +60,7 @@ pagination, sort and filter, which is a different feature.
 and the engine — not a handler — evaluates `If-Match`. It performs the
 pre-read itself, immediately before handler execution, and hashes the
 target row's **canonical read representation**: what `findOne` on that id
-with no `fields`/`include`/`sort` params would return (the `item` DTO
+with no `select`/`include`/`sort` params would return (the `item` DTO
 resolved for `findOne`). That is the representation an `If-Match` token
 came from, so it is the one the token is compared against. `createCrud`
 already holds the adapter, which is both halves, so the wiring costs
@@ -146,7 +146,7 @@ its own value is untouched.
   writes is the change that would, and it is deliberately out of scope —
   if it ever lands, it supersedes point 1 here, not the reader seam.
 - **An `If-Match` token must come from an unnarrowed read.** An ETag
-  taken from `GET /users/1?fields=name` identifies a different
+  taken from `GET /users/1?select=name` identifies a different
   representation and will not match the canonical one, so it 412s. This
   is spec-conformant and surprising in equal measure, which is why it is
   documented for adopters and not only here. A **write** response's tag

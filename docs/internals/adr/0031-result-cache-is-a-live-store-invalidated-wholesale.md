@@ -79,8 +79,8 @@ bucket; a cyclic value throws a `RangeError` at a 512-level depth guard
 rather than overflowing the stack. No escape hatch; the constraint is
 documented in the result-cache and auth guides. `queryFingerprint` is a plain-data
 projection of the normalized query — `filter`, `sort`, `pagination`,
-`fields`, `include`, `withDeleted`, `onlyDeleted`, `count` — folding each
-include node down to its query-decided parts, `fields` and `children` (the
+`select`, `include`, `withDeleted`, `onlyDeleted`, `count` — folding each
+include node down to its query-decided parts, `select` and `children` (the
 relation paths are the keys), because `canonicalize` must never serialize a
 live `RelationDescriptor`. Per-call _settings_ are deliberately not in the
 key: a per-call override that reshapes a response without changing the query

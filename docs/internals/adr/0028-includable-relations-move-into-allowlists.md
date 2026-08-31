@@ -130,7 +130,7 @@ appended. Any caller constructing one directly (outside the
 `resolveEntityConfig` call this ADR's decision lives in) needs to add the new
 `includable: readonly string[]` argument in the right position.
 
-**Swagger's `include`/`fields[relation]` docs read `allowlists.includable`
+**Swagger's `include`/`select[relation]` docs read `allowlists.includable`
 instead of `relations.edges`, with one added case.** `{ exclude }` cannot be
 resolved at `@Kavo` decoration time (no ORM metadata exists yet, ADR-0012) —
 the same limitation the other three allowlist keys already have — so

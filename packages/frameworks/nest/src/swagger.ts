@@ -112,25 +112,25 @@ export const KAVO_API_GUIDE = `### List query parameters
 - \`sort\`: comma-separated fields; '-' prefix = descending.
 - \`limit\`: page size (clamped to the configured maximum). Rejected outright on an entity configured with \`pagination.strategy: "none"\`, which always returns the whole match set instead.
 - \`offset\`: zero-based index of the first returned row. Same rejection as \`limit\` under \`pagination.strategy: "none"\`.
-- \`fields\`: sparse fieldset — comma-separated field names.
+- \`select\`: sparse fieldset — comma-separated field names.
 - \`search[query]\`: free-text search across the entity's searchable fields, composed (AND) with any \`filter\`. \`search[mode]\` (\`substring\`, the default, or \`words\`) and \`search[fields]\` (narrows to a subset of the entity's searchable fields) are optional modifiers, and require \`search[query]\` to be present. Only present on entities that have search enabled — see this route's own \`search[fields]\` description.
 
-Each list route's own \`filter\`/\`sort\`/\`fields\`/\`search[fields]\` parameter description names which fields are actually allowed, where the entity's config makes that known.
+Each list route's own \`filter\`/\`sort\`/\`select\`/\`search[fields]\` parameter description names which fields are actually allowed, where the entity's config makes that known.
 
 ### Relation includes (every read route)
 
 - \`include\`: comma-separated relation paths to embed, dot-separated for nesting (e.g. \`include=owner,pets.tags\`).
-- \`fields[relation]\`: sparse fieldset for an included relation node (e.g. \`fields[owner]=id,name\`).
+- \`select[relation]\`: sparse fieldset for an included relation node (e.g. \`select[owner]=id,name\`).
 
 Each read route's own \`include\` parameter description names which relations are actually includable on that entity.
 
 ### Conditional requests (single-row routes only)
 
 - \`If-None-Match\`: revalidate a cached copy — a matching entity-tag answers 304 with no body.
-- \`If-Match\`: apply this write only if the row's current ETag is one of these entity-tags. Take the tag from an unnarrowed read — a \`fields=\`/\`include=\`-narrowed one identifies a different representation and will not match.`;
+- \`If-Match\`: apply this write only if the row's current ETag is one of these entity-tags. Take the tag from an unnarrowed read — a \`select=\`/\`include=\`-narrowed one identifies a different representation and will not match.`;
 
 /**
- * The `filter`/`sort`/`fields` params on a list route — `limit`/`offset`
+ * The `filter`/`sort`/`select` params on a list route — `limit`/`offset`
  * are deliberately not here, see {@link applyPaginationDocs}. A description
  * exactly when decoration time can name the entity's actual allowlisted
  * fields (issue #171):
@@ -156,7 +156,7 @@ function listQueryParams(config: EntityConfig<object> | undefined): readonly { n
   return [
     { name: "filter", description: allowedFieldsDescription(allowlists?.filterable) },
     { name: "sort", description: allowedFieldsDescription(allowlists?.sortable) },
-    { name: "fields", description: allowedFieldsDescription(allowlists?.selectable) },
+    { name: "select", description: allowedFieldsDescription(allowlists?.selectable) },
   ];
 }
 
@@ -249,10 +249,10 @@ export function applySwaggerMetadata(
   // Includes are documented from the entity config's relation allowlist —
   // the only relation knowledge decoration time has (ADR-0012). Every read
   // supports `include` with identical semantics, single-item ones included.
-  // The generic `include`/`fields[relation]` syntax lives only in
+  // The generic `include`/`select[relation]` syntax lives only in
   // `KAVO_API_GUIDE`; per-route, `include` carries just which
   // relations this entity actually allows (mirroring `listQueryParams`
-  // above), and `fields[relation]` carries no description at all — its
+  // above), and `select[relation]` carries no description at all — its
   // relation name is already the param name, so there is nothing
   // entity-specific left to add. When no relation is includable, the
   // parameter could never do anything, so it is omitted entirely rather
@@ -287,12 +287,12 @@ export function applySwaggerMetadata(
         const ceiling = relationFieldCeiling(config, relation);
         apply(
           swagger.ApiQuery({
-            name: `fields[${relation}]`,
+            name: `select[${relation}]`,
             required: false,
             type: String,
             // A per-relation projection ceiling (ADR-0044) is the one
             // entity-specific thing worth saying here: the request may
-            // narrow `fields[<relation>]` further but not past this set.
+            // narrow `select[<relation>]` further but not past this set.
             ...(ceiling !== undefined ? { description: `Restricted to: ${ceiling.join(", ")}.` } : {}),
           }),
         );
@@ -458,12 +458,12 @@ export function applyConditionalRequestDocs(
  * `KavoModule`'s discovery binder resolves the entity's config —
  * `KavoBinder.onModuleInit`, long after `@Kavo` decoration ran (ADR-0012).
  *
- * Unlike `filter`/`sort`/`fields` at decoration time, this late binding is
+ * Unlike `filter`/`sort`/`select` at decoration time, this late binding is
  * strictly *better* documentation for `search[fields]`, not a fallback:
  * `service.engine.config.allowlists.searchable` is the fully **resolved**
  * allowlist (ORM metadata already exists by `onModuleInit`), so the
  * `{ exclude }`/unconfigured-default cases that leave `filter`/`sort`/
- * `fields` undescribed at decoration time (`listQueryParams`'s doc comment)
+ * `select` undescribed at decoration time (`listQueryParams`'s doc comment)
  * are no obstacle here — `searchable` is always a concrete array by the
  * time this runs.
  *
@@ -685,11 +685,11 @@ export function applyPaginationDocs(
  *   expected `<Entity>Filter` name, an assumption `hoistQuerySchemas`
  *   makes true absent a genuine cross-entity name collision (ADR-0042).
  * - **`query`** — `<Entity>Query`, the aggregate `filter`+`sort`+
- *   `pagination`+`fields`+`include`+`search` shape for a GraphQL/MCP
+ *   `pagination`+`select`+`include`+`search` shape for a GraphQL/MCP
  *   resolver or a programmatic `QueryContext` caller — documented-only,
  *   published as a component no REST parameter ever `$ref`s (ADR-0042).
  *   `sort`/`pagination`/`include`/`filter` `$ref` the entity's own other
- *   expected component names; `fields`/`search` are inlined rather than
+ *   expected component names; `select`/`search` are inlined rather than
  *   hoisted, since this issue only asks for `Filter`/`Query` as named
  *   components. `search` is omitted when `query.search` doesn't resolve
  *   to an object, the same gate `applySearchQueryDocs` uses.
@@ -862,10 +862,10 @@ export function applyQuerySchemaDocs(
     const queryProperties: Record<string, object> = { filter: filterRef };
     queryProperties.sort = { $ref: `#/components/schemas/${entityName}Sort` };
     queryProperties.pagination = { $ref: `#/components/schemas/${entityName}Pagination` };
-    queryProperties.fields = {
+    queryProperties.select = {
       type: "array",
       items: { type: "string", enum: [...resolved.selectable] },
-      description: "Sparse fieldset for the root resource, as passed to `fields=` (comma-separated).",
+      description: "Sparse fieldset for the root resource, as passed to `select=` (comma-separated).",
     };
     if (resolved.includable.length > 0) {
       queryProperties.include = { $ref: `#/components/schemas/${entityName}Include` };
@@ -884,7 +884,7 @@ export function applyQuerySchemaDocs(
       {
         type: "object",
         description:
-          "The full query surface — filter, sort, pagination, fields, include, search — as one " +
+          "The full query surface — filter, sort, pagination, select, include, search — as one " +
           "typed aggregate, for a GraphQL/MCP resolver or a programmatic QueryContext caller. " +
           "No REST parameter references this shape; REST keeps its flat query params unchanged (ADR-0042).",
         properties: queryProperties,
@@ -1518,7 +1518,7 @@ function includableRelations(config: EntityConfig<object> | undefined): readonly
 /**
  * The per-relation projection ceiling this entity's config imposes on an
  * included `<relation>` (`allowlists.selectable: [..., "<relation>.<field>"]`,
- * ADR-0044) — the field names `fields[<relation>]` is narrowed to, or
+ * ADR-0044) — the field names `select[<relation>]` is narrowed to, or
  * `undefined` when the relation carries no ceiling.
  *
  * Like `includableRelations`, this is decoration-time-resolvable: the ceiling

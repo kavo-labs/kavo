@@ -114,7 +114,7 @@ requiring initializers for narrowing; the tradeoff is documented API.
 
 ## 5. Serialization order (normative)
 
-**DTO mapping first, then field selection.** `fields=id,name` can only
+**DTO mapping first, then field selection.** `select=id,name` can only
 narrow what the resolved DTO exposes — selection never widens a
 projection. Implemented in `DefaultSerializer.serializeItem`:
 projection ∩ selection, applied to every item and list element.
@@ -158,7 +158,7 @@ The rules, all governed by
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Default projection      | Included in `item`/`list` automatically — unless an explicit `allowlists.selectable` omits it (ADR-0026)                         |
 | Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
-| `selectable`            | Joined by default, so `fields=fullName` works; `selectable: false` opts out                                                      |
+| `selectable`            | Joined by default, so `select=fullName` works; `selectable: false` opts out                                                      |
 | `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |
 | Write payloads          | Never writable — a `create`/`update`/`patch` DTO naming one is a bootstrap error, and the deserializer strips the key regardless |
 | Precedence chain        | Outside it: structural entity config like `dto`, resolved once at `createCrud`                                                   |

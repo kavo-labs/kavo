@@ -54,13 +54,13 @@ const equivalents: readonly {
   },
   {
     name: "the root fieldset",
-    nested: { fields: "id,name,email" },
-    flat: { fields: "id,name,email" },
+    nested: { select: "id,name,email" },
+    flat: { select: "id,name,email" },
   },
   {
     name: "a per-relation fieldset",
-    nested: { fields: { posts: "id,title" } },
-    flat: { "fields[posts]": "id,title" },
+    nested: { select: { posts: "id,title" } },
+    flat: { "select[posts]": "id,title" },
   },
   {
     name: "include and withDeleted",
@@ -165,13 +165,13 @@ describe("flattenQuery — idempotent against an already-wrapped WireQuery (issu
     const wired = new WireQuery(params);
 
     // A stale @Override written before issue #25 that still manually wraps
-    // its (now already-wired) query param must not have its filter/fields
+    // its (now already-wired) query param must not have its filter/select
     // silently mangled into `params[filter[status][eq]]` etc.
     expect(flattenQuery(wired as unknown as Record<string, unknown>)).toEqual(params);
   });
 
   it("does not mutate or alias the WireQuery's params object", () => {
-    const params = { fields: "id,title" };
+    const params = { select: "id,title" };
     const wired = new WireQuery(params);
     const flattened = flattenQuery(wired as unknown as Record<string, unknown>);
     expect(flattened).not.toBe(params);

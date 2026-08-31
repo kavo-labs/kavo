@@ -77,8 +77,8 @@ describe("NoSQL operator injection via the query grammar (identifier position)",
     ]);
   });
 
-  it("rejects a $-operator field name in fields= (select) as an unknown field", async () => {
-    const response = await request(server()).get("/articles").query("fields=title,$where").expect(400);
+  it("rejects a $-operator field name in select= as an unknown field", async () => {
+    const response = await request(server()).get("/articles").query("select=title,$where").expect(400);
     expect(response.body.errors).toEqual([expect.objectContaining({ code: "KAVO_QUERY_INVALID_FIELD" })]);
   });
 

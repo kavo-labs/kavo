@@ -14,10 +14,10 @@ A response can carry fields that have no database column behind them, like a `fu
 
 ```
 GET /books/1     → { "id": 1, "title": "Dune", "year": 1965, "displayTitle": "Dune (1965)" }
-GET /books?fields=id,displayTitle
+GET /books?select=id,displayTitle
 ```
 
-From a client's point of view a computed field is an ordinary field: it is in the default response, it can be selected with `fields=`, and it can be narrowed away by an `item`/`list` DTO. Three things it is not:
+From a client's point of view a computed field is an ordinary field: it is in the default response, it can be selected with `select=`, and it can be narrowed away by an `item`/`list` DTO. Three things it is not:
 
 - **Not filterable or sortable.** `filter[displayTitle][eq]=…` and `sort=displayTitle` are a 400, because there is no column to translate to `WHERE`/`ORDER BY`. Filter and sort on the underlying columns instead (`sort=title`).
 - **Not writable.** Sending one in a `POST`/`PUT`/`PATCH` body is silently ignored, like any other non-writable key. A server-side `create`/`update`/`patch` DTO that declares one is a startup error rather than a silent drop.
@@ -40,7 +40,7 @@ Response fields with no backing column, derived from an entity that has already 
 })
 ```
 
-`resolve` is `(entity, context: KavoContext) => unknown`. It derives the value, called once per served item, synchronously (see the caveats below). `selectable` is a `boolean` (default `true`) controlling whether `fields=` may name the field; `false` makes naming it a 400, so read the note below carefully.
+`resolve` is `(entity, context: KavoContext) => unknown`. It derives the value, called once per served item, synchronously (see the caveats below). `selectable` is a `boolean` (default `true`) controlling whether `select=` may name the field; `false` makes naming it a 400, so read the note below carefully.
 
 A declared computed field is in the default `item`/`list` projection with no DTO registration, and in the `selectable` allowlist by default. It is never filterable, sortable, or writable: naming one in `allowlists.filterable`/`sortable` is both a type error and a bootstrap `ConfigurationException`, and so is naming one in a registered `create`/`update`/`patch` DTO. A raw body key is still just dropped, like any other unknown key; the DTO case is a declaration, and every other computed misdeclaration fails at bootstrap too. It also has a wire consequence a silent drop cannot reach: `@ApiBody` is built from the DTO's runtime shape, so OpenAPI would advertise a property the engine unconditionally discards.
 
@@ -52,9 +52,9 @@ A resolver reading `context.app`, like `canEdit` above, needs the module's [`app
 
 Keep it a pure function of the entity as well (plus `context.app` where a field has to vary by caller). It runs per row, so a resolver that queries the database or calls out over the network reintroduces exactly the N+1 that batched includes exist to avoid. Declaring it `async` is a bootstrap error rather than a slow success: the serializer never awaits, so the promise would be emitted as-is and serialize to `{}`.
 
-**`resolve` receives the full fetched row**, not the projected object. Selection is "kept internally, stripped late", so every column is present regardless of `fields=` or the registered `item` DTO. A computed field can therefore surface a value a narrowed DTO or `selectable` list deliberately hides. That is deliberate (`resolve` is server-authored code, the same trust level as `exposeInternals`), but it makes the resolver part of the exposure decision: narrowing the DTO does not narrow what the resolver can see.
+**`resolve` receives the full fetched row**, not the projected object. Selection is "kept internally, stripped late", so every column is present regardless of `select=` or the registered `item` DTO. A computed field can therefore surface a value a narrowed DTO or `selectable` list deliberately hides. That is deliberate (`resolve` is server-authored code, the same trust level as `exposeInternals`), but it makes the resolver part of the exposure decision: narrowing the DTO does not narrow what the resolver can see.
 
-**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?fields=auditNote` is a 400. It does not pin the field into every response: selection narrows the projection uniformly, so any request that sends `fields=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present".
+**What `selectable: false` does and does not mean.** It removes the name from the allowlist, so `?select=auditNote` is a 400. It does not pin the field into every response: selection narrows the projection uniformly, so any request that sends `select=` at all still drops it, and the client has no way to ask for it back. Read it as "not individually selectable", not "always present".
 
 The flag and an explicit `allowlists.selectable` list say different things, deliberately. The flag is a default about nameability and leaves the projection alone. An explicit list is a statement about the response, so a list that omits the field, or excludes it, drops it from responses too. Where both are present the explicit list wins, as it always has ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 

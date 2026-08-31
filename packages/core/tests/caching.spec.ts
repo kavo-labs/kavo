@@ -148,13 +148,13 @@ describe("ETag generation", () => {
     await execute(crud, { operation: "createOne", body: ADA as never });
 
     const full = await execute(crud, { operation: "findOne", id: 1 });
-    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { fields: ["name"] } as never });
+    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { select: ["name"] } as never });
     expect(narrowed.item).toEqual({ name: "Ada" });
     expect(narrowed.etag).not.toBe(full.etag);
   });
 
-  it("tags per representation for include= too, not only fields=", async () => {
-    // The adopter docs name both narrowing knobs; only `fields=` was
+  it("tags per representation for include= too, not only select=", async () => {
+    // The adopter docs name both narrowing knobs; only `select=` was
     // pinned, so an `include=` that stopped changing the tag would have
     // gone unnoticed — and a tag that ignores an embedded relation is a
     // cache that serves the wrong body.
@@ -397,7 +397,7 @@ describe("If-Match on a write", () => {
     // honoring `request.query` without a test noticing.
     const { crud, adapter } = makeCrud();
     await execute(crud, { operation: "createOne", body: ADA as never });
-    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { fields: ["name"] } as never });
+    const narrowed = await execute(crud, { operation: "findOne", id: 1, query: { select: ["name"] } as never });
 
     await expect(
       execute(crud, {

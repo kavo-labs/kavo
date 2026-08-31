@@ -195,7 +195,7 @@ describe("Sparse fieldsets on included nodes", () => {
     await seed();
     const list = await blogs.findMany({
       include: ["articles"],
-      fields: { root: ["_id", "name"], relations: { articles: ["title"] } },
+      select: { root: ["_id", "name"], relations: { articles: ["title"] } },
     });
     expect(list.items[0]).toEqual({
       _id: expect.any(String),

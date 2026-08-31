@@ -90,7 +90,7 @@ Try it:
 
 ```
 POST   /cats                     {"name":"Whiskers","age":3,"size":"small","indoor":true,"livesLeft":9}
-GET    /cats?filter[age][gte]=3&sort=-age&limit=2&offset=0&fields=id,name
+GET    /cats?filter[age][gte]=3&sort=-age&limit=2&offset=0&select=id,name
 GET    /cats/1
 
 POST   /owners                   {"name":"Ada","email":"ada@x.io"}
@@ -101,7 +101,7 @@ DELETE /owners/1/purge           # permanent, and only for an already-deleted ro
 
 GET    /owners?include=pets              # to-many: batch-loaded, one query per page
 GET    /cats?include=owner               # to-one: joined into the same query
-GET    /cats?include=owner&fields[owner]=id,name
+GET    /cats?include=owner&select[owner]=id,name
 POST   /cats                     {"name":"Kit","age":1,"owner":1}   # associate by id
 ```
 

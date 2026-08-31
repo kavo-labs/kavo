@@ -1,7 +1,7 @@
 import type { FieldPath } from "../types/field-path.js";
 
 /**
- * Sparse-fieldset selection (`fields=id,name` / `fields[posts]=id,title`).
+ * Sparse-fieldset selection (`select=id,name` / `select[posts]=id,title`).
  *
  * Selection is applied *after* DTO mapping (DTO mapping → field
  * selection), so it can only narrow what the resolved DTO already exposes.
@@ -9,13 +9,13 @@ import type { FieldPath } from "../types/field-path.js";
 export interface FieldSelection<Entity = unknown> {
   /**
    * Fields of the root resource; `null` means "everything the resolved DTO
-   * allows" (no `fields` param sent). Depth 1: root selection addresses own
+   * allows" (no `select` param sent). Depth 1: root selection addresses own
    * columns — relation shapes are selected via {@link relations}.
    */
   readonly root: readonly FieldPath<Entity, 1>[] | null;
   /**
    * Per-included-relation fieldsets, keyed by relation path as it appeared
-   * on the wire (`fields[posts]=…`). Validated against the *target*
+   * on the wire (`select[posts]=…`). Validated against the *target*
    * entity's selectable allowlist.
    */
   readonly relations: Readonly<Record<string, readonly string[]>>;
@@ -25,9 +25,9 @@ export interface FieldSelection<Entity = unknown> {
  * The three caller-facing spellings of a fieldset, all collapsing to one
  * {@link FieldSelection} in `QueryNormalizer.normalizeInput`:
  *
- * - `['id', 'name']` — root-only sugar, mirroring `?fields=id,name`.
+ * - `['id', 'name']` — root-only sugar, mirroring `?select=id,name`.
  * - `{ root: [...], relations: { posts: [...] } }` — the structured form.
- * - `{ posts: ['id', 'title'] }` — relation-keyed, mirroring `?fields[posts]=`.
+ * - `{ posts: ['id', 'title'] }` — relation-keyed, mirroring `?select[posts]=`.
  *
  * The normalized form is deliberately *not* widened: adapters and the engine
  * still see exactly one shape. Only the input is forgiving.

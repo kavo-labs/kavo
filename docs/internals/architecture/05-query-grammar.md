@@ -57,7 +57,7 @@ GET /users
   &filter[or][1][status][eq]=banned
   &sort=-createdAt,name
   &limit=20&offset=20
-  &fields=id,name,email
+  &select=id,name,email
 ```
 
 resolves to
@@ -67,7 +67,7 @@ AND[ age GTE 18, status IN [active, pending], name LIKE "%john%",
      OR[ role EQ "admin", status EQ "banned" ] ]
 sort:       [{ createdAt desc }, { name asc }]
 pagination: { limit: 20, offset: 20 }
-fields:     root: [id, name, email]
+select:     root: [id, name, email]
 ```
 
 ## 3. Grammar rules
@@ -240,9 +240,9 @@ limit ?? defaultLimit, maxLimit)`) rather than calling the registered
   strategy, the same as it already does for `offset`/`page`, so nothing
   short of a name check would make it unbounded there too.
 
-- **Field selection:** `fields=id,name,email` — sparse fieldset for the
+- **Field selection:** `select=id,name,email` — sparse fieldset for the
   root resource, validated against the selectable allowlist.
-  `fields[<relation path>]=id,title` narrows an included node, validated
+  `select[<relation path>]=id,title` narrows an included node, validated
   against the _target_ entity's allowlist (doc 12). Programmatic callers
   pass `FieldSelectionInput`, whose three spellings mirror these wire forms
   and collapse to the same normalized selection (doc 03).
@@ -299,7 +299,7 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
 - **`search[fields]=<comma-list>`** — optional. Narrows which fields this
   call searches to a subset of the entity's resolved `allowlists.searchable`
   set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
-  allowlist-rejection family `filter[...]`/`sort=`/`fields=` use). Omitted,
+  allowlist-rejection family `filter[...]`/`sort=`/`select=` use). Omitted,
   every field in `searchable` is searched.
 
 **Allowlist.** `EntityConfig.allowlists.searchable` — same
@@ -404,12 +404,12 @@ through `filter`, the same way it composes any other filter.
   prototype-less objects. `filter[__proto__][x]=v` therefore assigns an
   ordinary own key and is rejected as a non-allowlisted field
   (`KAVO_QUERY_INVALID_FIELD`) rather than writing through to
-  `Object.prototype`. The same applies to `fields[__proto__]`, and the
+  `Object.prototype`. The same applies to `select[__proto__]`, and the
   deserializer reads request bodies with an own-property check, so a
   prototype polluted by anything else in the host application still cannot
   add a writable field to a request that omitted it.
 - **One exception, all issues:** every violation across filter, sort,
-  fields, and pagination is collected into a single
+  select, and pagination is collected into a single
   `QueryValidationException`, so a client fixes its request in one round
   trip (`errors[]` in the problem-details body).
 
@@ -418,9 +418,9 @@ through `filter`, the same way it composes any other filter.
 ```
 raw query string (flat bracket keys)
   → DefaultFilterParser   (allowlist + coercion + limits → Filter AST)
-  → sort / fields parsing (allowlists)
+  → sort / select parsing (allowlists)
   → PaginationStrategy    (defaultLimit / maxLimit / 400s)
-  → NormalizedQueryContext  { filter, sort, pagination, fields,
+  → NormalizedQueryContext  { filter, sort, pagination, select,
                               include: {}, withDeleted: false,
                               onlyDeleted: false, count }
 ```

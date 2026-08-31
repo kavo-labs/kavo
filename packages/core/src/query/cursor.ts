@@ -110,7 +110,7 @@ export function decodeCursor<Entity>(
  * {@link encodeCursor} turns into the next page's token.
  *
  * Reads the **entity**, before serialization and field selection, because a
- * client selecting `fields=title` still needs `id` in its cursor. That is
+ * client selecting `select=title` still needs `id` in its cursor. That is
  * also why the normalizer requires every cursor sort key to be *selectable*:
  * `meta` never passes through the serializer, so a value read here reaches
  * the wire base64-encoded whether or not the DTO would have carried it

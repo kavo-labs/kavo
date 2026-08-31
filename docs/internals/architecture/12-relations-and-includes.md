@@ -1,6 +1,6 @@
 # 12 — Relation System & Nested Includes
 
-`GET /owners?include=pets&fields[pets]=id,name` — everything between that
+`GET /owners?include=pets&select[pets]=id,name` — everything between that
 query string and the SQL is documented here.
 
 ```ts
@@ -50,11 +50,11 @@ first client asks.
 4. **Cycle guard is depth, and only depth.** `manager.manager.manager` is
    legal until the budget runs out. Visited-type tracking would forbid a
    legitimate self-relation, and depth is the rule a client can predict.
-5. **Fieldsets**: `fields[posts.comments]=id,body` attaches to that node,
+5. **Fieldsets**: `select[posts.comments]=id,body` attaches to that node,
    validated against the _target_ entity's selectable allowlist — and,
    when the **owning** entity's `allowlists.selectable` names a relation
    path (`selectable: [..., "posts.title"]`, ADR-0044), against that
-   ceiling too. With no `fields[<path>]=` in the request the ceiling _is_
+   ceiling too. With no `select[<path>]=` in the request the ceiling _is_
    the node's fieldset; with one, a field outside the ceiling is a 400,
    the same as one outside the target's `selectable`. A request may narrow
    within the ceiling, never past it.
@@ -148,8 +148,8 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
 
 - **Sparse fieldsets:** keys needed for stitching are always fetched and
   stripped at serialization — "kept internally, stripped late". Root
-  `fields=` selects the root's own columns; relation shapes are selected
-  through `fields[<path>]`.
+  `select=` selects the root's own columns; relation shapes are selected
+  through `select[<path>]`.
 - **DTOs:** an included node is projected through the target's registered
   `item` DTO (`list` for a to-many, which falls back to `item`), else the
   target's derived default. A relation key on the _parent's_ DTO is
@@ -169,11 +169,11 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
   ORM's default, so widening the root never silently widens the relation.
   A per-include `withDeleted` is deliberately out of scope in v6.
 - **`findOne` supports `include`** with identical semantics.
-- **Swagger:** `include` and one `fields[<relation>]` per includable
+- **Swagger:** `include` and one `select[<relation>]` per includable
   relation are documented from the entity config's allowlist — the only
   relation knowledge decoration time has (ADR-0012). A relation carrying a
   projection ceiling (ADR-0044) gets a `Restricted to: …` description on
-  its `fields[<relation>]` parameter; the ceiling is literal strings on
+  its `select[<relation>]` parameter; the ceiling is literal strings on
   `allowlists.selectable`, so it resolves at decoration time.
 
 ## 5. Writes

@@ -45,7 +45,7 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly allowlists: ResolvedQueryAllowlists<Entity>;
   /**
    * The default response projection: what a read serves when the request
-   * sends no `fields=` and no `item`/`list` DTO is registered.
+   * sends no `select=` and no `item`/`list` DTO is registered.
    *
    * `null` means "the entity-derived default" — every scalar column plus
    * every declared computed field. A non-null value is
@@ -56,7 +56,7 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * off `allowlists.selectable`. Unconfigured, that list resolves to a base
    * set that is *almost* the derived projection but drops computed fields
    * declaring `selectable: false` — fields whose documented contract is to
-   * stay in the projection while being unnameable in `fields=`. Narrowing
+   * stay in the projection while being unnameable in `select=`. Narrowing
    * by a list nobody wrote would silently retire that contract.
    */
   readonly projection: readonly FieldPath<Entity>[] | null;
@@ -66,7 +66,7 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * `{ dictionary: ["id"] }` from `selectable: [..., "dictionary.id"]`.
    *
    * A relation named here is projected to at most these fields when it is
-   * included — a request may narrow further with `fields[<relation>]=` but
+   * included — a request may narrow further with `select[<relation>]=` but
    * a field outside the ceiling is a 400, never served. Enforced in
    * {@link DefaultIncludeResolver} against the config of the entity that
    * *owns* the relation, so a nested owner's ceiling applies at its own

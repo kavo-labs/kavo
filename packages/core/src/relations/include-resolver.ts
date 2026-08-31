@@ -5,7 +5,7 @@ import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
 export interface IncludeRequest {
   /** Dot-paths from `include=posts.comments,profile`. */
   readonly paths: readonly string[];
-  /** Per-path sparse fieldsets from `fields[posts]=id,title`. */
+  /** Per-path sparse fieldsets from `select[posts]=id,title`. */
   readonly fields: Readonly<Record<string, readonly string[]>>;
 }
 
