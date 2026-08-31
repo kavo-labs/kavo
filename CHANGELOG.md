@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/kavo-labs/kavo/compare/v0.17.0...v0.17.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **nest:** document includable relations in the synthesized response schema ([#350](https://github.com/kavo-labs/kavo/issues/350)) ([35cf193](https://github.com/kavo-labs/kavo/commit/35cf1936fb17400294b0cd68c716dc949c680d52))
+
 ## [0.17.0](https://github.com/kavo-labs/kavo/compare/v0.16.2...v0.17.0) (2026-08-31)
 
 
