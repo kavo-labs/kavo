@@ -8,8 +8,10 @@ import { createTypeOrmKavo } from "@kavo/typeorm";
 /** Counts SELECT statements so a test can assert "exactly one query fired". */
 class QueryCountingLogger implements Logger {
   count = 0;
-  logQuery(): void {
+  queries: string[] = [];
+  logQuery(query: string): void {
     this.count += 1;
+    this.queries.push(query);
   }
   logQueryError(): void {}
   logQuerySlow(): void {}
@@ -66,6 +68,7 @@ let blogs: DefaultKavoService<Blog>;
 let joinedBlogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let batchedArticles: DefaultKavoService<Article>;
+let keyArticles: DefaultKavoService<Article>;
 const queryLogger = new QueryCountingLogger();
 
 beforeAll(async () => {
@@ -104,6 +107,14 @@ beforeAll(async () => {
     softDelete: { strategy: "soft" },
     allowlists: { includable: ["blog"] },
     relations: { edges: { blog: { strategy: "batch" } } },
+  } as never) as DefaultKavoService<Article>;
+  // The same to-one loaded as its FK id alone (issue #364) — no join, no
+  // batch. `blog.name` stays filterable to prove a filter on a key-edge
+  // path still resolves through its own join.
+  keyArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
+    softDelete: { strategy: "soft" },
+    allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
 });
 
@@ -213,6 +224,64 @@ describe("Single-query eager loading for detail views", () => {
     const before = queryLogger.count;
     await blogs.findOne(blogId, { include: ["articles"] } as never);
     expect(queryLogger.count - before).toBeGreaterThan(1);
+  });
+});
+
+describe("TypeOrmRepositoryAdapter — key loading (issue #364)", () => {
+  it("materializes a to-one as its FK id with no join and a constant query count", async () => {
+    const { blogId } = await seed();
+    const before = queryLogger.count;
+    const list = await keyArticles.findMany({ include: ["blog"], sort: [{ field: "id", direction: "asc" }] });
+    const fired = queryLogger.queries.slice(before);
+    // No `leftJoinAndSelect` for the edge — the FK id comes from TypeORM's
+    // own batched relation-id loader, never a row-multiplying join.
+    expect(fired.some((sql) => /join/i.test(sql))).toBe(false);
+    // One root query plus one batched relation-id query — nothing else.
+    expect(fired).toHaveLength(2);
+    // And that count is constant in the number of roots — never N+1.
+    const twoRows = queryLogger.count;
+    await dataSource.getRepository(Article).save({ title: "Third", blog: { id: blogId } as never });
+    const marker = queryLogger.count;
+    await keyArticles.findMany({ include: ["blog"] });
+    expect(queryLogger.count - marker).toBe(twoRows - before);
+    expect(list.items[0]).toMatchObject({ title: "Includes", blog: { id: blogId } });
+    expect((list.items[0] as unknown as { blog: unknown }).blog).toEqual({ id: blogId });
+  });
+
+  it("serializes a null FK as null, not { id: null }", async () => {
+    await dataSource.getRepository(Article).save({ title: "Orphan" });
+    const list = await keyArticles.findMany({
+      filter: { kind: "condition", field: "title" as never, operator: "EQ", value: "Orphan" },
+      include: ["blog"],
+    });
+    expect((list.items[0] as { blog: unknown }).blog).toBeNull();
+  });
+
+  it("works on findOne with identical shape", async () => {
+    const { articleId, blogId } = await seed();
+    const item = await keyArticles.findOne(articleId, { include: ["blog"] } as never);
+    expect(item).toMatchObject({ blog: { id: blogId } });
+  });
+
+  it("accepts select[blog]=id and rejects any other field", async () => {
+    const { blogId } = await seed();
+    const ok = await keyArticles.findMany({ include: ["blog"], select: { blog: ["id"] } as never });
+    expect((ok.items[0] as { blog: unknown }).blog).toEqual({ id: blogId });
+    await expect(
+      keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
+    ).rejects.toMatchObject({
+      issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }],
+    });
+  });
+
+  it("still resolves a filter on the key-edge path via its own join", async () => {
+    await seed();
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "blog.name" as never, operator: "EQ", value: "Kavo weekly" },
+    });
+    expect(list.items).toHaveLength(2);
+    expect((list.items[0] as { blog: unknown }).blog).not.toBeNull();
   });
 });
 

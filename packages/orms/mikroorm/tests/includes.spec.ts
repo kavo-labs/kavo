@@ -57,10 +57,16 @@ let kavo: KavoInstance;
 let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let notes: DefaultKavoService<Note>;
+let keyArticles: DefaultKavoService<Article>;
 
 beforeAll(async () => {
   orm = await newTestOrm([Blog, Article, Note]);
   kavo = createMikroOrmKavo(orm);
+  keyArticles = createMikroOrmKavo(orm).createCrud(Article, {
+    softDelete: { strategy: "soft", field: "deletedAt" },
+    allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never) as DefaultKavoService<Article>;
   blogs = kavo.createCrud(Blog, {
     allowlists: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
@@ -127,6 +133,47 @@ describe("MikroOrmRepositoryAdapter — to-one includes", () => {
     await em.flush();
     const list = await articles.findMany({ include: ["blog"] });
     expect(list.items[0]).toMatchObject({ blog: null });
+  });
+});
+
+describe("MikroOrmRepositoryAdapter — key loading (issue #364)", () => {
+  it("materializes a to-one as its FK id, left un-populated", async () => {
+    const { blogId } = await seed();
+    const list = await keyArticles.findMany({ include: ["blog"], sort: [{ field: "id", direction: "asc" }] });
+    expect((list.items[0] as { blog: unknown }).blog).toEqual({ id: blogId });
+  });
+
+  it("serializes a null FK as null", async () => {
+    const em = orm.em.fork();
+    em.create(Article, { title: "Orphan" });
+    await em.flush();
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "title" as never, operator: "EQ", value: "Orphan" },
+    });
+    expect((list.items[0] as { blog: unknown }).blog).toBeNull();
+  });
+
+  it("works on findOne with the same shape", async () => {
+    const { articleId, blogId } = await seed();
+    const item = await keyArticles.findOne(articleId, { include: ["blog"] } as never);
+    expect(item).toMatchObject({ blog: { id: blogId } });
+  });
+
+  it("rejects a non-pk field on the key edge with a 400", async () => {
+    await seed();
+    await expect(
+      keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
+    ).rejects.toMatchObject({ issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }] });
+  });
+
+  it("still resolves a filter on the key-edge path", async () => {
+    await seed();
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "blog.name" as never, operator: "EQ", value: "Kavo weekly" },
+    });
+    expect(list.items).toHaveLength(2);
   });
 });
 

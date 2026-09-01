@@ -56,6 +56,7 @@ let kavo: KavoInstance;
 let models: ReturnType<typeof defineModels>;
 let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
+let keyArticles: DefaultKavoService<Article>;
 
 beforeAll(async () => {
   database = await startTestDatabase();
@@ -74,6 +75,13 @@ beforeAll(async () => {
     allowlists: { includable: ["blog", "notes"] },
   } as never) as unknown as DefaultKavoService<Article>;
   kavo.createCrud(models.Note);
+  // Its own root instance so this Article config does not clobber the one
+  // above in the shared catalog (issue #364).
+  keyArticles = createMongooseKavo(database.connection).createCrud(models.Article, {
+    softDelete: { field: "deletedAt" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never) as unknown as DefaultKavoService<Article>;
 });
 
 afterAll(async () => {
@@ -128,6 +136,36 @@ describe("MongooseRepositoryAdapter — to-one includes", () => {
     expect(item).not.toHaveProperty("blog");
     const stored = (await models.Article.findById(item["_id"]).lean()) as unknown as Record<string, unknown>;
     expect(stored["blog"]).toBeTruthy();
+  });
+});
+
+describe("MongooseRepositoryAdapter — key loading (issue #364)", () => {
+  it("materializes a to-one as its FK id, left un-populated", async () => {
+    const { blogId } = await seed();
+    const list = await keyArticles.findMany({ include: ["blog"], sort: [{ field: "title", direction: "asc" }] });
+    expect((list.items[0] as { blog: unknown }).blog).toEqual({ _id: blogId });
+  });
+
+  it("serializes a null FK as null", async () => {
+    await models.Article.create({ title: "Orphan" });
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "title" as never, operator: "EQ", value: "Orphan" },
+    });
+    expect((list.items[0] as { blog: unknown }).blog).toBeNull();
+  });
+
+  it("works on findOne with the same shape", async () => {
+    const { articleId, blogId } = await seed();
+    const item = await keyArticles.findOne(articleId, { include: ["blog"] } as never);
+    expect(item).toMatchObject({ blog: { _id: blogId } });
+  });
+
+  it("rejects a non-pk field on the key edge with a 400", async () => {
+    await seed();
+    await expect(
+      keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
+    ).rejects.toMatchObject({ issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }] });
   });
 });
 
