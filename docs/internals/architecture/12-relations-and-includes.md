@@ -59,7 +59,7 @@ first client asks.
 6. **Resolve decisions**: `auto` becomes `join` or `batch`, and the
    target's delete strategy is attached — so the adapter translates
    answers rather than re-deriving them. A `key` node additionally carries
-   `keyField` (the target's pk), has its fieldset forced to `[keyField]`
+   `idField` (the target's pk), has its fieldset forced to `[idField]`
    (any other `select[<path>]=` field is a 400), and may carry no
    children (a nested path through it is a 400).
 
@@ -77,23 +77,38 @@ opening no further relations, since nothing opted in.
 
 ## 3. Loading strategies
 
-| Strategy | What happens                                                                                                              | Default for |
-| -------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| `join`   | `leftJoinAndSelect` in the main query                                                                                     | to-one      |
-| `batch`  | one extra query per relation level, parents batched by id, stitched in memory                                             | to-many     |
-| `key`    | the parent's local FK id alone, materialized as `{ <pk>: value }` / `null` — no join, no row-multiplication (to-one only) | —           |
-| `auto`   | the `join`/`batch` rules above                                                                                            | everything  |
+| Strategy | What happens                                                                                                                            | Default for |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `join`   | `leftJoinAndSelect` in the main query                                                                                                   | to-one      |
+| `batch`  | one extra query per relation level, parents batched by id, stitched in memory                                                           | to-many     |
+| `key`    | the parent row's own FK id alone, materialized as `{ <pk>: value }` / `null` — no join, no row-multiplication (owning-side to-one only) | —           |
+| `auto`   | the `join`/`batch` rules above                                                                                                          | everything  |
 
 `key` (issue #364) is for the case where a caller wants only a to-one
 edge's foreign key in the response and a join buys nothing — the FK is
 already a column on the parent row. It is rejected at bootstrap on a
-to-many edge (no local FK), grants no permission of its own (the edge is
-still includable only via `allowlists.includable`, ADR-0028), and — unlike
-`join`/`batch` — every adapter acts on it: `@kavo/typeorm` via TypeORM's
-batched relation-id loader (`loadRelationIdAndMap`), `@kavo/prisma` via a
-nested `select` of the pk, `@kavo/mongoose` and `@kavo/mikroorm` by
-leaving the edge un-populated and rewriting its raw FK. A composite-key
-target is not supported yet (first cut assumes a single-column pk).
+to-many edge and on an inverse `@OneToOne` (neither has a local FK —
+`RelationDescriptor.ownsForeignKey`, set by each adapter from its ORM's
+metadata), grants no permission of its own (the edge is still includable
+only via `allowlists.includable`, ADR-0028), and its returned id is the
+literal value on the parent row — the target's `selectable` allowlist and
+soft-delete state have no say, unlike `join`/`batch`.
+
+Unlike `join`/`batch`, every adapter acts on `key`, and how cheap it is
+differs by ORM:
+
+- `@kavo/mongoose` / `@kavo/mikroorm` — the edge is dropped from
+  `populate` entirely and its raw FK, already on the row, is rewritten to
+  `{ <pk>: value }` / `null`. One query saved.
+- `@kavo/typeorm` — TypeORM's batched relation-id loader
+  (`loadRelationIdAndMap`): zero extra queries for a many-to-one (read
+  from the rows already fetched), one id-only batched query for an owning
+  one-to-one. No join either way.
+- `@kavo/prisma` — a nested `select` of the pk. Prisma still issues its
+  own relation query as it always does; only the selected columns shrink.
+
+A composite-key target is not supported yet (first cut assumes a
+single-column pk).
 
 **Pagination correctness (normative): root pagination always counts and
 slices distinct root entities, never joined rows.** Batching to-many

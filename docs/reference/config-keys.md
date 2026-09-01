@@ -48,7 +48,7 @@ See [Errors](/reference/errors).
 | `relations.edges.<name>.strategy`       | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                             |
 | `relations.edges.<name>.write`          | `boolean \| { strategy }`              | `false`                              |
 
-Whether a relation is includable at all is `allowlists.includable` (entity scope only); see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `strategy: "key"` is to-one only (a to-many has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent's foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+Whether a relation is includable at all is `allowlists.includable` (entity scope only); see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
 
 ## arrayMutation
 
