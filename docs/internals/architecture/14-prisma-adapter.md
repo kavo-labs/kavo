@@ -102,6 +102,12 @@ the target is soft-deletable (Prisma accepts `where` inside `include` for
 to-one and to-many edges alike). A root `withDeleted` is the root's own
 opt-in only, same rule as `@kavo/typeorm`.
 
+The one strategy it does act on is `key` (issue #364): the node maps to
+`include[<rel>] = { select: { <pk>: true } }`, so Prisma returns
+`{ <pk>: value }` or `null` for the edge with no other column — no
+soft-delete `where`, since the FK is the literal reference on the parent
+row whatever the target's delete state.
+
 ## 4. Pagination & count strategy
 
 `findMany` filters by `readFilter(query)` rather than `query.filter`,

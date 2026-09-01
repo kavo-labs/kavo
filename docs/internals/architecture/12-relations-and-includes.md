@@ -58,7 +58,10 @@ first client asks.
    projection applies.
 6. **Resolve decisions**: `auto` becomes `join` or `batch`, and the
    target's delete strategy is attached — so the adapter translates
-   answers rather than re-deriving them.
+   answers rather than re-deriving them. A `key` node additionally carries
+   `keyField` (the target's pk), has its fieldset forced to `[keyField]`
+   (any other `select[<path>]=` field is a 400), and may carry no
+   children (a nested path through it is a 400).
 
 Every issue across the tree is collected before throwing: one round trip,
 all problems, like the rest of the query pipeline.
@@ -74,11 +77,23 @@ opening no further relations, since nothing opted in.
 
 ## 3. Loading strategies
 
-| Strategy | What happens                                                                  | Default for |
-| -------- | ----------------------------------------------------------------------------- | ----------- |
-| `join`   | `leftJoinAndSelect` in the main query                                         | to-one      |
-| `batch`  | one extra query per relation level, parents batched by id, stitched in memory | to-many     |
-| `auto`   | the two rules above                                                           | everything  |
+| Strategy | What happens                                                                                                              | Default for |
+| -------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `join`   | `leftJoinAndSelect` in the main query                                                                                     | to-one      |
+| `batch`  | one extra query per relation level, parents batched by id, stitched in memory                                             | to-many     |
+| `key`    | the parent's local FK id alone, materialized as `{ <pk>: value }` / `null` — no join, no row-multiplication (to-one only) | —           |
+| `auto`   | the `join`/`batch` rules above                                                                                            | everything  |
+
+`key` (issue #364) is for the case where a caller wants only a to-one
+edge's foreign key in the response and a join buys nothing — the FK is
+already a column on the parent row. It is rejected at bootstrap on a
+to-many edge (no local FK), grants no permission of its own (the edge is
+still includable only via `allowlists.includable`, ADR-0028), and — unlike
+`join`/`batch` — every adapter acts on it: `@kavo/typeorm` via TypeORM's
+batched relation-id loader (`loadRelationIdAndMap`), `@kavo/prisma` via a
+nested `select` of the pk, `@kavo/mongoose` and `@kavo/mikroorm` by
+leaving the edge un-populated and rewriting its raw FK. A composite-key
+target is not supported yet (first cut assumes a single-column pk).
 
 **Pagination correctness (normative): root pagination always counts and
 slices distinct root entities, never joined rows.** Batching to-many
@@ -125,10 +140,11 @@ only `@kavo/typeorm` acts on it. Prisma's `include`, Mongoose's
 own separate queries and apply `limit`/`offset` to the root regardless —
 never a row-multiplying join the caller has to compensate for — so a
 to-many include cannot disturb root pagination there whatever strategy
-core resolved. Those three adapters therefore ignore
-`IncludeNode.strategy` entirely (doc 14 §3, doc 15 §3, doc 17 §3); core
-still resolves it, because the contract is the same everywhere and an
-adapter that _does_ join needs the answer.
+core resolved. Those three adapters therefore ignore the `join`/`batch`
+distinction (doc 14 §3, doc 15 §3, doc 17 §3) — they still act on `key`,
+which is not about join-vs-batch but about not loading the target at all;
+core still resolves the `join`/`batch` split anyway, because the contract
+is the same everywhere and an adapter that _does_ join needs the answer.
 
 A many-to-many edge is nothing special here: metadata maps
 `isManyToMany` to cardinality `"many"` exactly like `isOneToMany`, so it

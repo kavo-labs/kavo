@@ -187,8 +187,11 @@ root rows and breaks core's pagination-correctness rule (doc 12).
 Mongoose's `populate` has no such failure mode: it issues its own query per
 edge and stitches in memory, to-one and to-many alike, so an include never
 disturbs root pagination. This adapter therefore **ignores
-`IncludeNode.strategy`** and maps every node the same way — same conclusion
-as `@kavo/prisma`, reached for the same reason.
+the `join`/`batch` split** and maps those nodes the same way — same
+conclusion as `@kavo/prisma`, reached for the same reason. It does act on
+`key` (issue #364): the edge is left out of `populate` and its raw FK id
+(already a hex string after `toPlainDocument`) is rewritten to
+`{ <pk>: value }` / `null` before the result is returned.
 
 Soft-deleted related documents are excluded with `match`, which behaves
 correctly on both cardinalities: a to-one edge comes back `null`, a to-many
