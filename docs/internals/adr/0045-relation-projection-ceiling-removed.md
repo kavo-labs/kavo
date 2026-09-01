@@ -32,15 +32,22 @@ declared computed-field names, and nothing else. A relation-dotted entry
 is a bootstrap `ConfigurationException` (`KAVO_CONFIG_INVALID`), in both
 the array and the `{ exclude }` form.**
 
-- The check runs in `resolveAllowlists`: any `selectable` entry that
-  contains a `.` and is not itself a known field name is rejected, naming
-  the entity, `allowlists.selectable`, and the offending entry. (A genuine
-  dotted column name — no adapter emits one today — is left alone; the
-  rule stays precise.) This catches every ADR-0044 ceiling entry
-  (`dictionary.id`), every relation-headed typo (`notARelation.field`),
-  and the `a.b.c` deep form in one rule. The exception message tells the
-  adopter to drop the entry or move the restriction to the target
-  entity's own config.
+- `allowlists.selectable` gets its own selector type,
+  `SelectableFieldSelector`, capped to depth 1 (`FieldPath` with `MaxDepth`
+  1. plus the entity's declared computed-field names — the same cap
+     `WritableFieldSelector` already uses for `creatable`/`updatable`. A
+     relation-dotted entry no longer type-checks, unlike on
+     `filterable`/`sortable`, which keep `QueryFieldSelector` and still take
+     one.
+- The runtime check in `resolveAllowlists` stays, for an erased or cast
+  config: any `selectable` entry that contains a `.` and is not itself a
+  known field name is rejected, naming the entity, `allowlists.selectable`,
+  and the offending entry. (A genuine dotted column name — no adapter
+  emits one today — is left alone; the rule stays precise.) This catches
+  every ADR-0044 ceiling entry (`dictionary.id`), every relation-headed
+  typo (`notARelation.field`), and the `a.b.c` deep form in one rule. The
+  exception message tells the adopter to drop the entry or move the
+  restriction to the target entity's own config.
 - `ResolvedEntityConfig.relationProjection` and its resolver
   (`resolveRelationProjection`) are removed. The resolved
   `allowlists.selectable` is the configured array verbatim (no
@@ -80,6 +87,12 @@ entity's own `selectable` (or its derived all-columns default). This is
 the accepted tradeoff — see Context. An unregistered relation target,
 which has no config to narrow, is served by its derived projection; there
 is no parent-side override for that case any more.
+
+**A new barrel type, `SelectableFieldSelector`.** Added to the core barrel
+alongside `QueryFieldSelector`/`WritableFieldSelector`. `QueryAllowlists.selectable`
+is retyped from `QueryFieldSelector` to it — a config that spelled a
+relation-dotted `selectable` entry now fails to compile as well as at
+bootstrap.
 
 **`ResolvedEntityConfig` loses a member.** `relationProjection` is gone
 from the interface and from `describeResolvedConfig`'s dump. Anyone
