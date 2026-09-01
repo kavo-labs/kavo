@@ -61,20 +61,6 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly projection: readonly FieldPath<Entity>[] | null;
   /**
-   * Per-relation projection ceilings, derived from the relation-dotted
-   * entries of an explicitly configured `allowlists.selectable` (ADR-0044).
-   * `{ dictionary: ["id"] }` from `selectable: [..., "dictionary.id"]`.
-   *
-   * A relation named here is projected to at most these fields when it is
-   * included — a request may narrow further with `select[<relation>]=` but
-   * a field outside the ceiling is a 400, never served. Enforced in
-   * {@link DefaultIncludeResolver} against the config of the entity that
-   * *owns* the relation, so a nested owner's ceiling applies at its own
-   * level. `undefined` when `allowlists.selectable` names no relation path
-   * (or was not configured, or used the `{ exclude }` form).
-   */
-  readonly relationProjection: Readonly<Record<string, readonly string[]>> | undefined;
-  /**
    * The delete strategy resolved for this scope — `hard` with
    * a `null` field for everything that isn't soft-deletable, so adapters
    * branch on one object instead of re-deriving the decision.

@@ -65,8 +65,8 @@
  * `<Entity>Patch` when no `dto.patch` is set) is emitted under both.
  *
  * **Includable-relation `$ref`s (issue #356).** `applyResponseSchemaDocs`
- * leaves an `x-kavo-includable-ref: "<Target>"` marker on any includable
- * relation the parent set no one-hop `selectable` ceiling for — bind time
+ * leaves an `x-kavo-includable-ref: "<Target>"` marker on every includable
+ * relation whose target metadata resolves — bind time
  * cannot name the target component, since naming happens here. After every
  * response has hoisted, a final pass (`resolveIncludableRefs`) walks every
  * registered component and rewrites each marker to a `$ref` to that entity's
@@ -97,9 +97,9 @@ interface SchemaObject {
   items?: SchemaObject;
   allOf?: SchemaObject[];
   /**
-   * Bind-time marker (`applyResponseSchemaDocs`) on an includable relation
-   * the parent set no `selectable` ceiling for: the target entity's resolved
-   * name. `resolveIncludableRefs` swaps the whole object for a `$ref` to that
+   * Bind-time marker (`applyResponseSchemaDocs`) on an includable relation:
+   * the target entity's resolved name.
+   * `resolveIncludableRefs` swaps the whole object for a `$ref` to that
    * entity's `<Target>Item` component once every component name is known.
    */
   "x-kavo-includable-ref"?: string;
@@ -169,7 +169,7 @@ export function registerKavoSchemas<T extends object>(document: T): T {
   }
 
   // Every `<Entity>Item` name is now known, so an includable-relation marker
-  // (`applyResponseSchemaDocs`, no parent ceiling) can be resolved to a
+  // (`applyResponseSchemaDocs`) can be resolved to a
   // `$ref` to its target's item component — or degraded to a plain object
   // when that target has no synthesized item schema. Runs over every
   // registered component so a marker on `<Entity>Item` and its structural
@@ -181,7 +181,7 @@ export function registerKavoSchemas<T extends object>(document: T): T {
 
 /**
  * Rewrite the `x-kavo-includable-ref` markers `applyResponseSchemaDocs`
- * leaves on includable relations that have no parent `selectable` ceiling.
+ * leaves on includable relations.
  * Bind time cannot name the target component (this pass owns naming, and a
  * cross-entity clash can bump it to `<Target>Item_2`), so it records only
  * the target entity name; here each marker becomes either a `$ref` to that

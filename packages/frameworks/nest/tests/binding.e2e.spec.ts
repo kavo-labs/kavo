@@ -1507,30 +1507,13 @@ describe("@Kavo relation includes", () => {
     expect(response.body.list).toEqual({ id: 7 });
   });
 
-  it("caps an included relation to the allowlists.selectable ceiling with no select[list] (ADR-0044)", async () => {
+  it("rejects a relation-dotted allowlists.selectable entry at bootstrap (ADR-0045)", async () => {
     @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
     @Controller("todos")
     class CeilingController {}
 
     await app.close();
-    await bootstrap(CeilingController);
-    await request(server())
-      .post("/todos")
-      .send({ title: "x", list: { id: 7 } })
-      .expect(201);
-
-    const list = await request(server()).get("/todos?include=list").expect(200);
-    expect(list.body.items[0].list).toEqual({ id: 7 });
-    const one = await request(server()).get("/todos/1?include=list").expect(200);
-    expect(one.body.list).toEqual({ id: 7 });
-
-    // A request may narrow within the ceiling, never past it: `name` is a
-    // real TodoList column but off the ceiling.
-    const rejected = await request(server()).get("/todos/1?include=list&select[list]=name").expect(400);
-    expect(rejected.body).toMatchObject({ code: "KAVO_QUERY_INVALID" });
-    expect(rejected.body.errors).toContainEqual(
-      expect.objectContaining({ field: "list.name", code: "KAVO_QUERY_INVALID_FIELD" }),
-    );
+    await expect(bootstrap(CeilingController)).rejects.toMatchObject({ code: "KAVO_CONFIG_INVALID" });
   });
 
   it("rejects a relation that is not includable, with problem details", async () => {
@@ -1605,21 +1588,6 @@ describe("@Kavo relation includes", () => {
     // `select[relation]`'s relation name is already the param name, so it
     // carries no description at all.
     expect(fieldsList?.description).toBeUndefined();
-  });
-
-  it("names a per-relation projection ceiling on select[relation] (ADR-0044)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
-    @Controller("todos")
-    class CeilingController {}
-
-    await app.close();
-    await bootstrap(CeilingController);
-    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build());
-    const params = (document.paths["/todos"]?.get?.parameters ?? []) as { name: string; description?: string }[];
-    const fieldsList = params.find((param) => param.name === "select[list]");
-    // The ceiling is literal strings on `allowlists.selectable` — resolvable
-    // at decoration time (ADR-0012), unlike an `{ exclude }` selector.
-    expect(fieldsList?.description).toBe("Restricted to: id.");
   });
 
   it("omits the include query parameter on an entity that opted nothing in", async () => {
@@ -2759,22 +2727,6 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     "x-kavo-entity"?: string;
   };
 
-  const stubAdapter = (): RepositoryAdapter<object> =>
-    ({
-      findOneById: async () => null,
-      findOne: async () => null,
-      findMany: async () => [],
-      count: async () => 0,
-      create: async (data: unknown) => data,
-      update: async (_id: unknown, data: unknown) => data,
-      patch: async (_id: unknown, data: unknown) => data,
-      delete: async () => {},
-      restore: async () => {
-        throw new Error("not exercised");
-      },
-      purge: async () => {},
-    }) as unknown as RepositoryAdapter<object>;
-
   const itemBody = (path: string, verb: string, status: string): Schema | undefined =>
     (
       document.paths[path] as Record<
@@ -2784,19 +2736,6 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     )?.[verb]?.responses?.[status]?.content?.["application/json"]?.schema;
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
-
-  // Boot one `@Kavo` controller against a caller-supplied infrastructure —
-  // for the includable-relation tests that need `metadataFor` to resolve (or
-  // deliberately fail) per target entity, which the shared `fakeInfrastructure`
-  // can't express.
-  const buildDoc = async (infrastructure: KavoInfrastructure, controller: unknown): Promise<void> => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [KavoModule.forRoot({ infrastructure }), KavoModule.forFeature([controller as never])],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-  };
 
   it("narrows the item response to selectable when no item DTO is registered", async () => {
     @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
@@ -3025,7 +2964,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
 
-  it("emits an optional property for an includable relation with no ceiling (issue #349)", async () => {
+  it("emits an optional property for an includable relation, deferring to the target's own config (issue #349)", async () => {
     @Kavo(Todo, { allowlists: { includable: ["list"] } })
     @Controller("todos")
     class IncludableController {}
@@ -3039,8 +2978,8 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(single?.required ?? []).not.toContain("list");
     // A to-one relation is documented as the object directly, no array wrap.
     expect(single?.properties?.list?.type).toBe("object");
-    // No ADR-0044 ceiling here, so the target's own config governs its
-    // projection — this schema does not reproduce it.
+    // The target's own config governs its projection (ADR-0026 decision 4)
+    // — this schema does not reproduce it inline.
     expect(single?.properties?.list?.properties).toBeUndefined();
     expect(single?.properties?.list?.description).toContain("include=list");
 
@@ -3048,168 +2987,6 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     const listElement = itemBody("/todos", "get", "200")?.properties?.items?.items;
     expect(Object.keys(listElement?.properties ?? {})).toContain("list");
     expect(listElement?.required ?? []).not.toContain("list");
-  });
-
-  it("caps an includable relation's emitted shape to the allowlists.selectable ceiling (ADR-0044, issue #349)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id", "list.name"] } })
-    @Controller("todos")
-    class CeilingController {}
-    await bootstrap(CeilingController);
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-
-    for (const [verb, path, status] of [
-      ["get", "/todos/{id}", "200"],
-      ["post", "/todos", "201"],
-    ] as const) {
-      const schema = itemBody(path, verb, status);
-      // The relation-dotted `list.*` entries are stripped from the root
-      // projection (ADR-0044) and re-applied as the relation object's shape,
-      // each field typed from `TodoList`'s own metadata — `id` is a number
-      // column and `name` a string, so a blind `string` guess would be wrong.
-      expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title", "list"]);
-      expect(schema?.properties?.list).toEqual({
-        type: "object",
-        properties: { id: { type: "number" }, name: { type: "string" } },
-      });
-      expect(schema?.required ?? []).not.toContain("list");
-    }
-  });
-
-  it("wraps a -to-many includable relation in an array, typing its ceiling fields from the target (issue #349)", async () => {
-    class Post {}
-    class Tag {}
-    const tagMetadata: EntityMetadata<object> = {
-      entity: Tag,
-      name: "Tag",
-      idField: "id",
-      fields: [
-        { name: "id", kind: "number", nullable: false, generated: true },
-        { name: "label", kind: "string", nullable: false, generated: false },
-        { name: "archived", kind: "boolean", nullable: false, generated: false },
-      ],
-      relations: [],
-    };
-    const postMetadata: EntityMetadata<object> = {
-      entity: Post,
-      name: "Post",
-      idField: "id",
-      fields: [
-        { name: "id", kind: "number", nullable: false, generated: true },
-        { name: "title", kind: "string", nullable: false, generated: false },
-      ],
-      relations: [
-        // `includable: false` on the descriptor deliberately disagrees with
-        // the config grant below — the synthesized schema must follow the
-        // resolved `allowlists.includable`, not the ORM-derived flag.
-        { name: "tags", target: () => Tag, cardinality: "many", includable: false, strategy: "auto" },
-      ],
-    };
-    const infrastructure: KavoInfrastructure = {
-      metadataFor: ((entity: unknown) => (entity === Tag ? tagMetadata : postMetadata)) as never,
-      adapterFor: () => stubAdapter() as never,
-    };
-
-    @Controller("posts")
-    class PostController {}
-    // `Post` has no declared fields, so the config's relation-name types
-    // infer to `never`; apply the decorator as a plain call with a cast, the
-    // same escape hatch the fallback-body-schema block uses.
-    const postConfig: unknown = {
-      allowlists: { includable: ["tags"], selectable: ["id", "title", "tags.label", "tags.archived"] },
-    };
-    Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
-    await buildDoc(infrastructure, PostController);
-
-    const single = itemBody("/posts/{id}", "get", "200");
-    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "tags"]);
-    // The ceiling object is array-wrapped, and each field carries the kind
-    // `Tag`'s own metadata gives it — a `string` guess would miss `archived`.
-    expect(single?.properties?.tags).toEqual({
-      type: "array",
-      items: {
-        type: "object",
-        properties: { label: { type: "string" }, archived: { type: "boolean" } },
-      },
-    });
-    expect(single?.required ?? []).not.toContain("tags");
-  });
-
-  it("leaves an includable relation's ceiling fields untyped when the target's metadata is unresolvable (issue #349)", async () => {
-    class Post {}
-    const postMetadata: EntityMetadata<object> = {
-      entity: Post,
-      name: "Post",
-      idField: "id",
-      fields: [
-        { name: "id", kind: "number", nullable: false, generated: true },
-        { name: "title", kind: "string", nullable: false, generated: false },
-      ],
-      relations: [
-        { name: "author", target: () => class Author {}, cardinality: "one", includable: false, strategy: "auto" },
-      ],
-    };
-    const infrastructure: KavoInfrastructure = {
-      metadataFor: ((entity: unknown) => {
-        if (entity === Post) {
-          return postMetadata;
-        }
-        throw new Error("no metadata for this relation target from this root");
-      }) as never,
-      adapterFor: () => stubAdapter() as never,
-    };
-
-    @Controller("posts")
-    class PostController {}
-    const postConfig: unknown = { allowlists: { includable: ["author"], selectable: ["id", "title", "author.id"] } };
-    Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
-    // `metadataFor` throwing for the target must not abort bootstrap.
-    await buildDoc(infrastructure, PostController);
-
-    const schema = itemBody("/posts/{id}", "get", "200");
-    // The ceiling still shapes the object, but its one field stays `{}`.
-    expect(schema?.properties?.author).toEqual({ type: "object", properties: { id: {} } });
-    expect(schema?.required ?? []).not.toContain("author");
-  });
-
-  it("leaves a ceiling entry untyped when the target has no such column, still typing its siblings (issue #349)", async () => {
-    // `list.phantom` is off `Todo`'s typed `selectable` union (no such
-    // `TodoList` column), so apply the decorator as a plain cast call.
-    const phantomConfig: unknown = {
-      allowlists: { includable: ["list"], selectable: ["id", "title", "list.id", "list.phantom"] },
-    };
-    @Controller("todos")
-    class PhantomCeilingController {}
-    Kavo(Todo, phantomConfig as Parameters<typeof Kavo>[1])(PhantomCeilingController);
-    await bootstrap(PhantomCeilingController);
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-
-    // `phantom` is not a `TodoList` column, so its per-field lookup misses
-    // and it stays `{}` while `id` (a real number column) is typed.
-    expect(itemBody("/todos/{id}", "get", "200")?.properties?.list).toEqual({
-      type: "object",
-      properties: { id: { type: "number" }, phantom: {} },
-    });
-  });
-
-  it("keeps the embedded relation object inline — registerKavoSchemas hoists no extra component (issue #349)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
-    @Controller("todos")
-    class InlineController {}
-    await bootstrap(InlineController);
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-    registerKavoSchemas(document);
-
-    const schemas = (document.components?.schemas ?? {}) as Record<string, Schema>;
-    // The relation object stays on `TodoItem.properties.list` rather than
-    // being hoisted under a positional component name: it carries no
-    // `x-kavo-entity` stamp, so `registerKavoSchemas` leaves it alone.
-    expect(schemas.TodoItem?.properties?.list?.$ref).toBeUndefined();
-    expect(schemas.TodoItem?.properties?.list?.type).toBe("object");
-    // The list-envelope element is `withKavoEntity`-stamped, so
-    // `registerKavoSchemas` recurses into it — assert the relation object
-    // still resolved inline there, not just that a `$ref` is absent.
-    expect(schemas.TodoListItem?.properties?.list?.type).toBe("object");
-    expect(schemas.TodoListItem?.properties?.list?.$ref).toBeUndefined();
   });
 
   it("adds no relation property when nothing is includable (issue #349)", async () => {
@@ -3312,9 +3089,9 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
   };
 
   it("resolves an unbounded includable relation to a $ref to the target's <Entity>Item, recursively", async () => {
-    // `Todo.list -> TodoList`, `TodoList.list -> TodoTag` — all three routed,
-    // none carries a relation-dotted `selectable` ceiling, so each relation
-    // defers wholly to its target and composes by shared component. Exact
+    // `Todo.list -> TodoList`, `TodoList.list -> TodoTag` — all three routed;
+    // each relation defers wholly to its target (ADR-0026 decision 4) and
+    // composes by shared component. Exact
     // component names are not asserted: entity `TodoList` collides with
     // `Todo`'s own `<Entity>ListItem` envelope element, so `registerKavoSchemas`
     // legitimately lands `TodoList`'s item on `TodoListItem_2` — the marker
@@ -3345,26 +3122,6 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     expectEveryRefResolves(doc);
   });
 
-  it("keeps a parent-ceilinged relation inline and does not $ref the target (ADR-0044)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
-    @Controller("todos")
-    class CeilingC {}
-    @Kavo(TodoList, {})
-    @Controller("lists")
-    class ListC {}
-
-    adapter = new InMemoryTodoAdapter();
-    const doc = await buildDoc(fakeInfrastructure(adapter), [CeilingC, ListC]);
-    registerKavoSchemas(doc);
-
-    const list = doc.components?.schemas?.TodoItem?.properties?.list;
-    // Parent narrowed it to `{ id }`, so the parent wins: an inline object,
-    // never a `$ref` to `TodoListItem` (which would re-widen it).
-    expect(list?.$ref).toBeUndefined();
-    expect(list).toEqual({ type: "object", properties: { id: { type: "number" } } });
-    expectEveryRefResolves(doc);
-  });
-
   it("degrades to a plain object when the relation target has no synthesized item component", async () => {
     // `TodoList` is not routed, so no `TodoListItem` is ever registered.
     @Kavo(Todo, { allowlists: { includable: ["list"] } })
@@ -3380,6 +3137,48 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     expect(list?.type).toBe("object");
     expect(list?.description).toContain("not published");
     // No dangling reference anywhere.
+    expectEveryRefResolves(doc);
+  });
+
+  it("leaves an includable relation a generic object when the target's metadata is unresolvable", async () => {
+    class Post {}
+    const postMetadata: EntityMetadata<object> = {
+      entity: Post,
+      name: "Post",
+      idField: "id",
+      fields: [
+        { name: "id", kind: "number", nullable: false, generated: true },
+        { name: "title", kind: "string", nullable: false, generated: false },
+      ],
+      relations: [
+        { name: "author", target: () => class Author {}, cardinality: "one", includable: false, strategy: "auto" },
+      ],
+    };
+    const infrastructure: KavoInfrastructure = {
+      metadataFor: ((entity: unknown) => {
+        if (entity === Post) {
+          return postMetadata;
+        }
+        throw new Error("no metadata for this relation target from this root");
+      }) as never,
+      adapterFor: () => stubAdapter() as never,
+    };
+
+    @Controller("posts")
+    class PostController {}
+    const postConfig: unknown = { allowlists: { includable: ["author"] } };
+    Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
+    // `metadataFor` throwing for the target must not abort bootstrap.
+    const doc = await buildDoc(infrastructure, [PostController]);
+    registerKavoSchemas(doc);
+
+    const author = doc.components?.schemas?.PostItem?.properties?.author;
+    // No target name to reference, so no marker and no `$ref` — a generic
+    // object with a prose description (ADR-0026 decision 4).
+    expect(author?.$ref).toBeUndefined();
+    expect(author?.["x-kavo-includable-ref"]).toBeUndefined();
+    expect(author?.type).toBe("object");
+    expect(author?.description).toContain("include=author");
     expectEveryRefResolves(doc);
   });
 

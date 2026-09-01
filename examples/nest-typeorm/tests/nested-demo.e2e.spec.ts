@@ -10,9 +10,8 @@ import { AppModule } from "../src/app.module.js";
 /**
  * The `Region → Zone → Landmark` chain (`src/nested-demo/`) exists to show
  * issue #356's recursive `$ref` schema composition: no controller registers
- * an item DTO and none sets a relation-dotted `selectable` ceiling, so every
- * includable relation is emitted as a `$ref` to its target's own
- * `<Entity>Item` component. This spec pins that in the generated document and
+ * an item DTO, so every includable relation is emitted as a `$ref` to its
+ * target's own `<Entity>Item` component. This spec pins that in the generated document and
  * checks the runtime response actually matches the advertised shape.
  */
 

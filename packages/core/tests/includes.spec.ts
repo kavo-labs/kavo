@@ -499,203 +499,57 @@ describe("include rejection messages", () => {
   });
 });
 
-describe("relation projection ceiling — allowlists.selectable relation paths (ADR-0044)", () => {
-  const authorCeiling = (): EntityConfig<Author> => ({
-    allowlists: { includable: ["posts"], selectable: ["id", "name", "posts.title"] },
+describe("allowlists.selectable takes root paths only (ADR-0045)", () => {
+  const bootstrap =
+    (selectable: unknown, includable: readonly string[] = ["posts"]): (() => unknown) =>
+    () =>
+      resolveEntityConfig(authorMetadata, { allowlists: { includable, selectable } } as never, undefined);
+
+  it("rejects a relation-dotted entry in the array form as a ConfigurationException", () => {
+    expect(bootstrap(["id", "name", "posts.title"])).toThrow(ConfigurationException);
+    expect(bootstrap(["id", "name", "posts.title"])).toThrow(/relation-dotted path/);
   });
 
-  it("derives relationProjection from the dotted selectable entries and strips them from the root list", () => {
-    const config = resolveEntityConfig(authorMetadata, authorCeiling() as never, undefined);
-    expect(config.relationProjection).toEqual({ posts: ["title"] });
-    // The relation path is the ceiling, not a root `select=` path — it must
-    // not leak into the resolved selectable list or the response projection.
+  it("carries the KAVO_CONFIG_INVALID code and names the offending entry", () => {
+    try {
+      bootstrap(["id", "posts.title"])();
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as Error).message).toContain("'posts.title'");
+    }
+  });
+
+  it("rejects a relation-headed typo and an a.b.c deep path the same way", () => {
+    expect(bootstrap(["id", "postz.title"])).toThrow(ConfigurationException);
+    expect(bootstrap(["id", "posts.author.name"])).toThrow(ConfigurationException);
+  });
+
+  it("rejects a relation-dotted entry inside the { exclude } form too", () => {
+    expect(bootstrap({ exclude: ["posts.title"] })).toThrow(ConfigurationException);
+  });
+
+  it("still accepts a plain root list", () => {
+    const config = resolveEntityConfig(
+      authorMetadata,
+      { allowlists: { includable: ["posts"], selectable: ["id", "name"] } } as never,
+      undefined,
+    );
     expect(config.allowlists.selectable).toEqual(["id", "name"]);
     expect(config.projection).toEqual(["id", "name"]);
   });
 
-  it("relationProjection is undefined when selectable names no relation path", () => {
-    const config = resolveEntityConfig(
-      authorMetadata,
-      { allowlists: { selectable: ["id", "name"] } } as never,
-      undefined,
-    );
-    expect(config.relationProjection).toBeUndefined();
-  });
-
-  it("projects an included relation to the ceiling with no select[path] in the request", async () => {
-    const fixture = blog({ author: authorCeiling() });
-    const { authors, authorRows } = fixture;
-    authorRows.push(authorWithPosts());
-
-    const list = await authors.findMany({ include: ["posts"] });
-    // Post's own config would serve id/title/authorId/deletedAt; the ceiling
-    // on the *Author* config cuts the included node to `title` alone.
-    expect((list.items[0] as { posts: unknown[] }).posts[0]).toEqual({ title: "First" });
-  });
-
-  it("applies the ceiling to findOne", async () => {
-    const fixture = blog({ author: authorCeiling() });
-    const { authors, authorRows } = fixture;
-    authorRows.push(authorWithPosts());
-
-    const one = await authors.findOne(1, { include: ["posts"] });
-    expect((one as { posts: unknown[] }).posts[0]).toEqual({ title: "First" });
-  });
-
-  it("lets a request narrow within the ceiling but not past it", async () => {
+  it("projects an included relation by the target entity's own selectable, not the includer's", async () => {
     const fixture = blog({
-      author: {
-        allowlists: { includable: ["posts"], selectable: ["id", "name", "posts.id", "posts.title"] },
-      },
-    });
-    const { authors, authorRows } = fixture;
-    authorRows.push(authorWithPosts());
-
-    const narrowed = await authors.findMany({
-      include: ["posts"],
-      select: { relations: { posts: ["id"] } },
-    });
-    expect((narrowed.items[0] as { posts: unknown[] }).posts[0]).toEqual({ id: 10 });
-
-    await expect(
-      authors.findMany({ include: ["posts"], select: { relations: { posts: ["title", "authorId"] } } }),
-    ).rejects.toMatchObject({
-      // `title` is on the ceiling; `authorId` is a real Post column but off it.
-      issues: [{ field: "posts.authorId", code: "KAVO_QUERY_INVALID_FIELD" }],
-    });
-  });
-
-  it("blames the owner entity's config when a request escapes the ceiling", async () => {
-    const { authors } = blog({ author: authorCeiling() });
-    const detail = await authors.findMany({ include: ["posts"], select: { relations: { posts: ["authorId"] } } }).then(
-      () => {
-        throw new Error("expected a QueryValidationException");
-      },
-      (error: unknown) => (error as QueryValidationException).issues[0]!.detail,
-    );
-    expect(detail).toContain("the 'Author' config restricts 'posts' to");
-    expect(detail).toContain("title");
-  });
-
-  it("bounds the ceiling even where the target registers a wider item DTO", async () => {
-    class PostItemDto {
-      id = 0;
-      title = "";
-      authorId = 0;
-    }
-    const fixture = blog({
-      author: authorCeiling(),
-      post: { dto: { item: PostItemDto } as never },
+      author: { allowlists: { includable: ["posts"], selectable: ["id", "name"] } },
+      post: { allowlists: { selectable: ["title"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
 
     const list = await authors.findMany({ include: ["posts"] });
+    // Post's own `selectable` governs the embed — Author's config has no say.
     expect((list.items[0] as { posts: unknown[] }).posts[0]).toEqual({ title: "First" });
-  });
-
-  it("applies each owner's own ceiling at its own level of a nested include", async () => {
-    const fixture = blog({
-      author: { allowlists: { includable: ["posts"], selectable: ["id", "name", "posts.title"] } },
-      post: { allowlists: { includable: ["comments"], selectable: ["id", "title", "comments.body"] } },
-    });
-    const { authors, authorRows } = fixture;
-    authorRows.push(authorWithPosts());
-
-    const list = await authors.findMany({ include: ["posts.comments"] });
-    const post = (list.items[0] as unknown as { posts: Array<Record<string, unknown>> }).posts[0]!;
-    // Author's ceiling keeps `title`; the `comments` key still rides along
-    // because it is an included child, projected by Post's own ceiling.
-    expect(post["title"]).toBe("First");
-    expect(post["comments"]).toEqual([{ body: "nice" }]);
-  });
-
-  it("holds even when the relation target never went through createCrud", async () => {
-    // Comment's metadata is known to the instance but it is never
-    // `createCrud`-ed, so it gets a derived config that configures nothing
-    // (ADR-0026 §"Decision 4 holds only for registered entities"). The
-    // ceiling still applies, because it rides on Post's `node.fields`, not
-    // on Comment's config.
-    const metadata = new Map<unknown, EntityMetadata<object>>([
-      [Post, postMetadata as EntityMetadata<object>],
-      [Comment, commentMetadata as EntityMetadata<object>],
-    ]);
-    const postAdapter = new SeededAdapter<Post>([
-      Object.assign(new Post(), {
-        id: 10,
-        title: "First",
-        authorId: 1,
-        comments: [Object.assign(new Comment(), { id: 100, body: "nice", postId: 10 })],
-      }),
-    ]);
-    const adapters = new Map<unknown, unknown>([
-      [Post, postAdapter],
-      [Comment, new SeededAdapter<Comment>([])],
-    ]);
-    const kavo = createKavo({
-      infrastructure: {
-        metadataFor: (entity) => metadata.get(entity) as never,
-        adapterFor: (entity) => adapters.get(entity) as never,
-      },
-    });
-    const posts = kavo.createCrud(Post, {
-      allowlists: { includable: ["comments"], selectable: ["id", "title", "comments.body"] },
-    } as never) as DefaultKavoService<Post>;
-
-    const list = await posts.findMany({ include: ["comments"] });
-    // The derived Comment config would serve id/body/postId; the ceiling on
-    // the Post config cuts the embed to `body` alone.
-    expect((list.items[0] as unknown as { comments: unknown[] }).comments[0]).toEqual({ body: "nice" });
-  });
-
-  it("omits a ceiling field that names no real column on the target", async () => {
-    // The field half of a ceiling entry is not checked at bootstrap (the
-    // target's metadata is not in scope). On the default path — no
-    // `select[posts]=` in the request — an unknown ceiling field is simply
-    // dropped from the embed, not raised as an error.
-    const fixture = blog({
-      author: {
-        allowlists: { includable: ["posts"], selectable: ["id", "name", "posts.title", "posts.ghost" as never] },
-      },
-    });
-    const { authors, authorRows } = fixture;
-    authorRows.push(authorWithPosts());
-
-    const list = await authors.findMany({ include: ["posts"] });
-    expect((list.items[0] as { posts: unknown[] }).posts[0]).toEqual({ title: "First" });
-  });
-
-  describe("bootstrap rejections", () => {
-    const bootstrap =
-      (selectable: readonly string[], includable: readonly string[] = ["posts"]): (() => unknown) =>
-      () =>
-        resolveEntityConfig(authorMetadata, { allowlists: { includable, selectable } } as never, undefined);
-
-    it("rejects a dotted selectable entry whose head is not a relation", () => {
-      expect(bootstrap(["id", "postz.title"])).toThrow(/'postz' is not a relation of Author/);
-    });
-
-    it("rejects a selectable relation path deeper than one segment", () => {
-      expect(bootstrap(["id", "posts.author.name"])).toThrow(/deeper than one relation segment/);
-    });
-
-    it("rejects a relation projected by selectable but not on allowlists.includable", () => {
-      expect(bootstrap(["id", "posts.title"], [])).toThrow(/not on allowlists\.includable/);
-    });
-
-    it("rejects a relation path inside the { exclude } form of selectable", () => {
-      expect(() =>
-        resolveEntityConfig(
-          authorMetadata,
-          { allowlists: { includable: ["posts"], selectable: { exclude: ["posts.title"] } } } as never,
-          undefined,
-        ),
-      ).toThrow(/the \{ exclude \} form cannot/);
-    });
-
-    it("every rejection is a ConfigurationException", () => {
-      expect(bootstrap(["id", "postz.title"])).toThrow(ConfigurationException);
-    });
   });
 });
 

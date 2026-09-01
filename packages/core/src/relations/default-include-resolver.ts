@@ -144,7 +144,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       tree[draft.name] = {
         relation,
         path: draft.path,
-        fields: this.fieldsFor(draft, request, owner, target.config, issues),
+        fields: this.fieldsFor(draft, request, target.config, issues),
         strategy:
           relation.strategy === "auto" ? (relation.cardinality === "many" ? "batch" : "join") : relation.strategy,
         softDelete: target.config.softDelete,
@@ -183,32 +183,24 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
   }
 
   /**
-   * A node's sparse fieldset. Two gates, both narrowing and neither able to
-   * widen:
-   *
-   *   - the *target* entity's `selectable` allowlist — never the root's;
-   *   - the *owner* entity's per-relation projection ceiling for this
-   *     relation (`allowlists.selectable: [..., "<relation>.<field>"]`,
-   *     ADR-0044), resolved on the config of the entity that declared the
-   *     `include` edge, so a nested owner's ceiling applies at its level.
-   *
-   * With a ceiling and no `select[<path>]=` in the request, the ceiling *is*
-   * the node's fieldset — the "default and ceiling" the ADR promises. With a
-   * request, a field outside the ceiling is a 400, the same as one outside
-   * `selectable`. Stitching keys are not added here: they are fetched
-   * regardless and stripped at serialization.
+   * A node's sparse fieldset, gated by the *target* entity's `selectable`
+   * allowlist — never the including entity's (ADR-0026 decision 4; the
+   * ADR-0044 parent-side ceiling was removed in ADR-0045). `null` when the
+   * request sends no `select[<path>]=` for this node: the target's own
+   * default projection then applies at serialization. With a request, a
+   * field outside the target's `selectable` is a 400. Stitching keys are
+   * not added here: they are fetched regardless and stripped at
+   * serialization.
    */
   private fieldsFor(
     draft: DraftNode,
     request: IncludeRequest,
-    owner: ResolvedEntityConfig<object>,
     target: ResolvedEntityConfig<object>,
     issues: QueryIssueDto[],
   ): readonly string[] | null {
-    const ceiling = owner.relationProjection?.[draft.name];
     const requested = request.fields[draft.path];
     if (requested === undefined) {
-      return ceiling === undefined ? null : [...ceiling];
+      return null;
     }
     // `IncludeRequest.fields` types this as `readonly string[]`, but the
     // programmatic `QueryContext.select` entry point can hand a caller's
@@ -238,16 +230,6 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
             // The allowlist that rejected it is the *target* entity's, so the
             // config key the developer has to edit is the target's too.
             allowlistHint(field, "selection", target.entityName, allowed),
-        });
-        continue;
-      }
-      if (ceiling !== undefined && !ceiling.includes(field)) {
-        issues.push({
-          field: `${draft.path}.${field}`,
-          code: "KAVO_QUERY_INVALID_FIELD",
-          detail:
-            `Field '${field}' cannot be used for selection on '${draft.path}': the '${owner.entityName}' ` +
-            `config restricts '${draft.name}' to ${nameList(ceiling)}.`,
         });
         continue;
       }

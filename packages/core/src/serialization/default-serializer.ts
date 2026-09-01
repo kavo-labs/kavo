@@ -225,9 +225,9 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
  * an entity that never configured the key gets.
  *
  * Filtering the derived list rather than using the allowlist directly keeps
- * the derived order and, more importantly, keeps the projection a subset of
- * what the entity actually has: an explicit `selectable` may legitimately
- * name a relation path, which is not a key this projection ever emits.
+ * the derived order and keeps the projection a subset of what the entity
+ * actually has, even if an explicit `selectable` names a column the derived
+ * key set does not carry.
  */
 function narrowToProjection(derived: readonly string[], projection: readonly string[] | null): readonly string[] {
   if (projection === null) {
