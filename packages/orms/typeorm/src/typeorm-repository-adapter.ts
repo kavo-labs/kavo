@@ -247,7 +247,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         for (const row of rows) {
           const fk = row[scratch];
           delete row[scratch];
-          row[node.relation.name] = fk === null || fk === undefined ? null : { [node.keyField!]: fk };
+          row[node.relation.name] = fk === null || fk === undefined ? null : { [node.idField!]: fk };
         }
         continue;
       }

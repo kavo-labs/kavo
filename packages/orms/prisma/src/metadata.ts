@@ -180,6 +180,9 @@ function relationDescriptor(
       return target;
     },
     cardinality: field.isList ? "many" : "one",
+    // Owns the FK iff Prisma lists scalar `relationFromFields` on this side
+    // — the only shape `strategy: "key"` can read off the parent row.
+    ...(field.isList ? {} : { ownsForeignKey: (field.relationFromFields?.length ?? 0) > 0 }),
     includable: false,
     strategy: "auto",
   };

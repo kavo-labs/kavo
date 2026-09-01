@@ -173,7 +173,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
         // Prisma returns `{ <pk>: value }` or `null` natively — no join,
         // no soft-delete filter (the FK is the literal reference on the
         // parent row, whatever the target's delete state).
-        include[node.relation.name] = { select: { [node.keyField!]: true } };
+        include[node.relation.name] = { select: { [node.idField!]: true } };
         continue;
       }
       const where = node.softDelete.strategy === "soft" ? { [node.softDelete.field]: null } : undefined;

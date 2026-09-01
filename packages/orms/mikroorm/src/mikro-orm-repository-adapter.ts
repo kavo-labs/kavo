@@ -517,8 +517,8 @@ function pruneIncluded<Row>(row: Row, tree: IncludeTree): Row {
       // An un-populated to-one comes back as its bare FK (`author: 1`) or,
       // from an uninitialized reference, an object carrying only the id.
       // Rewrite it to `{ <pk>: value }`, or `null` when absent (issue #364).
-      const fk = unwrapAssociation(value, node.keyField as string);
-      source[name] = fk === null || fk === undefined ? null : { [node.keyField as string]: fk };
+      const fk = unwrapAssociation(value, node.idField as string);
+      source[name] = fk === null || fk === undefined ? null : { [node.idField as string]: fk };
       continue;
     }
     const deleted = (candidate: unknown): boolean => {

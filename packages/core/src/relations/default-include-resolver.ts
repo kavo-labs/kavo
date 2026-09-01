@@ -150,7 +150,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
           path: draft.path,
           fields: this.keyFieldset(draft, request, target, issues),
           strategy: "key",
-          keyField: target.metadata.idField,
+          idField: target.metadata.idField,
           softDelete: target.config.softDelete,
           // A `key` node materializes only the FK — there is nothing below
           // it to load, so a nested path through it is a client error, not
@@ -214,7 +214,18 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
     }
     const requested = request.fields[draft.path];
     if (requested !== undefined) {
-      for (const field of Array.isArray(requested) ? requested : []) {
+      if (!Array.isArray(requested)) {
+        // Same failure mode `fieldsFor` guards for a `join`/`batch` node:
+        // the programmatic entry point can hand through a shape the wire
+        // parser would never produce — an issue, never an uncaught throw.
+        issues.push({
+          field: draft.path,
+          code: "KAVO_QUERY_INVALID_VALUE",
+          detail: `'select.${draft.path}' must be an array of field names.`,
+        });
+        return [pk];
+      }
+      for (const field of requested) {
         if (field !== pk) {
           issues.push({
             field: `${draft.path}.${field}`,

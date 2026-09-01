@@ -508,7 +508,7 @@ function finalizeKeyNodes(plain: Record<string, unknown>, tree: IncludeTree): vo
     const name = node.relation.name;
     if (node.strategy === "key") {
       const fk = plain[name];
-      plain[name] = fk === null || fk === undefined ? null : { [node.keyField as string]: fk };
+      plain[name] = fk === null || fk === undefined ? null : { [node.idField as string]: fk };
       continue;
     }
     const value = plain[name];

@@ -94,6 +94,11 @@ export function buildEntityMetadata<Entity extends object>(
     // core matches registered entities by class identity.
     target: () => relation.inverseEntityMetadata.target as ClassRef,
     cardinality: relation.isOneToMany || relation.isManyToMany ? "many" : "one",
+    // Owns the FK column iff it is the many-to-one side or the owning side
+    // of a one-to-one — the only shapes `strategy: "key"` can read.
+    ...(relation.isOneToMany || relation.isManyToMany
+      ? {}
+      : { ownsForeignKey: relation.isManyToOne || relation.isOneToOneOwner }),
     // Inclusion is an opt-in allowlist; ORM metadata only
     // supplies shape, never permission.
     includable: false,

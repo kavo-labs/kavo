@@ -214,6 +214,9 @@ export function buildEntityMetadata<Entity extends object>(
       // relation's cycle off the runtime graph) leaves `entity` a string.
       target: targetOf(orm, property, metadata.className),
       cardinality: TO_MANY.has(property.kind) ? ("many" as const) : ("one" as const),
+      // `property.owner` is true on a many-to-one and the owning side of a
+      // one-to-one — the shapes whose FK column `strategy: "key"` reads.
+      ...(TO_MANY.has(property.kind) ? {} : { ownsForeignKey: property.owner === true }),
       // Inclusion is an opt-in allowlist; ORM metadata only supplies shape,
       // never permission.
       includable: false,

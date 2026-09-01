@@ -307,6 +307,9 @@ function relationDescriptor(
       return model as ClassRef;
     },
     cardinality: schemaType.instance === "Array" ? "many" : "one",
+    // A `ref` path always stores the ObjectId on this document, so a to-one
+    // edge always owns its FK — `strategy: "key"` can read it directly.
+    ...(schemaType.instance === "Array" ? {} : { ownsForeignKey: true }),
     includable: false,
     strategy: "auto",
   };
