@@ -19,9 +19,17 @@ export interface IncludeNode {
   /**
    * The resolved load strategy — never `auto`. Core answers the heuristic
    * (to-one → `join`, to-many → `batch`), so adapters translate a decision
-   * rather than re-make it.
+   * rather than re-make it. `key` reaches here only on a to-one edge whose
+   * config asked for it; `fields` is then always `[keyField]` and
+   * `children` is always empty.
    */
-  readonly strategy: "join" | "batch";
+  readonly strategy: "join" | "batch" | "key";
+  /**
+   * The target entity's primary-key property, set only when `strategy` is
+   * `"key"`. The adapter materializes the relation as `{ [keyField]: value }`
+   * (or `null`) from the parent's local FK column, touching no join.
+   */
+  readonly keyField?: string;
   /**
    * The *target* entity's delete strategy: soft-deleted related rows are
    * excluded from includes. Root-level `withDeleted` applies to the root

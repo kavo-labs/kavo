@@ -141,12 +141,30 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       }
       nodeBudget.remaining -= 1;
 
+      const resolvedStrategy =
+        relation.strategy === "auto" ? (relation.cardinality === "many" ? "batch" : "join") : relation.strategy;
+
+      if (resolvedStrategy === "key") {
+        tree[draft.name] = {
+          relation,
+          path: draft.path,
+          fields: this.keyFieldset(draft, request, target, issues),
+          strategy: "key",
+          keyField: target.metadata.idField,
+          softDelete: target.config.softDelete,
+          // A `key` node materializes only the FK — there is nothing below
+          // it to load, so a nested path through it is a client error, not
+          // a silently-truncated tree.
+          children: this.rejectKeyChildren(draft, issues),
+        };
+        continue;
+      }
+
       tree[draft.name] = {
         relation,
         path: draft.path,
         fields: this.fieldsFor(draft, request, target.config, issues),
-        strategy:
-          relation.strategy === "auto" ? (relation.cardinality === "many" ? "batch" : "join") : relation.strategy,
+        strategy: resolvedStrategy,
         softDelete: target.config.softDelete,
         children: this.build(
           draft.children,
@@ -162,6 +180,71 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       };
     }
     return tree;
+  }
+
+  /**
+   * The fieldset for a `strategy: "key"` node: always exactly the target's
+   * primary key. An explicit `select[<path>]=` may name only that key —
+   * anything else is a 400, since a `key` edge never loads another column.
+   * A composite-key target has no single local FK column to read, so it is
+   * rejected outright (a follow-up may lift this).
+   *
+   * The target's own `selectable` allowlist is deliberately *not* consulted
+   * (unlike the `join`/`batch` path): the value comes from the parent row's
+   * foreign-key column, not from a row of the target, so the target's
+   * selection policy has no say — the same reason its soft-delete state has
+   * none.
+   */
+  private keyFieldset(
+    draft: DraftNode,
+    request: IncludeRequest,
+    target: EntityRuntimeInfo,
+    issues: QueryIssueDto[],
+  ): readonly string[] {
+    const pk = target.metadata.idField;
+    if (target.metadata.compositeIdFields !== undefined) {
+      issues.push({
+        field: draft.path,
+        code: "KAVO_QUERY_UNSUPPORTED_PARAM",
+        detail:
+          `Relation '${draft.path}' uses strategy 'key', which reads a single local foreign-key column, ` +
+          `but its target '${target.config.entityName}' has a composite primary key.`,
+      });
+      return [pk];
+    }
+    const requested = request.fields[draft.path];
+    if (requested !== undefined) {
+      for (const field of Array.isArray(requested) ? requested : []) {
+        if (field !== pk) {
+          issues.push({
+            field: `${draft.path}.${field}`,
+            code: "KAVO_QUERY_INVALID_FIELD",
+            detail:
+              `Field '${field}' cannot be selected on '${draft.path}': it loads through strategy 'key', ` +
+              `which exposes only the primary key '${pk}'.`,
+          });
+        }
+      }
+    }
+    return [pk];
+  }
+
+  /**
+   * A `key` node cannot carry children — the FK is all it loads. Any nested
+   * draft path is reported and dropped, so `IncludeNode.children` stays an
+   * invariant-empty object for `key` nodes and adapters need no guard.
+   */
+  private rejectKeyChildren(draft: DraftNode, issues: QueryIssueDto[]): IncludeTree {
+    for (const child of draft.children.values()) {
+      issues.push({
+        field: child.path,
+        code: "KAVO_QUERY_INVALID_FIELD",
+        detail:
+          `Include path '${child.path}' is not resolvable: '${draft.path}' loads through strategy 'key', ` +
+          `which materializes only the foreign-key id and has no nested relations to include.`,
+      });
+    }
+    return {};
   }
 
   private targetOf(

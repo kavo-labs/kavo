@@ -260,6 +260,97 @@ describe("include resolution", () => {
   });
 });
 
+describe("strategy: 'key' (issue #364)", () => {
+  const postWithAuthor = (author: Author | null): Post =>
+    Object.assign(new Post(), { id: 10, title: "First", authorId: author?.id ?? 0, author });
+
+  it("resolves a to-one edge to a key node carrying only the target pk", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+    await fixture.posts.findMany({ include: ["author"] });
+    const node = includeTree(fixture.postAdapter)["author"]!;
+    expect(node.strategy).toBe("key");
+    expect(node.keyField).toBe("id");
+    expect(node.fields).toEqual(["id"]);
+    expect(node.children).toEqual({});
+  });
+
+  it("rejects strategy 'key' on a to-many edge at bootstrap", () => {
+    try {
+      blog({ post: { relations: { edges: { comments: { strategy: "key" } } } } });
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.edges.comments.strategy",
+      });
+    }
+  });
+
+  it("serializes a populated FK as { pk } and a null FK as null", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+    });
+    fixture.postAdapter.rows.push(
+      postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })),
+      postWithAuthor(null),
+    );
+    const list = await fixture.posts.findMany({ include: ["author"] });
+    expect((list.items[0] as { author: unknown }).author).toEqual({ id: 7 });
+    expect((list.items[1] as { author: unknown }).author).toBeNull();
+  });
+
+  it("accepts select[author]=id but rejects any other field with a 400", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+
+    const ok = await fixture.posts.findMany({ include: ["author"], select: { author: ["id"] } });
+    expect((ok.items[0] as { author: unknown }).author).toEqual({ id: 7 });
+
+    await expect(fixture.posts.findMany({ include: ["author"], select: { author: ["name"] } })).rejects.toMatchObject({
+      issues: [{ field: "author.name", code: "KAVO_QUERY_INVALID_FIELD" }],
+    });
+  });
+
+  it("rejects a nested path through a key edge", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+      author: { allowlists: { includable: ["posts"] } },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+    await expect(fixture.posts.findMany({ include: ["author", "author.posts"] })).rejects.toMatchObject({
+      issues: [{ field: "author.posts", code: "KAVO_QUERY_INVALID_FIELD" }],
+    });
+  });
+
+  it("still enforces allowlists.includable — key grants no permission of its own", async () => {
+    const fixture = blog({
+      post: { relations: { edges: { author: { strategy: "key" } } } },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+    await expect(fixture.posts.findMany({ include: ["author"] })).rejects.toMatchObject({
+      issues: [{ field: "author", code: "KAVO_QUERY_INVALID_FIELD" }],
+    });
+  });
+});
+
 describe("include serialization", () => {
   it("projects an included node through the target's own shape", async () => {
     const fixture = blog({

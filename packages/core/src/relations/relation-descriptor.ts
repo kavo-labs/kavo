@@ -11,9 +11,14 @@ export type RelationCardinality = "one" | "many";
  * - `batch` — per-level `WHERE parentId IN (…)` queries stitched in
  *   memory; correct default for to-many (avoids row explosion and the
  *   joined-pagination trap).
+ * - `key`   — to-one only: materialize the relation as `{ <pk>: value }`
+ *   read from the parent row's local foreign-key column — no join, no
+ *   batch query. A `null` FK serializes as `null`. Rejected at bootstrap
+ *   on a to-many edge (no local FK to read). See architecture doc 12,
+ *   section 3.
  * - `auto`  — to-one → `join`, to-many → `batch`.
  */
-export type RelationLoadStrategy = "join" | "batch" | "auto";
+export type RelationLoadStrategy = "join" | "batch" | "key" | "auto";
 
 /**
  * One relation edge of an entity, as registered in its relation registry.
