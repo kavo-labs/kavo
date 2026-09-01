@@ -51,13 +51,11 @@ first client asks.
    legal until the budget runs out. Visited-type tracking would forbid a
    legitimate self-relation, and depth is the rule a client can predict.
 5. **Fieldsets**: `select[posts.comments]=id,body` attaches to that node,
-   validated against the _target_ entity's selectable allowlist — and,
-   when the **owning** entity's `allowlists.selectable` names a relation
-   path (`selectable: [..., "posts.title"]`, ADR-0044), against that
-   ceiling too. With no `select[<path>]=` in the request the ceiling _is_
-   the node's fieldset; with one, a field outside the ceiling is a 400,
-   the same as one outside the target's `selectable`. A request may narrow
-   within the ceiling, never past it.
+   validated against the _target_ entity's selectable allowlist only —
+   never the owning entity's (ADR-0026 decision 4; the ADR-0044 parent-side
+   ceiling was removed in ADR-0045). With no `select[<path>]=` in the
+   request the node carries no fieldset and the target's own default
+   projection applies.
 6. **Resolve decisions**: `auto` becomes `join` or `batch`, and the
    target's delete strategy is attached — so the adapter translates
    answers rather than re-deriving them.
@@ -154,15 +152,11 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
   `item` DTO (`list` for a to-many, which falls back to `item`), else the
   target's derived default. A relation key on the _parent's_ DTO is
   documentation, not a load: it stays absent until the node is included.
-- **Relation projection ceiling (ADR-0044):** a relation-dotted entry on
-  the owning entity's `allowlists.selectable` (`"dictionary.id"`) caps
-  what an included `dictionary` returns, whatever its own config or DTO
-  would otherwise expose — an intersection, never a widening. Enforced
-  against the config of the entity that _owns_ the include edge, so each
-  owner's ceiling applies at its own level of a nested path. Array form
-  only; the `{ exclude }` form of `selectable` rejects a relation path at
-  bootstrap. `include` resolution runs for reads only, so there is no
-  write-echo path to bound.
+- **No parent-side ceiling (ADR-0045):** an included relation's projection
+  is the target entity's own `selectable` (or its derived default). The
+  including entity's `allowlists.selectable` takes root paths only — a
+  relation-dotted entry is a bootstrap error, in the array and the
+  `{ exclude }` form alike. ADR-0044's ceiling mechanism is fully removed.
 - **Soft delete:** soft-deleted related rows are excluded from
   includes. Root-level `withDeleted` applies to the **root only** — the
   adapter spells the child predicate out rather than leaving it to the
@@ -171,10 +165,9 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
 - **`findOne` supports `include`** with identical semantics.
 - **Swagger:** `include` and one `select[<relation>]` per includable
   relation are documented from the entity config's allowlist — the only
-  relation knowledge decoration time has (ADR-0012). A relation carrying a
-  projection ceiling (ADR-0044) gets a `Restricted to: …` description on
-  its `select[<relation>]` parameter; the ceiling is literal strings on
-  `allowlists.selectable`, so it resolves at decoration time.
+  relation knowledge decoration time has (ADR-0012). The synthesized
+  `<Entity>Item` schema `$ref`s each includable relation's `<Target>Item`
+  component (ADR-0045; the ADR-0044 inline-ceiling branch is gone).
 
 ## 5. Writes
 

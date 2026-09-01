@@ -18,7 +18,7 @@ What a request may filter, sort, select, include, and write, including relation 
 
 - `filterable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`): fields usable in `filter[...]`.
 - `sortable` (same shape): fields usable in `sort=`.
-- `selectable` (same shape): fields usable in `select=`, and what a response carries. A relation-dotted entry in the **array** form (`selectable: ["id", "title", "dictionary.id"]`) is not a root `select=` path — it is a projection ceiling for that included relation ([ADR-0044](/internals/adr/0044-relation-projection-ceiling-from-selectable)); see below.
+- `selectable` (same shape): fields usable in `select=`, and what a response carries. Takes this entity's own columns and its declared computed-field names only — a relation-dotted entry (`"dictionary.id"`) is a bootstrap error ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)). An included relation's projection is governed by the **target** entity's own `selectable` ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)); to restrict it, configure the target entity, or drop it from `includable`.
 - `includable` (`readonly IncludePath<Entity, 1>[]` \| `{ exclude: readonly IncludePath<Entity, 1>[] }`): relation names usable in `include=`, one segment at a time from the root ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 - `searchable` (`readonly FieldPath[]` \| `{ exclude: readonly FieldPath[] }`): fields `search[query]`/`search[fields]` may search. Relation paths are permitted here, unlike `filterable`/`sortable`. Default: every own string-kind column, not every own column. Also gated by `query.search` (`false` by default — set it to an object to turn search on); see [Search](/querying/search).
 - `creatable` (`readonly FieldPath<Entity, 1>[]` \| `{ exclude: readonly FieldPath<Entity, 1>[] }`): fields `createOne` may write. Default: every non-generated own column except the primary key, plus every relation (associable by id). Capped to one path segment — a write body addresses the entity's own fields and relations, never a dotted path into a relation's own fields.
@@ -59,27 +59,8 @@ The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cur
 
 Two more edges. A registered `dto.item`/`dto.list` with a runtime shape replaces the projection rather than intersecting with it, so `selectable` does not fence a column the DTO names, even where the DTO is wider. Register the DTO as the narrowing statement when you use one. And an included relation is projected by its own target's `selectable`, never the root's, so hiding a column on `User` keeps it hidden wherever `user` is included, provided `User` itself went through `@Kavo`/`createCrud`. A relation target that never did gets a derived config, which configures nothing and serves its full column set.
 
-## Capping an included relation's fields
+## Restricting an included relation's fields
 
-`selectable` also caps what an **included** relation returns, from the config of the entity doing the including. Name the relation and the fields you want, dotted, in the array form:
+`selectable` takes this entity's own columns and its declared computed-field names only. A relation-dotted entry (`"dictionary.id"`) is a bootstrap error ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)) — including in the `{ exclude }` form.
 
-```ts
-@Kavo(Entry, {
-  allowlists: {
-    includable: ["dictionary"],
-    selectable: ["id", "title", "kind", "published", "dictionary.id"],
-  },
-})
-```
-
-Now `GET /entries?include=dictionary` embeds `{ "id": … }` and nothing else on each `dictionary`, whatever the `Dictionary` entity's own `selectable` or `item` DTO would otherwise expose — an intersection, never a widening ([ADR-0044](/internals/adr/0044-relation-projection-ceiling-from-selectable)). A request may still narrow further (`select[dictionary]=id`); a field outside the ceiling (`select[dictionary]=slug`) is a 400, the same as one outside `Dictionary`'s own `selectable`. Each entity's ceiling applies at its own level of a nested `include`.
-
-Rules:
-
-- **Array form only.** A relation path inside `selectable: { exclude: [...] }` is a bootstrap error — use the array form.
-- **One relation segment.** `dictionary.id` is fine; `dictionary.publisher.id` is a bootstrap error (deep projection is out of scope).
-- **Must be includable.** A relation projected here but absent from `allowlists.includable` is a bootstrap error — the ceiling could never apply.
-- A dotted entry whose head is not a real relation is a bootstrap error, not a silently ignored line.
-- The **field** half (`dictionary.id`) is not checked against `Dictionary`'s columns at bootstrap. A request naming a field off `Dictionary`'s own `selectable` is still a 400; a ceiling entry that names no real `Dictionary` column is just omitted from the embed. Name fields that exist.
-- The ceiling applies even when the relation target never went through its own `@Kavo`/`createCrud` — it rides on the owning entity's config, not the target's.
-- `include` resolves for reads only, so this bounds `findOne`/`findMany` (and any custom read); there is no write-echo path in Kavo to bound.
+An included relation's projection is governed by the **target** entity's own `selectable` ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection) decision 4), never the entity doing the including. To restrict what `?include=dictionary` embeds, narrow `selectable` on the `Dictionary` entity's own config; a `Dictionary` that never went through `@Kavo`/`createCrud` serves its full derived column set, so route it (even service-only) if you need to trim it. To drop the relation entirely, leave it off `allowlists.includable`.
