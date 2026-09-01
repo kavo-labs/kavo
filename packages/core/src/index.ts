@@ -99,6 +99,7 @@ export type {
   QueryAllowlists,
   QueryFieldSelector,
   RelationFieldSelector,
+  SelectableFieldSelector,
   WritableFieldSelector,
 } from "./config/entity-config.js";
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";

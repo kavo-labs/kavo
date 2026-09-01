@@ -1508,7 +1508,11 @@ describe("@Kavo relation includes", () => {
   });
 
   it("rejects a relation-dotted allowlists.selectable entry at bootstrap (ADR-0045)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } })
+    // `"list.id"` no longer type-checks (`SelectableFieldSelector` is capped
+    // to depth 1); the cast stands in for an erased or `as`-cast config, and
+    // the bootstrap check is the backstop.
+    const config = { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } } as never;
+    @Kavo(Todo, config)
     @Controller("todos")
     class CeilingController {}
 

@@ -1,7 +1,7 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
-import type { EntityConfig, OperationConfig, QueryFieldSelector, RelationFieldSelector } from "./entity-config.js";
+import type { EntityConfig, OperationConfig, RelationFieldSelector, SelectableFieldSelector } from "./entity-config.js";
 import type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./resolved-entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
@@ -720,7 +720,7 @@ function resolveProjection<Entity extends object>(
 function rejectRelationDottedSelectable(
   entityName: string,
   known: readonly string[],
-  selector: QueryFieldSelector<object, string> | undefined,
+  selector: SelectableFieldSelector<object, string> | undefined,
 ): void {
   if (selector === undefined) {
     return;
