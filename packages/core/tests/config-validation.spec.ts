@@ -230,8 +230,8 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("rejects a load strategy outside join, batch, and auto", () => {
-    for (const value of ["eager", "JOIN", 1]) {
+  it("rejects a load strategy outside join, batch, key, and auto", () => {
+    for (const value of ["eager", "JOIN", "KEY", 1]) {
       expectRejected({ relations: { edges: { posts: { strategy: value } } } }, "relations.edges.posts.strategy", value);
     }
   });
@@ -248,7 +248,7 @@ describe("validateSettings — relation edges", () => {
   });
 
   it("accepts each documented load strategy", () => {
-    for (const strategy of ["join", "batch", "auto"]) {
+    for (const strategy of ["join", "batch", "key", "auto"]) {
       expect(() => accept({ relations: { edges: { posts: { strategy } } } })).not.toThrow();
     }
   });

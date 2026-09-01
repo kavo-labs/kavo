@@ -57,6 +57,7 @@ let models: ReturnType<typeof defineModels>;
 let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let keyArticles: DefaultKavoService<Article>;
+let nestedKeyBlogs: DefaultKavoService<Blog>;
 
 beforeAll(async () => {
   database = await startTestDatabase();
@@ -82,6 +83,15 @@ beforeAll(async () => {
     allowlists: { includable: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as unknown as DefaultKavoService<Article>;
+  const nestedKavo = createMongooseKavo(database.connection);
+  nestedKavo.createCrud(models.Article, {
+    softDelete: { field: "deletedAt" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never);
+  nestedKeyBlogs = nestedKavo.createCrud(models.Blog, {
+    allowlists: { includable: ["articles"] },
+  }) as unknown as DefaultKavoService<Blog>;
 });
 
 afterAll(async () => {
@@ -161,11 +171,23 @@ describe("MongooseRepositoryAdapter — key loading (issue #364)", () => {
     expect(item).toMatchObject({ blog: { _id: blogId } });
   });
 
-  it("rejects a non-pk field on the key edge with a 400", async () => {
-    await seed();
+  it("accepts select of exactly the pk and rejects any other field", async () => {
+    const { blogId } = await seed();
+    const ok = await keyArticles.findMany({ include: ["blog"], select: { blog: ["_id"] } as never });
+    expect((ok.items[0] as { blog: unknown }).blog).toEqual({ _id: blogId });
     await expect(
       keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
     ).rejects.toMatchObject({ issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }] });
+  });
+
+  it("resolves a key edge nested under a populated to-many parent", async () => {
+    const { blogId } = await seed();
+    const list = await nestedKeyBlogs.findMany({ include: ["articles", "articles.blog"] });
+    const embedded = (list.items[0] as { articles: { blog: unknown }[] }).articles;
+    expect(embedded).toHaveLength(2);
+    for (const article of embedded) {
+      expect(article.blog).toEqual({ _id: blogId });
+    }
   });
 });
 

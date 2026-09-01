@@ -30,6 +30,7 @@ let kavo: KavoInstance;
 let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let keyArticles: DefaultKavoService<Article>;
+let nestedKeyBlogs: DefaultKavoService<Blog>;
 
 beforeAll(() => {
   client = newTestPrismaClient();
@@ -57,6 +58,19 @@ beforeAll(() => {
     allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
+  const nestedKavo = createPrismaKavo(client as never, {
+    datamodel: Prisma.dmmf.datamodel,
+    entities: [Blog, Article, Note],
+    caseInsensitiveFilters: false,
+  });
+  nestedKavo.createCrud(Article, {
+    softDelete: { field: "deletedAt" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never);
+  nestedKeyBlogs = nestedKavo.createCrud(Blog, {
+    allowlists: { includable: ["articles"] },
+  }) as DefaultKavoService<Blog>;
 });
 
 afterAll(async () => {
@@ -134,6 +148,16 @@ describe("PrismaRepositoryAdapter — key loading (issue #364)", () => {
       filter: { kind: "condition", field: "blog.name" as never, operator: "EQ", value: "Kavo weekly" },
     });
     expect(list.items).toHaveLength(2);
+  });
+
+  it("resolves a key edge nested under an included to-many parent", async () => {
+    const { blogId } = await seed();
+    const list = await nestedKeyBlogs.findMany({ include: ["articles", "articles.blog"] });
+    const embedded = (list.items[0] as { articles: { blog: unknown }[] }).articles;
+    expect(embedded).toHaveLength(2);
+    for (const article of embedded) {
+      expect(article.blog).toEqual({ id: blogId });
+    }
   });
 });
 

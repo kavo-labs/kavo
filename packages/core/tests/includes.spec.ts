@@ -275,7 +275,7 @@ describe("strategy: 'key' (issue #364)", () => {
     await fixture.posts.findMany({ include: ["author"] });
     const node = includeTree(fixture.postAdapter)["author"]!;
     expect(node.strategy).toBe("key");
-    expect(node.keyField).toBe("id");
+    expect(node.idField).toBe("id");
     expect(node.fields).toEqual(["id"]);
     expect(node.children).toEqual({});
   });
@@ -348,6 +348,34 @@ describe("strategy: 'key' (issue #364)", () => {
     await expect(fixture.posts.findMany({ include: ["author"] })).rejects.toMatchObject({
       issues: [{ field: "author", code: "KAVO_QUERY_INVALID_FIELD" }],
     });
+  });
+
+  it("reports a non-array select value for a key edge rather than throwing", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+    await expect(
+      fixture.posts.findMany({ include: ["author"], select: { relations: { author: 5 as never } } }),
+    ).rejects.toMatchObject({
+      issues: [{ field: "author", code: "KAVO_QUERY_INVALID_VALUE" }],
+    });
+  });
+
+  it("serializes the id through the target's projection — a target withholding id yields {}", async () => {
+    const fixture = blog({
+      post: {
+        allowlists: { includable: ["author"] },
+        relations: { edges: { author: { strategy: "key" } } },
+      },
+      author: { allowlists: { selectable: ["name"] } },
+    });
+    fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
+    const list = await fixture.posts.findMany({ include: ["author"] });
+    expect((list.items[0] as { author: unknown }).author).toEqual({});
   });
 });
 

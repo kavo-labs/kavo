@@ -58,6 +58,7 @@ let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let notes: DefaultKavoService<Note>;
 let keyArticles: DefaultKavoService<Article>;
+let nestedKeyBlogs: DefaultKavoService<Blog>;
 
 beforeAll(async () => {
   orm = await newTestOrm([Blog, Article, Note]);
@@ -67,6 +68,15 @@ beforeAll(async () => {
     allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
+  const nestedKavo = createMikroOrmKavo(orm);
+  nestedKavo.createCrud(Article, {
+    softDelete: { strategy: "soft", field: "deletedAt" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never);
+  nestedKeyBlogs = nestedKavo.createCrud(Blog, {
+    allowlists: { includable: ["articles"] },
+  }) as DefaultKavoService<Blog>;
   blogs = kavo.createCrud(Blog, {
     allowlists: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
@@ -160,8 +170,10 @@ describe("MikroOrmRepositoryAdapter — key loading (issue #364)", () => {
     expect(item).toMatchObject({ blog: { id: blogId } });
   });
 
-  it("rejects a non-pk field on the key edge with a 400", async () => {
-    await seed();
+  it("accepts select of exactly the pk and rejects any other field", async () => {
+    const { blogId } = await seed();
+    const ok = await keyArticles.findMany({ include: ["blog"], select: { blog: ["id"] } as never });
+    expect((ok.items[0] as { blog: unknown }).blog).toEqual({ id: blogId });
     await expect(
       keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
     ).rejects.toMatchObject({ issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }] });
@@ -174,6 +186,16 @@ describe("MikroOrmRepositoryAdapter — key loading (issue #364)", () => {
       filter: { kind: "condition", field: "blog.name" as never, operator: "EQ", value: "Kavo weekly" },
     });
     expect(list.items).toHaveLength(2);
+  });
+
+  it("resolves a key edge nested under a populated to-many parent", async () => {
+    const { blogId } = await seed();
+    const list = await nestedKeyBlogs.findMany({ include: ["articles", "articles.blog"] as never });
+    const embedded = (list.items[0] as unknown as { articles: { blog: unknown }[] }).articles;
+    expect(embedded).toHaveLength(2);
+    for (const article of embedded) {
+      expect(article.blog).toEqual({ id: blogId });
+    }
   });
 });
 

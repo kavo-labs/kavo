@@ -69,6 +69,7 @@ let joinedBlogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
 let batchedArticles: DefaultKavoService<Article>;
 let keyArticles: DefaultKavoService<Article>;
+let nestedKeyBlogs: DefaultKavoService<Blog>;
 const queryLogger = new QueryCountingLogger();
 
 beforeAll(async () => {
@@ -116,6 +117,17 @@ beforeAll(async () => {
     allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
+  // A key edge nested under a batched to-many parent: Blog → articles (batch)
+  // → each article's `blog` as a key edge.
+  const nestedKavo = createTypeOrmKavo(dataSource);
+  nestedKavo.createCrud(Article, {
+    softDelete: { strategy: "soft" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never);
+  nestedKeyBlogs = nestedKavo.createCrud(Blog, {
+    allowlists: { includable: ["articles"] },
+  }) as DefaultKavoService<Blog>;
 });
 
 afterAll(async () => {
@@ -282,6 +294,16 @@ describe("TypeOrmRepositoryAdapter — key loading (issue #364)", () => {
     });
     expect(list.items).toHaveLength(2);
     expect((list.items[0] as { blog: unknown }).blog).not.toBeNull();
+  });
+
+  it("resolves a key edge nested under a batched to-many parent", async () => {
+    const { blogId } = await seed();
+    const list = await nestedKeyBlogs.findMany({ include: ["articles", "articles.blog"] });
+    const embedded = (list.items[0] as { articles: { blog: unknown }[] }).articles;
+    expect(embedded).toHaveLength(2);
+    for (const article of embedded) {
+      expect(article.blog).toEqual({ id: blogId });
+    }
   });
 });
 
