@@ -101,6 +101,15 @@ void kavo.createCrud(Author, { allowlists: { selectable: { exclude: ["name"] } }
 // @ts-expect-error — including `selectable`.
 void kavo.createCrud(Author, { allowlists: { selectable: { exclude: ["nmae"] } } });
 
+// `selectable` is capped to depth 1 (ADR-0045): a relation-dotted path does
+// not type-check, unlike `filterable`/`sortable`, which take one.
+// @ts-expect-error — `posts.title` is a relation-dotted path.
+void kavo.createCrud(Author, { allowlists: { selectable: ["id", "posts.title"] } });
+// @ts-expect-error — and the same in the `{ exclude }` form.
+void kavo.createCrud(Author, { allowlists: { selectable: { exclude: ["posts.title"] } } });
+// `filterable` still accepts the dotted path it always did.
+void kavo.createCrud(Author, { allowlists: { filterable: ["posts.title"] } });
+
 // Overridden and default operations dispatch through the engine, one pipeline either way.
 void authors.engine.execute({ operation: "findMany", id: null, body: null, query: null, options: null });
 

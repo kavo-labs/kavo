@@ -4,9 +4,9 @@ import { Column, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "ty
  * A three-hop includable-relation chain — `Region → Zone → Landmark` — used
  * only to show issue #356's recursive `$ref` schema composition in the
  * generated OpenAPI document. None of these controllers registers an `item`
- * DTO and none sets a relation-dotted `allowlists.selectable` ceiling, so
- * every includable relation defers wholly to its target and is emitted as a
- * `$ref` to that entity's own `<Entity>Item` component. `GET
+ * DTO, so every includable relation defers wholly to its target
+ * (ADR-0026 decision 4) and is emitted as a `$ref` to that entity's own
+ * `<Entity>Item` component. `GET
  * /regions/:id?include=zones.landmarks` therefore types transitively, and
  * `Zone.region ↔ Region.zones` is a legal `$ref` cycle.
  */

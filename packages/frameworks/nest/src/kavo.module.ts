@@ -423,10 +423,11 @@ class KavoBinder implements OnModuleInit {
         const prototype = metatype.prototype as Record<string, unknown>;
         const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined);
         // The target entity's own metadata for each relation a synthesized
-        // schema references — includable ones for `applyResponseSchemaDocs`'s
-        // ADR-0044 ceiling fields (issue #349), creatable/updatable ones for
-        // `applyBodySchemaDocs`'s `{ id }` reference object (issue #339) — so
-        // both can type those fields instead of emitting an untyped `{}`.
+        // schema references — includable ones so `applyResponseSchemaDocs`
+        // can name the `x-kavo-includable-ref` marker `registerKavoSchemas`
+        // composes into a `$ref` to `<Target>Item`, creatable/updatable ones
+        // for `applyBodySchemaDocs`'s `{ id }` reference object (issue #339)
+        // — so both can type those fields instead of emitting an untyped `{}`.
         // Resolved once per controller, not per route. `metadataFor` may
         // throw or return `undefined` for a target this root cannot derive
         // metadata for (a `runtime.metadata` wiring, or an infrastructure
@@ -481,9 +482,10 @@ class KavoBinder implements OnModuleInit {
           // Fallback success-response schema, narrowed to `selectable`
           // (issue #264's response-side counterpart) — `applyResponseSchemaDocs`
           // itself no-ops when a real `item`/`list` DTO or `descriptor.output`
-          // already documented this route at decoration time. `includable` +
-          // `relationProjection` let it emit an optional property per
-          // embeddable relation, capped by any ADR-0044 ceiling (issue #349).
+          // already documented this route at decoration time. `includable`
+          // lets it emit an optional property per embeddable relation, each
+          // deferring to the target's own `<Target>Item` component (ADR-0026
+          // decision 4).
           applyResponseSchemaDocs(
             prototype,
             methodName,
@@ -493,7 +495,6 @@ class KavoBinder implements OnModuleInit {
             service.engine.config.allowlists.selectable as readonly string[],
             Object.keys(service.engine.config.computed),
             service.engine.config.allowlists.includable as readonly string[],
-            service.engine.config.relationProjection,
             relationTargetMetadata,
             dtoResolver,
           );

@@ -500,17 +500,11 @@ emitted as an **optional** property on `<Entity>Item`/`<Entity>ListItem` —
 appended after the scalar columns and the computed fields, never in
 `required`, since it is only in the body when `include=` asks for it, and
 the shape is shared with the write responses, which resolve no `include=`
-at all (ADR-0020). Its shape depends on whether the parent narrowed it:
+at all (ADR-0020). The property defers wholly to the relation target's own
+config (ADR-0026 decision 4; the ADR-0044 parent-side ceiling was removed
+in ADR-0045):
 
-- **Parent one-hop `selectable` ceiling** (`relationProjection`, ADR-0044):
-  an inline object limited to those fields, each typed from the target
-  entity's own metadata (the same `infrastructure.metadataFor(relation.target())`
-  resolution the body side uses), falling back to an untyped `{}` for a
-  ceiling entry the target has no column for. Left unstamped by
-  `withKavoEntity`, so `registerKavoSchemas` keeps it inline rather than
-  hoisting it as its own component.
-- **No parent ceiling**: the relation defers wholly to the target, so
-  `applyResponseSchemaDocs` emits an unstamped `x-kavo-includable-ref`
+- `applyResponseSchemaDocs` emits an unstamped `x-kavo-includable-ref`
   marker carrying only the target entity's resolved name (bind time cannot
   name the final component — `registerKavoSchemas` owns naming and a
   cross-entity clash can bump `<Target>Item` to `<Target>Item_2`).
@@ -524,7 +518,7 @@ at all (ADR-0020). Its shape depends on whether the parent narrowed it:
   and left as-is. A document that never runs `registerKavoSchemas` keeps
   the marker inline — still a valid object schema, just not `$ref`-composed.
 
-A `-to-many` relation wraps whichever shape in `{ type: "array", items }`.
+A `-to-many` relation wraps that shape in `{ type: "array", items }`.
 The request-side nesting bound is the existing `relations.maxIncludeDepth`;
 there is no separate Swagger depth control. Driven off the resolved
 `allowlists.includable` names, not `RelationDescriptor.includable` (which

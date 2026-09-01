@@ -1,6 +1,6 @@
 # ADR-0044 — A relation-dotted `allowlists.selectable` entry caps an included relation's projection
 
-**Status:** accepted
+**Status:** superseded by [ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed), which reverts this decision entirely — `allowlists.selectable` takes root paths only again, and a relation-dotted entry is now a bootstrap error rather than a ceiling. The rest of this document describes behaviour that no longer exists.
 
 ## Context
 
@@ -135,7 +135,7 @@ the same break ADR-0026 recorded for `projection` and ADR-0019 for
 decoration time (ADR-0012), because the ceiling is literal strings on
 `allowlists.selectable`, unlike an `{ exclude }` selector.
 
-**The synthesized response schema uses the ceiling too** (issue #349, then
+**The synthesized response schema uses the ceiling too** (issues #349 and
 #356). `@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem` schema —
 the path with no registered `item`/`list` DTO — emits an optional property
 for each `allowlists.includable` relation. When the parent sets a one-hop

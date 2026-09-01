@@ -37,6 +37,20 @@ export type WritableFieldSelector<Entity> =
   readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
 
 /**
+ * `allowlists.selectable`'s raw configuration — the same array-or-
+ * `{ exclude }` shape as {@link QueryFieldSelector}, but capped to depth 1
+ * ({@link FieldPath} with `MaxDepth` 1): `select=` addresses the entity's
+ * own columns, and an included relation is projected through
+ * `select[<relation>]=` against the target entity's own `selectable`, never
+ * `select=<relation>.<field>` (ADR-0045). A relation-dotted entry does not
+ * type-check here and is a bootstrap error if it reaches `resolveAllowlists`
+ * through an erased or cast config. `Extra` widens both forms with the
+ * entity's declared computed-field names (ADR-0019).
+ */
+export type SelectableFieldSelector<Entity, Extra extends string = never> =
+  readonly (FieldPath<Entity, 1> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity, 1> | Extra)[] };
+
+/**
  * One relation allowlist key's raw configuration — the same array-or-
  * `{ exclude }` shape as {@link QueryFieldSelector}, but typed against the
  * entity's own top-level relation names ({@link IncludePath} capped to
@@ -90,7 +104,7 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * it is *wider*. Where you register one, it — not this key — is the
    * narrowing statement.
    */
-  readonly selectable?: QueryFieldSelector<Entity, Computed>;
+  readonly selectable?: SelectableFieldSelector<Entity, Computed>;
   /**
    * What a request may name in `include=` — which relations, one path
    * segment at a time from the root, a client may embed at all

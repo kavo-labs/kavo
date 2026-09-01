@@ -410,6 +410,10 @@ const config = defineConfig({
                 text: "0044 — A relation-dotted allowlists.selectable entry caps an included relation's projection",
                 link: "/internals/adr/0044-relation-projection-ceiling-from-selectable",
               },
+              {
+                text: "0045 — allowlists.selectable takes root paths only; the relation-dotted ceiling is removed",
+                link: "/internals/adr/0045-relation-projection-ceiling-removed",
+              },
             ],
           },
         ],

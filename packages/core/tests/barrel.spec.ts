@@ -216,6 +216,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "SearchDriver",
   "SearchMode",
   "SearchSettings",
+  "SelectableFieldSelector",
   "Serializer",
   "SincePagination",
   "SoftDeletable",

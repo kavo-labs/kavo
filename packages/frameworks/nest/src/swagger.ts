@@ -284,16 +284,11 @@ export function applySwaggerMetadata(
         }),
       );
       for (const relation of includable) {
-        const ceiling = relationFieldCeiling(config, relation);
         apply(
           swagger.ApiQuery({
             name: `select[${relation}]`,
             required: false,
             type: String,
-            // A per-relation projection ceiling (ADR-0044) is the one
-            // entity-specific thing worth saying here: the request may
-            // narrow `select[<relation>]` further but not past this set.
-            ...(ceiling !== undefined ? { description: `Restricted to: ${ceiling.join(", ")}.` } : {}),
           }),
         );
       }
@@ -1369,21 +1364,12 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * never in `required`, since it is only present when `include=` asks for
  * it, and this shape is shared with the write responses, which never
  * resolve `include=` at all (ADR-0020: "a write resolves no query, so a
- * write response never carries relations"). Its shape depends on whether
- * the parent narrowed it:
+ * write response never carries relations"). The property defers wholly to
+ * the relation target's own config (ADR-0026 decision 4; the ADR-0044
+ * parent-side ceiling was removed in ADR-0045):
  *
- * - **Parent one-hop `selectable` ceiling** (`selectable: ["word.id"]`,
- *   ADR-0044) — an inline object limited to those fields, each typed from
- *   the target entity's own `metadata.fields`, passed in as
- *   `relationTargetMetadata` (the binder resolves it via
- *   `infrastructure.metadataFor(relation.target())`). A ceiling field falls
- *   back to an untyped `{}` in two cases: the target as a whole is
- *   unresolvable (no infrastructure, or a root that cannot derive its
- *   metadata), or the target resolves but carries no column of that name.
- *   Left unstamped by `withKavoEntity` so `registerKavoSchemas` keeps it
- *   inline rather than hoisting it as its own component.
- *
- * - **No parent ceiling** — the parent defers wholly to the target, so
+ * - When the target's metadata resolves (via `relationTargetMetadata`,
+ *   which the binder fills from `infrastructure.metadataFor(relation.target())`),
  *   this emits an unstamped marker (`x-kavo-includable-ref: "<Target>"`)
  *   carrying only the target entity's resolved name. It is *not* a `$ref`
  *   yet: bind time does not know the final component name
@@ -1395,9 +1381,11 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  *   `{ type: "object" }` with a prose description. A document that never
  *   runs `registerKavoSchemas` keeps the marker inline, which is still a
  *   valid schema (an object with a vendor extension and a description),
- *   just not `$ref`-composed. When the target's name cannot be resolved at
- *   bind time, no marker is emitted and the property stays a generic
- *   `{ type: "object" }` with a description.
+ *   just not `$ref`-composed.
+ *
+ * - When the target's name cannot be resolved at bind time, no marker is
+ *   emitted and the property stays a generic `{ type: "object" }` with a
+ *   description.
  *
  * A `-to-many` relation wraps whichever shape in `{ type: "array", items }`.
  *
@@ -1422,7 +1410,6 @@ export function applyResponseSchemaDocs(
   selectable: readonly string[],
   computedFieldNames: readonly string[],
   includable: readonly string[],
-  relationProjection: Readonly<Record<string, readonly string[]>> | undefined,
   relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
   dtoResolver: DtoResolver<object>,
 ): void {
@@ -1485,24 +1472,10 @@ export function applyResponseSchemaDocs(
     if (relation === undefined) {
       continue;
     }
-    const ceiling = relationProjection?.[relationName];
     const targetMetadata = relationTargetMetadata[relationName];
-    const targetFields = targetMetadata?.fields;
     let object: object;
-    if (ceiling !== undefined) {
-      // Parent narrowed this relation with a one-hop `selectable` ceiling
-      // (ADR-0044) — reproduce exactly those fields, typed from the target.
-      object = {
-        type: "object",
-        properties: Object.fromEntries(
-          ceiling.map((name) => {
-            const field = targetFields?.find((candidate) => candidate.name === name);
-            return [name, field !== undefined ? fieldSchema(field) : {}];
-          }),
-        ),
-      };
-    } else if (targetMetadata !== undefined) {
-      // No parent ceiling — defer wholly to the target. Emit a marker
+    if (targetMetadata !== undefined) {
+      // Defer wholly to the target (ADR-0026 decision 4). Emit a marker
       // carrying the target entity's resolved name; `registerKavoSchemas`
       // turns it into a `$ref` to `<Target>Item` (or a degraded object when
       // that component was never synthesized). Unstamped by `withKavoEntity`
@@ -1522,7 +1495,7 @@ export function applyResponseSchemaDocs(
         type: "object",
         description:
           `Embedded when \`include=${relationName}\` is requested. Its projection is governed by ` +
-          `the ${relationName} target's own config (ADR-0026); no relation-dotted \`selectable\` ceiling is set here.`,
+          `the ${relationName} target's own config (ADR-0026 decision 4).`,
       };
     }
     properties[relationName] = relation.cardinality === "many" ? { type: "array", items: object } : object;
@@ -1636,32 +1609,6 @@ function includableRelations(config: EntityConfig<object> | undefined): readonly
     return null;
   }
   return selector;
-}
-
-/**
- * The per-relation projection ceiling this entity's config imposes on an
- * included `<relation>` (`allowlists.selectable: [..., "<relation>.<field>"]`,
- * ADR-0044) — the field names `select[<relation>]` is narrowed to, or
- * `undefined` when the relation carries no ceiling.
- *
- * Like `includableRelations`, this is decoration-time-resolvable: the ceiling
- * is literal strings on `allowlists.selectable`, no ORM metadata needed. The
- * `{ exclude }` form of `selectable` never carries a relation path (core
- * rejects it at bootstrap), so it simply yields no ceilings here.
- */
-function relationFieldCeiling(
-  config: EntityConfig<object> | undefined,
-  relation: string,
-): readonly string[] | undefined {
-  const selector = (config?.allowlists as { selectable?: QueryFieldSelector<object> } | undefined)?.selectable;
-  if (selector === undefined || "exclude" in selector) {
-    return undefined;
-  }
-  const prefix = `${relation}.`;
-  const fields = (selector as readonly string[])
-    .filter((entry) => entry.startsWith(prefix) && !entry.slice(prefix.length).includes("."))
-    .map((entry) => entry.slice(prefix.length));
-  return fields.length > 0 ? fields : undefined;
 }
 
 export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
