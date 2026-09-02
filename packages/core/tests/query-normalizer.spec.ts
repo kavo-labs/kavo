@@ -845,6 +845,41 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     expect(issues[0]?.detail).toContain("IN");
   });
 
+  it.each(["LIKE", "ILIKE"])(
+    "enforces maxLikePatternLength on a hand-built %s condition (issue #367 finding 4)",
+    (operator) => {
+      // The wire path's own `maxLikePatternLength` cap only runs inside
+      // `DefaultFilterParser`, which a programmatic `QueryContext` caller
+      // never goes through — without this gate here too, that caller could
+      // hand the adapter a pattern long enough to force an expensive scan
+      // that the wire path would have refused.
+      const issues = issuesOf(() =>
+        normalizer.normalizeInput(
+          {
+            filter: {
+              kind: "condition",
+              field: "name",
+              operator,
+              value: `%${"a".repeat(201)}%`,
+            },
+          } as never,
+          config,
+        ),
+      );
+      expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+    },
+  );
+
+  it("accepts a hand-built LIKE condition at exactly maxLikePatternLength", () => {
+    const pattern = "a".repeat(200);
+    expect(() =>
+      normalizer.normalizeInput(
+        { filter: { kind: "condition", field: "name", operator: "LIKE", value: pattern } } as never,
+        config,
+      ),
+    ).not.toThrow();
+  });
+
   it("accepts an IN list exactly at the budget", () => {
     const query = normalizer.normalizeInput(
       {

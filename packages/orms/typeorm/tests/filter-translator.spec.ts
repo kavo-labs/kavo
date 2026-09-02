@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Column, DataSource, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm";
 import type { ObjectLiteral } from "typeorm";
 import type { Filter, FilterExpression } from "@kavo/core";
+import { ConfigurationException } from "@kavo/core";
 import { FilterTranslator } from "@kavo/typeorm";
 
 /**
@@ -356,7 +357,15 @@ describe("FilterTranslator — columnRef identifier guard (issue #367 finding 1)
       "1title",
       "",
     ]) {
-      expect(() => translator.columnRef(poisoned)).toThrow(/is not a valid column\/relation identifier/);
+      let caught: unknown;
+      try {
+        translator.columnRef(poisoned);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ConfigurationException);
+      expect((caught as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((caught as ConfigurationException).message).toContain("is not a valid column/relation identifier");
     }
   });
 

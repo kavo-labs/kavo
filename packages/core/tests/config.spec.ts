@@ -112,9 +112,15 @@ describe("resolveEntityConfig — bootstrap", () => {
     it.each(["filterable", "sortable"] as const)(
       "rejects a bare %s entry that names no real column, relation, or computed field",
       (key) => {
-        expect(() =>
-          resolveEntityConfig(userMetadata, { allowlists: { [key]: ["notAColumn"] } }, undefined),
-        ).toThrowError(/'notAColumn' is not a column on 'User'/);
+        let caught: unknown;
+        try {
+          resolveEntityConfig(userMetadata, { allowlists: { [key]: ["notAColumn"] } }, undefined);
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBeInstanceOf(ConfigurationException);
+        expect((caught as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+        expect((caught as ConfigurationException).message).toContain("'notAColumn' is not a column on 'User'");
       },
     );
 
@@ -127,9 +133,15 @@ describe("resolveEntityConfig — bootstrap", () => {
           "profile. city",
           "profile.city.$where",
         ]) {
-          expect(() =>
-            resolveEntityConfig(userMetadata, { allowlists: { [key]: [poisoned] } }, undefined),
-          ).toThrowError(/is not a valid relation path/);
+          let caught: unknown;
+          try {
+            resolveEntityConfig(userMetadata, { allowlists: { [key]: [poisoned] } }, undefined);
+          } catch (error) {
+            caught = error;
+          }
+          expect(caught).toBeInstanceOf(ConfigurationException);
+          expect((caught as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+          expect((caught as ConfigurationException).message).toContain("is not a valid relation path");
         }
       },
     );
@@ -139,6 +151,17 @@ describe("resolveEntityConfig — bootstrap", () => {
         resolveEntityConfig(userMetadata, { allowlists: { [key]: ["profile.city"] } }, undefined),
       ).not.toThrow();
     });
+
+    it.each(["filterable", "sortable"] as const)(
+      "accepts a bare relation name as a %s entry (e.g. filtering a to-one relation's FK directly)",
+      (key) => {
+        const metadata = {
+          ...userMetadata,
+          relations: [{ name: "posts", target: () => class {}, cardinality: "many", includable: false }],
+        } as unknown as typeof userMetadata;
+        expect(() => resolveEntityConfig(metadata, { allowlists: { [key]: ["posts"] } }, undefined)).not.toThrow();
+      },
+    );
 
     it("still lets { exclude } through unchecked, same as before (it only subtracts from known-safe own columns)", () => {
       const notAColumn = "notAColumn" as unknown as keyof User;
