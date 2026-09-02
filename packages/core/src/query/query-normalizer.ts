@@ -1064,6 +1064,17 @@ function validateExpression<Entity>(
         detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.settings.query.maxInValues}.`,
       });
     }
+    if (
+      (expression.operator === "LIKE" || expression.operator === "ILIKE") &&
+      typeof value === "string" &&
+      value.length > config.settings.query.maxLikePatternLength
+    ) {
+      issues.push({
+        field: expression.field as string,
+        code: "KAVO_QUERY_LIMIT_EXCEEDED",
+        detail: `'${expression.operator}' pattern is ${value.length} characters; the maximum is ${config.settings.query.maxLikePatternLength}.`,
+      });
+    }
     return;
   }
   for (const child of expression.children) {

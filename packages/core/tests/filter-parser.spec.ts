@@ -503,6 +503,25 @@ describe("DefaultFilterParser — security posture", () => {
     expect(issues.some((i) => i.code === "KAVO_QUERY_LIMIT_EXCEEDED")).toBe(true);
   });
 
+  it("enforces maxFilterDepth before recursing deep enough to blow the stack (issue #367 finding 3)", () => {
+    // `JSON.parse` builds nesting far past anything the bracket grammar's
+    // own key-splitting could reach, and (unlike the bracket form) does it
+    // in one call, not one recursive `convertNode` per level — so this is
+    // the shape that used to reach `expressionDepth`'s second unbounded
+    // recursion before the depth check ever fired. 50,000 levels comfortably
+    // exceeds any JS call-stack budget if `convertNode`/`convertLogical`
+    // recursed that deep; the fix aborts at `maxFilterDepth` on the way
+    // down instead.
+    // Built as a string, not a nested object: constructing (or
+    // `JSON.stringify`-ing) a 50,000-deep object graph with ordinary
+    // recursive helpers would itself blow the stack before the parser ever
+    // saw the input — exactly what this test must not depend on.
+    const depth = 50_000;
+    const raw = '{"and":['.repeat(depth) + '{"name":{"eq":"x"}}' + "]}".repeat(depth);
+    const issues = issuesOf(() => parse({ filter: raw }));
+    expect(issues.some((i) => i.code === "KAVO_QUERY_LIMIT_EXCEEDED")).toBe(true);
+  });
+
   it("collects every issue into one exception", () => {
     const issues = issuesOf(() =>
       parse({
@@ -516,6 +535,18 @@ describe("DefaultFilterParser — security posture", () => {
   it.each(["like", "ilike"])("restricts '%s' to string columns", (token) => {
     const issues = issuesOf(() => parse({ [`filter[age][${token}]`]: "%1%" }));
     expect(issues[0]).toMatchObject({ field: "age", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it.each(["like", "ilike"])("enforces maxLikePatternLength on '%s' (issue #367 finding 4)", (token) => {
+    const pattern = `%${"a".repeat(201)}%`;
+    const issues = issuesOf(() => parse({ [`filter[name][${token}]`]: pattern }));
+    expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+  });
+
+  it.each(["like", "ilike"])("accepts a '%s' pattern at exactly maxLikePatternLength", (token) => {
+    const pattern = "a".repeat(200);
+    const result = parse({ [`filter[name][${token}]`]: pattern });
+    expect(result.root).toMatchObject({ value: pattern });
   });
 });
 
