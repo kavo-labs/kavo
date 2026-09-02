@@ -521,21 +521,25 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(conflict.body.code).toBe("KAVO_CONFLICT");
     });
 
-    it("rejects associating a nonexistent address id as a conflict, not a silent drop", async () => {
+    it("rejects associating a nonexistent address id as a 422, not a silent drop", async () => {
+      // A dangling foreign key on insert/update: the payload points at a row
+      // that does not exist, so the fix is to correct the id and retry — a
+      // 422, distinct from the 409 that a duplicate association returns
+      // (issue #365).
       const created = await request(server())
         .post("/owners")
         .send({ name: "Rex", email: "rex@x.io", address: { id: 999999 } })
-        .expect(409)
+        .expect(422)
         .expect("Content-Type", /application\/problem\+json/);
-      expect(created.body.code).toBe("KAVO_CONFLICT");
+      expect(created.body.code).toBe("KAVO_UNRESOLVED_RELATION");
 
       const owner = await request(server()).post("/owners").send({ name: "Sam", email: "sam@x.io" }).expect(201);
       const updateConflict = await request(server())
         .put(`/owners/${owner.body.id}`)
         .send({ name: "Sam", email: "sam@x.io", address: { id: 999999 } })
-        .expect(409)
+        .expect(422)
         .expect("Content-Type", /application\/problem\+json/);
-      expect(updateConflict.body.code).toBe("KAVO_CONFLICT");
+      expect(updateConflict.body.code).toBe("KAVO_UNRESOLVED_RELATION");
     });
 
     it("clears the owning relation before deleting a referenced address (issue #21 deleteOne override)", async () => {
@@ -798,15 +802,16 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(cleared.body.tags).toEqual([]);
     });
 
-    it("rejects associating a nonexistent tag id as a conflict, not a silent drop", async () => {
+    it("rejects associating a nonexistent tag id as a 422, not a silent drop", async () => {
       // ADR-0014's association-by-id path has no existence check of its own —
-      // an unknown id surfaces as the join table's own FK-constraint violation.
+      // an unknown id surfaces as the join table's own FK-constraint
+      // violation, which on an insert is a 422 (issue #365).
       const response = await request(server())
         .post("/cats")
         .send({ name: "BadTag", age: 1, size: "small", indoor: true, livesLeft: 9, tags: [{ id: 999999 }] })
-        .expect(409)
+        .expect(422)
         .expect("Content-Type", /application\/problem\+json/);
-      expect(response.body.code).toBe("KAVO_CONFLICT");
+      expect(response.body.code).toBe("KAVO_UNRESOLVED_RELATION");
     });
 
     it("cleans up the join table when a still-referenced tag is deleted", async () => {

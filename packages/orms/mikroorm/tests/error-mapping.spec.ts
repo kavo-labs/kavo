@@ -15,6 +15,7 @@ import {
   PersistenceException,
   QueryValidationException,
   TransactionException,
+  UnresolvedRelationException,
 } from "@kavo/core";
 import { mapDriverError } from "@kavo/mikroorm";
 
@@ -24,6 +25,14 @@ const context: ErrorContext = {
   correlationId: "req-1",
 };
 
+const deleteContext: ErrorContext = {
+  entityName: "Author",
+  operation: "deleteOne",
+  correlationId: "req-1",
+};
+
+const foreignKeyViolation = new ForeignKeyConstraintViolationException(new Error("FOREIGN KEY constraint failed"));
+
 /**
  * MikroORM builds each of these from the driver's own error, which is what
  * this adapter matches on instead of the SQLSTATEs and errnos `@kavo/typeorm`
@@ -31,7 +40,6 @@ const context: ErrorContext = {
  */
 const conflicts = [
   ["a unique violation", new UniqueConstraintViolationException(new Error("UNIQUE constraint failed: author.email"))],
-  ["a foreign-key violation", new ForeignKeyConstraintViolationException(new Error("FOREIGN KEY constraint failed"))],
 ] as const;
 
 const retryable = [
@@ -50,6 +58,14 @@ describe("mapDriverError — conflicts", () => {
     const mapped = mapDriverError(error, context);
     expect(mapped).toBeInstanceOf(ConflictException);
     expect(mapped).toMatchObject({ code: "KAVO_CONFLICT", status: 409 });
+  });
+
+  it("maps a foreign-key violation blocking a delete to a 409 conflict", () => {
+    for (const operation of ["deleteOne", "purgeOne"] as const) {
+      const mapped = mapDriverError(foreignKeyViolation, { entityName: "Author", operation });
+      expect(mapped).toBeInstanceOf(ConflictException);
+      expect(mapped).toMatchObject({ code: "KAVO_CONFLICT", status: 409 });
+    }
   });
 
   it("names the entity in the conflict's message params", () => {
@@ -74,6 +90,22 @@ describe("mapDriverError — conflicts", () => {
   });
 });
 
+describe("mapDriverError — foreign-key violations on insert/update", () => {
+  it("maps a foreign-key violation from a write to a 422 unresolved relation", () => {
+    const mapped = mapDriverError(foreignKeyViolation, context);
+    expect(mapped).toBeInstanceOf(UnresolvedRelationException);
+    expect(mapped).toMatchObject({ code: "KAVO_UNRESOLVED_RELATION", status: 422 });
+  });
+
+  it("names the entity in the unresolved-relation message params", () => {
+    expect(mapDriverError(foreignKeyViolation, context).messageParams).toEqual({ entity: "Author" });
+  });
+
+  it("defaults to 422 when the context names no operation", () => {
+    expect(mapDriverError(foreignKeyViolation, { entityName: "Author" })).toBeInstanceOf(UnresolvedRelationException);
+  });
+});
+
 describe("mapDriverError — serialization failures and deadlocks", () => {
   it.each(retryable)("maps %s to a retryable transaction failure", (_name, error) => {
     const mapped = mapDriverError(error, context);
@@ -85,9 +117,9 @@ describe("mapDriverError — serialization failures and deadlocks", () => {
 
 describe("mapDriverError — the fallback row", () => {
   it.each(fallbacks)("maps %s to a persistence failure", (_name, error) => {
-    // Only unique and foreign-key violations are conflicts. A constraint
-    // failure of another kind is not the caller's to resolve, so it must not
-    // become a 409 — the same line `@kavo/typeorm`'s table draws.
+    // Only unique and foreign-key violations are mapped (to 409 / 422). A
+    // constraint failure of another kind is not the caller's to resolve, so
+    // it must not become a 4xx — the same line `@kavo/typeorm`'s table draws.
     const mapped = mapDriverError(error, context);
     expect(mapped).toBeInstanceOf(PersistenceException);
     expect(mapped).toMatchObject({ code: "KAVO_PERSISTENCE_FAILED", status: 500 });
@@ -120,7 +152,12 @@ describe("mapDriverError — the fallback row", () => {
 });
 
 describe("mapDriverError — cause and context propagation", () => {
-  const everyRow = [...conflicts, ...retryable, ...fallbacks] as const;
+  const everyRow = [
+    ...conflicts,
+    ["a foreign-key violation", foreignKeyViolation],
+    ...retryable,
+    ...fallbacks,
+  ] as const;
 
   it("keeps the original driver error as cause in every mapped case", () => {
     for (const [, error] of everyRow) {
@@ -142,6 +179,7 @@ describe("mapDriverError — Kavo exceptions pass through", () => {
     for (const original of [
       new NotFoundException({ messageParams: { entity: "Author", id: "7" } }),
       new ConflictException({ messageParams: { entity: "Author" } }),
+      new UnresolvedRelationException({ messageParams: { entity: "Author" } }),
       new QueryValidationException([{ field: "age", code: "KAVO_QUERY_INVALID_VALUE", detail: "bad" }]),
       new TransactionException({ retryable: true }),
     ]) {

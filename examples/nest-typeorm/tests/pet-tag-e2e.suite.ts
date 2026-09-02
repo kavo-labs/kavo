@@ -77,18 +77,18 @@ export function registerPetTagE2eSuite(getApp: () => INestApplication): void {
     });
 
     describe("Foreign key validity", () => {
-      it("rejects a petId that does not reference an existing pet, as a 409 (the DB's own FK constraint, not a shape error)", async () => {
+      it("rejects a petId that does not reference an existing pet, as a 422 (the DB's own FK constraint, not a shape error)", async () => {
         const tagId = await createTag();
         const response = await request(server())
           .post("/pet-tags")
           .send({ petId: 999999, tagId, note: "orphan" })
-          .expect(409);
-        expect(response.body).toMatchObject({ status: 409 });
+          .expect(422);
+        expect(response.body).toMatchObject({ status: 422, code: "KAVO_UNRESOLVED_RELATION" });
       });
 
-      it("rejects a tagId that does not reference an existing tag, as a 409", async () => {
+      it("rejects a tagId that does not reference an existing tag, as a 422", async () => {
         const petId = await createPet();
-        await request(server()).post("/pet-tags").send({ petId, tagId: 999999, note: "orphan" }).expect(409);
+        await request(server()).post("/pet-tags").send({ petId, tagId: 999999, note: "orphan" }).expect(422);
       });
     });
 
