@@ -25,12 +25,6 @@ const context: ErrorContext = {
   correlationId: "req-1",
 };
 
-const deleteContext: ErrorContext = {
-  entityName: "Author",
-  operation: "deleteOne",
-  correlationId: "req-1",
-};
-
 const foreignKeyViolation = new ForeignKeyConstraintViolationException(new Error("FOREIGN KEY constraint failed"));
 
 /**

@@ -88,7 +88,11 @@ export function registerPetTagE2eSuite(getApp: () => INestApplication): void {
 
       it("rejects a tagId that does not reference an existing tag, as a 422", async () => {
         const petId = await createPet();
-        await request(server()).post("/pet-tags").send({ petId, tagId: 999999, note: "orphan" }).expect(422);
+        const response = await request(server())
+          .post("/pet-tags")
+          .send({ petId, tagId: 999999, note: "orphan" })
+          .expect(422);
+        expect(response.body).toMatchObject({ status: 422, code: "KAVO_UNRESOLVED_RELATION" });
       });
     });
 

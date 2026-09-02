@@ -294,11 +294,13 @@ SQLite extended codes itself. Every driver MikroORM supports is covered by
 that normalization; anything it does not recognize falls through to
 `PersistenceException`, and the original error always travels as `cause`.
 
-Note the line the table draws: only unique and foreign-key violations are
-conflicts. A `NotNullConstraintViolationException` or
-`CheckConstraintViolationException` is not the caller's to resolve, so it
-stays a 500 — the same boundary `@kavo/typeorm` draws when its SQLite
-message sniff declines to match a `NOT NULL` failure.
+Note the line the table draws: unique violations and foreign-key violations
+that block `deleteOne`/`purgeOne` are conflicts; an insert/update foreign-key
+violation is an unresolved relation instead. A
+`NotNullConstraintViolationException` or `CheckConstraintViolationException`
+is not the caller's to resolve, so it stays a 500 — the same boundary
+`@kavo/typeorm` draws when its SQLite message sniff declines to match a `NOT
+NULL` failure.
 
 A soft-deleted row still occupies its unique indexes, so re-creating "the
 same" row after a soft delete raises a 409 — the honest answer, since the
