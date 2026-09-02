@@ -8,6 +8,7 @@ import {
   PersistenceException,
   QueryValidationException,
   TransactionException,
+  UnresolvedRelationException,
 } from "@kavo/core";
 import { mapDriverError } from "@kavo/typeorm";
 
@@ -32,6 +33,12 @@ const context: ErrorContext = {
   correlationId: "req-1",
 };
 
+const deleteContext: ErrorContext = {
+  entityName: "Author",
+  operation: "deleteOne",
+  correlationId: "req-1",
+};
+
 const uniqueViolations: readonly (readonly [string, DriverPayload])[] = [
   ["Postgres unique_violation", { code: "23505" }],
   ["MySQL ER_DUP_ENTRY", { code: "ER_DUP_ENTRY", errno: 1062 }],
@@ -43,15 +50,23 @@ const uniqueViolations: readonly (readonly [string, DriverPayload])[] = [
   ],
 ];
 
-const foreignKeyViolations: readonly (readonly [string, DriverPayload])[] = [
+// A bad foreign key on insert/update: the payload names a related row that
+// does not exist → 422. Postgres and SQLite reuse one code for both FK
+// directions, so under a non-delete operation they land here.
+const foreignKeyOnInsert: readonly (readonly [string, DriverPayload])[] = [
   ["Postgres foreign_key_violation", { code: "23503" }],
   ["MySQL ER_NO_REFERENCED_ROW_2", { code: "ER_NO_REFERENCED_ROW_2", errno: 1452 }],
-  ["MySQL ER_ROW_IS_REFERENCED_2", { code: "ER_ROW_IS_REFERENCED_2", errno: 1451 }],
   ["SQLite extended foreign-key code", { code: "SQLITE_CONSTRAINT_FOREIGNKEY" }],
   [
     "SQLite base code with a foreign-key message",
     { code: "SQLITE_CONSTRAINT", message: "FOREIGN KEY constraint failed" },
   ],
+];
+
+// The row is still referenced by children — a blocked delete → stays 409.
+// MySQL's 1451 says this by code; Postgres/SQLite need a delete operation.
+const foreignKeyBlockingDelete: readonly (readonly [string, DriverPayload])[] = [
+  ["MySQL ER_ROW_IS_REFERENCED_2", { code: "ER_ROW_IS_REFERENCED_2", errno: 1451 }],
 ];
 
 const retryableFailures: readonly (readonly [string, DriverPayload])[] = [
@@ -91,11 +106,46 @@ describe("mapDriverError — unique violations", () => {
   });
 });
 
-describe("mapDriverError — foreign-key violations", () => {
-  it.each(foreignKeyViolations)("maps a %s to a 409 conflict", (_name, driver) => {
+describe("mapDriverError — foreign-key violations on insert/update", () => {
+  it.each(foreignKeyOnInsert)("maps a %s to a 422 unresolved relation", (_name, driver) => {
+    const mapped = mapDriverError(queryFailed(driver), context);
+    expect(mapped).toBeInstanceOf(UnresolvedRelationException);
+    expect(mapped).toMatchObject({ code: "KAVO_UNRESOLVED_RELATION", status: 422 });
+  });
+
+  it("names the entity in the unresolved-relation message params", () => {
+    expect(mapDriverError(queryFailed({ code: "23503" }), context).messageParams).toEqual({ entity: "Author" });
+  });
+
+  it("routes a directionless FK code to 422 when the context names no operation", () => {
+    // The dominant case is a bad id in the request body; only a delete
+    // operation flips it back to 409.
+    const mapped = mapDriverError(queryFailed({ code: "23503" }), { entityName: "Author" });
+    expect(mapped).toBeInstanceOf(UnresolvedRelationException);
+  });
+});
+
+describe("mapDriverError — foreign-key violations blocking a delete", () => {
+  it.each(foreignKeyBlockingDelete)("maps a %s to a 409 conflict by code alone", (_name, driver) => {
+    // MySQL's 1451 is unambiguous — a still-referenced row — so it stays
+    // 409 regardless of the operation in the context.
     const mapped = mapDriverError(queryFailed(driver), context);
     expect(mapped).toBeInstanceOf(ConflictException);
     expect(mapped).toMatchObject({ code: "KAVO_CONFLICT", status: 409 });
+  });
+
+  it.each([
+    ["Postgres foreign_key_violation", { code: "23503" }],
+    ["SQLite extended foreign-key code", { code: "SQLITE_CONSTRAINT_FOREIGNKEY" }],
+  ] as const)("maps a %s under a delete operation to a 409 conflict", (_name, driver) => {
+    const mapped = mapDriverError(queryFailed(driver), deleteContext);
+    expect(mapped).toBeInstanceOf(ConflictException);
+    expect(mapped).toMatchObject({ code: "KAVO_CONFLICT", status: 409 });
+  });
+
+  it("treats purgeOne as a delete too", () => {
+    const mapped = mapDriverError(queryFailed({ code: "23503" }), { entityName: "Author", operation: "purgeOne" });
+    expect(mapped).toBeInstanceOf(ConflictException);
   });
 
   it("leaves other SQLite constraint failures to the fallback row", () => {
@@ -189,7 +239,8 @@ describe("mapDriverError — the fallback row", () => {
 describe("mapDriverError — cause and context propagation", () => {
   const everyRow = [
     ...uniqueViolations,
-    ...foreignKeyViolations,
+    ...foreignKeyOnInsert,
+    ...foreignKeyBlockingDelete,
     ...retryableFailures,
     ["Postgres invalid_text_representation", { code: "22P02" }],
     ["unknown", { code: "42P01" }],
@@ -216,6 +267,7 @@ describe("mapDriverError — Kavo exceptions pass through", () => {
     for (const original of [
       new NotFoundException({ messageParams: { entity: "Author", id: "7" } }),
       new ConflictException({ messageParams: { entity: "Author" } }),
+      new UnresolvedRelationException({ messageParams: { entity: "Author" } }),
       new QueryValidationException([{ field: "age", code: "KAVO_QUERY_INVALID_VALUE", detail: "bad" }]),
       new TransactionException({ retryable: true }),
     ]) {

@@ -238,6 +238,7 @@ export {
   PreconditionUnsupportedException,
   QueryValidationException,
   TransactionException,
+  UnresolvedRelationException,
   type KavoExceptionOptions,
 } from "./errors/exceptions.js";
 export { toProblemDetails, type ProblemDetailsOptions } from "./errors/problem-details-serializer.js";

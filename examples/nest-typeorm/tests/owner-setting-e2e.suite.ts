@@ -85,11 +85,14 @@ export function registerOwnerSettingE2eSuite(getApp: () => INestApplication): vo
         await request(server()).post("/owner-settings").send({ theme: "dark", emailNotifications: true }).expect(400);
       });
 
-      it("rejects an owner id that does not reference an existing owner, as a 409 (the DB's own FK constraint)", async () => {
+      it("rejects an owner id that does not reference an existing owner, as a 422 (the DB's own FK constraint)", async () => {
         await request(server())
           .post("/owner-settings")
           .send({ owner: { id: 999999 }, theme: "dark", emailNotifications: true })
-          .expect(409);
+          .expect(422)
+          .expect((res) => {
+            expect(res.body.code).toBe("KAVO_UNRESOLVED_RELATION");
+          });
       });
     });
 

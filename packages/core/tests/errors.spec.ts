@@ -19,6 +19,7 @@ import {
   PersistenceException,
   QueryValidationException,
   TransactionException,
+  UnresolvedRelationException,
   renderMessage,
   toProblemDetails,
 } from "@kavo/core";
@@ -42,6 +43,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_NOT_FOUND: { status: 404, title: "Not found" },
   KAVO_FORBIDDEN: { status: 403, title: "Forbidden" },
   KAVO_CONFLICT: { status: 409, title: "Conflict" },
+  KAVO_UNRESOLVED_RELATION: { status: 422, title: "Unresolved relation" },
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: { status: 400, title: "Invalid array-mutation body" },
   KAVO_ASSOCIATION_INVALID_SHAPE: { status: 400, title: "Invalid association shape" },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: { status: 400, title: "Invalid JSON Patch document" },
@@ -124,6 +126,12 @@ describe("renderMessage — message key + params", () => {
     );
   });
 
+  it("names the entity in the unresolved-relation template", () => {
+    expect(renderMessage("KAVO_UNRESOLVED_RELATION", { entity: "Bookmark" })).toBe(
+      "The request for Bookmark references a related record that does not exist.",
+    );
+  });
+
   it("leaves an unsupplied placeholder verbatim rather than printing 'undefined'", () => {
     // The spec fixes key + params as the localization contract but is silent
     // on a missing param; keeping the placeholder is what core does, and it
@@ -137,6 +145,7 @@ describe("exception hierarchy", () => {
     { exception: new NotFoundException(), code: "KAVO_NOT_FOUND", status: 404 },
     { exception: new ForbiddenException(), code: "KAVO_FORBIDDEN", status: 403 },
     { exception: new ConflictException(), code: "KAVO_CONFLICT", status: 409 },
+    { exception: new UnresolvedRelationException(), code: "KAVO_UNRESOLVED_RELATION", status: 422 },
     { exception: new ArrayMutationInvalidShapeException(), code: "KAVO_ARRAY_MUTATION_INVALID_SHAPE", status: 400 },
     {
       exception: new ArrayMutationMemberNotFoundException(),

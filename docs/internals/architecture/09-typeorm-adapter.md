@@ -83,13 +83,14 @@ is true, so `total: null` costs zero extra queries.
 
 `mapDriverError` — the original error always travels as `cause`:
 
-| Driver condition (PG SQLSTATE / MySQL errno / SQLite code)                   | Exception                                  |
-| ---------------------------------------------------------------------------- | ------------------------------------------ |
-| unique violation (`23505` / 1062 / `SQLITE_CONSTRAINT_UNIQUE`·`_PRIMARYKEY`) | `ConflictException`                        |
-| FK violation (`23503` / 1451·1452 / `SQLITE_CONSTRAINT_FOREIGNKEY`)          | `ConflictException`                        |
-| invalid input syntax (PG `22P02`, e.g. a non-UUID id)                        | `QueryValidationException` (400)           |
-| serialization/deadlock (`40001`·`40P01` / 1213 / `SQLITE_BUSY`)              | `TransactionException` (`retryable: true`) |
-| anything else                                                                | `PersistenceException` with `cause`        |
+| Driver condition (PG SQLSTATE / MySQL errno / SQLite code)                                                                                                    | Exception                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| unique violation (`23505` / 1062 / `SQLITE_CONSTRAINT_UNIQUE`·`_PRIMARYKEY`)                                                                                  | `ConflictException` (409)                  |
+| FK violation on insert/update — bad FK (`23503`/`SQLITE_CONSTRAINT_FOREIGNKEY` when `context.operation` is not a delete; MySQL 1452)                          | `UnresolvedRelationException` (422)        |
+| FK violation blocking a delete — row still referenced (`23503`/`SQLITE_CONSTRAINT_FOREIGNKEY` when `context.operation` is `deleteOne`/`purgeOne`; MySQL 1451) | `ConflictException` (409)                  |
+| invalid input syntax (PG `22P02`, e.g. a non-UUID id)                                                                                                         | `QueryValidationException` (400)           |
+| serialization/deadlock (`40001`·`40P01` / 1213 / `SQLITE_BUSY`)                                                                                               | `TransactionException` (`retryable: true`) |
+| anything else                                                                                                                                                 | `PersistenceException` with `cause`        |
 
 ## 6. Attachment points for later work
 

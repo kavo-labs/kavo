@@ -61,12 +61,13 @@ A query-validation failure additionally carries an `errors[]` array, so a client
 
 The most common codes:
 
-| Code                   | HTTP | Fires when                                              |
-| ---------------------- | ---- | ------------------------------------------------------- |
-| `KAVO_QUERY_INVALID`   | 400  | Any filter/sort/select/pagination violation (aggregate) |
-| `KAVO_NOT_FOUND`       | 404  | Target row missing on a get/update/patch/delete         |
-| `KAVO_CONFLICT`        | 409  | A unique or foreign-key violation                       |
-| `KAVO_ALREADY_DELETED` | 409  | Soft-deleting a row that's already deleted              |
-| `KAVO_NOT_DELETED`     | 409  | Restoring or purging a row that isn't deleted           |
+| Code                       | HTTP | Fires when                                                                                                                                                                        |
+| -------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KAVO_QUERY_INVALID`       | 400  | Any filter/sort/select/pagination violation (aggregate)                                                                                                                           |
+| `KAVO_NOT_FOUND`           | 404  | Target row missing on a get/update/patch/delete                                                                                                                                   |
+| `KAVO_CONFLICT`            | 409  | A unique violation, or a delete blocked by a still-referenced row                                                                                                                 |
+| `KAVO_UNRESOLVED_RELATION` | 422  | A standard entity create/update write whose database foreign-key violation names a missing related row; route-specific writes such as `PUT /cats/:id/tags` may return 404 instead |
+| `KAVO_ALREADY_DELETED`     | 409  | Soft-deleting a row that's already deleted                                                                                                                                        |
+| `KAVO_NOT_DELETED`         | 409  | Restoring or purging a row that isn't deleted                                                                                                                                     |
 
 Driver-level detail (raw SQL error text, stack info) never leaks into `detail` unless `errors.exposeInternals` is turned on. Keep it off in production. See [Error handling](/internals/architecture/06-error-handling) for the full exception hierarchy and code catalog.

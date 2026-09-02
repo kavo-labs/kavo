@@ -1,5 +1,11 @@
 import type { ErrorContext } from "@kavo/core";
-import { ConflictException, KavoException, PersistenceException, TransactionException } from "@kavo/core";
+import {
+  ConflictException,
+  KavoException,
+  PersistenceException,
+  TransactionException,
+  UnresolvedRelationException,
+} from "@kavo/core";
 import {
   DeadlockException,
   ForeignKeyConstraintViolationException,
@@ -12,12 +18,19 @@ import {
  *
  * | MikroORM condition                          | Exception                          |
  * | ------------------------------------------- | ---------------------------------- |
- * | `UniqueConstraintViolationException`        | ConflictException                  |
- * | `ForeignKeyConstraintViolationException`    | ConflictException                  |
+ * | `UniqueConstraintViolationException`        | ConflictException (409)            |
+ * | `ForeignKeyConstraintViolationException` from an insert/update | UnresolvedRelationException (422) |
+ * | `ForeignKeyConstraintViolationException` from a delete | ConflictException (409)   |
  * | `DeadlockException` / `LockWaitTimeoutException` | TransactionException (retryable) |
  * | anything else                               | PersistenceException with `cause`  |
  *
- * The same four rows `@kavo/typeorm`'s table has, reached differently:
+ * MikroORM does not name the FK direction, so the two causes are told apart
+ * by `context.operation`: a delete (`deleteOne`/`purgeOne`) blocked by
+ * children that still reference the row is a real state conflict (409);
+ * anything else is a dangling reference in the payload — correct the id and
+ * retry (422, issue #365).
+ *
+ * The same rows `@kavo/typeorm`'s table has, reached differently:
  * MikroORM normalizes each driver's native error into its own exception
  * hierarchy before it surfaces, so this matches on those classes rather than
  * on Postgres SQLSTATEs, MySQL errnos, and SQLite extended codes the way the
@@ -42,12 +55,22 @@ export function mapDriverError(error: unknown, context: ErrorContext): KavoExcep
 
   const entity = context.entityName ?? "entity";
 
-  if (error instanceof UniqueConstraintViolationException || error instanceof ForeignKeyConstraintViolationException) {
+  if (error instanceof UniqueConstraintViolationException) {
     return new ConflictException({
       messageParams: { entity },
       context,
       cause: error,
     });
+  }
+
+  if (error instanceof ForeignKeyConstraintViolationException) {
+    // Closed to the two standard delete ids on purpose: a custom operation
+    // that deletes cannot be recognized here, and defaulting it to 422
+    // matches the dominant case (a bad FK in the request body).
+    const isDelete = context.operation === "deleteOne" || context.operation === "purgeOne";
+    return isDelete
+      ? new ConflictException({ messageParams: { entity }, context, cause: error })
+      : new UnresolvedRelationException({ messageParams: { entity }, context, cause: error });
   }
 
   if (error instanceof DeadlockException || error instanceof LockWaitTimeoutException) {

@@ -5,23 +5,49 @@ import {
   PersistenceException,
   QueryValidationException,
   TransactionException,
+  UnresolvedRelationException,
 } from "@kavo/core";
 import { QueryFailedError } from "typeorm";
 
 /**
+ * The standard operations that delete a row. A foreign-key violation from
+ * one of these is the parent still being referenced by children — a genuine
+ * conflict with current state (409). From anything else (an insert or
+ * update, a custom operation, or an unknown operation) an FK violation is a
+ * dangling reference in the payload — the dominant case — so it maps to 422.
+ * The set is deliberately closed to these two standard ids: a custom
+ * operation that deletes cannot be recognized here, and defaulting it to 422
+ * matches the common case rather than guessing.
+ */
+function isDeleteOperation(operation: string | undefined): boolean {
+  return operation === "deleteOne" || operation === "purgeOne";
+}
+
+/**
  * The error-mapping table: driver error → Kavo exception.
  *
- * | Driver condition                  | Exception                          |
- * | --------------------------------- | ---------------------------------- |
- * | unique violation                  | ConflictException                  |
- * | foreign-key violation             | ConflictException                  |
- * | invalid input syntax (bad value)  | QueryValidationException           |
+ * | Driver condition                          | Exception                          |
+ * | ----------------------------------------- | ---------------------------------- |
+ * | unique violation                          | ConflictException (409)            |
+ * | FK violation on insert/update (bad FK)    | UnresolvedRelationException (422)  |
+ * | FK violation blocking a delete            | ConflictException (409)            |
+ * | invalid input syntax (bad value)          | QueryValidationException           |
  * | serialization failure / deadlock  | TransactionException (retryable)   |
  * | anything else                     | PersistenceException with `cause`  |
  *
  * Codes covered: Postgres SQLSTATE, MySQL errno, SQLite extended codes.
  * Unknown drivers fall through to `PersistenceException` — the original
  * error always travels as `cause`, never swallowed.
+ *
+ * **Foreign-key violations have two directions.** A child insert/update
+ * naming a parent that does not exist is a bad id in the request body — the
+ * dominant case — and maps to `UnresolvedRelationException` (422): correct
+ * the id and retry. A parent delete blocked because children still
+ * reference it is a real conflict with current state and stays
+ * `ConflictException` (409). MySQL splits these itself (`1452` vs `1451`);
+ * Postgres and SQLite reuse one code (`23503` / `SQLITE_CONSTRAINT_FOREIGNKEY`)
+ * for both, so those are routed by `context.operation` — a delete
+ * (`deleteOne`/`purgeOne`) → 409, anything else → 422 (issue #365).
  *
  * **Invalid input syntax.** A malformed id/filter value that a driver
  * itself rejects for not matching a column's storage format (e.g. a
@@ -61,18 +87,34 @@ export function mapDriverError(error: unknown, context: ErrorContext): KavoExcep
       code === "SQLITE_CONSTRAINT_UNIQUE" ||
       code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
       (code.startsWith("SQLITE_CONSTRAINT") && /unique/i.test(message));
-    const foreignKey =
-      code === "23503" || // Postgres foreign_key_violation
-      errno === 1452 || // MySQL ER_NO_REFERENCED_ROW_2
-      errno === 1451 || // MySQL ER_ROW_IS_REFERENCED_2
-      code === "SQLITE_CONSTRAINT_FOREIGNKEY" ||
-      (code.startsWith("SQLITE_CONSTRAINT") && /foreign key/i.test(message));
-    if (unique || foreignKey) {
+    if (unique) {
       return new ConflictException({
         messageParams: { entity },
         context,
         cause: error,
       });
+    }
+
+    // MySQL names the direction: 1451 is "row is still referenced" (a
+    // blocked delete → 409), 1452 is "no referenced row" (a bad FK on
+    // insert/update → 422). Decided by code alone, never by the operation.
+    if (errno === 1451) {
+      return new ConflictException({ messageParams: { entity }, context, cause: error });
+    }
+    if (errno === 1452) {
+      return new UnresolvedRelationException({ messageParams: { entity }, context, cause: error });
+    }
+
+    // Postgres (`23503`) and SQLite reuse one code for both FK directions,
+    // so the operation is what tells them apart.
+    const foreignKeyDirectionless =
+      code === "23503" || // Postgres foreign_key_violation
+      code === "SQLITE_CONSTRAINT_FOREIGNKEY" ||
+      (code.startsWith("SQLITE_CONSTRAINT") && /foreign key/i.test(message));
+    if (foreignKeyDirectionless) {
+      return isDeleteOperation(context.operation)
+        ? new ConflictException({ messageParams: { entity }, context, cause: error })
+        : new UnresolvedRelationException({ messageParams: { entity }, context, cause: error });
     }
 
     const retryable =

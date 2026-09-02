@@ -275,14 +275,18 @@ one or the other.
 
 ## 6. Error-mapping table
 
-| MikroORM condition                               | Exception                         |
-| ------------------------------------------------ | --------------------------------- |
-| `UniqueConstraintViolationException`             | `ConflictException` (409)         |
-| `ForeignKeyConstraintViolationException`         | `ConflictException` (409)         |
-| `DeadlockException` / `LockWaitTimeoutException` | `TransactionException`, retryable |
-| anything else                                    | `PersistenceException` (500)      |
+| MikroORM condition                                                                                     | Exception                           |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `UniqueConstraintViolationException`                                                                   | `ConflictException` (409)           |
+| `ForeignKeyConstraintViolationException` from an insert/update                                         | `UnresolvedRelationException` (422) |
+| `ForeignKeyConstraintViolationException` from a delete (`context.operation` is `deleteOne`/`purgeOne`) | `ConflictException` (409)           |
+| `DeadlockException` / `LockWaitTimeoutException`                                                       | `TransactionException`, retryable   |
+| anything else                                                                                          | `PersistenceException` (500)        |
 
-The same four rows `@kavo/typeorm`'s table has (doc 06), reached
+MikroORM does not name the FK direction, so the two `ForeignKeyConstraintViolationException`
+causes are told apart by `context.operation` (issue #365).
+
+The same rows `@kavo/typeorm`'s table has (doc 06), reached
 differently. MikroORM normalizes each driver's native error into its own
 exception hierarchy before it surfaces, so this adapter matches on those
 classes rather than recognizing Postgres SQLSTATEs, MySQL errnos, and
@@ -290,11 +294,13 @@ SQLite extended codes itself. Every driver MikroORM supports is covered by
 that normalization; anything it does not recognize falls through to
 `PersistenceException`, and the original error always travels as `cause`.
 
-Note the line the table draws: only unique and foreign-key violations are
-conflicts. A `NotNullConstraintViolationException` or
-`CheckConstraintViolationException` is not the caller's to resolve, so it
-stays a 500 — the same boundary `@kavo/typeorm` draws when its SQLite
-message sniff declines to match a `NOT NULL` failure.
+Note the line the table draws: unique violations and foreign-key violations
+that block `deleteOne`/`purgeOne` are conflicts; an insert/update foreign-key
+violation is an unresolved relation instead. A
+`NotNullConstraintViolationException` or `CheckConstraintViolationException`
+is not the caller's to resolve, so it stays a 500 — the same boundary
+`@kavo/typeorm` draws when its SQLite message sniff declines to match a `NOT
+NULL` failure.
 
 A soft-deleted row still occupies its unique indexes, so re-creating "the
 same" row after a soft delete raises a 409 — the honest answer, since the
