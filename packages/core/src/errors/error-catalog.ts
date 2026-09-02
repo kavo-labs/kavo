@@ -76,6 +76,11 @@ export const ERROR_CATALOG = {
     title: "Conflict",
     message: "The operation conflicts with the current state of {entity}.",
   },
+  KAVO_UNRESOLVED_RELATION: {
+    status: 422,
+    title: "Unresolved relation",
+    message: "The request for {entity} references a related record that does not exist.",
+  },
   KAVO_ARRAY_MUTATION_INVALID_SHAPE: {
     status: 400,
     title: "Invalid array-mutation body",

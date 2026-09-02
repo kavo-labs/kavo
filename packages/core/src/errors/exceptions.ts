@@ -92,6 +92,24 @@ export class ConflictException extends KavoException {
 }
 
 /**
+ * A write whose payload references a related row that does not exist — a
+ * dangling foreign key on insert or update (`{ "word": { "id": "…" } }`
+ * naming an id with no matching row) → 422. Distinct from
+ * {@link ConflictException} (409): nothing in existing state conflicts, the
+ * request just points at something absent, so the fix is to correct the id
+ * and retry rather than to stop. A blocked *delete* — the row is still
+ * referenced by children — stays a {@link ConflictException}: that one is a
+ * genuine conflict with current state. Raised only by an adapter's
+ * `mapDriverError` table from a driver-level FK violation, never by the
+ * engine directly.
+ */
+export class UnresolvedRelationException extends KavoException {
+  constructor(options: KavoExceptionOptions = {}) {
+    super("KAVO_UNRESOLVED_RELATION", options);
+  }
+}
+
+/**
  * A `replace`-strategy array-mutation body (`PUT /entity/:id/relation`) that
  * is not the shape ADR-0014 defines for a to-many association — an array of
  * scalar ids / `{ id }` references, or `null` — → 400. `replace` disables

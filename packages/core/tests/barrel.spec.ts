@@ -233,6 +233,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "TransactionManager",
   "TransactionOptions",
   "TransactionPropagation",
+  "UnresolvedRelationException",
   "WhenParams",
   "WireQuery",
   "WritableFieldSelector",
