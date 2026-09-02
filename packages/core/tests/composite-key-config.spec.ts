@@ -124,4 +124,22 @@ describe("createCrud — composite-key bootstrap rejections (issue #261)", () =>
       }),
     ).not.toThrow();
   });
+
+  it("rejects include of a strategy: 'key' edge whose target has a composite primary key (issue #364)", async () => {
+    const kavo = createKavo();
+    kavo.createCrud(CompositeEntity, undefined, {
+      adapter: new SeededAdapter<CompositeEntity>(),
+      metadata: compositeMetadata,
+    });
+    const ownerAdapter = new SeededAdapter<OwnerOfComposite>([{ id: 1 } as OwnerOfComposite]);
+    const owners = kavo.createCrud(
+      OwnerOfComposite,
+      { allowlists: { includable: ["item"] }, relations: { edges: { item: { strategy: "key" } } } } as never,
+      { adapter: ownerAdapter, metadata: ownerOfCompositeMetadata },
+    ) as unknown as { findMany: (q: unknown) => Promise<unknown> };
+
+    await expect(owners.findMany({ include: ["item"] })).rejects.toMatchObject({
+      issues: [{ field: "item", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }],
+    });
+  });
 });

@@ -191,6 +191,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     translator?: FilterTranslator<Entity>,
   ): void {
     for (const node of Object.values(tree)) {
+      if (node.strategy === "key") {
+        // `strategy: "key"` (issue #364): pull the local FK id into a
+        // scratch property on the same query — no `leftJoinAndSelect`, no
+        // batch. `finalizeKeyNodes` turns it into `{ <pk>: value }` / null.
+        qb.loadRelationIdAndMap(
+          `${parentAlias}.${keyScratch(node.relation.name)}`,
+          `${parentAlias}.${node.relation.name}`,
+        );
+        continue;
+      }
       if (node.strategy !== "join") {
         continue;
       }
@@ -230,6 +240,17 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       return;
     }
     for (const node of Object.values(tree)) {
+      if (node.strategy === "key") {
+        // The FK id already rode in on the owning query as a scratch
+        // property (`joinIncludes`); turn it into `{ <pk>: value }` / null.
+        const scratch = keyScratch(node.relation.name);
+        for (const row of rows) {
+          const fk = row[scratch];
+          delete row[scratch];
+          row[node.relation.name] = fk === null || fk === undefined ? null : { [node.idField!]: fk };
+        }
+        continue;
+      }
       if (node.strategy === "batch") {
         await this.batchLoad(rows, entity, node);
         continue;
@@ -1010,6 +1031,15 @@ function stripImmutableKeys<Entity>(
 }
 
 /** The loaded rows on one relation of a set of parents, flattened. */
+/**
+ * The scratch property `strategy: "key"` maps the local FK id onto,
+ * before it is rewritten as `{ <pk>: value }`. Namespaced so it cannot
+ * collide with a real column or relation of the entity.
+ */
+function keyScratch(relationName: string): string {
+  return `__kavoKey__${relationName}`;
+}
+
 function relatedRows(parents: readonly ObjectLiteral[], name: string): readonly ObjectLiteral[] {
   const rows: ObjectLiteral[] = [];
   for (const parent of parents) {

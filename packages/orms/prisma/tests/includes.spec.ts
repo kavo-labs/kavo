@@ -29,6 +29,8 @@ let client: PrismaClient;
 let kavo: KavoInstance;
 let blogs: DefaultKavoService<Blog>;
 let articles: DefaultKavoService<Article>;
+let keyArticles: DefaultKavoService<Article>;
+let nestedKeyBlogs: DefaultKavoService<Blog>;
 
 beforeAll(() => {
   client = newTestPrismaClient();
@@ -45,6 +47,30 @@ beforeAll(() => {
     allowlists: { includable: ["blog", "notes"], filterable: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
   kavo.createCrud(Note, { allowlists: { includable: ["article"] } } as never);
+  // A separate root instance so this Article config does not clobber the
+  // one above in the shared catalog (issue #364).
+  keyArticles = createPrismaKavo(client as never, {
+    datamodel: Prisma.dmmf.datamodel,
+    entities: [Blog, Article, Note],
+    caseInsensitiveFilters: false,
+  }).createCrud(Article, {
+    softDelete: { field: "deletedAt" },
+    allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never) as DefaultKavoService<Article>;
+  const nestedKavo = createPrismaKavo(client as never, {
+    datamodel: Prisma.dmmf.datamodel,
+    entities: [Blog, Article, Note],
+    caseInsensitiveFilters: false,
+  });
+  nestedKavo.createCrud(Article, {
+    softDelete: { field: "deletedAt" },
+    allowlists: { includable: ["blog"] },
+    relations: { edges: { blog: { strategy: "key" } } },
+  } as never);
+  nestedKeyBlogs = nestedKavo.createCrud(Blog, {
+    allowlists: { includable: ["articles"] },
+  }) as DefaultKavoService<Blog>;
 });
 
 afterAll(async () => {
@@ -87,6 +113,51 @@ describe("PrismaRepositoryAdapter — to-one includes", () => {
     });
     expect(list.items).toHaveLength(2);
     expect(list.items[0]).toMatchObject({ blog: { name: "Kavo weekly" } });
+  });
+});
+
+describe("PrismaRepositoryAdapter — key loading (issue #364)", () => {
+  it("materializes a to-one as its FK id, nothing else", async () => {
+    const { blogId } = await seed();
+    const list = await keyArticles.findMany({ include: ["blog"], sort: [{ field: "id", direction: "asc" }] });
+    expect((list.items[0] as { blog: unknown }).blog).toEqual({ id: blogId });
+  });
+
+  it("serializes a null FK as null", async () => {
+    await client.article.create({ data: { title: "Orphan" } });
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "title" as never, operator: "EQ", value: "Orphan" },
+    });
+    expect((list.items[0] as { blog: unknown }).blog).toBeNull();
+  });
+
+  it("accepts select[blog]=id and rejects any other field with a 400", async () => {
+    const { blogId } = await seed();
+    const ok = await keyArticles.findMany({ include: ["blog"], select: { blog: ["id"] } as never });
+    expect((ok.items[0] as { blog: unknown }).blog).toEqual({ id: blogId });
+    await expect(
+      keyArticles.findMany({ include: ["blog"], select: { blog: ["name"] } as never }),
+    ).rejects.toMatchObject({ issues: [{ field: "blog.name", code: "KAVO_QUERY_INVALID_FIELD" }] });
+  });
+
+  it("still resolves a filter on the key-edge path", async () => {
+    await seed();
+    const list = await keyArticles.findMany({
+      include: ["blog"],
+      filter: { kind: "condition", field: "blog.name" as never, operator: "EQ", value: "Kavo weekly" },
+    });
+    expect(list.items).toHaveLength(2);
+  });
+
+  it("resolves a key edge nested under an included to-many parent", async () => {
+    const { blogId } = await seed();
+    const list = await nestedKeyBlogs.findMany({ include: ["articles", "articles.blog"] });
+    const embedded = (list.items[0] as { articles: { blog: unknown }[] }).articles;
+    expect(embedded).toHaveLength(2);
+    for (const article of embedded) {
+      expect(article.blog).toEqual({ id: blogId });
+    }
   });
 });
 

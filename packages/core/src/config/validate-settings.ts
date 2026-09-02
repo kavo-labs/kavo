@@ -112,11 +112,11 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     if (edge.maxDepth !== undefined) {
       positiveInt(`${path}.maxDepth`, edge.maxDepth);
     }
-    if (edge.strategy !== undefined && !["join", "batch", "auto"].includes(edge.strategy)) {
+    if (edge.strategy !== undefined && !["join", "batch", "key", "auto"].includes(edge.strategy)) {
       throw new ConfigurationException(
         entityName,
         `${path}.strategy`,
-        `expected "join", "batch", or "auto", got ${JSON.stringify(edge.strategy)}`,
+        `expected "join", "batch", "key", or "auto", got ${JSON.stringify(edge.strategy)}`,
       );
     }
     if (edge.write !== undefined && typeof edge.write !== "boolean") {

@@ -42,8 +42,10 @@ interface PopulateSpec {
  * Mongoose's `populate` has no such failure mode — it issues its own
  * separate query per edge and stitches in memory, to-one and to-many alike,
  * so a to-many include never disturbs root pagination. This adapter
- * therefore *ignores* `IncludeNode.strategy` and maps every node the same
- * way, exactly as `@kavo/prisma` does.
+ * therefore ignores the `join`/`batch` distinction and maps those nodes the
+ * same way, exactly as `@kavo/prisma` does. It does honor `key` (issue
+ * #364): the edge is left un-populated and its raw FK id is rewritten to
+ * `{ <pk>: value }` / `null` after conversion to plain data.
  *
  * **Every read is `lean`.** Hydrated Mongoose documents carry getters,
  * virtuals, and change tracking that core has no use for and the serializer
@@ -92,7 +94,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         query?.onlyDeleted ?? false,
       );
       const row = await this.model.findOne(where, null, this.readOptions(this.buildPopulate(query?.include ?? {})));
-      return row === null || row === undefined ? null : (toPlainResult(row) as Entity);
+      return row === null || row === undefined ? null : (this.plainWithKeys(row, query?.include ?? {}) as Entity);
     } catch (error) {
       throw this.mapError(error, context, true);
     }
@@ -105,7 +107,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         null,
         this.readOptions(this.buildPopulate(query.include), this.buildSort(query)),
       );
-      return row === null || row === undefined ? null : (toPlainResult(row) as Entity);
+      return row === null || row === undefined ? null : (this.plainWithKeys(row, query.include) as Entity);
     } catch (error) {
       throw this.mapError(error, context);
     }
@@ -122,7 +124,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         skip: hasKeyset(pagination) ? 0 : pagination.offset,
         limit: pagination.limit,
       });
-      return rows.map((row) => toPlainResult(row) as Entity);
+      return rows.map((row) => this.plainWithKeys(row, query.include) as Entity);
     } catch (error) {
       throw this.mapError(error, context);
     }
@@ -184,14 +186,29 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     if (nodes.length === 0) {
       return undefined;
     }
-    return nodes.map((node) => {
-      const children = this.buildPopulate(node.children);
-      return {
-        path: node.relation.name,
-        ...(node.softDelete.strategy === "soft" && { match: { [node.softDelete.field]: null } }),
-        ...(children && { populate: children }),
-      };
-    });
+    return nodes
+      .filter((node) => node.strategy !== "key")
+      .map((node) => {
+        const children = this.buildPopulate(node.children);
+        return {
+          path: node.relation.name,
+          ...(node.softDelete.strategy === "soft" && { match: { [node.softDelete.field]: null } }),
+          ...(children && { populate: children }),
+        };
+      });
+  }
+
+  /**
+   * `toPlainResult`, then resolve every `strategy: "key"` node (issue #364):
+   * an un-populated to-one ref is already a hex-string id after
+   * `toPlainDocument`; rewrite it as `{ <pk>: value }`, or `null` when the
+   * FK is absent. Recurses through populated parents so a nested key edge
+   * is handled at its own level.
+   */
+  private plainWithKeys(row: unknown, tree: IncludeTree): Record<string, unknown> {
+    const plain = toPlainResult(row);
+    finalizeKeyNodes(plain, tree);
+    return plain;
   }
 
   // ── Soft delete ──────────────────────────────────────────────────────
@@ -476,6 +493,34 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       messageParams: { entity: context.entityName, id: String(id) },
       context: errorContext(context),
     });
+  }
+}
+
+/**
+ * Rewrite every `strategy: "key"` node of `tree` in place: `plain[rel]` is
+ * a bare FK id (a hex string, post-`toPlainDocument`) or absent — it
+ * becomes `{ <pk>: value }` or `null`. Recurses through populated parents
+ * so a key edge nested under a `join`/`batch` parent is resolved at its own
+ * level.
+ */
+function finalizeKeyNodes(plain: Record<string, unknown>, tree: IncludeTree): void {
+  for (const node of Object.values(tree)) {
+    const name = node.relation.name;
+    if (node.strategy === "key") {
+      const fk = plain[name];
+      plain[name] = fk === null || fk === undefined ? null : { [node.idField as string]: fk };
+      continue;
+    }
+    const value = plain[name];
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        if (child !== null && typeof child === "object") {
+          finalizeKeyNodes(child as Record<string, unknown>, node.children);
+        }
+      }
+    } else if (value !== null && typeof value === "object") {
+      finalizeKeyNodes(value as Record<string, unknown>, node.children);
+    }
   }
 }
 

@@ -11,9 +11,15 @@ export type RelationCardinality = "one" | "many";
  * - `batch` — per-level `WHERE parentId IN (…)` queries stitched in
  *   memory; correct default for to-many (avoids row explosion and the
  *   joined-pagination trap).
+ * - `key`   — owning-side to-one only: materialize the relation as
+ *   `{ <pk>: value }` from the parent row's own foreign-key column — no
+ *   join, no batch query. A `null` FK serializes as `null`. Rejected at
+ *   bootstrap on a to-many edge, and on a to-one edge that does not own
+ *   the FK (an inverse `@OneToOne`), since neither has a local column to
+ *   read. See architecture doc 12, section 3.
  * - `auto`  — to-one → `join`, to-many → `batch`.
  */
-export type RelationLoadStrategy = "join" | "batch" | "auto";
+export type RelationLoadStrategy = "join" | "batch" | "key" | "auto";
 
 /**
  * One relation edge of an entity, as registered in its relation registry.
@@ -24,6 +30,15 @@ export interface RelationDescriptor {
   /** Lazy reference to the target entity class (avoids import cycles). */
   readonly target: () => ClassRef;
   readonly cardinality: RelationCardinality;
+  /**
+   * Whether this side of the edge owns the foreign-key column — `true` for
+   * a many-to-one and the owning side of a one-to-one, `false` for an
+   * inverse one-to-one, `undefined` when the ORM metadata does not say.
+   * Only consulted to reject `strategy: "key"` on an edge with no local FK
+   * to read; an ORM adapter that cannot determine ownership leaves it
+   * unset and `key` stays permitted.
+   */
+  readonly ownsForeignKey?: boolean;
   /**
    * Whether clients may `include=` this relation. Defaults to `false` —
    * inclusion is an opt-in allowlist, granted by `allowlists.includable`

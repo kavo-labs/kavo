@@ -302,6 +302,72 @@ describe("DefaultRelationRegistry — the arrayMutationDefault constructor param
   });
 });
 
+describe("DefaultRelationRegistry — strategy: 'key' bootstrap rejection (issue #364)", () => {
+  const toMany: readonly RelationDescriptor[] = [
+    { name: "posts", target: () => Post as never, cardinality: "many", includable: false, strategy: "auto" },
+  ];
+  const inverseToOne: readonly RelationDescriptor[] = [
+    {
+      name: "profile",
+      target: () => Post as never,
+      cardinality: "one",
+      ownsForeignKey: false,
+      includable: false,
+      strategy: "auto",
+    },
+  ];
+  const owningToOne: readonly RelationDescriptor[] = [
+    {
+      name: "author",
+      target: () => Author as never,
+      cardinality: "one",
+      ownsForeignKey: true,
+      includable: false,
+      strategy: "auto",
+    },
+  ];
+
+  it("rejects 'key' on a to-many edge", () => {
+    try {
+      new DefaultRelationRegistry(toMany, [], { posts: { strategy: "key" } }, "Author");
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.edges.posts.strategy",
+      });
+      expect((error as ConfigurationException).message).toContain("to-many");
+    }
+  });
+
+  it("rejects 'key' on the inverse side of a one-to-one (no local FK)", () => {
+    try {
+      new DefaultRelationRegistry(inverseToOne, [], { profile: { strategy: "key" } }, "Author");
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.edges.profile.strategy",
+      });
+      expect((error as ConfigurationException).message).toContain("inverse side");
+    }
+  });
+
+  it("accepts 'key' on an owning-side to-one edge", () => {
+    expect(() => new DefaultRelationRegistry(owningToOne, [], { author: { strategy: "key" } }, "Post")).not.toThrow();
+  });
+
+  it("accepts 'key' when ownership is unknown — an adapter that cannot tell leaves it permitted", () => {
+    const unknownOwnership: readonly RelationDescriptor[] = [
+      { name: "author", target: () => Author as never, cardinality: "one", includable: false, strategy: "auto" },
+    ];
+    expect(
+      () => new DefaultRelationRegistry(unknownOwnership, [], { author: { strategy: "key" } }, "Post"),
+    ).not.toThrow();
+  });
+});
+
 describe("validateSettings — relations.edges.<name>.write's object form", () => {
   function settingsWith(write: unknown): KavoSettings {
     return {

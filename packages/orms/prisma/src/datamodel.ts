@@ -42,6 +42,13 @@ export interface PrismaField {
   readonly isId: boolean;
   readonly isList: boolean;
   readonly isRequired: boolean;
+  /**
+   * For a `kind: "object"` relation field, the scalar fields on *this*
+   * model that hold the foreign key — non-empty on the owning side, empty
+   * on the inverse side. Used only to reject `strategy: "key"` on an
+   * inverse relation.
+   */
+  readonly relationFromFields?: readonly string[];
   readonly isUpdatedAt?: boolean;
   readonly hasDefaultValue: boolean;
   readonly default?: unknown;

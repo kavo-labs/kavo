@@ -58,7 +58,10 @@ first client asks.
    projection applies.
 6. **Resolve decisions**: `auto` becomes `join` or `batch`, and the
    target's delete strategy is attached — so the adapter translates
-   answers rather than re-deriving them.
+   answers rather than re-deriving them. A `key` node additionally carries
+   `idField` (the target's pk), has its fieldset forced to `[idField]`
+   (any other `select[<path>]=` field is a 400), and may carry no
+   children (a nested path through it is a 400).
 
 Every issue across the tree is collected before throwing: one round trip,
 all problems, like the rest of the query pipeline.
@@ -74,11 +77,38 @@ opening no further relations, since nothing opted in.
 
 ## 3. Loading strategies
 
-| Strategy | What happens                                                                  | Default for |
-| -------- | ----------------------------------------------------------------------------- | ----------- |
-| `join`   | `leftJoinAndSelect` in the main query                                         | to-one      |
-| `batch`  | one extra query per relation level, parents batched by id, stitched in memory | to-many     |
-| `auto`   | the two rules above                                                           | everything  |
+| Strategy | What happens                                                                                                                            | Default for |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `join`   | `leftJoinAndSelect` in the main query                                                                                                   | to-one      |
+| `batch`  | one extra query per relation level, parents batched by id, stitched in memory                                                           | to-many     |
+| `key`    | the parent row's own FK id alone, materialized as `{ <pk>: value }` / `null` — no join, no row-multiplication (owning-side to-one only) | —           |
+| `auto`   | the `join`/`batch` rules above                                                                                                          | everything  |
+
+`key` (issue #364) is for the case where a caller wants only a to-one
+edge's foreign key in the response and a join buys nothing — the FK is
+already a column on the parent row. It is rejected at bootstrap on a
+to-many edge and on an inverse `@OneToOne` (neither has a local FK —
+`RelationDescriptor.ownsForeignKey`, set by each adapter from its ORM's
+metadata), grants no permission of its own (the edge is still includable
+only via `allowlists.includable`, ADR-0028), and its returned id is the
+literal value on the parent row — the target's `selectable` allowlist and
+soft-delete state have no say, unlike `join`/`batch`.
+
+Unlike `join`/`batch`, every adapter acts on `key`, and how cheap it is
+differs by ORM:
+
+- `@kavo/mongoose` / `@kavo/mikroorm` — the edge is dropped from
+  `populate` entirely and its raw FK, already on the row, is rewritten to
+  `{ <pk>: value }` / `null`. One query saved.
+- `@kavo/typeorm` — TypeORM's batched relation-id loader
+  (`loadRelationIdAndMap`): zero extra queries for a many-to-one (read
+  from the rows already fetched), one id-only batched query for an owning
+  one-to-one. No join either way.
+- `@kavo/prisma` — a nested `select` of the pk. Prisma still issues its
+  own relation query as it always does; only the selected columns shrink.
+
+A composite-key target is not supported yet (first cut assumes a
+single-column pk).
 
 **Pagination correctness (normative): root pagination always counts and
 slices distinct root entities, never joined rows.** Batching to-many
@@ -125,10 +155,11 @@ only `@kavo/typeorm` acts on it. Prisma's `include`, Mongoose's
 own separate queries and apply `limit`/`offset` to the root regardless —
 never a row-multiplying join the caller has to compensate for — so a
 to-many include cannot disturb root pagination there whatever strategy
-core resolved. Those three adapters therefore ignore
-`IncludeNode.strategy` entirely (doc 14 §3, doc 15 §3, doc 17 §3); core
-still resolves it, because the contract is the same everywhere and an
-adapter that _does_ join needs the answer.
+core resolved. Those three adapters therefore ignore the `join`/`batch`
+distinction (doc 14 §3, doc 15 §3, doc 17 §3) — they still act on `key`,
+which is not about join-vs-batch but about not loading the target at all;
+core still resolves the `join`/`batch` split anyway, because the contract
+is the same everywhere and an adapter that _does_ join needs the answer.
 
 A many-to-many edge is nothing special here: metadata maps
 `isManyToMany` to cardinality `"many"` exactly like `isOneToMany`, so it

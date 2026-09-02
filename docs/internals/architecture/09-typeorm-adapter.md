@@ -102,7 +102,14 @@ here:
 - **Includes (doc 12):** built. `buildQuery` joins to-one nodes
   from the validated `IncludeTree` and `loadBatches` issues one extra query
   per to-many level, stitched by id; the deterministic alias scheme is what
-  lets an include join and a relation-path filter share one join (§2).
+  lets an include join and a relation-path filter share one join (§2). A
+  `key` node (issue #364) is neither: `joinIncludes` maps its FK id in via
+  TypeORM's batched `loadRelationIdAndMap` — no join, and no extra query at
+  all for a many-to-one edge, since the FK is read out of the rows already
+  fetched; an owning one-to-one costs one id-only batched query. Core
+  rejects a non-owning `key` edge at bootstrap
+  via `RelationDescriptor.ownsForeignKey`. `loadBatches` then rewrites the
+  scratch id to `{ <pk>: value }` / `null`.
 - **Transactions:** still a seam, and the only one left. Every method
   already receives `KavoContext`; a `QueryRunner` would ride on
   `context.transaction.handle`, with reads/writes switching to the runner's

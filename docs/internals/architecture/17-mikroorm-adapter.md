@@ -162,7 +162,10 @@ case-insensitive.
 ## 3. Includes: `populate`, and no join/batch split
 
 Core resolves `IncludeNode.strategy` to `join` or `batch` (doc 12), and
-this adapter **ignores it**, exactly as `@kavo/prisma` does.
+this adapter **ignores that split**, exactly as `@kavo/prisma` does. It
+does act on `key` (issue #364): the edge is dropped from the `populate`
+paths and its bare FK — how MikroORM returns an un-populated to-one — is
+rewritten to `{ <pk>: value }` / `null` in `pruneIncluded`.
 
 `@kavo/typeorm` translates the split because it drives a raw SQL query
 builder, where a to-many `JOIN` multiplies root rows and separate batched

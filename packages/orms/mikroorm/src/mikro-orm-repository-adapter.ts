@@ -55,15 +55,18 @@ interface MikroFindOptions {
  * a clean, isolated one, which is the same scope a request-scoped
  * `RequestContext` would give a hand-written MikroORM application.
  *
- * **`IncludeNode.strategy` is deliberately ignored**, exactly as in
+ * **The `join`/`batch` split is deliberately ignored**, exactly as in
  * `@kavo/prisma` and unlike `@kavo/typeorm`. The TypeORM adapter translates
- * the join/batch split because it drives a raw SQL query builder, where a
- * to-many `JOIN` multiplies root rows and separate batched queries are how
- * that is avoided. MikroORM resolves `populate` with its own queries and
- * applies `limit`/`offset` to the root regardless of the load strategy, so a
- * to-many include never disturbs pagination here. There is nothing left for
- * the distinction to control, and MikroORM's `strategy` option is per-query
- * rather than per-relation anyway — it could not express a mixed tree.
+ * it because it drives a raw SQL query builder, where a to-many `JOIN`
+ * multiplies root rows and separate batched queries are how that is avoided.
+ * MikroORM resolves `populate` with its own queries and applies
+ * `limit`/`offset` to the root regardless of the load strategy, so a to-many
+ * include never disturbs pagination here. There is nothing left for that
+ * distinction to control, and MikroORM's `strategy` option is per-query
+ * rather than per-relation anyway — it could not express a mixed tree. The
+ * one strategy this adapter honors is `key` (issue #364): the edge is left
+ * un-populated and its bare FK is rewritten to `{ <pk>: value }` / `null` in
+ * `pruneIncluded`.
  */
 export class MikroOrmRepositoryAdapter<Entity extends object> implements RepositoryAdapter<Entity> {
   private readonly entity: ClassRef<Entity>;
@@ -510,6 +513,14 @@ function pruneIncluded<Row>(row: Row, tree: IncludeTree): Row {
   for (const node of Object.values(tree)) {
     const name = node.relation.name;
     const value = source[name];
+    if (node.strategy === "key") {
+      // An un-populated to-one comes back as its bare FK (`author: 1`) or,
+      // from an uninitialized reference, an object carrying only the id.
+      // Rewrite it to `{ <pk>: value }`, or `null` when absent (issue #364).
+      const fk = unwrapAssociation(value, node.idField as string);
+      source[name] = fk === null || fk === undefined ? null : { [node.idField as string]: fk };
+      continue;
+    }
     const deleted = (candidate: unknown): boolean => {
       if (node.softDelete.strategy !== "soft") {
         return false;
@@ -563,6 +574,11 @@ function and(where: MikroWhere | undefined, extra: MikroWhere): MikroWhere {
 function populatePaths(tree: IncludeTree, prefix = ""): string[] {
   const paths: string[] = [];
   for (const node of Object.values(tree)) {
+    // `strategy: "key"` (issue #364): never populated — its raw FK id is
+    // read straight off the parent and rewritten by `pruneIncluded`.
+    if (node.strategy === "key") {
+      continue;
+    }
     const path = prefix === "" ? node.relation.name : `${prefix}.${node.relation.name}`;
     paths.push(path);
     paths.push(...populatePaths(node.children, path));

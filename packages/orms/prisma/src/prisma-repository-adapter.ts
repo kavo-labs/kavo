@@ -33,8 +33,10 @@ import { delegateName, type PrismaClientLike, type PrismaModelDelegate } from ".
  * as its own internally-batched queries, to-one or to-many alike, never a
  * row-multiplying join — so a to-many include never disturbs root
  * pagination regardless of which strategy core resolved. This adapter
- * therefore *ignores* `IncludeNode.strategy` and maps every node the same
- * way; there is nothing for the distinction to control here.
+ * therefore ignores the `join`/`batch` distinction and maps those nodes the
+ * same way; there is nothing for it to control here. The one strategy it
+ * does honor is `key` (issue #364): a `select` of the target's primary key
+ * alone, so the edge materializes as `{ <pk>: value }` / `null`.
  */
 export class PrismaRepositoryAdapter<Entity extends object> implements RepositoryAdapter<Entity> {
   private readonly delegate: PrismaModelDelegate;
@@ -166,6 +168,14 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     }
     const include: Record<string, unknown> = {};
     for (const node of entries) {
+      if (node.strategy === "key") {
+        // `strategy: "key"` (issue #364): the parent's local FK id alone.
+        // Prisma returns `{ <pk>: value }` or `null` natively — no join,
+        // no soft-delete filter (the FK is the literal reference on the
+        // parent row, whatever the target's delete state).
+        include[node.relation.name] = { select: { [node.idField!]: true } };
+        continue;
+      }
       const where = node.softDelete.strategy === "soft" ? { [node.softDelete.field]: null } : undefined;
       const children = this.buildInclude(node.children);
       if (where === undefined && children === undefined) {

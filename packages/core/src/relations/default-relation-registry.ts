@@ -77,6 +77,28 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
           `'${name}' is not a relation of ${entityName} (relations: ${[...byName.keys()].join(", ") || "none"})`,
         );
       }
+      // `strategy: "key"` reads the parent row's own foreign-key column,
+      // which only an owning-side to-one edge has — reject it here, at
+      // bootstrap, the same way a mistuned `edges` entry is rejected
+      // elsewhere.
+      if (edge.strategy === "key") {
+        if (descriptor.cardinality !== "one") {
+          throw new ConfigurationException(
+            entityName,
+            `relations.edges.${name}.strategy`,
+            `'${name}' is a to-many relation — strategy 'key' reads a local foreign-key column, ` +
+              `which only a to-one relation has`,
+          );
+        }
+        if (descriptor.ownsForeignKey === false) {
+          throw new ConfigurationException(
+            entityName,
+            `relations.edges.${name}.strategy`,
+            `'${name}' is the inverse side of a one-to-one relation — strategy 'key' reads a local ` +
+              `foreign-key column, which only the owning side has; use 'join' here`,
+          );
+        }
+      }
       const writeRequested = edge.write === true || typeof edge.write === "object";
       // `write: true`/`write: { strategy }` on a to-one relation has
       // nothing to mutate — association by id already covers to-one writes
