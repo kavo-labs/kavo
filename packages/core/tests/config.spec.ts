@@ -104,6 +104,50 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.sortable).toContain("email");
   });
 
+  // Issue #367 finding 1: `filterable`/`sortable` feed `@kavo/typeorm`'s raw
+  // SQL identifier interpolation, so an explicit array override — used
+  // verbatim, unlike `{ exclude }` — is validated at bootstrap rather than
+  // trusted blindly.
+  describe("validates explicit filterable/sortable entries (issue #367)", () => {
+    it.each(["filterable", "sortable"] as const)(
+      "rejects a bare %s entry that names no real column, relation, or computed field",
+      (key) => {
+        expect(() =>
+          resolveEntityConfig(userMetadata, { allowlists: { [key]: ["notAColumn"] } }, undefined),
+        ).toThrowError(/'notAColumn' is not a column on 'User'/);
+      },
+    );
+
+    it.each(["filterable", "sortable"] as const)(
+      "rejects a %s entry whose relation path carries a non-identifier segment",
+      (key) => {
+        for (const poisoned of [
+          "profile.city; DROP TABLE users; --",
+          "profile.`city`",
+          "profile. city",
+          "profile.city.$where",
+        ]) {
+          expect(() =>
+            resolveEntityConfig(userMetadata, { allowlists: { [key]: [poisoned] } }, undefined),
+          ).toThrowError(/is not a valid relation path/);
+        }
+      },
+    );
+
+    it.each(["filterable", "sortable"] as const)("accepts a well-formed relation-path %s entry", (key) => {
+      expect(() =>
+        resolveEntityConfig(userMetadata, { allowlists: { [key]: ["profile.city"] } }, undefined),
+      ).not.toThrow();
+    });
+
+    it("still lets { exclude } through unchecked, same as before (it only subtracts from known-safe own columns)", () => {
+      const notAColumn = "notAColumn" as unknown as keyof User;
+      expect(() =>
+        resolveEntityConfig(userMetadata, { allowlists: { filterable: { exclude: [notAColumn] } } }, undefined),
+      ).not.toThrow();
+    });
+  });
+
   it("resolves { exclude } to every own column except the ones named", () => {
     const config = resolveEntityConfig(userMetadata, { allowlists: { filterable: { exclude: ["email"] } } }, undefined);
     expect(config.allowlists.filterable).toEqual(["id", "name", "age", "status", "createdAt"]);

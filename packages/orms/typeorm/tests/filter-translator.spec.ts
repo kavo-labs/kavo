@@ -338,6 +338,36 @@ describe("FilterTranslator — relation paths", () => {
 });
 
 /**
+ * `field` reaches `columnRef` already cleared by the `filterable`/`sortable`
+ * allowlist and (as of issue #367 finding 1) by a bootstrap charset check on
+ * any explicit array override — but this is the last line of defense before
+ * a string is interpolated raw into SQL text (`where`/`addOrderBy`), so it
+ * re-checks rather than trusting either upstream gate.
+ */
+describe("FilterTranslator — columnRef identifier guard (issue #367 finding 1)", () => {
+  it("rejects a field segment that is not a plain identifier", () => {
+    const qb = builderFor();
+    const translator = new FilterTranslator<Book>(qb, "root");
+    for (const poisoned of [
+      "title; DROP TABLE book; --",
+      "title = 1 OR 1=1",
+      "author.name; --",
+      "title--",
+      "1title",
+      "",
+    ]) {
+      expect(() => translator.columnRef(poisoned)).toThrow(/is not a valid column\/relation identifier/);
+    }
+  });
+
+  it("still resolves a well-formed multi-segment relation path", () => {
+    const qb = builderFor();
+    const translator = new FilterTranslator<Book>(qb, "root");
+    expect(translator.columnRef("author.books.title")).toBe(`root__author__books.title`);
+  });
+});
+
+/**
  * `search[query]` (issue #156) is synthesized by `QueryNormalizer` into
  * ordinary `Filter`/`FilterGroup`/`ILIKE` AST nodes before it ever reaches
  * an adapter — no adapter-level code changed to support it. These tests
