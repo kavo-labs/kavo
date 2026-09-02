@@ -53,6 +53,7 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
 
   positiveInt("query.maxFilterDepth", settings.query.maxFilterDepth);
   positiveInt("query.maxInValues", settings.query.maxInValues);
+  positiveInt("query.maxLikePatternLength", settings.query.maxLikePatternLength);
 
   if (!Array.isArray(settings.query.defaultSort)) {
     throw new ConfigurationException(
