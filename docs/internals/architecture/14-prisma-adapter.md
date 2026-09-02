@@ -140,13 +140,14 @@ normalizes every connector's errors into its own driver-agnostic
 `P####` catalog, so unlike `@kavo/typeorm`'s table this one needs no
 per-database code lists. The original error always travels as `cause`:
 
-| Prisma code                   | Exception                                  |
-| ----------------------------- | ------------------------------------------ |
-| `P2002` unique constraint     | `ConflictException`                        |
-| `P2003` / `P2014` FK/relation | `ConflictException`                        |
-| `P2025` record not found      | `NotFoundException`                        |
-| `P2034` transaction conflict  | `TransactionException` (`retryable: true`) |
-| anything else                 | `PersistenceException` with `cause`        |
+| Prisma code                                                                  | Exception                                  |
+| ---------------------------------------------------------------------------- | ------------------------------------------ |
+| `P2002` unique constraint                                                    | `ConflictException` (409)                  |
+| `P2003` FK on insert/update, `P2014` required relation                       | `UnresolvedRelationException` (422)        |
+| `P2003` FK blocking a delete (`context.operation` is `deleteOne`/`purgeOne`) | `ConflictException` (409)                  |
+| `P2025` record not found                                                     | `NotFoundException`                        |
+| `P2034` transaction conflict                                                 | `TransactionException` (`retryable: true`) |
+| anything else                                                                | `PersistenceException` with `cause`        |
 
 ## 6. Adapter-specific caveats
 

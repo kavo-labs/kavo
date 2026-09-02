@@ -275,14 +275,18 @@ one or the other.
 
 ## 6. Error-mapping table
 
-| MikroORM condition                               | Exception                         |
-| ------------------------------------------------ | --------------------------------- |
-| `UniqueConstraintViolationException`             | `ConflictException` (409)         |
-| `ForeignKeyConstraintViolationException`         | `ConflictException` (409)         |
-| `DeadlockException` / `LockWaitTimeoutException` | `TransactionException`, retryable |
-| anything else                                    | `PersistenceException` (500)      |
+| MikroORM condition                                                                                     | Exception                           |
+| ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `UniqueConstraintViolationException`                                                                   | `ConflictException` (409)           |
+| `ForeignKeyConstraintViolationException` from an insert/update                                         | `UnresolvedRelationException` (422) |
+| `ForeignKeyConstraintViolationException` from a delete (`context.operation` is `deleteOne`/`purgeOne`) | `ConflictException` (409)           |
+| `DeadlockException` / `LockWaitTimeoutException`                                                       | `TransactionException`, retryable   |
+| anything else                                                                                          | `PersistenceException` (500)        |
 
-The same four rows `@kavo/typeorm`'s table has (doc 06), reached
+MikroORM does not name the FK direction, so the two `ForeignKeyConstraintViolationException`
+causes are told apart by `context.operation` (issue #365).
+
+The same rows `@kavo/typeorm`'s table has (doc 06), reached
 differently. MikroORM normalizes each driver's native error into its own
 exception hierarchy before it surfaces, so this adapter matches on those
 classes rather than recognizing Postgres SQLSTATEs, MySQL errnos, and

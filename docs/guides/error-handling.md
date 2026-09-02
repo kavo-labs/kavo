@@ -34,7 +34,9 @@ Iterate `errors[]` rather than assuming a single failure. A request with a bad f
 
 ## Handling a conflict on write
 
-`KAVO_CONFLICT` (409) means a unique or foreign-key constraint rejected the write. Retry with different data, don't retry the same request. `KAVO_ALREADY_DELETED`/`KAVO_NOT_DELETED` (both 409) are the soft-delete-specific version of the same idea: they mean the row's state doesn't match what the operation assumed, not that anything is broken.
+`KAVO_CONFLICT` (409) means a unique constraint rejected the write, or a delete was refused because the row is still referenced by children. Retry with different data, don't retry the same request. `KAVO_ALREADY_DELETED`/`KAVO_NOT_DELETED` (both 409) are the soft-delete-specific version of the same idea: they mean the row's state doesn't match what the operation assumed, not that anything is broken.
+
+`KAVO_UNRESOLVED_RELATION` (422) is the opposite case: a create or update whose payload references a related row that doesn't exist — a mistyped `{ "relation": { "id": "…" } }`. Nothing in existing state conflicts; the request just points at something absent. Fix the id and retry.
 
 ## Handling a conditional-write failure
 
