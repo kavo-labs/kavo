@@ -109,7 +109,11 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   `@kavo/prisma` has no raw pattern operator, so an interior `%` and any
   `_` are **rejected with a 400** rather than mistranslated (doc 14 §6),
   and `@kavo/mikroorm` cannot attach an `ESCAPE` clause, so the backslash
-  escape there is driver-dependent (doc 17 §7).
+  escape there is driver-dependent (doc 17 §7). The pattern's length is
+  capped by `query.maxLikePatternLength` (default 200) — values are always
+  parameter-bound, so this is not an injection guard, but an unbounded
+  pattern (heavy wildcard backtracking, e.g. `%a%b%c%…`) can otherwise force
+  an expensive scan.
 - **Relation-path filtering:** dot notation
   (`filter[profile.city][eq]=Helsinki`), permitted only for paths on the
   filterable allowlist. Relation-path filters **restrict root rows** (a
@@ -388,8 +392,25 @@ through `filter`, the same way it composes any other filter.
   Resolution starts from exactly the base set that key's plain default
   uses, so the result stays fail-closed like the plain array form.
 - **Limits** (configurable per scope, doc 8): `query.maxFilterDepth`
-  (default 3) on the built AST, `query.maxInValues` (default 100) on
-  `in`/`notIn` arrays, `pagination.maxLimit` (default 100) on page size.
+  (default 3) on the built AST — enforced _while_ the wire grammar is being
+  converted into the AST, not after, so a pathologically nested
+  `filter[and][0][and][0]…` (or the `filter={…}` JSON escape hatch, which
+  lets `JSON.parse` build far deeper trees than the bracket grammar's own
+  key-splitting could) is rejected before the recursion that builds it goes
+  any deeper than the limit allows; `query.maxInValues` (default 100) on
+  `in`/`notIn`/`between` arrays; `query.maxLikePatternLength` (default 200)
+  on `like`/`ilike` pattern length; `pagination.maxLimit` (default 100) on
+  page size.
+- **Allowlist identifier safety** (`@kavo/typeorm`, issue #367): `filterable`/
+  `sortable` are the only two allowlists whose fields are interpolated raw
+  into SQL (a join property path, and a `where`/`addOrderBy` column
+  reference — identifiers can't be parameter-bound). An explicit array
+  override is used verbatim, so it is validated at bootstrap: a bare entry
+  must name a real column, relation, or computed field, and a relation-path
+  entry's segments must each look like a plain identifier (checked against
+  a strict charset — cross-entity metadata to validate the path's target
+  isn't available at bootstrap). `@kavo/typeorm`'s `columnRef` re-checks the
+  same charset at request time as defense in depth.
 - **Type coercion:** raw wire strings coerce against column metadata
   before becoming AST values — number, boolean (`true`/`false`/`1`/`0`),
   date (ISO 8601), enum (member match), `null` for nullable columns.
