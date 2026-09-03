@@ -461,6 +461,31 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     });
     expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
   });
+
+  // Issue #371: a user reported that `allowlists.filterable: { exclude }`
+  // silently does nothing end-to-end and only the plain array form works.
+  // `resolveEntityConfig` already covers `{ exclude }` in isolation
+  // (packages/core/tests/config.spec.ts) — this exercises the same shape
+  // through a real `createCrud` + TypeORM adapter + `findMany`, the path the
+  // report actually hit.
+  it("still rejects a filter on a field named in allowlists.filterable's { exclude } form (issue #371)", async () => {
+    const excluded = kavo.createCrud(Author, {
+      allowlists: { filterable: { exclude: ["status"] } },
+    }) as DefaultKavoService<Author>;
+    await seed();
+
+    await expect(
+      excluded.findMany({
+        filter: { kind: "condition", field: "status", operator: "EQ", value: "active" },
+      }),
+    ).rejects.toBeInstanceOf(QueryValidationException);
+
+    // A field not named in `exclude` still filters normally.
+    const list = await excluded.findMany({
+      filter: { kind: "condition", field: "name", operator: "EQ", value: "Ada" },
+    });
+    expect(list.items.map((a) => (a as Author).name)).toEqual(["Ada"]);
+  });
 });
 
 /** A normalized query with no filter — what a custom handler hands the reader. */
