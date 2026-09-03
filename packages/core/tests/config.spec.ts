@@ -157,7 +157,7 @@ describe("resolveEntityConfig — bootstrap", () => {
       (key) => {
         const metadata = {
           ...userMetadata,
-          relations: [{ name: "posts", target: () => class {}, cardinality: "many", includable: false }],
+          relations: [{ name: "posts", target: () => class {}, cardinality: "one", includable: false }],
         } as unknown as typeof userMetadata;
         expect(() => resolveEntityConfig(metadata, { allowlists: { [key]: ["posts"] } }, undefined)).not.toThrow();
       },
