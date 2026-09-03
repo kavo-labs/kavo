@@ -462,6 +462,82 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
   });
 
+  it("filters a to-one relation path with an operator other than EQ", async () => {
+    const scoped = kavo.createCrud(Book, {
+      allowlists: { filterable: ["title", "author.name" as never] },
+    }) as DefaultKavoService<Book>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    const grace = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Grace")!;
+    await dataSource.getRepository(Book).save([
+      { title: "Notes", author: { id: ada.id } },
+      { title: "Other", author: { id: grace.id } },
+    ] as never);
+
+    const list = await scoped.findMany({
+      filter: {
+        kind: "condition",
+        field: "author.name" as never,
+        operator: "LIKE",
+        value: "A%",
+      },
+    });
+    expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
+  });
+
+  it("filters through the reverse one-to-many relation path", async () => {
+    // Author -> books is the OneToMany side; a filter on `books.title`
+    // still joins and restricts, it just doesn't select the relation
+    // (that's what `include=` is for).
+    const scoped = kavo.createCrud(Author, {
+      allowlists: { filterable: ["name", "books.title" as never] },
+    }) as DefaultKavoService<Author>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    await dataSource.getRepository(Book).save([{ title: "Dune", author: { id: ada.id } }] as never);
+
+    const list = await scoped.findMany({
+      filter: { kind: "condition", field: "books.title" as never, operator: "EQ", value: "Dune" },
+    });
+    expect(list.items.map((a) => (a as Author).name)).toEqual(["Ada"]);
+  });
+
+  it("combines a relation-path condition with an own-field condition under AND", async () => {
+    const scoped = kavo.createCrud(Book, {
+      allowlists: { filterable: ["title", "author.name" as never] },
+    }) as DefaultKavoService<Book>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    await dataSource.getRepository(Book).save([
+      { title: "Notes", author: { id: ada.id } },
+      { title: "Other Notes", author: { id: ada.id } },
+    ] as never);
+
+    const list = await scoped.findMany({
+      filter: {
+        kind: "group",
+        operator: "AND",
+        children: [
+          { kind: "condition", field: "author.name" as never, operator: "EQ", value: "Ada" },
+          { kind: "condition", field: "title", operator: "EQ", value: "Notes" },
+        ],
+      },
+    });
+    expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
+  });
+
+  it("rejects a relation-path filter that isn't on the filterable allowlist", async () => {
+    const scoped = kavo.createCrud(Book, {
+      allowlists: { filterable: ["title"] },
+    }) as DefaultKavoService<Book>;
+
+    await expect(
+      scoped.findMany({
+        filter: { kind: "condition", field: "author.name" as never, operator: "EQ", value: "Ada" },
+      }),
+    ).rejects.toBeInstanceOf(QueryValidationException);
+  });
+
   // Issue #371: a user reported that `allowlists.filterable: { exclude }`
   // silently does nothing end-to-end and only the plain array form works.
   // `resolveEntityConfig` already covers `{ exclude }` in isolation
