@@ -449,6 +449,29 @@ function resolveAllowlists<Entity extends object>(
     selectableBase,
     configured?.selectable,
   ) as unknown as readonly FieldPath<Entity>[];
+  // `filterable`/`sortable` feed `@kavo/typeorm`'s `columnRef`, which
+  // interpolates the field string raw into SQL (join paths, `where(...)`,
+  // `addOrderBy(...)`) — identifiers can't be parameter-bound. An explicit
+  // array override is used verbatim (`resolveFieldSelector`'s plain-array
+  // branch), so an entry here is the *only* thing standing between an HTTP
+  // client and a raw SQL identifier. A bare (non-dotted) entry is checked
+  // against this entity's own columns, its relation names (filtering by a
+  // to-one relation's FK directly, e.g. `filter[author][eq]=1`), and its
+  // computed-field names (left for the existing, more specific
+  // COMPUTED_REJECTION check below to name); a relation-dotted entry can't
+  // be checked the same way — its target metadata isn't in scope here — so
+  // each of its segments is instead checked against a strict identifier
+  // charset, closing the injection surface even without cross-entity
+  // metadata (issue #367 finding 1). `@kavo/typeorm`'s `columnRef`
+  // re-checks the charset at request time as defense in depth; this is the
+  // fail-fast bootstrap half.
+  const knownFieldNames = [
+    ...(ownColumns as readonly string[]),
+    ...(relationNames as readonly string[]),
+    ...Object.keys(computed),
+  ];
+  validateAllowlistFieldNames(metadata.name, "filterable", configured?.filterable, knownFieldNames);
+  validateAllowlistFieldNames(metadata.name, "sortable", configured?.sortable, knownFieldNames);
   const allowlists = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
@@ -759,6 +782,68 @@ function resolveFieldSelector<Path extends string>(
   }
   const excluded = new Set(selector.exclude);
   return base.filter((path) => !excluded.has(path));
+}
+
+/** Letters, digits, underscore, not leading with a digit — same charset `@kavo/typeorm`'s `columnRef` enforces at request time. */
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Bootstrap check for an explicit `filterable`/`sortable` array override
+ * (issue #367 finding 1). These allowlists gate the *only* two client
+ * inputs `@kavo/typeorm` interpolates raw into SQL — a join path and a
+ * `where`/`addOrderBy` column reference, neither of which can be
+ * parameter-bound — so an explicit array here is used verbatim
+ * (`resolveFieldSelector`'s plain-array branch) with nothing else standing
+ * between it and the driver. `{ exclude }` overrides are skipped: they
+ * subtract from `base`, which is already known-safe own columns.
+ *
+ * A bare entry must name a real own column, relation, or computed field on
+ * the entity; a relation-dotted entry (`profile.city`) can't be checked
+ * against real metadata here — the target entity is out of scope for a
+ * single entity's config resolution — so each of its segments is instead
+ * required to look like an identifier. Either failure is a bootstrap
+ * `ConfigurationException`, not a runtime 400: a bad allowlist entry is a
+ * configuration bug, not a client mistake. Naming a real relation or
+ * computed field is still generally wrong (a relation isn't a scalar
+ * column, a computed field has none) — that is caught by the existing,
+ * more specific checks downstream in `resolveAllowlists`, which this
+ * function defers to rather than duplicating.
+ */
+function validateAllowlistFieldNames(
+  entityName: string,
+  key: "filterable" | "sortable",
+  selector: readonly string[] | { readonly exclude: readonly string[] } | undefined,
+  knownFieldNames: readonly string[],
+): void {
+  if (selector === undefined || "exclude" in selector) {
+    return;
+  }
+  const known = new Set(knownFieldNames);
+  for (const field of selector) {
+    const segments = field.split(".");
+    if (segments.length === 1) {
+      if (!known.has(field)) {
+        throw new ConfigurationException(
+          entityName,
+          `allowlists.${key}`,
+          `'${field}' is not a column on '${entityName}' — allowlists.${key} entries must name a real ` +
+            `column, or a relation path ('relation.field') for a relation-dotted entry.`,
+        );
+      }
+      continue;
+    }
+    for (const segment of segments) {
+      if (!IDENTIFIER.test(segment)) {
+        throw new ConfigurationException(
+          entityName,
+          `allowlists.${key}`,
+          `'${field}' is not a valid relation path — '${segment}' is not a valid identifier. ` +
+            `allowlists.${key} entries reach raw SQL unquoted, so every segment must be letters, digits, ` +
+            `and underscores only.`,
+        );
+      }
+    }
+  }
 }
 
 /**

@@ -104,6 +104,73 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.sortable).toContain("email");
   });
 
+  // Issue #367 finding 1: `filterable`/`sortable` feed `@kavo/typeorm`'s raw
+  // SQL identifier interpolation, so an explicit array override — used
+  // verbatim, unlike `{ exclude }` — is validated at bootstrap rather than
+  // trusted blindly.
+  describe("validates explicit filterable/sortable entries (issue #367)", () => {
+    it.each(["filterable", "sortable"] as const)(
+      "rejects a bare %s entry that names no real column, relation, or computed field",
+      (key) => {
+        let caught: unknown;
+        try {
+          resolveEntityConfig(userMetadata, { allowlists: { [key]: ["notAColumn"] } }, undefined);
+        } catch (error) {
+          caught = error;
+        }
+        expect(caught).toBeInstanceOf(ConfigurationException);
+        expect((caught as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+        expect((caught as ConfigurationException).message).toContain("'notAColumn' is not a column on 'User'");
+      },
+    );
+
+    it.each(["filterable", "sortable"] as const)(
+      "rejects a %s entry whose relation path carries a non-identifier segment",
+      (key) => {
+        for (const poisoned of [
+          "profile.city; DROP TABLE users; --",
+          "profile.`city`",
+          "profile. city",
+          "profile.city.$where",
+        ]) {
+          let caught: unknown;
+          try {
+            resolveEntityConfig(userMetadata, { allowlists: { [key]: [poisoned] } }, undefined);
+          } catch (error) {
+            caught = error;
+          }
+          expect(caught).toBeInstanceOf(ConfigurationException);
+          expect((caught as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+          expect((caught as ConfigurationException).message).toContain("is not a valid relation path");
+        }
+      },
+    );
+
+    it.each(["filterable", "sortable"] as const)("accepts a well-formed relation-path %s entry", (key) => {
+      expect(() =>
+        resolveEntityConfig(userMetadata, { allowlists: { [key]: ["profile.city"] } }, undefined),
+      ).not.toThrow();
+    });
+
+    it.each(["filterable", "sortable"] as const)(
+      "accepts a bare relation name as a %s entry (e.g. filtering a to-one relation's FK directly)",
+      (key) => {
+        const metadata = {
+          ...userMetadata,
+          relations: [{ name: "posts", target: () => class {}, cardinality: "one", includable: false }],
+        } as unknown as typeof userMetadata;
+        expect(() => resolveEntityConfig(metadata, { allowlists: { [key]: ["posts"] } }, undefined)).not.toThrow();
+      },
+    );
+
+    it("still lets { exclude } through unchecked, same as before (it only subtracts from known-safe own columns)", () => {
+      const notAColumn = "notAColumn" as unknown as keyof User;
+      expect(() =>
+        resolveEntityConfig(userMetadata, { allowlists: { filterable: { exclude: [notAColumn] } } }, undefined),
+      ).not.toThrow();
+    });
+  });
+
   it("resolves { exclude } to every own column except the ones named", () => {
     const config = resolveEntityConfig(userMetadata, { allowlists: { filterable: { exclude: ["email"] } } }, undefined);
     expect(config.allowlists.filterable).toEqual(["id", "name", "age", "status", "createdAt"]);

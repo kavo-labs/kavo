@@ -22,7 +22,7 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 ## query
 
-`maxFilterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `maxInValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators.
+`maxFilterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `maxInValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `maxLikePatternLength` (default `200`) is the max character length of a `like`/`ilike` pattern.
 
 `defaultSort` (default `[]`) is the sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright; it never merges with this. It's validated against the sortable allowlist, same as a client-supplied sort.
 

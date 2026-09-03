@@ -69,9 +69,11 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     const issues: QueryIssueDto[] = [];
     const roots: FilterExpression<Entity>[] = [];
 
+    const guard: DepthGuard = { maxDepth: config.settings.query.maxFilterDepth, exceeded: false };
+
     const bracketTree = this.collectBracketTree(rawParams);
     if (bracketTree !== null) {
-      const expression = this.convertNode(bracketTree, config, issues);
+      const expression = this.convertNode(bracketTree, config, issues, 1, guard);
       if (expression !== null) {
         roots.push(expression);
       }
@@ -81,7 +83,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     if (typeof json === "string") {
       const parsed = this.parseJsonFilter(json, issues);
       if (parsed !== null) {
-        const expression = this.convertNode(parsed, config, issues);
+        const expression = this.convertNode(parsed, config, issues, 1, guard);
         if (expression !== null) {
           roots.push(expression);
         }
@@ -95,16 +97,12 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
           ? (roots[0] as FilterExpression<Entity>)
           : ({ kind: "group", operator: "AND", children: roots } as const);
 
-    if (root !== null) {
-      const depth = expressionDepth(root);
-      const maxDepth = config.settings.query.maxFilterDepth;
-      if (depth > maxDepth) {
-        issues.push({
-          field: "filter",
-          code: "KAVO_QUERY_LIMIT_EXCEEDED",
-          detail: `Filter depth ${depth} exceeds the configured maximum of ${maxDepth}.`,
-        });
-      }
+    if (guard.exceeded) {
+      issues.push({
+        field: "filter",
+        code: "KAVO_QUERY_LIMIT_EXCEEDED",
+        detail: `Filter nesting exceeds the configured maximum depth of ${guard.maxDepth}.`,
+      });
     }
 
     if (issues.length > 0) {
@@ -159,16 +157,36 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
    * groups. Returns `null` when the node contributed nothing (empty, or
    * all entries were invalid — the issues carry the story).
    */
+  /**
+   * `depth`/`guard` bound the recursion **before** it happens, not after
+   * (issue #367 finding 3): the old code built the whole AST — unbounded
+   * `convertNode`/`convertLogical` recursion — then measured its depth
+   * with a second recursive pass and rejected it only then, so a
+   * sufficiently nested `filter[and][0][and][0]…` (or the JSON escape
+   * hatch, which lets `JSON.parse` build far deeper trees than the bracket
+   * grammar's own key-splitting ever could) could blow the call stack
+   * before either recursion finished — a crash, not a clean 400. `guard`
+   * is shared across both wire-format entry points in `parse()` so the
+   * limit is one budget for the whole request, not one per entry point;
+   * once exceeded, deeper nodes stop being converted at all rather than
+   * being built and discarded.
+   */
   private convertNode(
     node: Record<string, unknown>,
     config: ResolvedEntityConfig<Entity>,
     issues: QueryIssueDto[],
+    depth: number,
+    guard: DepthGuard,
   ): FilterExpression<Entity> | null {
+    if (depth > guard.maxDepth) {
+      guard.exceeded = true;
+      return null;
+    }
     const children: FilterExpression<Entity>[] = [];
 
     for (const [key, value] of Object.entries(node)) {
       if (LOGICAL_TOKENS.has(key)) {
-        this.convertLogical(key, value, config, issues, children);
+        this.convertLogical(key, value, config, issues, children, depth, guard);
         continue;
       }
       this.convertConditions(key, value, config, issues, children);
@@ -189,6 +207,8 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     config: ResolvedEntityConfig<Entity>,
     issues: QueryIssueDto[],
     out: FilterExpression<Entity>[],
+    depth: number,
+    guard: DepthGuard,
   ): void {
     if (typeof value !== "object" || value === null) {
       issues.push({
@@ -199,7 +219,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
       return;
     }
     if (token === "not") {
-      const child = this.convertNode(value as Record<string, unknown>, config, issues);
+      const child = this.convertNode(value as Record<string, unknown>, config, issues, depth + 1, guard);
       if (child !== null) {
         out.push({ kind: "group", operator: "NOT", children: [child] });
       }
@@ -217,7 +237,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         });
         continue;
       }
-      const child = this.convertNode(branch as Record<string, unknown>, config, issues);
+      const child = this.convertNode(branch as Record<string, unknown>, config, issues, depth + 1, guard);
       if (child !== null) {
         children.push(child);
       }
@@ -362,11 +382,25 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         // No auto-wrapped wildcards: callers pass `%` explicitly; literal
         // `%`/`_` are escaped with a backslash (`\%`) — the adapter emits
         // the matching ESCAPE clause.
+        const pattern = String(raw);
+        const max = config.settings.query.maxLikePatternLength;
+        if (pattern.length > max) {
+          // Values are parameter-bound (never SQLi), but an unbounded
+          // pattern — heavy wildcard backtracking, e.g. `%a%b%c%…` — can
+          // force an expensive full scan (issue #367 finding 4), same
+          // shape of concern `maxInValues` addresses for array length.
+          issues.push({
+            field,
+            code: "KAVO_QUERY_LIMIT_EXCEEDED",
+            detail: `'${token}' pattern is ${pattern.length} characters; the maximum is ${max}.`,
+          });
+          return null;
+        }
         return {
           kind: "condition",
           field: path,
           operator,
-          value: String(raw),
+          value: pattern,
         };
       }
       default: {
@@ -427,18 +461,10 @@ function isBareEmptyOperand(parts: readonly unknown[]): boolean {
   return parts.length === 1 && parts[0] === "";
 }
 
-function expressionDepth(expression: FilterExpression<unknown>): number {
-  if (expression.kind === "condition") {
-    return 1;
-  }
-  let deepest = 0;
-  for (const child of expression.children) {
-    const depth = expressionDepth(child);
-    if (depth > deepest) {
-      deepest = depth;
-    }
-  }
-  return 1 + deepest;
+/** One depth budget shared across `convertNode`/`convertLogical`'s whole recursion for one `parse()` call. */
+interface DepthGuard {
+  readonly maxDepth: number;
+  exceeded: boolean;
 }
 
 /**

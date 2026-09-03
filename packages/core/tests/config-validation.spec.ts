@@ -83,8 +83,14 @@ describe("validateSettings — query limits", () => {
     }
   });
 
-  it("accepts a depth and a value cap of 1", () => {
-    expect(() => accept({ query: { maxFilterDepth: 1, maxInValues: 1 } })).not.toThrow();
+  it("rejects a maxLikePatternLength that is not a positive integer", () => {
+    for (const value of NOT_POSITIVE_INTEGERS) {
+      expectRejected({ query: { maxLikePatternLength: value } }, "query.maxLikePatternLength", value);
+    }
+  });
+
+  it("accepts a depth, value cap, and like-pattern cap of 1", () => {
+    expect(() => accept({ query: { maxFilterDepth: 1, maxInValues: 1, maxLikePatternLength: 1 } })).not.toThrow();
   });
 
   it("rejects a defaultSort that is not an array", () => {

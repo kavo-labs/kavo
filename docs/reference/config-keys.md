@@ -18,14 +18,15 @@ See [Pagination](/querying/pagination) and [Settings](/guides/configuration/sett
 
 ## query
 
-| Key                    | Type                        | Default       |
-| ---------------------- | --------------------------- | ------------- |
-| `query.maxFilterDepth` | `number`                    | `3`           |
-| `query.maxInValues`    | `number`                    | `100`         |
-| `query.defaultSort`    | `Sort[]`                    | `[]`          |
-| `query.search`         | `{ mode, driver } \| false` | `false`       |
-| `query.search.mode`    | `"substring" \| "words"`    | `"substring"` |
-| `query.search.driver`  | `"orm"`                     | `"orm"`       |
+| Key                          | Type                        | Default       |
+| ---------------------------- | --------------------------- | ------------- |
+| `query.maxFilterDepth`       | `number`                    | `3`           |
+| `query.maxInValues`          | `number`                    | `100`         |
+| `query.maxLikePatternLength` | `number`                    | `200`         |
+| `query.defaultSort`          | `Sort[]`                    | `[]`          |
+| `query.search`               | `{ mode, driver } \| false` | `false`       |
+| `query.search.mode`          | `"substring" \| "words"`    | `"substring"` |
+| `query.search.driver`        | `"orm"`                     | `"orm"`       |
 
 See [Filtering](/querying/filtering), [Search](/querying/search), [Sorting](/querying/sorting).
 

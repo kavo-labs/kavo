@@ -68,6 +68,14 @@ export interface QuerySettings {
   /** Max array length for `IN`/`NOT_IN`/`BETWEEN` values. */
   readonly maxInValues: number;
   /**
+   * Max character length of a `like`/`ilike` pattern (issue #367 finding
+   * 4). Values are always parameter-bound, so this is not an injection
+   * guard — it caps the cost of a pathological pattern (heavy wildcard
+   * backtracking, e.g. `%a%b%c%…`) against an unindexed or relation-joined
+   * column, which is otherwise unbounded.
+   */
+  readonly maxLikePatternLength: number;
+  /**
    * Order applied when a request supplies no `sort` — a client-supplied
    * `sort` always wins outright, never merges with this. Fields are
    * validated against the sortable allowlist at bootstrap, the same as

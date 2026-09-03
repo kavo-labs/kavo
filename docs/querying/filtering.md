@@ -73,6 +73,7 @@ Every request is guarded by limits, configurable per scope:
 
 - `query.maxFilterDepth` (default 3) caps how deeply `or`/`not` can nest.
 - `query.maxInValues` (default 100) caps `in`/`notIn` array length.
+- `query.maxLikePatternLength` (default 200) caps `like`/`ilike` pattern length.
 - `pagination.maxLimit` (default 100) caps page size.
 
 If a request breaks several of these at once (filter, sort, select, pagination), Kavo collects the violations and reports them together in a single response. See [Errors](/using-the-api#errors).

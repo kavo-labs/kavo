@@ -1,7 +1,21 @@
 import type { Filter, FilterBuilder, FilterCondition, FilterExpression, FilterScalar } from "@kavo/core";
-import { assertNever } from "@kavo/core";
+import { assertNever, ConfigurationException } from "@kavo/core";
 import { Brackets, NotBrackets, type WhereExpressionBuilder } from "typeorm";
 import type { SelectQueryBuilder, ObjectLiteral } from "typeorm";
+
+/**
+ * A `field`/`sort.field` segment is interpolated **raw** into SQL (join
+ * property paths and, worse, the `where(\`...\`)`/`addOrderBy(...)` text
+ * itself — identifiers can't be bound as parameters). Upstream, every field
+ * reaching here has already cleared the `filterable`/`sortable` allowlist,
+ * but that allowlist is a bootstrap-configured array of strings a caller
+ * could mistype or, deliberately, poison — there is no quoting or charset
+ * check between it and the SQL text otherwise. This is the last line of
+ * defense (issue #367 finding 1): every segment must look like an
+ * identifier — letters, digits, underscore, not leading with a digit —
+ * before it is allowed anywhere near the query builder.
+ */
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
  * Filter AST → TypeORM `QueryBuilder` translation.
@@ -48,6 +62,16 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
   /** Resolve `field` to a `alias.column` reference, adding joins as needed. */
   columnRef(field: string): string {
     const segments = field.split(".");
+    for (const segment of segments) {
+      if (!IDENTIFIER.test(segment)) {
+        throw new ConfigurationException(
+          this.rootAlias,
+          "field",
+          `'${field}' is not a valid column/relation identifier — '${segment}' contains characters an ` +
+            `allowlist entry must never carry through to raw SQL.`,
+        );
+      }
+    }
     if (segments.length === 1) {
       return `${this.rootAlias}.${field}`;
     }
