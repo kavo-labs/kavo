@@ -78,7 +78,9 @@ export class QueryNormalizer<Entity = unknown> {
 
     const clientSort = parseSort(rawParams["sort"], config, issues);
     let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
-    const select = parseSelect(rawParams, config, issues);
+    const parsedSelect = parseSelect(rawParams, config, issues);
+    const select: FieldSelection<Entity> =
+      parsedSelect.root === null ? { ...parsedSelect, root: defaultSelectOf(config) } : parsedSelect;
     const include = this.resolveIncludes(parseIncludePaths(rawParams["include"], issues), select, config, issues);
 
     let pagination: Pagination<Entity> = { limit: 0, offset: 0 };
@@ -172,7 +174,7 @@ export class QueryNormalizer<Entity = unknown> {
       }
     }
     const select: FieldSelection<Entity> = {
-      root: rootFields,
+      root: rootFields ?? defaultSelectOf(config),
       relations: relationFields,
     };
     const include = this.resolveIncludes(input.include ?? [], select, config, issues);
@@ -332,7 +334,7 @@ export class QueryNormalizer<Entity = unknown> {
           `${tiebreaker.length === 1 ? "field" : "fields, in this order,"} '${tiebreakerText}' — ` +
           `e.g. 'sort=-createdAt,${tiebreakerText}'. ` +
           (sort.length === 0
-            ? `This request has no sort and ${config.entityName} declares no 'query.defaultSort'.`
+            ? `This request has no sort and ${config.entityName} declares no 'defaults.sort'.`
             : `This request sorts by '${sort.map((entry) => entry.field as string).join(", ")}'.`),
       });
     }
@@ -361,7 +363,7 @@ export class QueryNormalizer<Entity = unknown> {
    * same treatment a stray `cursor=`/`since=` under the wrong strategy
    * gets, and for the same reason: silently overriding it would leave a
    * client believing its `sort` took effect when it didn't. A configured
-   * `query.defaultSort`, by contrast, is silently overridden — being
+   * `defaults.sort`, by contrast, is silently overridden — being
    * overridden by a more specific setting is what a default is for.
    *
    * The token carries an id precisely because a single-column
@@ -724,13 +726,22 @@ function conflictingSoftDeleteFlagsIssue(): QueryIssueDto {
 }
 
 /**
- * `config.settings.query.defaultSort` — validated against the sortable
- * allowlist wherever it's set (`resolveEntityConfig` at bootstrap for
- * entity/operation scope, `KavoEngine.configViewFor` for per-call scope),
- * so it's applied here as-is rather than re-checked per request.
+ * `config.settings.defaults.sort` — the same `-field`/`field` wire
+ * shorthand `sort=` accepts, validated against the sortable allowlist
+ * wherever it's set (`resolveEntityConfig` at bootstrap for entity/
+ * operation scope, `KavoEngine.configViewFor` for per-call scope) — so each
+ * token is parsed into the internal `Sort` shape here, with no allowlist
+ * re-check, rather than re-validated per request.
  */
 function defaultSortOf<Entity>(config: ResolvedEntityConfig<Entity>): readonly Sort<Entity>[] {
-  return config.settings.query.defaultSort as unknown as readonly Sort<Entity>[];
+  return config.settings.defaults.sort.map((token) => parseSortToken<Entity>(token));
+}
+
+/** `-field` → `{ field, direction: "desc" }`; `field` → `{ field, direction: "asc" }`. */
+function parseSortToken<Entity>(token: string): Sort<Entity> {
+  const descending = token.startsWith("-");
+  const field = descending ? token.slice(1) : token;
+  return { field: field as FieldPath<Entity>, direction: descending ? "desc" : "asc" };
 }
 
 function parseSort<Entity>(
@@ -754,16 +765,23 @@ function parseSort<Entity>(
     if (token === "") {
       continue;
     }
-    const descending = token.startsWith("-");
-    const field = descending ? token.slice(1) : token;
-    if (requireAllowlisted(field, config, "sorting", issues)) {
-      result.push({
-        field: field as FieldPath<Entity>,
-        direction: descending ? "desc" : "asc",
-      });
+    const entry = parseSortToken<Entity>(token);
+    if (requireAllowlisted(entry.field as string, config, "sorting", issues)) {
+      result.push(entry);
     }
   }
   return result;
+}
+
+/**
+ * `config.settings.defaults.select` — validated against the selectable
+ * allowlist at bootstrap, the same as `defaults.sort`. `undefined` means
+ * "no configured default": the caller keeps `root: null`, the existing
+ * "project every selectable field" behavior.
+ */
+function defaultSelectOf<Entity>(config: ResolvedEntityConfig<Entity>): readonly FieldPath<Entity, 1>[] | null {
+  const select = config.settings.defaults.select;
+  return select === undefined ? null : (select as unknown as readonly FieldPath<Entity, 1>[]);
 }
 
 /**

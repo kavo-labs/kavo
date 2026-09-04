@@ -161,6 +161,17 @@ through `as never`/erasure, which every ORM adapter's own tests use for
 relation names that don't type-check cleanly against a marker class or a
 lean-document shape (ADR-0017, ADR-0018).
 
+## Amendment (ADR-0046)
+
+`defaultInclude` itself later moved out of `relations.edges` entirely, into
+a flat `defaults.include` list (issue #375) — the cross-check this ADR
+describes (`defaultInclude` vs. `allowed.includable`) still holds verbatim,
+just re-homed: `defaults.include` names must still be on `allowed.includable`,
+checked by the same `validateDefaults` (renamed from `validateDefaultSort`)
+this ADR's `validateIncludableRelations` was folded into. `relations.edges`
+now carries only `maxDepth`/`strategy`/`write` — no permission, no default,
+loading tuning only. See ADR-0046 for the full decision.
+
 ## References
 
 - ADR-0026 (`allowed.selectable` narrows the response projection), the

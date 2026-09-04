@@ -407,7 +407,7 @@ describe("withListMeta under cursor pagination — the strategy's key is the bas
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: [{ field: "id", direction: "asc" }] },
+        defaults: { sort: ["id"] },
       },
     } as never).createCrud(
       User,

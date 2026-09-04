@@ -414,6 +414,10 @@ const config = defineConfig({
                 text: "0045 — The allowed.selectable allowlist takes root paths only; the relation-dotted ceiling is removed",
                 link: "/internals/adr/0045-relation-projection-ceiling-removed",
               },
+              {
+                text: "0046 — A defaults block covers what a request looks like when the client asks for nothing",
+                link: "/internals/adr/0046-defaults-block-for-omitted-query-axes",
+              },
             ],
           },
         ],

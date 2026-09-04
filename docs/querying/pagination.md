@@ -51,7 +51,7 @@ Pass it straight back as `?cursor=…` to get the next page, and keep every othe
 
 **A cursor is opaque.** It encodes the previous page's last row projected onto the effective sort. Don't parse it, construct one, or store it as a permanent bookmark: the encoding is an implementation detail and may change. It's not signed and isn't a security boundary. Everything inside it is a comparison value against a field the client can already filter on, so forging one grants nothing that `filter[…]` doesn't already.
 
-**The sort must end in the id field.** Keyset paging needs a total order, so `sort` (or the entity's `query.defaultSort`) has to end in the entity's primary key, like `?sort=-createdAt,id`. A request without one is a 400 naming the field it needs. The sort keys must also be plain scalar columns of the entity, not relation paths and not JSON columns.
+**The sort must end in the id field.** Keyset paging needs a total order, so `sort` (or the entity's `defaults.sort`) has to end in the entity's primary key, like `?sort=-createdAt,id`. A request without one is a 400 naming the field it needs. The sort keys must also be plain scalar columns of the entity, not relation paths and not JSON columns.
 
 **Every cursor sort key must be filterable and selectable too, not just sortable.** A cursor turns each sort key into a filter comparison, and reads its value off the raw row into `meta.nextCursor`. So a field on `allowed.sortable` but missing from `allowed.filterable` or `allowed.selectable` gets rejected with a 400 rather than quietly dropped from the sort. If you narrow one of the three allowlists, narrow all three the same way for any column you page by.
 

@@ -152,25 +152,16 @@ describe("QueryNormalizer — wire params", () => {
     ]);
   });
 
-  it("falls back to the configured defaultSort when the client supplies no sort", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("falls back to the configured defaults.sort when the client supplies no sort", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
-  it("applies a multi-field defaultSort in priority order", () => {
+  it("applies a multi-field defaults.sort in priority order", () => {
     const defaulted = resolveEntityConfig(
       userMetadata,
       {
-        query: {
-          defaultSort: [
-            { field: "createdAt", direction: "desc" },
-            { field: "id", direction: "asc" },
-          ],
-        },
+        defaults: { sort: ["-createdAt", "id"] },
       },
       undefined,
     );
@@ -180,12 +171,8 @@ describe("QueryNormalizer — wire params", () => {
     ]);
   });
 
-  it("lets a client-supplied sort override the configured defaultSort outright", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("lets a client-supplied sort override the configured defaults.sort outright", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({ sort: "name" }, defaulted).sort).toEqual([{ field: "name", direction: "asc" }]);
   });
 });
@@ -603,21 +590,13 @@ describe("QueryNormalizer — programmatic input", () => {
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_FIELD");
   });
 
-  it("falls back to the configured defaultSort when no sort is given", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("falls back to the configured defaults.sort when no sort is given", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeInput({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
-  it("lets a caller-supplied sort override the configured defaultSort outright", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("lets a caller-supplied sort override the configured defaults.sort outright", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
     const query = normalizer.normalizeInput({ sort: [{ field: "name", direction: "asc" }] }, defaulted);
     expect(query.sort).toEqual([{ field: "name", direction: "asc" }]);
   });

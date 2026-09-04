@@ -24,13 +24,21 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 `maxFilterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `maxInValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `maxLikePatternLength` (default `200`) is the max character length of a `like`/`ilike` pattern.
 
-`defaultSort` (default `[]`) is the sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright; it never merges with this. It's validated against the sortable allowlist, same as a client-supplied sort.
-
 `search` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until a scope sets it to an object (`{}` uses the defaults), even though `allowed.searchable` itself defaults to every own string column; set it back to `false` at a narrower scope to disable it there. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token). A narrower scope re-enabling search from `false` may name only the keys it changes — the rest backfill from these defaults.
 
 ## errors
 
 `exposeInternals` (default `false`) controls whether driver-level error details (raw SQL error messages, stack info) leak into problem-details responses. Keep it `false` in production.
+
+## defaults
+
+What a request looks like when the client specifies nothing — the omission-side counterpart to `allowed` (see [Entity config](/guides/configuration/entity-config)). Applied only when the request omits that axis; a client-supplied value replaces it outright, never merges.
+
+`sort` (default `[]`) is the sort order applied when a request supplies no `sort` of its own, in the same wire shorthand `sort=` accepts (`-field` for descending, comma-separated conceptually but declared as an array — `["​-createdAt", "id"]`). A client-supplied `sort` always wins outright; it never merges with this. It's validated against the sortable allowlist, same as a client-supplied sort. `pagination.strategy: "since"` (ADR-0022) still forces its own sort when active, overriding this.
+
+`select` (default unset) is the default response projection: what a read serves when the request sends no `select=` of its own. Unset, behavior is unchanged — every selectable field is projected. Configured, its fields must be on `allowed.selectable`.
+
+`include` (default `[]`) is the list of relations included even when the client's `include=` doesn't name them. Each entry must also be on `allowed.includable` — naming a relation here that clients cannot ask for is a bootstrap error. See [Relations](/features/relations).
 
 ## relations
 

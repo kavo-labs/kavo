@@ -331,49 +331,45 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
-  it("resolves an entity-scope defaultSort", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
-    expect(config.settings.query.defaultSort).toEqual([{ field: "createdAt", direction: "desc" }]);
+  it("resolves an entity-scope defaults.sort", () => {
+    const config = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
+    expect(config.settings.defaults.sort).toEqual(["-createdAt"]);
   });
 
-  it("lets an operation override the entity-scope defaultSort", () => {
+  it("lets an operation override the entity-scope defaults.sort", () => {
     const config = resolveEntityConfig(
       userMetadata,
       {
-        query: { defaultSort: [{ field: "createdAt", direction: "desc" }] },
-        operations: { findMany: { query: { defaultSort: [{ field: "name", direction: "asc" }] } } },
+        defaults: { sort: ["-createdAt"] },
+        operations: { findMany: { defaults: { sort: ["name"] } } },
       },
       undefined,
     );
-    expect(config.settingsFor("findMany").query.defaultSort).toEqual([{ field: "name", direction: "asc" }]);
-    expect(config.settingsFor("findOne").query.defaultSort).toEqual([{ field: "createdAt", direction: "desc" }]);
+    expect(config.settingsFor("findMany").defaults.sort).toEqual(["name"]);
+    expect(config.settingsFor("findOne").defaults.sort).toEqual(["-createdAt"]);
   });
 
-  it("applies the precedence chain global -> entity for defaultSort", () => {
+  it("applies the precedence chain global -> entity for defaults.sort", () => {
     const config = resolveEntityConfig(
       userMetadata,
-      { query: { defaultSort: [{ field: "name", direction: "asc" }] } },
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
+      { defaults: { sort: ["name"] } },
+      { defaults: { sort: ["-createdAt"] } },
     );
-    expect(config.settings.query.defaultSort).toEqual([{ field: "name", direction: "asc" }]); // entity beats global
+    expect(config.settings.defaults.sort).toEqual(["name"]); // entity beats global
 
     const globalOnly = resolveEntityConfig(userMetadata, undefined, {
-      query: { defaultSort: [{ field: "createdAt", direction: "desc" }] },
+      defaults: { sort: ["-createdAt"] },
     });
-    expect(globalOnly.settings.query.defaultSort).toEqual([{ field: "createdAt", direction: "desc" }]);
+    expect(globalOnly.settings.defaults.sort).toEqual(["-createdAt"]);
   });
 
-  it("rejects an entity-scope defaultSort field outside the sortable allowlist", () => {
+  it("rejects an entity-scope defaults.sort field outside the sortable allowlist", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           allowed: { sortable: ["name"] },
-          query: { defaultSort: [{ field: "email", direction: "asc" }] },
+          defaults: { sort: ["email"] },
         },
         undefined,
       );
@@ -384,13 +380,13 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
-  it("rejects an operation-scope defaultSort field outside the sortable allowlist", () => {
+  it("rejects an operation-scope defaults.sort field outside the sortable allowlist", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           allowed: { sortable: ["name"] },
-          operations: { findMany: { query: { defaultSort: [{ field: "email", direction: "asc" }] } } },
+          operations: { findMany: { defaults: { sort: ["email"] } } },
         },
         undefined,
       );
@@ -401,15 +397,15 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
-  it("rejects an operation-scope defaultInclude on a relation absent from allowed.includable", () => {
-    // `validateIncludableRelations` runs for the per-operation settings view
-    // too, not only entity scope — an operation override can name
-    // `relations.edges` just as the entity config can.
+  it("rejects an operation-scope defaults.include on a relation absent from allowed.includable", () => {
+    // `validateDefaults` runs for the per-operation settings view too, not
+    // only entity scope — an operation override can name `defaults.include`
+    // just as the entity config can.
     try {
       resolveEntityConfig(
         authorMetadata,
         {
-          operations: { findMany: { relations: { edges: { posts: { defaultInclude: true } } } } },
+          operations: { findMany: { defaults: { include: ["posts"] } } },
         },
         undefined,
       );
@@ -418,7 +414,7 @@ describe("resolveEntityConfig — bootstrap", () => {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author.operations.findMany",
-        path: "relations.edges.posts",
+        path: "defaults.include",
       });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
@@ -426,47 +422,48 @@ describe("resolveEntityConfig — bootstrap", () => {
 });
 
 /**
- * ADR-0028: `defaultInclude` vs. permission is cross-checked against
+ * ADR-0028: `defaults.include` vs. permission is cross-checked against
  * `allowed.includable`, not `relations.edges`'s own (now-removed)
- * `includable` key — `validateIncludableRelations` in
- * resolve-entity-config.ts, run after `allowed` is resolved.
+ * `includable` key — `validateDefaults` in resolve-entity-config.ts, run
+ * after `allowed` is resolved.
  */
 describe("resolveEntityConfig — allowed.includable", () => {
-  it("rejects defaultInclude on a relation absent from allowed.includable", () => {
+  it("rejects defaults.include on a relation absent from allowed.includable", () => {
     try {
-      resolveEntityConfig(authorMetadata, { relations: { edges: { posts: { defaultInclude: true } } } }, undefined);
+      resolveEntityConfig(authorMetadata, { defaults: { include: ["posts"] } }, undefined);
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "relations.edges.posts",
+        path: "defaults.include",
       });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
   });
 
-  it("rejects defaultInclude set at global scope when no entity opts the relation into allowed.includable", () => {
-    // Migration hazard: `relations.edges.<name>.defaultInclude` at global
-    // `defaults` scope used to be safe — naming the relation at all was the
-    // opt-in before this PR. It is not safe now: `allowed.includable` is
-    // entity-scope-only, so a global defaultInclude with no matching entity
-    // grant is a bootstrap crash on every entity sharing that relation name,
-    // not a silent no-op. Pinning the crash here so a future change to this
-    // cross-check doesn't silently turn it into the no-op adopters might
-    // expect.
-    expect(() =>
-      resolveEntityConfig(authorMetadata, undefined, { relations: { edges: { posts: { defaultInclude: true } } } }),
-    ).toThrow(ConfigurationException);
+  it("rejects defaults.include set at global scope when no entity opts the relation into allowed.includable", () => {
+    // Migration hazard: `defaults.include` at global scope used to be safe
+    // under the old `relations.edges.<name>.defaultInclude` — naming the
+    // relation at all was the opt-in before this PR. It is not safe now:
+    // `allowed.includable` is entity-scope-only, so a global
+    // `defaults.include` with no matching entity grant is a bootstrap crash
+    // on every entity sharing that relation name, not a silent no-op.
+    // Pinning the crash here so a future change to this cross-check doesn't
+    // silently turn it into the no-op adopters might expect.
+    expect(() => resolveEntityConfig(authorMetadata, undefined, { defaults: { include: ["posts"] } })).toThrow(
+      ConfigurationException,
+    );
   });
 
-  it("accepts defaultInclude on a relation allowed.includable named", () => {
+  it("accepts defaults.include on a relation allowed.includable named", () => {
     expect(() =>
       resolveEntityConfig(
         authorMetadata,
         {
           allowed: { includable: ["posts"] },
-          relations: { edges: { posts: { defaultInclude: true, maxDepth: 1 } } },
+          defaults: { include: ["posts"] },
+          relations: { edges: { posts: { maxDepth: 1 } } },
         },
         undefined,
       ),

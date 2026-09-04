@@ -20,9 +20,6 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     maxFilterDepth: 3,
     maxInValues: 100,
     maxLikePatternLength: 200,
-    // Unset: today's no-`sort`-means-no-`ORDER BY` behavior is unchanged
-    // for apps that don't declare a default.
-    defaultSort: Object.freeze([]),
     // Off by default, the same `false` sentinel `softDelete`/`realtime` use:
     // `search[query]` is rejected until an entity or operation scope sets an
     // object, even though `searchable`'s own default is permissive (doc 05
@@ -39,6 +36,13 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // Inclusion is opt-in: with no edges configured, `include=` has
     // nothing to reach.
     edges: Object.freeze({}),
+  }),
+  // Unset: today's no-`sort`-means-no-`ORDER BY`, no-`select=`-means-every-
+  // selectable-field, and no-`include=`-means-nothing-included behavior is
+  // unchanged for apps that don't declare a default (issue #375).
+  defaults: Object.freeze({
+    sort: Object.freeze([]),
+    include: Object.freeze([]),
   }),
   // Off by default. A full object rather than `false` — like `softDelete`'s
   // default — so a partial `cache: { ttl: 60 }` override merges against a

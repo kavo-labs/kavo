@@ -151,7 +151,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
 - **Sort:** `sort=-createdAt,name` — comma-separated, `-` prefix =
   descending, list order is priority order. Sortable-allowlist enforced.
   A request that supplies no `sort` falls back to the resolved
-  `query.defaultSort` setting (doc 08) if one is configured; a client- or
+  `defaults.sort` setting (doc 08) if one is configured; a client- or
   caller-supplied `sort` always wins outright over the default rather than
   merging with it. With neither, there is no `ORDER BY` at all — row order
   is DB-dependent.

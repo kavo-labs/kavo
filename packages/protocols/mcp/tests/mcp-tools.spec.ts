@@ -207,7 +207,7 @@ describe("cursor-paginated entities are refused at bootstrap", () => {
     return createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: [{ field: "id", direction: "asc" }] },
+        defaults: { sort: ["id"] },
       },
     } as never).createCrud(Todo, undefined, { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata });
   }

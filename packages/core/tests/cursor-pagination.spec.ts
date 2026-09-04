@@ -40,13 +40,18 @@ import { issuesOf } from "./support/query-issues.js";
 
 const SORT_BY_ID: readonly Sort<User>[] = [{ field: "id", direction: "asc" }];
 
+/** `{ field: "age", direction: "desc" }` → `"-age"` — the `defaults.sort` wire shorthand. */
+function sortWireToken(entry: Sort<User>): string {
+  return entry.direction === "desc" ? `-${entry.field as string}` : (entry.field as string);
+}
+
 function cursorCrud(overrides: DeepPartial<KavoSettings> = {}) {
   const adapter = new InMemoryUserAdapter();
   const crud = createKavo({
     defaults: {
       ...overrides,
       pagination: { strategy: "cursor", ...overrides.pagination },
-      query: { defaultSort: SORT_BY_ID, ...overrides.query },
+      defaults: { sort: SORT_BY_ID.map(sortWireToken), ...overrides.defaults },
     },
   } as never).createCrud(User, undefined, { adapter, metadata: userMetadata });
   return { crud, adapter };
@@ -487,9 +492,10 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
   ): ResolvedEntityConfig<User> {
     const settings = {
       pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true },
-      query: { maxFilterDepth: 5, maxInValues: 100, defaultSort },
+      query: { maxFilterDepth: 5, maxInValues: 100 },
       errors: { exposeInternals: false },
       relations: { maxIncludeDepth: 3, maxIncludedNodes: 20, edges: {} },
+      defaults: { sort: defaultSort.map(sortWireToken), include: [] },
       softDelete: false,
       operations: {},
     } as unknown as KavoSettings;
@@ -521,12 +527,12 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
     expect(issues[0]).toMatchObject({ field: "sort", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
   });
 
-  it("rejects an empty effective sort and names the missing defaultSort", () => {
+  it("rejects an empty effective sort and names the missing defaults.sort", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({}, configWith([])));
-    expect(issues[0]?.detail).toContain("defaultSort");
+    expect(issues[0]?.detail).toContain("defaults.sort");
   });
 
-  it("falls back to a conforming defaultSort without the client sending sort", () => {
+  it("falls back to a conforming default sort without the client sending sort", () => {
     const query = normalizer.normalizeWire({}, configWith(SORT_BY_ID));
     expect(query.sort).toEqual(SORT_BY_ID);
     expect(isCursorPagination(query.pagination)).toBe(true);
@@ -779,12 +785,7 @@ describe("cursor pagination end to end", () => {
 
   it("pages a descending sort correctly", async () => {
     const { crud } = cursorCrud({
-      query: {
-        defaultSort: [
-          { field: "age", direction: "desc" },
-          { field: "id", direction: "asc" },
-        ],
-      },
+      defaults: { sort: ["-age", "id"] },
     });
     await seed(crud, 5);
 
@@ -794,13 +795,7 @@ describe("cursor pagination end to end", () => {
 
   it("pages a mixed asc/desc sort correctly", async () => {
     const { crud, adapter } = cursorCrud({
-      query: {
-        defaultSort: [
-          { field: "status", direction: "asc" },
-          { field: "age", direction: "desc" },
-          { field: "id", direction: "asc" },
-        ],
-      },
+      defaults: { sort: ["status", "-age", "id"] },
     });
     await seed(crud, 6);
     // Two status buckets, so the leading key really has ties to break.
@@ -885,12 +880,7 @@ describe("cursor pagination end to end", () => {
     // null story — ADR-0021 §4 records the quiet half (a NULLS-LAST
     // ordering omits the null-keyed rows entirely, with no error at all).
     const { crud, adapter } = cursorCrud({
-      query: {
-        defaultSort: [
-          { field: "name", direction: "asc" },
-          { field: "id", direction: "asc" },
-        ],
-      },
+      defaults: { sort: ["name", "id"] },
     });
     await seed(crud, 4);
     // sqlite-style NULLS FIRST: the null-named row sorts to the front and
@@ -920,7 +910,7 @@ describe("cursor pagination end to end", () => {
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: SORT_BY_ID },
+        defaults: { sort: SORT_BY_ID.map(sortWireToken) },
       },
     } as never).createCrud(
       User,
@@ -1020,7 +1010,7 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: SORT_BY_ID },
+        defaults: { sort: SORT_BY_ID.map(sortWireToken) },
       },
     } as never).createCrud(User, undefined, { adapter, metadata: userMetadata });
     return { crud, adapter };

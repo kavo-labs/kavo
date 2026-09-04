@@ -545,19 +545,19 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(4);
   });
 
-  it("applies the configured defaultSort when the caller supplies no sort", async () => {
+  it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      defaults: { sort: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((author) => (author as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
   });
 
-  it("keeps defaultSort-ordered pages disjoint and stable across offsets", async () => {
+  it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      defaults: { sort: ["age"] },
     }) as DefaultKavoService<Author>;
     const page1 = await withDefault.findMany({ limit: 2, offset: 0 });
     const page2 = await withDefault.findMany({ limit: 2, offset: 2 });

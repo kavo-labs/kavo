@@ -64,7 +64,7 @@ beforeAll(async () => {
   kavo = createMongooseKavo(database.connection, {
     defaults: {
       pagination: { strategy: "cursor" },
-      query: { defaultSort: [{ field: "_id", direction: "asc" }] },
+      defaults: { sort: ["_id"] },
     },
   });
   posts = kavo.createCrud(models.Post, {
