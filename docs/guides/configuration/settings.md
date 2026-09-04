@@ -20,9 +20,11 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 `count` (default `true`) controls whether list responses compute `total`, which costs an extra `COUNT` query per list call. Set it to `false` alongside `strategy: "cursor"`/`"since"`: the `COUNT` is `O(n)` over the whole match set and dominates the `O(limit)` keyset page it accompanies.
 
-## query
+## limits
 
-`maxFilterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `maxInValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `maxLikePatternLength` (default `200`) is the max character length of a `like`/`ilike` pattern.
+`filterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `inValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `likePattern` (default `200`) is the max character length of a `like`/`ilike` pattern. `includeDepth` (default `2`) is the max relation-include nesting depth — overridable per-subtree by `relations.edges.<name>.maxDepth` (see [Relations](/features/relations)). `includedNodes` (default `10`) is the max total number of included relation nodes across the whole include tree.
+
+## search
 
 `search` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until a scope sets it to an object (`{}` uses the defaults), even though `allowed.searchable` itself defaults to every own string column; set it back to `false` at a narrower scope to disable it there. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token). A narrower scope re-enabling search from `false` may name only the keys it changes — the rest backfill from these defaults.
 

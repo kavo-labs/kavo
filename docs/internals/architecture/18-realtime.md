@@ -96,7 +96,7 @@ const sse = createTransport({
 An entity with no `filterableEntities` entry rejects any `filter[...]`
 query param with `400` before the stream opens — filtering is opt-in per
 entity, not a fallback that silently does nothing. A malformed filter
-(bad operator, depth over `query.maxFilterDepth`, too many `in` values, …)
+(bad operator, depth over `limits.filterDepth`, too many `in` values, …)
 gets the same `400` REST would give it, via the same
 `QueryValidationException`. A filter field that is not one of the entity's
 own columns — a relation path, a computed field — is also rejected with

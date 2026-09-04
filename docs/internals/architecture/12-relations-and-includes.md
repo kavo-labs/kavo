@@ -32,7 +32,7 @@ a relation in `edges` grants nothing by itself, and naming one in
 | `name`, `target`, `cardinality` | metadata             | —                                                                                                   |
 | `includable`                    | `allowed.includable` | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
 | `defaultInclude`                | `defaults.include`   | `false`                                                                                             |
-| `maxDepth`                      | `relations.edges`    | inherit `relations.maxIncludeDepth`                                                                 |
+| `maxDepth`                      | `relations.edges`    | inherit `limits.includeDepth`                                                                       |
 | `strategy`                      | `relations.edges`    | `auto`                                                                                              |
 
 A name in `allowed.includable`, `defaults.include`, or `relations.edges`
@@ -46,9 +46,9 @@ config until the first client asks.
    and `posts.comments` produce one `posts` node with a `comments` child.
 2. **Validate** each edge against the registry of the entity that _owns_
    it — unknown or non-includable → `KAVO_QUERY_INVALID_FIELD` (400).
-3. **Limit**: `relations.maxIncludeDepth` (default 2) as a budget spent
+3. **Limit**: `limits.includeDepth` (default 2) as a budget spent
    per level, a relation's own `maxDepth` replacing that budget for its
-   subtree, and `relations.maxIncludedNodes` (default 10) across the whole
+   subtree, and `limits.includedNodes` (default 10) across the whole
    tree → `KAVO_QUERY_LIMIT_EXCEEDED`.
 4. **Cycle guard is depth, and only depth.** `manager.manager.manager` is
    legal until the budget runs out. Visited-type tracking would forbid a

@@ -418,6 +418,10 @@ const config = defineConfig({
                 text: "0046 — A defaults block covers what a request looks like when the client asks for nothing",
                 link: "/internals/adr/0046-defaults-block-for-omitted-query-axes",
               },
+              {
+                text: "0047 — The settings tree groups limits and lifts search to top level",
+                link: "/internals/adr/0047-settings-tree-groups-limits-and-lifts-search",
+              },
             ],
           },
         ],

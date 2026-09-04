@@ -44,7 +44,7 @@ Only fields on the entity's `filterable` allowlist can be filtered on. See [Allo
 
 ## OR, NOT, and nested logic
 
-The same bracket grammar covers `or` and `not`, and it can nest arbitrarily deep, up to `query.maxFilterDepth` (default 3):
+The same bracket grammar covers `or` and `not`, and it can nest arbitrarily deep, up to `limits.filterDepth` (default 3):
 
 ```http
 GET /books?filter[or][0][author][eq]=Tolkien&filter[or][1][author][eq]=Herbert
@@ -71,9 +71,9 @@ This never filters what's inside an included relation. It only decides which roo
 
 Every request is guarded by limits, configurable per scope:
 
-- `query.maxFilterDepth` (default 3) caps how deeply `or`/`not` can nest.
-- `query.maxInValues` (default 100) caps `in`/`notIn` array length.
-- `query.maxLikePatternLength` (default 200) caps `like`/`ilike` pattern length.
+- `limits.filterDepth` (default 3) caps how deeply `or`/`not` can nest.
+- `limits.inValues` (default 100) caps `in`/`notIn` array length.
+- `limits.likePattern` (default 200) caps `like`/`ilike` pattern length.
 - `pagination.maxLimit` (default 100) caps page size.
 
 If a request breaks several of these at once (filter, sort, select, pagination), Kavo collects the violations and reports them together in a single response. See [Errors](/using-the-api#errors).

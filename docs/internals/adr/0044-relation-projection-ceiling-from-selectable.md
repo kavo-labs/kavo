@@ -146,7 +146,7 @@ composed by shared component — `registerKavoSchemas` resolves it to
 `{ $ref: "#/components/schemas/<Target>Item" }` (a degraded `{ type: "object" }`
 when the target publishes no synthesized item schema). Nested `include=a.b.c`
 therefore types transitively, bounded on the request side by the existing
-`relations.maxIncludeDepth` — there is no separate Swagger depth control.
+`limits.includeDepth` — there is no separate Swagger depth control.
 The property never enters `required` (present only under `include=`), and a
 `defaultInclude: true` relation is not promoted either: the shape is shared
 with write responses, which carry no relations (ADR-0020).

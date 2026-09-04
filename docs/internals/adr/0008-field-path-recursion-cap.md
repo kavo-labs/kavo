@@ -22,7 +22,7 @@ Depth is capped by a tuple-decrement counter: default 3, hard maximum 5
   (`posts.comments.text`); deeper paths need an explicit
   `FieldPath<T, 4|5>` opt-in.
 - Depth caps in the _type_ system are independent of the _runtime_ limits
-  (`maxIncludeDepth`, `allowed.includable`) — the runtime remains the security gate.
+  (`limits.includeDepth`, `allowed.includable`) — the runtime remains the security gate.
 - The degrade-to-`string` rule means untyped entities lose checking
   silently; documented, and acceptable against the alternative of breaking
   them.

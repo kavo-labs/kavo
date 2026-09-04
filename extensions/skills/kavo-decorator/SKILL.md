@@ -59,7 +59,7 @@ interface EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto
   `{ enabled?, handler?, meta? }`, additionally lets you swap the
   `OperationHandler` or supply route `meta` (`method`, `path`, `successStatus`,
   or `enabled: false` to keep it service-only).
-- **Settings keys** (`pagination`, `query`, `errors`, `relations`, `softDelete`,
+- **Settings keys** (`pagination`, `limits`, `search`, `errors`, `relations`, `softDelete`,
   `bulk`) inherited from `DeepPartial<KavoSettings>` override the global
   default for this entity only — see the `global-config` skill for the
   precedence chain these merge through, and the sections below for what
@@ -111,8 +111,10 @@ Inclusion is its own allowlist, resolved per-edge under `relations.edges`:
       pets: { includable: true },
       address: { includable: true, strategy: "join" },
     },
-    maxIncludeDepth: 3,   // default 2 — budget spent per level
-    maxIncludedNodes: 20, // default 10 — cap across the whole include tree
+  },
+  limits: {
+    includeDepth: 3,   // default 2 — budget spent per level
+    includedNodes: 20, // default 10 — cap across the whole include tree
   },
 })
 ```
@@ -120,12 +122,12 @@ Inclusion is its own allowlist, resolved per-edge under `relations.edges`:
 Per-edge options (`relations.edges.<name>`), each defaulting from the table
 below if omitted:
 
-| Key              | Default                              | Meaning                                                                                                                                    |
-| ---------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `includable`     | `false`                              | naming the edge at all is what opts it in; omitted = not includable                                                                        |
-| `defaultInclude` | `false`                              | `true` includes it even without an explicit `include=` param                                                                               |
-| `maxDepth`       | inherits `relations.maxIncludeDepth` | replaces the depth budget for this edge's own subtree                                                                                      |
-| `strategy`       | `"auto"`                             | `"join"` (`leftJoinAndSelect`) or `"batch"` (one query per level, stitched in memory); `auto` picks `join` for to-one, `batch` for to-many |
+| Key              | Default                        | Meaning                                                                                                                                    |
+| ---------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `includable`     | `false`                        | naming the edge at all is what opts it in; omitted = not includable                                                                        |
+| `defaultInclude` | `false`                        | `true` includes it even without an explicit `include=` param                                                                               |
+| `maxDepth`       | inherits `limits.includeDepth` | replaces the depth budget for this edge's own subtree                                                                                      |
+| `strategy`       | `"auto"`                       | `"join"` (`leftJoinAndSelect`) or `"batch"` (one query per level, stitched in memory); `auto` picks `join` for to-one, `batch` for to-many |
 
 - An edge name that doesn't exist on the entity is a bootstrap
   `ConfigurationException` — a typo can't silently permit nothing.
