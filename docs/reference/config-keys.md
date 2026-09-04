@@ -23,7 +23,6 @@ See [Pagination](/querying/pagination) and [Settings](/guides/configuration/sett
 | `query.maxFilterDepth`       | `number`                    | `3`           |
 | `query.maxInValues`          | `number`                    | `100`         |
 | `query.maxLikePatternLength` | `number`                    | `200`         |
-| `query.defaultSort`          | `Sort[]`                    | `[]`          |
 | `query.search`               | `{ mode, driver } \| false` | `false`       |
 | `query.search.mode`          | `"substring" \| "words"`    | `"substring"` |
 | `query.search.driver`        | `"orm"`                     | `"orm"`       |
@@ -40,16 +39,25 @@ See [Errors](/reference/errors).
 
 ## relations
 
-| Key                                     | Type                                   | Default                              |
-| --------------------------------------- | -------------------------------------- | ------------------------------------ |
-| `relations.maxIncludeDepth`             | `number`                               | `2`                                  |
-| `relations.maxIncludedNodes`            | `number`                               | `10`                                 |
-| `relations.edges.<name>.defaultInclude` | `boolean`                              | `false`                              |
-| `relations.edges.<name>.maxDepth`       | `number`                               | inherits `relations.maxIncludeDepth` |
-| `relations.edges.<name>.strategy`       | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                             |
-| `relations.edges.<name>.write`          | `boolean \| { strategy }`              | `false`                              |
+| Key                               | Type                                   | Default                              |
+| --------------------------------- | -------------------------------------- | ------------------------------------ |
+| `relations.maxIncludeDepth`       | `number`                               | `2`                                  |
+| `relations.maxIncludedNodes`      | `number`                               | `10`                                 |
+| `relations.edges.<name>.maxDepth` | `number`                               | inherits `relations.maxIncludeDepth` |
+| `relations.edges.<name>.strategy` | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                             |
+| `relations.edges.<name>.write`    | `boolean \| { strategy }`              | `false`                              |
 
-Whether a relation is includable at all is `allowed.includable` (entity scope only); see [Reference/Config keys §allowed](#allowed-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+Whether a relation is includable at all is `allowed.includable` (entity scope only); see [Reference/Config keys §allowed](#allowed-entity-scope-only). Which includable relations load by default is `defaults.include`, below. `relations.edges` is loading tuning only for a relation that is already includable — no permission, no default. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+
+## defaults
+
+| Key                | Type                                           | Default                        |
+| ------------------ | ---------------------------------------------- | ------------------------------ |
+| `defaults.sort`    | `(-FieldPath \| FieldPath)[]` (wire shorthand) | `[]`                           |
+| `defaults.select`  | `FieldPath[]` (optional)                       | unset — every selectable field |
+| `defaults.include` | `string[]` (relation names)                    | `[]`                           |
+
+What a request looks like when the client specifies nothing — applied only when the request omits that axis; a client-supplied value replaces it outright, never merges. `defaults.sort` takes the same wire shorthand `sort=` does (`-field` for descending). `defaults.select` fields must be on `allowed.selectable`; `defaults.include` relations must be on `allowed.includable`. See [Sorting](/querying/sorting), [Field selection](/querying/field-selection), [Relations](/features/relations).
 
 ## arrayMutation
 

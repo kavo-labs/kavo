@@ -17,13 +17,13 @@ built-in defaults → global (createKavo) → entity (createCrud)
 | `pagination.strategy`                                              | `"offset"`                               | `"page"` built in; custom via `paginationStrategies`                                                                                                                                                                                                                                                                            |
 | `pagination.count`                                                 | `true`                                   | `false` skips the count query; envelope reports `total: null`                                                                                                                                                                                                                                                                   |
 | `query.maxFilterDepth` / `maxInValues`                             | 3 / 100                                  |                                                                                                                                                                                                                                                                                                                                 |
-| `query.defaultSort`                                                | `[]` (unset)                             | order applied when a request supplies no `sort` (issue #56); see below                                                                                                                                                                                                                                                          |
 | `query.search`                                                     | `false`                                  | `false` or `{ mode, driver }`; `search[query]` is a 400 until a scope sets an object (issue #156, doc 05 §4). `mode`/`driver` backfill from their defaults when a partial re-enables it                                                                                                                                         |
 | `query.search.mode`                                                | `"substring"`                            | `"substring"` \| `"words"`; per-call override via `search[mode]`                                                                                                                                                                                                                                                                |
 | `query.search.driver`                                              | `"orm"`                                  | reserved discriminator — the only value accepted today; config-only, no wire counterpart                                                                                                                                                                                                                                        |
 | `errors.exposeInternals`                                           | `false`                                  | leak driver detail into responses                                                                                                                                                                                                                                                                                               |
 | `relations.maxIncludeDepth` / `maxIncludedNodes`                   | 2 / 10                                   | include depth budget and total node cap                                                                                                                                                                                                                                                                                         |
-| `relations.edges.<name>`                                           | `{}`                                     | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowed.includable`, entity scope only (ADR-0028)                                                                                                                                                                                      |
+| `relations.edges.<name>`                                           | `{}`                                     | per-relation loading tuning — `maxDepth` / `strategy` / `write`; permission is `allowed.includable`, default inclusion is `defaults.include`, both entity scope only (ADR-0028, ADR-0046)                                                                                                                                       |
+| `defaults.sort` / `select` / `include`                             | `[]` / unset / `[]`                      | what a request looks like when the client specifies nothing (issue #375); see below                                                                                                                                                                                                                                             |
 | `relations.edges.<name>.write`                                     | unset (`false`)                          | `boolean \| { strategy }` — opts a to-many relation into `arrayMutation` writes, inheriting the entity default (`true`) or pinning its own strategy (`{ strategy }`, issue #223); rejected on a to-one relation                                                                                                                 |
 | `arrayMutation.strategy`                                           | unset — no built-in default (issue #221) | `"replace"` \| `"resource"` \| `"jsonPatch"` — all three are implemented; the entity-wide default a `write: true` relation inherits; a write-opted relation with no strategy resolvable anywhere demands one be declared; `false` disables the feature wholesale and wins over any per-relation override (ADR-0029, issue #223) |
 | `cache.ttl` / `etag`                                               | `0` / `true`                             | TTL result cache for `findOne`/`findMany` (a positive `ttl` turns it on, `0` = off — no separate `enabled` key) + ETag on single-item responses with `If-None-Match`/`If-Match`; the result cache's backing store is **not** here (ADR-0020, ADR-0031)                                                                          |
@@ -183,21 +183,35 @@ if a caller still passes one — fails at bootstrap with a
 `ConfigurationException` naming the entity and the scope's path, the same
 bar every other entry in this section holds to.
 
-### `query.defaultSort`
+### `defaults.sort`
 
 Order applied when a request supplies no `sort` at all — a client- or
 caller-supplied `sort`, when present, always wins outright; the two never
-merge. Each entry is `{ field, direction }` (the same shape as a parsed
-`Sort`), resolved through the full precedence chain like every other
-setting, so it can be set globally, per entity, per operation, or per call.
-Fields are checked against the same sortable allowlist client-supplied
-`sort` fields are checked against, but as soon as the value is set rather
-than when a request uses it: at **bootstrap** (`resolveEntityConfig`) for
-global/entity/operation scope, and when a per-call override is merged
-(`KavoEngine.configViewFor`) for per-call scope — so a bad default fails
-fast at the scope that introduced it instead of producing a broken
-`ORDER BY` on the first request that hits it. Doc 05 covers the
-request-time semantics (client `sort` vs. this fallback).
+merge. Each entry is the same wire shorthand `sort=` accepts (`-field` for
+descending), not the internal `Sort` AST — `QueryNormalizer.defaultSortOf`
+parses each token with the same per-token logic `parseSort` uses for the
+wire param (issue #375). It resolves through the full precedence chain like
+every other setting, so it can be set globally, per entity, per operation,
+or per call. Fields are checked against the same sortable allowlist
+client-supplied `sort` fields are checked against, but as soon as the value
+is set rather than when a request uses it: at **bootstrap**
+(`resolveEntityConfig`) for global/entity/operation scope, and when a
+per-call override is merged (`KavoEngine.configViewFor`) for per-call scope
+— so a bad default fails fast at the scope that introduced it instead of
+producing a broken `ORDER BY` on the first request that hits it. Doc 05
+covers the request-time semantics (client `sort` vs. this fallback).
+
+### `defaults.select` / `defaults.include`
+
+The other two `defaults` keys (issue #375), same posture: applied only on
+omission, checked against the resolved allowlist at the same two points
+`defaults.sort` is. `defaults.select` fields are checked against
+`selectable`; absent, the projection is unchanged (every selectable field).
+`defaults.include` names are checked against `includable`
+([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists),
+[ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)) — the
+replacement for the old per-relation `relations.edges.<name>.defaultInclude`
+boolean, now one flat entity-wide list.
 
 ### `allowed.searchable`
 
@@ -209,16 +223,14 @@ permitted (unlike `filterable`/`sortable`), reusing the per-path join
 machinery `filter[...]` already resolves for relation filters. See doc 05
 §4 for the wire grammar it gates.
 
-### `relations.edges.<name>.defaultInclude`
-
-`defaultInclude: true` on a relation absent from `allowed.includable` is a
-bootstrap `ConfigurationException` — it would load a relation clients cannot
-ask for ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
+A name in `defaults.include` absent from `allowed.includable` is a bootstrap
+`ConfigurationException` — it would load a relation clients cannot ask for
+([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 `validateSettings` only ever sees `KavoSettings`, which does not carry
-`allowed`, so this cross-check runs separately, in
-`validateIncludableRelations` (`resolve-entity-config.ts`), once `allowed`
-has resolved — the same reason `query.defaultSort` and
-`pagination.since.field` are checked outside `validateSettings` too.
+`allowed`, so this cross-check runs separately, in `validateDefaults`
+(`resolve-entity-config.ts`, renamed from `validateDefaultSort`), once
+`allowed` has resolved — the same reason `pagination.since.field` is checked
+outside `validateSettings` too.
 
 ## 5. Root factory and framework skin
 

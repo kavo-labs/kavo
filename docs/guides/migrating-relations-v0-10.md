@@ -9,10 +9,12 @@ To migrate:
 
 `allowed.includable` is entity-scope-only config; there's no global `defaults` and no per-operation override. So a permission that used to come from a global default now needs its own `createCrud`/`@Kavo` registration per entity.
 
-## `defaultInclude` at global scope needs extra care
+## `defaultInclude` moved again, in v0.18 (issue #375)
 
-Before this change, naming a relation in a global `defaults.relations.edges.<name>` was itself the opt-in, so a global `defaultInclude: true` was safe by construction.
+`relations.edges.<name>.defaultInclude` — the per-relation boolean this guide's earlier revisions covered — is also gone now, replaced by a flat `defaults.include` list ([ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)): `relations.edges.posts.defaultInclude: true` becomes `defaults: { include: ["posts"] }`, alongside the same `allowed.includable` grant as before.
 
-It is not safe to leave where it was. `allowed.includable` cannot be set globally, so a global `defaultInclude: true` with no entity-level `allowed.includable` naming that relation now crashes at bootstrap (`ConfigurationException`) on every entity that has a relation of that name. It is not a silent no-op.
+## `defaults.include` at global scope needs extra care
 
-Move `defaultInclude: true` down to each entity's own `relations.edges.<name>`, alongside that entity's `allowed.includable` grant, instead of leaving it at global scope.
+`allowed.includable` cannot be set globally — it is entity-scope-only config, same as before. A global `defaults.include: ["posts"]` with no entity-level `allowed.includable` naming that relation crashes at bootstrap (`ConfigurationException`) on every entity that has a relation of that name. It is not a silent no-op.
+
+Move `defaults.include` down to each entity's own `defaults`, alongside that entity's `allowed.includable` grant, instead of leaving it at global scope.

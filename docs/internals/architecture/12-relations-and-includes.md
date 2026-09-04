@@ -12,30 +12,33 @@ query string and the SQL is documented here.
 Inclusion is an **allowlist**, exactly like filtering and sorting: ORM
 metadata supplies the shape of a relation (name, target, cardinality) and
 config supplies permission, which metadata can never know. A relation
-nobody opted in is a 400, never a silent omission. Permission and loading
-tuning are two different config keys (ADR-0028): `allowed.includable`
-(entity-config.ts) grants `include=` access, one relation segment at a time
-from the root; `relations.edges.<name>` (settings.ts) only tunes
-`defaultInclude`/`maxDepth`/`strategy` for a relation once it is already
-includable — naming a relation in `edges` grants nothing by itself.
+nobody opted in is a 400, never a silent omission. Permission, default
+inclusion, and loading tuning are three different config keys (ADR-0028,
+ADR-0046): `allowed.includable` (entity-config.ts) grants `include=` access,
+one relation segment at a time from the root; `defaults.include`
+(settings.ts) names which includable relations load even when the client's
+`include=` doesn't ask; `relations.edges.<name>` (settings.ts) only tunes
+`maxDepth`/`strategy` for a relation once it is already includable — naming
+a relation in `edges` grants nothing by itself, and naming one in
+`defaults.include` still requires the matching `allowed.includable` grant.
 
 ## 1. The registry
 
-`DefaultRelationRegistry` merges three sources at bootstrap into one
+`DefaultRelationRegistry` merges four sources at bootstrap into one
 `RelationDescriptor` per edge:
 
 | Key                             | Source               | Default                                                                                             |
 | ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
 | `name`, `target`, `cardinality` | metadata             | —                                                                                                   |
 | `includable`                    | `allowed.includable` | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
-| `defaultInclude`                | `relations.edges`    | `false`                                                                                             |
+| `defaultInclude`                | `defaults.include`   | `false`                                                                                             |
 | `maxDepth`                      | `relations.edges`    | inherit `relations.maxIncludeDepth`                                                                 |
 | `strategy`                      | `relations.edges`    | `auto`                                                                                              |
 
-A name in `allowed.includable`, or in `relations.edges`, that the entity
-does not have is a bootstrap `ConfigurationException`: an allowlist typo
-that silently permits nothing looks exactly like working config until the
-first client asks.
+A name in `allowed.includable`, `defaults.include`, or `relations.edges`
+that the entity does not have is a bootstrap `ConfigurationException`: an
+allowlist typo that silently permits nothing looks exactly like working
+config until the first client asks.
 
 ## 2. Resolution (`DefaultIncludeResolver`)
 
