@@ -38,4 +38,12 @@ Commits follow Conventional Commits using the same type vocabulary:
 `<type>(<scope>): <subject>` (e.g. `feat(core): add cursor pagination`), scope
 optional but preferred when the change is package-scoped. Subject line under
 ~72 chars, imperative mood. Add a short body only when the "why" isn't
-obvious.
+obvious. A breaking change adds `!` right before the colon —
+`type(scope)!: subject` — instead of (or alongside) a `BREAKING CHANGE:`
+footer.
+
+`commitlint.config.mjs` additionally accepts `build`, `revert`, and `style`
+as commit types, since @commitlint/config-conventional supports them out of
+the box. They have no issue label or branch prefix — those three surfaces
+stay pinned to the eight types above — so use them only for a commit message
+on work already branched and labeled under one of those eight.
