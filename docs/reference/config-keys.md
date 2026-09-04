@@ -77,13 +77,13 @@ What a request looks like when the client specifies nothing — applied only whe
 
 ## cache
 
-| Key          | Type                     | Default |
-| ------------ | ------------------------ | ------- |
-| `cache`      | `{ ttl, etag } \| false` | `false` |
-| `cache.ttl`  | `number` (seconds)       | `0`     |
-| `cache.etag` | `boolean`                | `true`  |
+| Key          | Type                        | Default |
+| ------------ | --------------------------- | ------- |
+| `cache`      | `{ ttl?, etag } \| false`   | `false` |
+| `cache.ttl`  | `number \| false`, optional | omitted |
+| `cache.etag` | `boolean`                   | `true`  |
 
-One subtree covers both halves of HTTP response caching. `cache.ttl` is the engine-level result cache that serves a repeated `findOne`/`findMany` read from a store without touching the adapter — a positive `ttl` turns it on, `0` (the default) means off, and there is no separate `enabled` key. `cache.etag` is the conditional-request machinery — the ETag on single-item responses plus `If-None-Match`/`If-Match`. `cache: false` turns both halves off together. The result cache's backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Caching & ETags](/features/caching-and-etags) and [Result cache](/features/result-cache).
+One subtree covers both halves of HTTP response caching. `cache.ttl` is the engine-level result cache that serves a repeated `findOne`/`findMany` read from a store without touching the adapter — a positive `ttl` turns it on, an omitted `ttl` (the default) means off, and there is no separate `enabled` key. `ttl: 0` fails bootstrap validation; `ttl: false` overrides an _inherited_ `ttl` back off without disabling `etag` at that scope. `cache.etag` is the conditional-request machinery — the ETag on single-item responses plus `If-None-Match`/`If-Match`. `cache: false` turns both halves off together. The result cache's backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Caching & ETags](/features/caching-and-etags) and [Result cache](/features/result-cache).
 
 ## softDelete
 
