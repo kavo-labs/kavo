@@ -137,15 +137,17 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       throw new ConfigurationException(
         entityName,
         "cache",
-        `expected { ttl: number, etag: boolean } or false, got ${JSON.stringify(cache)} — ` +
+        `expected { ttl?: number | false, etag: boolean } or false, got ${JSON.stringify(cache)} — ` +
           `to turn result caching and ETags off together, set 'cache' to false`,
       );
     }
-    if (!Number.isInteger(cache.ttl) || (cache.ttl as number) < 0) {
+    if (cache.ttl !== undefined && cache.ttl !== false && (!Number.isInteger(cache.ttl) || cache.ttl <= 0)) {
       throw new ConfigurationException(
         entityName,
         "cache.ttl",
-        `expected a non-negative integer (0 disables the result cache), got ${JSON.stringify(cache.ttl)}`,
+        `expected a positive integer, false, or omitted, got ${JSON.stringify(cache.ttl)} — ` +
+          `omit 'ttl' (or set it to false) to disable the result cache while keeping 'etag', ` +
+          `or set 'cache' to false to disable the whole subtree`,
       );
     }
     bool("cache.etag", cache.etag);

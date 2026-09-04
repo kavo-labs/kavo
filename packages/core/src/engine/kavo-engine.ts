@@ -579,10 +579,19 @@ export class KavoEngine<Entity extends object> {
     return this.cacheSettings(config) !== null;
   }
 
-  /** The `cache` settings in force for a config view, or `null` when off. */
-  private cacheSettings(config: ResolvedEntityConfig<Entity>): CacheSettings | null {
+  /**
+   * The `cache` settings in force for a config view, or `null` when the
+   * result cache is off — the whole subtree disabled (`cache: false`), or
+   * `ttl` absent/`false` (ADR-0031 as amended). `ttl` is narrowed to
+   * `number` here since a caller only reaches for `.ttl` once this returns
+   * non-null.
+   */
+  private cacheSettings(config: ResolvedEntityConfig<Entity>): (CacheSettings & { ttl: number }) | null {
     const cache = config.settings.cache;
-    return cache === false || cache.ttl <= 0 ? null : cache;
+    if (cache === false || cache.ttl === undefined || cache.ttl === false) {
+      return null;
+    }
+    return { ...cache, ttl: cache.ttl };
   }
 
   /**

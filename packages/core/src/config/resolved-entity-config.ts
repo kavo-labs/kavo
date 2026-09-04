@@ -90,7 +90,8 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * per entity and not through the settings precedence chain, for the same
    * ADR-0023 reason `realtimeTransports` documents: a store is a live
    * object (a Redis client, say) that must not be deep-frozen. The engine
-   * reads and writes it when `settings.cache.ttl` is positive (ADR-0031).
+   * reads and writes it when `settings.cache.ttl` is a positive number
+   * (ADR-0031 as amended).
    */
   readonly cacheStore: CacheStore;
   /**

@@ -227,6 +227,26 @@ describe("cache settings resolution", () => {
     expect(() => makeCrud({ cache: true } as never)).toThrowError(ConfigurationException);
   });
 
+  it("'cache: { ttl: 0 }' no longer validates — omit 'ttl' or use 'ttl: false'", () => {
+    expect(() => makeCrud({ cache: { ttl: 0 } } as never)).toThrowError(ConfigurationException);
+  });
+
+  it("'cache: { ttl: false }' overrides an inherited ttl back off without disabling etag", async () => {
+    const store = createMemoryCacheStore();
+    const { crud, adapter } = makeCrud({ cache: { ttl: false } } as never, store, {
+      defaults: { cache: { ttl: 60 } },
+    });
+    await execute(crud, { operation: "createOne", body: ADA });
+    await execute(crud, { operation: "findOne", id: 1 });
+    const readsAfterMiss = adapter.reads;
+
+    // The entity-scoped `ttl: false` overrode the inherited global ttl: no hit.
+    const second = await execute(crud, { operation: "findOne", id: 1 });
+    expect(adapter.reads).toBe(readsAfterMiss + 1);
+    // ETags still serve — only the result cache was turned off.
+    expect(second.etag).not.toBeNull();
+  });
+
   it("rejects a malformed cache store at createKavo, once", () => {
     expect(() => createKavo({ cacheStore: {} as never })).toThrowError(ConfigurationException);
     expect(() => createKavo({ cacheStore: { get: 1 } as never })).toThrowError(ConfigurationException);
