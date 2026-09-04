@@ -69,7 +69,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     const issues: QueryIssueDto[] = [];
     const roots: FilterExpression<Entity>[] = [];
 
-    const guard: DepthGuard = { maxDepth: config.settings.query.maxFilterDepth, exceeded: false };
+    const guard: DepthGuard = { maxDepth: config.settings.limits.filterDepth, exceeded: false };
 
     const bracketTree = this.collectBracketTree(rawParams);
     if (bracketTree !== null) {
@@ -338,7 +338,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
           });
           return null;
         }
-        const max = config.settings.query.maxInValues;
+        const max = config.settings.limits.inValues;
         if (parts.length > max) {
           issues.push({
             field,
@@ -383,12 +383,12 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         // `%`/`_` are escaped with a backslash (`\%`) — the adapter emits
         // the matching ESCAPE clause.
         const pattern = String(raw);
-        const max = config.settings.query.maxLikePatternLength;
+        const max = config.settings.limits.likePattern;
         if (pattern.length > max) {
           // Values are parameter-bound (never SQLi), but an unbounded
           // pattern — heavy wildcard backtracking, e.g. `%a%b%c%…` — can
           // force an expensive full scan (issue #367 finding 4), same
-          // shape of concern `maxInValues` addresses for array length.
+          // shape of concern `limits.inValues` addresses for array length.
           issues.push({
             field,
             code: "KAVO_QUERY_LIMIT_EXCEEDED",

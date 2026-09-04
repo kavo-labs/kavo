@@ -21,8 +21,8 @@ interface DraftNode {
  *    `posts.comments` produce one `posts` node with a `comments` child;
  * 2. validate every edge against the relation registry of the entity that
  *    *owns* it (unknown or non-includable → 400, never a silent drop);
- * 3. enforce `maxIncludeDepth`, per-relation `maxDepth` overrides below a
- *    node, and `maxIncludedNodes` across the whole tree;
+ * 3. enforce `limits.includeDepth`, per-relation `maxDepth` overrides below a
+ *    node, and `limits.includedNodes` across the whole tree;
  * 4. attach sparse fieldsets, validated against the target's selectable
  *    allowlist;
  * 5. resolve `auto` strategies and the target's delete strategy, so the
@@ -46,12 +46,12 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       addPath(drafts, path, issues);
     }
 
-    const budget = { remaining: config.settings.relations.maxIncludedNodes };
+    const budget = { remaining: config.settings.limits.includedNodes };
     const tree = this.build(
       drafts,
       config as unknown as ResolvedEntityConfig<object>,
       request,
-      config.settings.relations.maxIncludeDepth,
+      config.settings.limits.includeDepth,
       budget,
       issues,
     );
@@ -122,7 +122,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
           code: "KAVO_QUERY_LIMIT_EXCEEDED",
           detail:
             `Include path '${draft.path}' is deeper than the configured maximum ` +
-            `of ${owner.settings.relations.maxIncludeDepth}.`,
+            `of ${owner.settings.limits.includeDepth}.`,
         });
         continue;
       }
@@ -130,7 +130,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
         issues.push({
           field: draft.path,
           code: "KAVO_QUERY_LIMIT_EXCEEDED",
-          detail: `Include tree exceeds the configured maximum of ${owner.settings.relations.maxIncludedNodes} nodes.`,
+          detail: `Include tree exceeds the configured maximum of ${owner.settings.limits.includedNodes} nodes.`,
         });
         continue;
       }

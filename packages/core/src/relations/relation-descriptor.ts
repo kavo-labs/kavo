@@ -52,7 +52,7 @@ export interface RelationDescriptor {
    * `relations.edges` (which tunes loading only).
    */
   readonly defaultInclude?: boolean;
-  /** Overrides the configured `maxIncludeDepth` below this node. */
+  /** Overrides the configured `limits.includeDepth` below this node. */
   readonly maxDepth?: number;
   readonly strategy: RelationLoadStrategy;
   /**

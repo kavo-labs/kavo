@@ -896,7 +896,7 @@ function parseSelect<Entity>(
 /**
  * `search[query]`/`search[mode]`/`search[fields]` (doc 05 §4): validated and
  * synthesized here, in the normalizer, rather than the filter parser —
- * `searchable` is an allowlist and `query.search` (`false` or `{ mode }`) is a per-operation
+ * `searchable` is an allowlist and `search` (`false` or `{ mode }`) is a per-operation
  * settings, both already in the normalizer's scope, and synthesis needs the
  * already-parsed `filter` to `AND` the fragment into.
  *
@@ -934,14 +934,14 @@ function parseSearch<Entity>(
   }
 
   const searchable = config.allowed.searchable as readonly string[];
-  const search = config.settings.query.search;
+  const search = config.settings.search;
   if (search === false) {
     issues.push({
       field: "search[query]",
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",
       detail:
         `Query parameter 'search[query]' is not supported: search is not enabled for ${config.entityName}. ` +
-        `Set 'query.search' to an object to turn it on.`,
+        `Set 'search' to an object to turn it on.`,
     });
     return filter;
   }
@@ -1003,14 +1003,14 @@ function parseSearch<Entity>(
   // Synthesized width is `terms.length * fields.length` — one ILIKE
   // condition per searched field, per term — unlike `filter[...]`'s
   // `IN`/`NOT_IN`/`BETWEEN`, which has no analogous width multiplier
-  // (`maxFilterDepth` caps nesting depth, not a group's child count).
+  // (`limits.filterDepth` caps nesting depth, not a group's child count).
   // Capping `terms.length` alone leaves the product unbounded whenever
   // `searchable` (or a wide `search[fields]`) carries many entries — its
   // own default is *every* own string column, so this is not a contrived
-  // case. `maxInValues` is already "how many operands may one param
+  // case. `limits.inValues` is already "how many operands may one param
   // carry"; reused on the product, rather than adding a second limit key,
   // so neither factor alone can still synthesize an unbounded predicate.
-  const max = config.settings.query.maxInValues;
+  const max = config.settings.limits.inValues;
   const width = terms.length * fields.length;
   if (width > max) {
     issues.push({
@@ -1064,33 +1064,33 @@ function validateExpression<Entity>(
   issues: QueryIssueDto[],
   depth = 1,
 ): void {
-  if (depth > config.settings.query.maxFilterDepth) {
+  if (depth > config.settings.limits.filterDepth) {
     issues.push({
       field: "filter",
       code: "KAVO_QUERY_LIMIT_EXCEEDED",
-      detail: `Filter depth exceeds the configured maximum of ${config.settings.query.maxFilterDepth}.`,
+      detail: `Filter depth exceeds the configured maximum of ${config.settings.limits.filterDepth}.`,
     });
     return;
   }
   if (expression.kind === "condition") {
     requireAllowlisted(expression.field as string, config, "filtering", issues);
     const value = expression.value;
-    if (Array.isArray(value) && value.length > config.settings.query.maxInValues) {
+    if (Array.isArray(value) && value.length > config.settings.limits.inValues) {
       issues.push({
         field: expression.field as string,
         code: "KAVO_QUERY_LIMIT_EXCEEDED",
-        detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.settings.query.maxInValues}.`,
+        detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.settings.limits.inValues}.`,
       });
     }
     if (
       (expression.operator === "LIKE" || expression.operator === "ILIKE") &&
       typeof value === "string" &&
-      value.length > config.settings.query.maxLikePatternLength
+      value.length > config.settings.limits.likePattern
     ) {
       issues.push({
         field: expression.field as string,
         code: "KAVO_QUERY_LIMIT_EXCEEDED",
-        detail: `'${expression.operator}' pattern is ${value.length} characters; the maximum is ${config.settings.query.maxLikePatternLength}.`,
+        detail: `'${expression.operator}' pattern is ${value.length} characters; the maximum is ${config.settings.limits.likePattern}.`,
       });
     }
     return;

@@ -140,7 +140,7 @@ export interface QueryAllowed<Entity = unknown, Computed extends string = never>
    * exactly the shape `filterable` already resolves join/nesting for.
    *
    * `searchable` only grants *which fields* a search may touch; whether
-   * `search[query]` is accepted at all is `query.search` (`KavoSettings`),
+   * `search[query]` is accepted at all is `search` (`KavoSettings`),
    * `false` by default — set it to an object to turn search on; see doc 05 §4.
    */
   readonly searchable?: QueryFieldSelector<Entity>;

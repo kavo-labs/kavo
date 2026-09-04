@@ -188,13 +188,13 @@ describe("include resolution", () => {
     expect(includeTree(fixture.authorAdapter)["posts"]!.softDelete).toEqual({ strategy: "soft", field: "deletedAt" });
   });
 
-  it("enforces maxIncludeDepth", async () => {
+  it("enforces limits.includeDepth", async () => {
     const fixture = blog(
       {
         author: { allowed: { includable: ["posts"] } },
         post: { allowed: { includable: ["comments"] } },
       },
-      { defaults: { relations: { maxIncludeDepth: 1 } } },
+      { defaults: { limits: { includeDepth: 1 } } },
     );
     const { authors } = fixture;
     await expect(authors.findMany({ include: ["posts.comments"] })).rejects.toMatchObject({
@@ -211,7 +211,7 @@ describe("include resolution", () => {
         },
         post: { allowed: { includable: ["comments"] } },
       },
-      { defaults: { relations: { maxIncludeDepth: 1 } } },
+      { defaults: { limits: { includeDepth: 1 } } },
     );
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -220,10 +220,10 @@ describe("include resolution", () => {
     expect(list.items[0]).toMatchObject({ posts: [{ comments: [{ body: "nice" }] }] });
   });
 
-  it("enforces maxIncludedNodes across the whole tree", async () => {
+  it("enforces limits.includedNodes across the whole tree", async () => {
     const fixture = blog(
       { post: { allowed: { includable: ["author", "comments"] } } },
-      { defaults: { relations: { maxIncludedNodes: 1 } } },
+      { defaults: { limits: { includedNodes: 1 } } },
     );
     const { posts, postRows } = fixture;
     postRows.push(Object.assign(new Post(), { id: 10 }));

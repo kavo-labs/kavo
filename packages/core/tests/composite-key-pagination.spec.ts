@@ -33,9 +33,10 @@ function configWith(
 ): ResolvedEntityConfig<CompositeEntity> {
   const settings = {
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
-    query: { maxFilterDepth: 5, maxInValues: 100 },
+    limits: { filterDepth: 5, inValues: 100, likePattern: 200, includeDepth: 3, includedNodes: 20 },
+    search: false,
     errors: { exposeInternals: false },
-    relations: { maxIncludeDepth: 3, maxIncludedNodes: 20, edges: {} },
+    relations: { edges: {} },
     defaults: { sort: defaultSort.map(sortWireToken), include: [] },
     softDelete: false,
     operations: {},

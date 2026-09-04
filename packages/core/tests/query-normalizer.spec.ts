@@ -178,19 +178,15 @@ describe("QueryNormalizer — wire params", () => {
 });
 
 describe("QueryNormalizer — search[...]", () => {
-  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: {} } }, undefined);
+  const searchEnabled = resolveEntityConfig(userMetadata, { search: {} }, undefined);
 
-  it("rejects search[query] when query.search is false (the default)", () => {
+  it("rejects search[query] when search is false (the default)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
 
   it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
-    const emptySearchable = resolveEntityConfig(
-      userMetadata,
-      { query: { search: {} }, allowed: { searchable: [] } },
-      undefined,
-    );
+    const emptySearchable = resolveEntityConfig(userMetadata, { search: {}, allowed: { searchable: [] } }, undefined);
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
@@ -267,8 +263,8 @@ describe("QueryNormalizer — search[...]", () => {
     expect(query.filter.root).toMatchObject({ operator: "ILIKE", value: "%50\\%\\_off%" });
   });
 
-  it("caps the number of words in words mode at query.maxInValues", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 2 } }, undefined);
+  it("caps the number of words in words mode at limits.inValues", () => {
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 2 } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
     );
@@ -280,7 +276,7 @@ describe("QueryNormalizer — search[...]", () => {
     // Two words × two fields = 4 synthesized conditions — over a cap of 3 —
     // even though the word count alone (2) is under it. A cap that only
     // checked `terms.length` would let this through.
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 3 } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, tightCap),
     );
@@ -288,7 +284,7 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("lets the same product through once search[fields] narrows it under the cap", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 3 } }, undefined);
     // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
     const query = normalizer.normalizeWire(
       { "search[query]": "blue iphone", "search[mode]": "words", "search[fields]": "name" },
@@ -339,7 +335,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
     const relationSearchable = resolveEntityConfig(
       authorMetadata,
-      { query: { search: {} }, allowed: { searchable: ["name", "posts.title" as never] } },
+      { search: {}, allowed: { searchable: ["name", "posts.title" as never] } },
       undefined,
     );
     const authorNormalizer = new QueryNormalizer(authorMetadata);
@@ -357,29 +353,29 @@ describe("QueryNormalizer — search[...]", () => {
   it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
     const independent = resolveEntityConfig(
       userMetadata,
-      { query: { search: {} }, allowed: { filterable: [], searchable: ["name"] } },
+      { search: {}, allowed: { filterable: [], searchable: ["name"] } },
       undefined,
     );
     const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
     expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
   });
 
-  it("applies the precedence chain global → entity → operation to query.search", () => {
+  it("applies the precedence chain global → entity → operation to search", () => {
     const config = resolveEntityConfig(
       userMetadata,
       {
-        query: { search: { mode: "words" } },
-        operations: { findMany: { query: { search: { mode: "substring" } } } },
+        search: { mode: "words" },
+        operations: { findMany: { search: { mode: "substring" } } },
       },
-      { query: { search: { mode: "substring" } } },
+      { search: { mode: "substring" } },
     );
     // Entity scope overrides global mode; `driver` (never named at any
     // scope) is backfilled from the built-in default — a partial per-scope
     // override must not leave sibling keys undefined.
-    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
+    expect(config.settings.search).toEqual({ mode: "words", driver: "orm" });
     // The operation scope's narrower override wins for that operation only.
-    expect(config.settingsFor("findMany").query.search).toEqual({ mode: "substring", driver: "orm" });
-    const findOneSearch = config.settingsFor("findOne").query.search;
+    expect(config.settingsFor("findMany").search).toEqual({ mode: "substring", driver: "orm" });
+    const findOneSearch = config.settingsFor("findOne").search;
     expect(findOneSearch !== false && findOneSearch.mode).toBe("words");
   });
 
@@ -387,18 +383,18 @@ describe("QueryNormalizer — search[...]", () => {
     const config = resolveEntityConfig(
       userMetadata,
       {
-        query: { search: {} },
-        operations: { findMany: { query: { search: false } } },
+        search: {},
+        operations: { findMany: { search: false } },
       },
       undefined,
     );
-    expect(config.settings.query.search).toEqual({ mode: "substring", driver: "orm" });
-    expect(config.settingsFor("findMany").query.search).toBe(false);
+    expect(config.settings.search).toEqual({ mode: "substring", driver: "orm" });
+    expect(config.settingsFor("findMany").search).toBe(false);
   });
 
   it("backfills mode/driver when a scope re-enables search from the false default with a partial object", () => {
-    const config = resolveEntityConfig(userMetadata, { query: { search: { mode: "words" } } }, undefined);
-    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
+    const config = resolveEntityConfig(userMetadata, { search: { mode: "words" } }, undefined);
+    expect(config.settings.search).toEqual({ mode: "words", driver: "orm" });
   });
 });
 
@@ -795,7 +791,7 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     expect(normalizer.normalizeInput({ limit: 1, offset: 0 }, config).pagination).toEqual({ limit: 1, offset: 0 });
   });
 
-  it("enforces maxFilterDepth on a hand-built AST", () => {
+  it("enforces limits.filterDepth on a hand-built AST", () => {
     // Four levels of nesting against the default budget of three. Without
     // this gate a programmatic caller could hand the adapter an
     // arbitrarily deep tree that the wire path would have refused.
@@ -806,7 +802,7 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     expect(issues[0]).toMatchObject({ field: "filter", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
   });
 
-  it("enforces maxInValues on a hand-built IN condition, naming the field and operator", () => {
+  it("enforces limits.inValues on a hand-built IN condition, naming the field and operator", () => {
     const issues = issuesOf(() =>
       normalizer.normalizeInput(
         {
@@ -825,9 +821,9 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
   });
 
   it.each(["LIKE", "ILIKE"])(
-    "enforces maxLikePatternLength on a hand-built %s condition (issue #367 finding 4)",
+    "enforces limits.likePattern on a hand-built %s condition (issue #367 finding 4)",
     (operator) => {
-      // The wire path's own `maxLikePatternLength` cap only runs inside
+      // The wire path's own `limits.likePattern` cap only runs inside
       // `DefaultFilterParser`, which a programmatic `QueryContext` caller
       // never goes through — without this gate here too, that caller could
       // hand the adapter a pattern long enough to force an expensive scan
@@ -849,7 +845,7 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     },
   );
 
-  it("accepts a hand-built LIKE condition at exactly maxLikePatternLength", () => {
+  it("accepts a hand-built LIKE condition at exactly limits.likePattern", () => {
     const pattern = "a".repeat(200);
     expect(() =>
       normalizer.normalizeInput(

@@ -51,23 +51,23 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     );
   }
 
-  positiveInt("query.maxFilterDepth", settings.query.maxFilterDepth);
-  positiveInt("query.maxInValues", settings.query.maxInValues);
-  positiveInt("query.maxLikePatternLength", settings.query.maxLikePatternLength);
+  positiveInt("limits.filterDepth", settings.limits.filterDepth);
+  positiveInt("limits.inValues", settings.limits.inValues);
+  positiveInt("limits.likePattern", settings.limits.likePattern);
 
-  const search = settings.query.search;
+  const search = settings.search;
   if (search !== false) {
     if (search.mode !== "substring" && search.mode !== "words") {
       throw new ConfigurationException(
         entityName,
-        "query.search.mode",
+        "search.mode",
         `expected "substring" or "words", got ${JSON.stringify(search.mode)}`,
       );
     }
     if (search.driver !== "orm") {
       throw new ConfigurationException(
         entityName,
-        "query.search.driver",
+        "search.driver",
         `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(search.driver)}`,
       );
     }
@@ -75,8 +75,8 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
 
   bool("errors.exposeInternals", settings.errors.exposeInternals);
 
-  positiveInt("relations.maxIncludeDepth", settings.relations.maxIncludeDepth);
-  positiveInt("relations.maxIncludedNodes", settings.relations.maxIncludedNodes);
+  positiveInt("limits.includeDepth", settings.limits.includeDepth);
+  positiveInt("limits.includedNodes", settings.limits.includedNodes);
   for (const [name, edge] of Object.entries(settings.relations.edges)) {
     const path = `relations.edges.${name}`;
     if (typeof edge !== "object" || edge === null) {

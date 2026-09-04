@@ -37,7 +37,8 @@ import { ConfigurationException } from "../errors/exceptions.js";
  */
 const SETTINGS_KEYS = [
   "pagination",
-  "query",
+  "limits",
+  "search",
   "errors",
   "relations",
   "defaults",
@@ -67,24 +68,21 @@ function pickSettings(config: Readonly<Record<string, unknown>> | undefined): De
 }
 
 /**
- * Backfill `query.search`'s `mode`/`driver` after a merge. `false` (the
+ * Backfill `search`'s `mode`/`driver` after a merge. `false` (the
  * default) stays `false` — search off. Any object turns search on, and a
  * nearer scope re-enabling from `false` may name only the keys it changes
  * (`search: { mode: "words" }`), so the missing ones fall back to the
  * built-in defaults here rather than being left `undefined`.
  */
 function normalizeSearch(settings: KavoSettings): KavoSettings {
-  const search = settings.query.search;
+  const search = settings.search;
   if (search === false) {
     return settings;
   }
   const defaults = BUILT_IN_DEFAULT_SEARCH;
   return {
     ...settings,
-    query: {
-      ...settings.query,
-      search: { mode: search.mode ?? defaults.mode, driver: search.driver ?? defaults.driver },
-    },
+    search: { mode: search.mode ?? defaults.mode, driver: search.driver ?? defaults.driver },
   };
 }
 
