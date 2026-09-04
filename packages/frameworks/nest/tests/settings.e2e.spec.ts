@@ -109,7 +109,7 @@ describe("@Kavo allowed — filterable/sortable/selectable enforced over HTTP", 
   });
 });
 
-describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", () => {
+describe("@Kavo relation include budgets (limits.includeDepth/limits.includedNodes)", () => {
   // `Todo.list` and `TodoList.list` deliberately share the relation name,
   // so `include=list.list` is a genuine two-level tree, which a single
   // relation can never exceed once a positive integer is the smallest legal
@@ -127,9 +127,9 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
   @Controller("todolists")
   class TodoListController {}
 
-  it("rejects an include deeper than the configured maxIncludeDepth", async () => {
+  it("rejects an include deeper than the configured limits.includeDepth", async () => {
     await bootstrap([NestedIncludeController, TodoListController], {
-      defaults: { relations: { maxIncludeDepth: 1 } },
+      defaults: { limits: { includeDepth: 1 } },
     });
 
     const response = await request(server()).get("/todos?include=list.list").expect(400);
@@ -139,9 +139,9 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
     });
   });
 
-  it("rejects an include tree exceeding the configured maxIncludedNodes", async () => {
+  it("rejects an include tree exceeding the configured limits.includedNodes", async () => {
     await bootstrap([NestedIncludeController, TodoListController], {
-      defaults: { relations: { maxIncludedNodes: 1 } },
+      defaults: { limits: { includedNodes: 1 } },
     });
 
     const response = await request(server()).get("/todos?include=list.list").expect(400);
@@ -154,7 +154,7 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
   it("accepts an include within both budgets", async () => {
     @Kavo(Todo, {
       allowed: { includable: ["list"] },
-      relations: { maxIncludeDepth: 1, maxIncludedNodes: 1 },
+      limits: { includeDepth: 1, includedNodes: 1 },
     })
     @Controller("todos")
     class RoomyController {}
@@ -164,9 +164,9 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
   });
 });
 
-describe("@Kavo query limits (maxFilterDepth/maxInValues) enforced over HTTP", () => {
-  it("rejects a filter tree deeper than the configured maxFilterDepth", async () => {
-    @Kavo(Todo, { query: { maxFilterDepth: 1 } })
+describe("@Kavo query limits (limits.filterDepth/limits.inValues) enforced over HTTP", () => {
+  it("rejects a filter tree deeper than the configured limits.filterDepth", async () => {
+    @Kavo(Todo, { limits: { filterDepth: 1 } })
     @Controller("todos")
     class ShallowFilterController {}
     await bootstrap(ShallowFilterController);
@@ -178,8 +178,8 @@ describe("@Kavo query limits (maxFilterDepth/maxInValues) enforced over HTTP", (
     });
   });
 
-  it("rejects an `in` value list longer than the configured maxInValues", async () => {
-    @Kavo(Todo, { query: { maxInValues: 1 } })
+  it("rejects an `in` value list longer than the configured limits.inValues", async () => {
+    @Kavo(Todo, { limits: { inValues: 1 } })
     @Controller("todos")
     class NarrowInController {}
     await bootstrap(NarrowInController);

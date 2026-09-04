@@ -65,7 +65,7 @@ import { hasPermission } from "./owner.policy.js";
   cache: { etag: false },
   realtime: { events: {} },
   softDelete: { strategy: "soft" },
-  query: { search: {} },
+  search: {},
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves
   // to every own column except this one, without hand-enumerating the rest.

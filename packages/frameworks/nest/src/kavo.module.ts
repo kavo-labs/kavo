@@ -500,7 +500,7 @@ class KavoBinder implements OnModuleInit {
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
-          // doc comment in swagger.ts): whether `query.search` resolved to an
+          // doc comment in swagger.ts): whether `search` resolved to an
           // object needs the full precedence chain, and `allowed.searchable`
           // is only fully resolved once ORM metadata exists, neither of which
           // `@Kavo` decoration time has.
@@ -508,7 +508,7 @@ class KavoBinder implements OnModuleInit {
             prototype,
             methodName,
             descriptor,
-            settings.query.search !== false,
+            settings.search !== false,
             service.engine.config.allowed.searchable as readonly string[],
           );
           // `limit`/`offset` docs (issue #225) — deferred for the same
@@ -520,7 +520,7 @@ class KavoBinder implements OnModuleInit {
           // same reason as the passes above: the resolved
           // `allowed.sortable`/`includable`/`filterable`/`selectable`/
           // `searchable` and the precedence-merged `pagination.strategy` /
-          // `query.search` only exist here. The extension
+          // `search` only exist here. The extension
           // `applyQuerySchemaDocs` stamps is hoisted into `components.schemas`
           // by `registerKavoSchemas`.
           applyQuerySchemaDocs(prototype, methodName, descriptor, metadata.entity.name, service.engine.metadata, {
@@ -530,7 +530,7 @@ class KavoBinder implements OnModuleInit {
             filterable: service.engine.config.allowed.filterable as readonly string[],
             selectable: service.engine.config.allowed.selectable as readonly string[],
             searchable: service.engine.config.allowed.searchable as readonly string[],
-            searchEnabled: settings.query.search !== false,
+            searchEnabled: settings.search !== false,
           });
           // Retag the always-present `400` as `<Entity>ValidationError`
           // (issue #310) so `registerKavoSchemas` gives each entity its own
