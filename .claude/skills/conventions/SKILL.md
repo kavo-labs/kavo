@@ -42,6 +42,11 @@ obvious. A breaking change adds `!` right before the colon —
 `type(scope)!: subject` — instead of (or alongside) a `BREAKING CHANGE:`
 footer.
 
+When a change spans more than one package, comma-separate the scopes with no
+space — `type(scope1,scope2): subject` (e.g. `fix(core,nest): align pagination
+defaults`) — rather than picking one package to name or writing separate
+commits for what is really one logical change.
+
 `commitlint.config.mjs` additionally accepts `build`, `revert`, and `style`
 as commit types, since @commitlint/config-conventional supports them out of
 the box. They have no issue label or branch prefix — those three surfaces

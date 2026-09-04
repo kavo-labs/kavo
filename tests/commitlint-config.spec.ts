@@ -47,6 +47,11 @@ describe("commitlint.config.mjs", () => {
     }
   });
 
+  it("accepts a comma-separated multiple-scope header", () => {
+    const result = lint("fix(core,nest): align pagination defaults across packages");
+    expect(result.ok, result.output).toBe(true);
+  });
+
   it("still rejects a type outside the allowed vocabulary", () => {
     const result = lint("wip(core): should not be an allowed type");
     expect(result.ok).toBe(false);
