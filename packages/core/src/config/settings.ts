@@ -222,12 +222,28 @@ export type EtagSettings = boolean;
  *
  * `false` disables the subtree wholesale (result cache **and** etags), the
  * same convention `softDelete` uses. Otherwise the result cache is on
- * exactly when `ttl` is positive: `ttl` **is** the switch — there is no
- * separate `enabled` key, and no presence rule to remember. `ttl: 0` (the
- * default) and an omitted `ttl` both mean "off"; `@Kavo(Entity,
- * { cache: { ttl: 60 } })` means "on, 60 seconds". Touching only `etag` on
- * an otherwise-off entity is then the natural spelling —
- * `cache: { etag: false }` — and never flips the result cache on.
+ * exactly when `ttl` is a positive number: `ttl`'s presence **is** the
+ * switch — there is no separate `enabled` key, and no magic number to
+ * remember. An omitted `ttl` (the default) means the result cache is off;
+ * `@Kavo(Entity, { cache: { ttl: 60 } })` means "on, 60 seconds". `ttl: 0`
+ * and any other non-positive or non-integer `ttl` fail bootstrap validation
+ * (ADR-0031) — `false` disables the whole subtree, omitting `ttl` disables
+ * just the result cache, and there is no third spelling for "off".
+ *
+ * `ttl: false` is the one exception, reserved for overriding an
+ * **inherited** `ttl` back off at a narrower scope without touching that
+ * scope's `etag` — `cache: false` would also disable ETags, which
+ * `{ ttl: false }` deliberately leaves alone. It merges like any other
+ * explicit value (`mergeSettings` never treats it as "clear the key"), so a
+ * later, still-narrower scope's own `ttl: 30` overrides it in turn. Writing
+ * `cache: { ttl: false }` at a scope with no inherited `ttl` is equivalent
+ * to omitting `ttl` — both mean "off" — but the presence form is meant for
+ * turning an inherited "on" back off, not as a spelling to reach for by
+ * default.
+ *
+ * Touching only `etag` on an otherwise-off entity is then the natural
+ * spelling — `cache: { etag: false }` — and never flips the result cache
+ * on.
  *
  * `etag` defaults **on** (`true`) independent of `ttl`: an entity with
  * result caching off still serves ETags and honors the conditional
@@ -246,7 +262,7 @@ export type EtagSettings = boolean;
  * caching (ADR-0031).
  */
 export interface CacheSettings {
-  readonly ttl: number;
+  readonly ttl?: number | false;
   readonly etag: EtagSettings;
 }
 

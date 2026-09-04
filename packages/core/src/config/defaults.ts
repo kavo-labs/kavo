@@ -46,16 +46,15 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   }),
   // Off by default. A full object rather than `false` — like `softDelete`'s
   // default — so a partial `cache: { ttl: 60 }` override merges against a
-  // complete base instead of replacing a `false` wholesale. `ttl` is the
-  // switch: `0` (the default) means off, and any positive `ttl` in an
-  // override means on — there is no separate `enabled` key and no presence
-  // rule to remember. `etag` defaults to `true`: the conditional-request
-  // machinery serves independently of the result cache.
+  // complete base instead of replacing a `false` wholesale. `ttl`'s
+  // presence is the switch: omitted (the default) means off, and any
+  // positive `ttl` in an override means on — there is no separate `enabled`
+  // key and no magic number to remember. `etag` defaults to `true`: the
+  // conditional-request machinery serves independently of the result cache.
   // The store itself lives outside this tree entirely
   // (`KavoOptions.cacheStore`), the same way realtime transports do (see
   // `RealtimeSettings`'s doc).
   cache: Object.freeze({
-    ttl: 0,
     // On by default: an `ETag` on every single-item response costs one hash
     // of a representation that was going to be serialized anyway, and a
     // client that sends no conditional header pays nothing beyond it.
@@ -80,7 +79,7 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // silently assuming one. The empty object — not `false` — is still the
   // base, so a partial `arrayMutation: {...}` override merges against a
   // complete base instead of replacing a `false` wholesale, the same
-  // "harmless default" reasoning `cache`'s `ttl: 0` object default documents.
+  // "harmless default" reasoning `cache`'s object default documents.
   arrayMutation: Object.freeze({}),
   // Unset: today's `STANDARD_OPERATIONS` enabled-by-default behavior (and
   // ADR-0013's soft-delete-driven `restoreOne` auto-enable) is unchanged

@@ -178,14 +178,21 @@ describe("validateSettings — cache", () => {
     expect(() => accept({ cache: false })).not.toThrow();
   });
 
-  it("rejects a cache.ttl that is not a non-negative integer", () => {
-    for (const value of [-1, 1.5, "60", null]) {
+  it("rejects a cache.ttl that is not a positive integer, false, or omitted", () => {
+    for (const value of [0, -1, 1.5, "60", null]) {
       const error = rejectionOf({ cache: { ttl: value } });
       expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.ttl" });
     }
-    for (const value of [0, 60]) {
+    for (const value of [60, false]) {
       expect(() => accept({ cache: { ttl: value } })).not.toThrow();
     }
+    expect(() => accept({ cache: { etag: true } })).not.toThrow();
+  });
+
+  it("bootstrap rejects 'cache: { ttl: 0 }' — omit 'ttl' or use 'ttl: false' instead", () => {
+    const error = rejectionOf({ cache: { ttl: 0 } });
+    expect(error).toBeInstanceOf(ConfigurationException);
+    expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.ttl" });
   });
 
   it("rejects a cache that is neither the object nor false", () => {
