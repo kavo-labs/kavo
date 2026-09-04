@@ -25,4 +25,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - uses: wagoid/commitlint-github-action@v6
+      # Lint with this repo's own pinned commitlint (the one `pnpm install`
+      # just produced, and what `tests/commitlint-config.spec.ts` exercises),
+      # not a version bundled inside a third-party GitHub Action's Docker
+      # image — that bundled parser was found to fail to parse a
+      # `type(scope)!: subject` header at all (`type`/`subject` both come
+      # back empty), even though this repo's own commitlint accepts it
+      # (issue #384).
+      - run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
