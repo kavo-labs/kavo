@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * commitlint.config.mjs pins the type vocabulary to the eight types the
- * `conventions` skill documents (feat, fix, chore, test, docs, refactor,
- * perf, ci) rather than @commitlint/config-conventional's larger default
- * list. That override must not break the one thing type-enum overrides are
+ * commitlint.config.mjs pins the type vocabulary to the `conventions` skill's
+ * eight types (feat, fix, chore, test, docs, refactor, perf, ci) plus the
+ * rest of @commitlint/config-conventional's own default list (build, revert,
+ * style). That override must not break the one thing type-enum overrides are
  * notorious for breaking: the `!` breaking-change marker
  * (`type(scope)!: subject`), which conventional-commits-parser strips out
  * of the header before type-enum ever sees it.
@@ -40,8 +40,15 @@ describe("commitlint.config.mjs", () => {
     expect(result.ok, result.output).toBe(true);
   });
 
-  it("still rejects a type outside the documented vocabulary", () => {
-    const result = lint("build(core): should not be an allowed type");
+  it("accepts the full config-conventional type list", () => {
+    for (const type of ["build", "revert", "style"]) {
+      const result = lint(`${type}: exercise a type outside the core eight`);
+      expect(result.ok, result.output).toBe(true);
+    }
+  });
+
+  it("still rejects a type outside the allowed vocabulary", () => {
+    const result = lint("wip(core): should not be an allowed type");
     expect(result.ok).toBe(false);
     expect(result.output).toContain("type-enum");
   });
