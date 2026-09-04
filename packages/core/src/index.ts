@@ -96,14 +96,14 @@ export type {
   OperationConfig,
   OperationsConfig,
   StandardOperationsConfig,
-  QueryAllowlists,
+  QueryAllowed,
   QueryFieldSelector,
   RelationFieldSelector,
   SelectableFieldSelector,
   WritableFieldSelector,
 } from "./config/entity-config.js";
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
-export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/resolved-entity-config.js";
+export type { ResolvedEntityConfig, ResolvedQueryAllowed } from "./config/resolved-entity-config.js";
 
 // ── Policy (ADR-0037) ─────────────────────────────────────────────────
 export { type Policy, type PolicyArgs, type WhenParams } from "./policy/kavo-policy.js";

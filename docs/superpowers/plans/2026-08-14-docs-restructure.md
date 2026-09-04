@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Scope is adopter-facing docs only: `docs/getting-started/introduction.md`, `docs/using-the-api.md`, `docs/integrations/**`. `docs/internals/**` (architecture docs, ADRs) is untouched — do not edit any file under `docs/internals/`.
-- Every safety-critical or correctness-critical block must survive verbatim (content may move to a new file, but its wording must not be shortened or dropped): the `::: danger` box under `allowlists` (the "selectable alone is not a credential control" table), the ADR-0028 pre-v0.10 migration notes under `relations`, and every `[ADR-NNNN](...)` cross-reference link anywhere in the moved/edited content.
+- Every safety-critical or correctness-critical block must survive verbatim (content may move to a new file, but its wording must not be shortened or dropped): the `::: danger` box under `allowed` (the "selectable alone is not a credential control" table), the ADR-0028 pre-v0.10 migration notes under `relations`, and every `[ADR-NNNN](...)` cross-reference link anywhere in the moved/edited content.
 - Every internal link that points at `/integrations/nest/configuration#<anchor>` must be updated to point at the new subpage that anchor moved to — heading text (and therefore the VitePress-generated anchor id) must not change during the split, only the file it lives in.
 - `getting-started.md` stays TypeORM-example-based; do not rewrite it per-ORM.
 - The chooser's Framework dropdown has exactly one option (`nest`) today — do not invent a second framework.
@@ -292,7 +292,7 @@ git commit -m "docs: split settings out of configuration.md"
 
 **Interfaces:**
 
-- Produces: `/integrations/nest/configuration/entity-config` with headings `## dto`, `## allowlists`, `## computed` — anchors `#dto`, `#allowlists`, `#computed` unchanged from source (same reasoning as Task 4: `###`→`##` promotion doesn't change VitePress anchor ids).
+- Produces: `/integrations/nest/configuration/entity-config` with headings `## dto`, `## allowed`, `## computed` — anchors `#dto`, `#allowed`, `#computed` unchanged from source (same reasoning as Task 4: `###`→`##` promotion doesn't change VitePress anchor ids).
 
 Source content: `docs/guides/configuration/index.md` lines 248–373 (`## @Kavo(Entity, config) — entity-scope config` through the end of `### computed`, i.e. everything before `### operations`).
 
@@ -301,9 +301,9 @@ Source content: `docs/guides/configuration/index.md` lines 248–373 (`## @Kavo(
 Create the file with:
 
 1. `# Entity config` as the H1.
-2. Intro (adapt source lines 248–250): "`@Kavo(Entity, config)` accepts every settings field from [Settings](/integrations/nest/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowlists`, `computed`, and `operations` (its own page, see [Operations](/integrations/nest/configuration/operations))."
+2. Intro (adapt source lines 248–250): "`@Kavo(Entity, config)` accepts every settings field from [Settings](/integrations/nest/configuration/settings) one level above global, plus four fields that only make sense per entity: `dto`, `allowed`, `computed`, and `operations` (its own page, see [Operations](/integrations/nest/configuration/operations))."
 3. `## dto` (source lines 252–276): keep the code example and the slot-default table — it's a short lookup table (6 rows), not exhaustive field reference, so it can stay a table. Keep the ADR-free wording as-is, tone-simplify only the surrounding prose sentence if it reads like reference copy.
-4. `## allowlists` (source lines 278–331): keep the code example. Convert the `filterable`/`sortable`/`selectable`/`includable`/`searchable` field table (lines 294–300) to prose bullets, one per field, preserving every link (`[ADR-0028]`, `[Search]`). Keep **verbatim, unshortened**:
+4. `## allowed` (source lines 278–331): keep the code example. Convert the `filterable`/`sortable`/`selectable`/`includable`/`searchable` field table (lines 294–300) to prose bullets, one per field, preserving every link (`[ADR-0028]`, `[Search]`). Keep **verbatim, unshortened**:
    - The `{ exclude: [...] }` semantics paragraph (line 302).
    - The "`includable` is the one key here that does not default to everything" paragraph (line 304).
    - The Swagger/`ApiQuery` description paragraph (line 306).
@@ -401,7 +401,7 @@ A field you don't set at a given scope just falls through to the next one down. 
 
 - **[Module setup](/integrations/nest/configuration/module-setup)** — `KavoModule.forRoot`/`forRootAsync`, and the `principal` extractor.
 - **[Settings](/integrations/nest/configuration/settings)** — the app-wide `KavoSettings` fields: pagination, query, errors, relations, arrayMutation, caching, softDelete, realtime.
-- **[Entity config](/integrations/nest/configuration/entity-config)** — `@Kavo(Entity, config)`'s own fields: `dto`, `allowlists`, `computed`.
+- **[Entity config](/integrations/nest/configuration/entity-config)** — `@Kavo(Entity, config)`'s own fields: `dto`, `allowed`, `computed`.
 - **[Operations](/integrations/nest/configuration/operations)** — per-operation overrides, custom operations, and custom list metadata.
 ```
 
@@ -430,14 +430,14 @@ This sits inside the existing `Nest` sidebar group alongside the `TypeORM`/`Pris
 
 Update these links (grep `integrations/nest/configuration` in the file to find them all — there are 9 occurrences across 8 lines):
 
-| Old link                                                                                             | New link                                                           |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `/integrations/nest/configuration#allowlists` (×2, lines ~41 and ~76 and ~191 — 3 occurrences total) | `/integrations/nest/configuration/entity-config#allowlists`        |
-| `/integrations/nest/configuration` (no anchor, ~line 107, about page-based pagination)               | `/integrations/nest/configuration/settings#pagination`             |
-| `/integrations/nest/configuration#computed` (~line 218)                                              | `/integrations/nest/configuration/entity-config#computed`          |
-| `/integrations/nest/configuration#relations` (~line 226)                                             | `/integrations/nest/configuration/settings#relations`              |
-| `/integrations/nest/configuration#custom-list-metadata` (~line 251)                                  | `/integrations/nest/configuration/operations#custom-list-metadata` |
-| `/integrations/nest/configuration#caching` (×3, ~lines 290, 297, 305)                                | `/integrations/nest/configuration/settings#caching`                |
+| Old link                                                                                          | New link                                                           |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `/integrations/nest/configuration#allowed` (×2, lines ~41 and ~76 and ~191 — 3 occurrences total) | `/integrations/nest/configuration/entity-config#allowed`           |
+| `/integrations/nest/configuration` (no anchor, ~line 107, about page-based pagination)            | `/integrations/nest/configuration/settings#pagination`             |
+| `/integrations/nest/configuration#computed` (~line 218)                                           | `/integrations/nest/configuration/entity-config#computed`          |
+| `/integrations/nest/configuration#relations` (~line 226)                                          | `/integrations/nest/configuration/settings#relations`              |
+| `/integrations/nest/configuration#custom-list-metadata` (~line 251)                               | `/integrations/nest/configuration/operations#custom-list-metadata` |
+| `/integrations/nest/configuration#caching` (×3, ~lines 290, 297, 305)                             | `/integrations/nest/configuration/settings#caching`                |
 
 Do a literal find of every `integrations/nest/configuration` substring in the file and replace per the table above — do not do a blind global replace, since the "no anchor" case gets a different target than the anchored ones.
 

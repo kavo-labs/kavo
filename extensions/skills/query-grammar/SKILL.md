@@ -12,7 +12,7 @@ normalized in `core/src/query/` (`DefaultFilterParser`, `QueryNormalizer`,
 consumer as-is. Full source: `docs/internals/architecture/05-query-grammar.md`
 (operators/grammar) and `docs/internals/architecture/12-relations-and-includes.md`
 (includes). What an entity _allows_ through these params is configured via
-`allowlists`/`relations` on `@Kavo` — see the `kavo-decorator` skill.
+`allowed`/`relations` on `@Kavo` — see the `kavo-decorator` skill.
 
 ## Filtering — `filter[field][operator]=value`
 
@@ -138,7 +138,7 @@ included relation returns.
 
 ## Security & robustness (why all of the above is safe to expose)
 
-- **Allowlists are fail-closed.** Every entity resolves `filterable`/
+- **Allowlist settings are fail-closed.** Every entity resolves `filterable`/
   `sortable`/`selectable` at bootstrap — explicit, or defaulting to the
   entity's own scalar columns. Relation paths are **never** allowlisted
   implicitly. Anything outside a list is `KAVO_QUERY_INVALID_FIELD` (400),

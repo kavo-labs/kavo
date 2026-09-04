@@ -374,7 +374,7 @@ describe("DefaultDeserializer — single-key relation association (ADR-0014, iss
 });
 
 describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", () => {
-  /** A context carrying a resolved config's allowlists, for one operation. */
+  /** A context carrying a resolved config's allowed, for one operation. */
   function writeContext(
     operation: "createOne" | "updateOne" | "patchOne",
     config: ResolvedEntityConfig<User>,
@@ -394,7 +394,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("narrows createOne's derived projection to the creatable allowlist", () => {
-    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
@@ -405,7 +405,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("leaves updateOne/patchOne unaffected by a creatable-only restriction", () => {
-    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const updatePayload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
@@ -416,7 +416,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("narrows both updateOne and patchOne to the same updatable allowlist", () => {
-    const config = resolveEntityConfig(userMetadata, { allowlists: { updatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { updatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const body = { name: "Ada", email: "ada@example.com" };
     expect(deserializer.deserialize(body, null, writeContext("updateOne", config))).toEqual({ name: "Ada" });
@@ -424,7 +424,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("leaves createOne unaffected by an updatable-only restriction", () => {
-    const config = resolveEntityConfig(userMetadata, { allowlists: { updatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { updatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
@@ -439,7 +439,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     // but `id` was never in the derived writable projection this class
     // intersects against — the exclusion holds because a list can only
     // narrow that base, never add a name back to it (commit 8aa8d65).
-    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["id" as never, "name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["id" as never, "name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, null, writeContext("createOne", config));
     expect(payload).toEqual({ name: "Ada" });
@@ -452,7 +452,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     };
     const config = resolveEntityConfig(
       withMarker,
-      { softDelete: { field: "deletedAt" }, allowlists: { updatable: ["deletedAt" as never, "name"] } },
+      { softDelete: { field: "deletedAt" }, allowed: { updatable: ["deletedAt" as never, "name"] } },
       undefined,
     );
     const deserializer = new DefaultDeserializer<User>(withMarker);
@@ -471,7 +471,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     class CreateUserDto {
       email = "";
     }
-    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
@@ -482,7 +482,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("does not narrow a custom write operation, which neither list names", () => {
-    const config = resolveEntityConfig(userMetadata, { allowlists: { creatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, null, {
       operation: "archiveUser",

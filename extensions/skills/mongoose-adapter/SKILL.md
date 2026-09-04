@@ -122,7 +122,7 @@ normally; it is only traversal through a reference that has no equivalent.
 
 ## Where to go next
 
-- Routes, allowlists, relations, per-operation overrides → `kavo-decorator`
+- Routes, allowed, relations, per-operation overrides → `kavo-decorator`
 - The `filter`/`sort`/`fields`/`include` wire grammar → `query-grammar`
 - Narrowing request/response shapes → `dto-slots`
 - Restore/purge semantics → `soft-delete`

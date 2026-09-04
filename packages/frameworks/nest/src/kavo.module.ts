@@ -441,9 +441,9 @@ class KavoBinder implements OnModuleInit {
           EntityMetadata<object>
         >;
         const schemaRelationNames = new Set<string>([
-          ...(service.engine.config.allowlists.includable as readonly string[]),
-          ...(service.engine.config.allowlists.creatable as readonly string[]),
-          ...(service.engine.config.allowlists.updatable as readonly string[]),
+          ...(service.engine.config.allowed.includable as readonly string[]),
+          ...(service.engine.config.allowed.creatable as readonly string[]),
+          ...(service.engine.config.allowed.updatable as readonly string[]),
         ]);
         for (const relation of service.engine.metadata.relations) {
           if (!schemaRelationNames.has(relation.name)) {
@@ -473,8 +473,8 @@ class KavoBinder implements OnModuleInit {
               descriptor,
               service.engine.metadata,
               {
-                creatable: service.engine.config.allowlists.creatable as readonly string[],
-                updatable: service.engine.config.allowlists.updatable as readonly string[],
+                creatable: service.engine.config.allowed.creatable as readonly string[],
+                updatable: service.engine.config.allowed.updatable as readonly string[],
               },
               relationTargetMetadata,
             );
@@ -492,16 +492,16 @@ class KavoBinder implements OnModuleInit {
             descriptor,
             route,
             service.engine.metadata,
-            service.engine.config.allowlists.selectable as readonly string[],
+            service.engine.config.allowed.selectable as readonly string[],
             Object.keys(service.engine.config.computed),
-            service.engine.config.allowlists.includable as readonly string[],
+            service.engine.config.allowed.includable as readonly string[],
             relationTargetMetadata,
             dtoResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
           // doc comment in swagger.ts): whether `query.search` resolved to an
-          // object needs the full precedence chain, and `allowlists.searchable`
+          // object needs the full precedence chain, and `allowed.searchable`
           // is only fully resolved once ORM metadata exists, neither of which
           // `@Kavo` decoration time has.
           applySearchQueryDocs(
@@ -509,7 +509,7 @@ class KavoBinder implements OnModuleInit {
             methodName,
             descriptor,
             settings.query.search !== false,
-            service.engine.config.allowlists.searchable as readonly string[],
+            service.engine.config.allowed.searchable as readonly string[],
           );
           // `limit`/`offset` docs (issue #225) — deferred for the same
           // reason as the two above (`applyPaginationDocs`'s doc comment):
@@ -518,18 +518,18 @@ class KavoBinder implements OnModuleInit {
           // `<Entity>Pagination`/`Include`/`Sort`/`Filter`/`Query` query-shape
           // components (issue #313, issue #314 / ADR-0042) — deferred for the
           // same reason as the passes above: the resolved
-          // `allowlists.sortable`/`includable`/`filterable`/`selectable`/
+          // `allowed.sortable`/`includable`/`filterable`/`selectable`/
           // `searchable` and the precedence-merged `pagination.strategy` /
           // `query.search` only exist here. The extension
           // `applyQuerySchemaDocs` stamps is hoisted into `components.schemas`
           // by `registerKavoSchemas`.
           applyQuerySchemaDocs(prototype, methodName, descriptor, metadata.entity.name, service.engine.metadata, {
             strategy: settings.pagination.strategy,
-            includable: service.engine.config.allowlists.includable as readonly string[],
-            sortable: service.engine.config.allowlists.sortable as readonly string[],
-            filterable: service.engine.config.allowlists.filterable as readonly string[],
-            selectable: service.engine.config.allowlists.selectable as readonly string[],
-            searchable: service.engine.config.allowlists.searchable as readonly string[],
+            includable: service.engine.config.allowed.includable as readonly string[],
+            sortable: service.engine.config.allowed.sortable as readonly string[],
+            filterable: service.engine.config.allowed.filterable as readonly string[],
+            selectable: service.engine.config.allowed.selectable as readonly string[],
+            searchable: service.engine.config.allowed.searchable as readonly string[],
             searchEnabled: settings.query.search !== false,
           });
           // Retag the always-present `400` as `<Entity>ValidationError`

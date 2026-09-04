@@ -12,7 +12,7 @@ Search is off by default per entity (`query.search` is `false`): a plain 400 unt
 @Kavo(Book, { query: { search: {} } }) // `{ mode: "substring", driver: "orm" }` — the defaults
 ```
 
-Set `query.search` back to `false` at a narrower scope (an entity or an operation) to disable it there. It only searches fields on the entity's `searchable` allowlist (default: every own string column). See [Allowlists](/features/allowlists).
+Set `query.search` back to `false` at a narrower scope (an entity or an operation) to disable it there. It only searches fields on the entity's `searchable` allowlist (default: every own string column). See [Allowed](/features/allowed).
 
 ```http
 GET /books?search[query]=blue+iphone&search[mode]=words&search[fields]=title,description

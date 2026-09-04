@@ -580,7 +580,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
   it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
     await seed();
     // The parser can never emit this, but a programmatic caller hand-builds
-    // the AST and `validateExpression` checks allowlists, not operators.
+    // the AST and `validateExpression` checks allowed, not operators.
     // Falling through the translator's switch would add no predicate at all —
     // the caller asked to narrow to one row and would silently get all four
     // back. The guard surfaces as PersistenceException: a forged AST is an
@@ -612,7 +612,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      allowed: { filterable: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);
@@ -637,7 +637,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("sorts on an allowlisted relation path", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { sortable: ["title", "author.name" as never] },
+      allowed: { sortable: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);

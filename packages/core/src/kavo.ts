@@ -100,7 +100,7 @@ export interface KavoInstance {
 /**
  * Create a Kavo root instance (`createKavo`). The zero-config
  * path is `createKavo({ infrastructure }).createCrud(Entity)` — built-in
- * defaults, derived DTOs and allowlists, standard operations.
+ * defaults, derived DTOs and allowlist configuration, and standard operations.
  */
 export function createKavo(options: KavoOptions = {}): KavoInstance {
   validateRealtimeTransports(options.realtimeTransports);

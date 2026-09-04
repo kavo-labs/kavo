@@ -36,7 +36,7 @@ const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
   }
   return undefined;
 });
-const postConfig = resolveEntityConfig(postMetadata, { allowlists: { includable: ["comments"] } }, undefined);
+const postConfig = resolveEntityConfig(postMetadata, { allowed: { includable: ["comments"] } }, undefined);
 const postNormalizer = new QueryNormalizer<Post>(postMetadata, [], new DefaultIncludeResolver<Post>(postCatalog));
 
 describe("QueryNormalizer — wire params", () => {
@@ -201,7 +201,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
     const emptySearchable = resolveEntityConfig(
       userMetadata,
-      { query: { search: {} }, allowlists: { searchable: [] } },
+      { query: { search: {} }, allowed: { searchable: [] } },
       undefined,
     );
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
@@ -352,7 +352,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
     const relationSearchable = resolveEntityConfig(
       authorMetadata,
-      { query: { search: {} }, allowlists: { searchable: ["name", "posts.title" as never] } },
+      { query: { search: {} }, allowed: { searchable: ["name", "posts.title" as never] } },
       undefined,
     );
     const authorNormalizer = new QueryNormalizer(authorMetadata);
@@ -370,7 +370,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
     const independent = resolveEntityConfig(
       userMetadata,
-      { query: { search: {} }, allowlists: { filterable: [], searchable: ["name"] } },
+      { query: { search: {} }, allowed: { filterable: [], searchable: ["name"] } },
       undefined,
     );
     const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
@@ -729,7 +729,7 @@ describe("allowlist rejection messages", () => {
     expect(detail).toContain("Field 'emial' cannot be used for filtering.");
     expect(detail).toContain("Did you mean 'email'?");
     expect(detail).toContain("Filterable fields on User:");
-    expect(detail).toContain("add it to allowlists.filterable on the User config to permit it.");
+    expect(detail).toContain("add it to allowed.filterable on the User config to permit it.");
   });
 
   it("stops appending the hint once a request is past a handful of problems", () => {
@@ -742,20 +742,20 @@ describe("allowlist rejection messages", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ select: many }, config));
     expect(issues).toHaveLength(200);
     expect(issues.every((issue) => issue.detail.includes("cannot be used for selection"))).toBe(true);
-    expect(issues.filter((issue) => issue.detail.includes("allowlists.selectable"))).toHaveLength(5);
+    expect(issues.filter((issue) => issue.detail.includes("allowed.selectable"))).toHaveLength(5);
     expect(issues[199]!.detail).toBe("Field 'bad199' cannot be used for selection.");
   });
 
-  it("names allowlists.sortable for a sort field", () => {
+  it("names allowed.sortable for a sort field", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ sort: "-emial" }, config))[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.sortable on the User config");
+    expect(detail).toContain("allowed.sortable on the User config");
   });
 
-  it("names allowlists.selectable for a selected field", () => {
+  it("names allowed.selectable for a selected field", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ select: "emial" }, config))[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.selectable on the User config");
+    expect(detail).toContain("allowed.selectable on the User config");
   });
 
   it("names the same key for a programmatic filter expression", () => {
@@ -766,7 +766,7 @@ describe("allowlist rejection messages", () => {
       ),
     )[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.filterable on the User config");
+    expect(detail).toContain("allowed.filterable on the User config");
   });
 
   it("says the same thing through the programmatic entry point", () => {
@@ -782,7 +782,7 @@ describe("allowlist rejection messages", () => {
   it("offers no suggestion when nothing is close, and still names the fix", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ sort: "passwordHash" }, config))[0]!.detail;
     expect(detail).not.toContain("Did you mean");
-    expect(detail).toContain("allowlists.sortable");
+    expect(detail).toContain("allowed.sortable");
   });
 
   it("collects every rejection into one round trip", () => {

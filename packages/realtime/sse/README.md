@@ -92,11 +92,11 @@ unconditional `"deleted"`-event bypass.
 
 Once `subscribableFields` is configured for an entity, it bounds every
 outgoing `item` **unconditionally** — not only when a subscriber names
-`fields` — the same way `allowlists.selectable`
+`fields` — the same way `allowed.selectable`
 bounds a REST response whether or not the caller asked for a subset. An
 optional `fields` query param (comma-separated) narrows further within
 that bound; a field outside it (or outside `subscribableFields`, when no
-`fields` param is given) gets a `400` the same way `allowlists.selectable`
+`fields` param is given) gets a `400` the same way `allowed.selectable`
 rejects an unlisted field over REST.
 
 A connection that cannot keep up with its publish rate (the writable

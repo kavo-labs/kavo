@@ -24,7 +24,7 @@ function configWith(
   defaultSort: readonly Sort<CompositeEntity>[],
   strategy = "cursor",
   sinceField = "key",
-  allowlists: Partial<typeof DEFAULT_ALLOWLISTS> = {},
+  allowed: Partial<typeof DEFAULT_ALLOWLISTS> = {},
 ): ResolvedEntityConfig<CompositeEntity> {
   const settings = {
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
@@ -38,7 +38,7 @@ function configWith(
     entityName: "CompositeEntity",
     settings,
     settingsFor: () => settings,
-    allowlists: { ...DEFAULT_ALLOWLISTS, ...allowlists },
+    allowed: { ...DEFAULT_ALLOWLISTS, ...allowed },
     softDelete: { strategy: "hard", field: "deletedAt" },
     dto: { resolve: () => null },
     relations: { all: () => [], get: () => undefined },

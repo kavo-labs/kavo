@@ -137,9 +137,9 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         );
       }
     }
-    // `defaultInclude` vs. `allowlists.includable` (permission) is cross-
+    // `defaultInclude` vs. `allowed.includable` (permission) is cross-
     // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
-    // not here — this function only sees `KavoSettings`, and `allowlists`
+    // not here — this function only sees `KavoSettings`, and `allowed`
     // is entity-typed config outside that schema (ADR-0028).
   }
 

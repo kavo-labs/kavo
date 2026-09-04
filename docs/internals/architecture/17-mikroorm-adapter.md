@@ -104,7 +104,7 @@ child per inner column, carrying an `embedded: [parent, child]`
 back-reference and a name that is an implementation detail (`address~city`
 when stored as an object, `billing_city` when inlined). Only the parent is
 addressable on the wire, so the children are filtered out rather than
-leaked into derived DTOs and allowlists. The parent is reported as `json`.
+leaked into derived DTOs or any allowlist. The parent is reported as `json`.
 
 ## 2. Query translation (Filter AST → MikroORM `FilterQuery`)
 
@@ -342,7 +342,7 @@ fix, since the derivation lives once in `@kavo/core`.
 
 **A `hidden` or `lazy` property is dropped from the seam entirely.** Not
 just from responses: excluding it from `fields` is what keeps it off the
-_default allowlists_, because a column that is invisible in the body but
+_default allowlist_, because a column that is invisible in the body but
 filterable in the database is a blind extraction oracle
 (`filter[passwordHash][like]=a%` answered by the row count). The trade is
 the one `@kavo/mongoose` documents for `select: false` (doc 15 §1): Kavo

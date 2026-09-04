@@ -383,7 +383,7 @@ describe("DefaultFilterParser — malformed bracket keys", () => {
 describe("DefaultFilterParser — relation paths", () => {
   const relationConfig = resolveEntityConfig(
     postMetadata,
-    { allowlists: { filterable: ["title", "author.name"] } },
+    { allowed: { filterable: ["title", "author.name"] } },
     undefined,
   );
   const relationParser = new DefaultFilterParser(postMetadata);
@@ -402,12 +402,12 @@ describe("DefaultFilterParser — relation paths", () => {
     // `Post.id` is a number column, but `author.id` is not in this entity's
     // column map — so the string reaches the adapter and the database
     // compares it.
-    const relaxed = resolveEntityConfig(postMetadata, { allowlists: { filterable: ["author.id"] } }, undefined);
+    const relaxed = resolveEntityConfig(postMetadata, { allowed: { filterable: ["author.id"] } }, undefined);
     expect(relationParser.parse({ "filter[author.id][eq]": "7" }, relaxed).root).toMatchObject({ value: "7" });
   });
 
   it("rejects a relation path nobody allowlisted, exactly like a scalar column", () => {
-    // Allowlists default to the entity's own scalar columns, so a relation
+    // Allowed default to the entity's own scalar columns, so a relation
     // path is never filterable implicitly.
     const issues = issuesOf(() => parseRelation({ "filter[comments.body][eq]": "x" }));
     expect(issues[0]).toMatchObject({ field: "comments.body", code: "KAVO_QUERY_INVALID_FIELD" });

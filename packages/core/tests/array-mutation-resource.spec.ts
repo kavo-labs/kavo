@@ -221,7 +221,7 @@ describe("list<Relation> — end to end through KavoEngine", () => {
   });
 
   it("still shows the relation even when it is write-opted but not read-includable", async () => {
-    // ADR-0029: `write` and `allowlists.includable` are independent
+    // ADR-0029: `write` and `allowed.includable` are independent
     // opt-ins — a relation a client could never reach with `?include=`
     // must still appear on its own dedicated `list<Relation>` response.
     const { crud, adapter } = makeAuthorCrud(true);

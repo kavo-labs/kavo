@@ -4,9 +4,9 @@ Status: implemented (issue #156). Three deviations from the design below,
 settled at implementation time — see `docs/internals/architecture/05-query-grammar.md`
 §4 and `08-configuration.md` for the shipped shape:
 
-- `searchable` lives under `EntityConfig.allowlists.searchable`, not as a
+- `searchable` lives under `EntityConfig.allowed.searchable`, not as a
   top-level `EntityConfig` key — `filterable`/`sortable`/`selectable`/
-  `includable` all moved under `allowlists` before this issue landed
+  `includable` all moved under `allowed` before this issue landed
   (`479d762`), and `searchable` followed the same precedent.
 - `search.enabled`/`search.mode` resolve as `QuerySettings.search.enabled`/
   `.mode` (i.e. `query.search.enabled`), not a top-level `search` settings

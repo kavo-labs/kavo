@@ -86,7 +86,7 @@ beforeAll(async () => {
     },
   });
   posts = kavo.createCrud(Post, {
-    allowlists: { includable: ["comments"] },
+    allowed: { includable: ["comments"] },
   } as never) as DefaultKavoService<Post>;
 });
 

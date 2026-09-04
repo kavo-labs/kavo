@@ -410,7 +410,8 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
     await seed();
     // The parser can never emit this, but a programmatic caller hand-builds
-    // the AST and `validateExpression` checks allowlists, not operators.
+    // the AST: its type restricts operators, while `validateExpression`
+    // enforces the field allowlist.
     // Falling through the translator's switch would add no predicate at
     // all — the caller asked to narrow to one row and would silently get
     // all four back. The guard surfaces as PersistenceException: a forged
@@ -442,7 +443,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      allowed: { filterable: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -464,7 +465,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("filters a to-one relation path with an operator other than EQ", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      allowed: { filterable: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -490,7 +491,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     // still joins and restricts, it just doesn't select the relation
     // (that's what `include=` is for).
     const scoped = kavo.createCrud(Author, {
-      allowlists: { filterable: ["name", "books.title" as never] },
+      allowed: { filterable: ["name", "books.title" as never] },
     }) as DefaultKavoService<Author>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -504,7 +505,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("combines a relation-path condition with an own-field condition under AND", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      allowed: { filterable: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -528,7 +529,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("rejects a relation-path filter that isn't on the filterable allowlist", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title"] },
+      allowed: { filterable: ["title"] },
     }) as DefaultKavoService<Book>;
 
     await expect(
@@ -546,7 +547,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   // report actually hit.
   it("still rejects a filter on a field named in allowlists.filterable's { exclude } form (issue #371)", async () => {
     const excluded = kavo.createCrud(Author, {
-      allowlists: { filterable: { exclude: ["status"] } },
+      allowed: { filterable: { exclude: ["status"] } },
     }) as DefaultKavoService<Author>;
     await seed();
 

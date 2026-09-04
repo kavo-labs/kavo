@@ -242,11 +242,11 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  // `defaultInclude` vs. permission (`allowlists.includable`) is no longer
+  // `defaultInclude` vs. permission (`allowed.includable`) is no longer
   // checkable by `validateSettings` alone — permission moved to entity-typed
-  // `EntityConfig.allowlists` (ADR-0028), outside the `KavoSettings` shape
+  // `EntityConfig.allowed` (ADR-0028), outside the `KavoSettings` shape
   // this file exercises. See `config.spec.ts`'s
-  // "resolveEntityConfig — allowlists.includable" describe block for that
+  // "resolveEntityConfig — allowed.includable" describe block for that
   // cross-check, now performed by `validateIncludableRelations`.
 
   it("accepts an edge that configures nothing — every sub-key is optional", () => {
@@ -261,7 +261,7 @@ describe("validateSettings — relation edges", () => {
 
   it("accepts defaultInclude/maxDepth shape regardless of includable permission", () => {
     // `validateSettings` only checks shape now — whether `posts` is actually
-    // includable is `resolveEntityConfig`'s `allowlists`-aware cross-check.
+    // includable is `resolveEntityConfig`'s `allowed`-aware cross-check.
     expect(() => accept({ relations: { edges: { posts: { defaultInclude: true, maxDepth: 1 } } } })).not.toThrow();
   });
 });

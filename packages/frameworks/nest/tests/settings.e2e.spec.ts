@@ -12,7 +12,7 @@ import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 /**
  * End-to-end coverage for `@Kavo`/`KavoSettings` knobs that
- * `binding.e2e.spec.ts` never drives over HTTP (issue #47) — allowlists,
+ * `binding.e2e.spec.ts` never drives over HTTP (issue #47) — allowed,
  * relation include budgets, filter limits, pagination `count`/limits, a
  * per-operation settings override, custom `meta.routes` on a
  * non-`@Override`'d standard operation, and `forRootAsync`. The no-arg
@@ -71,8 +71,8 @@ function server(): SupertestTarget {
   return boundServer(httpServer);
 }
 
-describe("@Kavo allowlists — filterable/sortable/selectable enforced over HTTP", () => {
-  @Kavo(Todo, { allowlists: { filterable: ["done"], sortable: ["priority"], selectable: ["id", "title"] } })
+describe("@Kavo allowed — filterable/sortable/selectable enforced over HTTP", () => {
+  @Kavo(Todo, { allowed: { filterable: ["done"], sortable: ["priority"], selectable: ["id", "title"] } })
   @Controller("todos")
   class AllowlistedController {}
 
@@ -114,16 +114,16 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
   // so `include=list.list` is a genuine two-level tree, which a single
   // relation can never exceed once a positive integer is the smallest legal
   // budget (see `fake-infrastructure.ts`). `includable` is entity-scope-only
-  // config (ADR-0028: `allowlists` merges from nowhere but the entity's own
+  // config (ADR-0028: `allowed` merges from nowhere but the entity's own
   // `EntityConfig`, no global default) — unlike before, when one global
   // `relations.edges.list.includable` opened both levels at once, each
   // level now needs its own `createCrud`/`@Kavo` registration, even though
   // `TodoList` is never routed, only included.
-  @Kavo(Todo, { allowlists: { includable: ["list"] } })
+  @Kavo(Todo, { allowed: { includable: ["list"] } })
   @Controller("todos")
   class NestedIncludeController {}
 
-  @Kavo(TodoList, { allowlists: { includable: ["list"] } })
+  @Kavo(TodoList, { allowed: { includable: ["list"] } })
   @Controller("todolists")
   class TodoListController {}
 
@@ -153,7 +153,7 @@ describe("@Kavo relation include budgets (maxIncludeDepth/maxIncludedNodes)", ()
 
   it("accepts an include within both budgets", async () => {
     @Kavo(Todo, {
-      allowlists: { includable: ["list"] },
+      allowed: { includable: ["list"] },
       relations: { maxIncludeDepth: 1, maxIncludedNodes: 1 },
     })
     @Controller("todos")

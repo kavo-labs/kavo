@@ -208,7 +208,7 @@ sequenceDiagram
     participant S as Serializer
     C->>E: execute("findMany", rawQuery)
     E->>P: parse(rawQuery, resolvedConfig)
-    Note over P: allowlists, coercion, limits →<br/>QueryValidationException on violation
+    Note over P: allowed, coercion, limits →<br/>QueryValidationException on violation
     P-->>E: NormalizedQueryContext
     E->>A: findMany(query, ctx)
     A-->>E: entities

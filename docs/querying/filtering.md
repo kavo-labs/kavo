@@ -40,7 +40,7 @@ GET /books?filter[status][in][]=active&filter[status][in][]=pending
 
 ## Which fields you can filter on
 
-Only fields on the entity's `filterable` allowlist can be filtered on. See [Allowlists](/features/allowlists) for how to configure that list. Filtering on anything outside it returns a 400, never a silent no-op.
+Only fields on the entity's `filterable` allowlist can be filtered on. See [Allowed](/features/allowed) for how to configure that list. Filtering on anything outside it returns a 400, never a silent no-op.
 
 ## OR, NOT, and nested logic
 

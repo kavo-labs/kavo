@@ -31,7 +31,7 @@ import {
  * different write strategies, live on the same entity.
  *
  * `GET /cats?search[query]=whiskers` free-text searches `name` (the one
- * field named in `allowlists.searchable`) — `search[mode]=words` and
+ * field named in `allowed.searchable`) — `search[mode]=words` and
  * `search[fields]` are also available, narrowed to that same allowlist.
  *
  * Validation: `createOne`/`updateOne` are `@Override()`'d purely to give
@@ -64,7 +64,7 @@ import {
   // still returned in every response (`CatItemDto` includes them), just
   // not queryable — narrower than "every own column" without excluding
   // anything by name.
-  allowlists: {
+  allowed: {
     filterable: ["id", "name", "age", "size"],
     sortable: ["id", "name", "age"],
     selectable: ["id", "name", "age", "size"],

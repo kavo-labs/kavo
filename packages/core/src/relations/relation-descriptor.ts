@@ -41,7 +41,7 @@ export interface RelationDescriptor {
   readonly ownsForeignKey?: boolean;
   /**
    * Whether clients may `include=` this relation. Defaults to `false` —
-   * inclusion is an opt-in allowlist, granted by `allowlists.includable`
+   * inclusion is an opt-in allowlist, granted by `allowed.includable`
    * (`EntityConfig`, entity-config.ts, ADR-0028), consistent with the
    * filter/sort/select posture.
    */

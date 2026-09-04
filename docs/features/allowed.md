@@ -1,10 +1,10 @@
-# Allowlists
+# Allowed
 
 What a request may filter, sort, select, include, and write, including relation paths. Anything outside a query-side allowlist is rejected with a 400, never silently dropped; a write-side allowlist (`creatable`/`updatable`) narrows silently, the same way an unknown body key already does:
 
 ```ts
 @Kavo(Book, {
-  allowlists: {
+  allowed: {
     filterable: ["id", "title", "author"],
     sortable: ["id", "title"],
     selectable: ["id", "title", "author"],
@@ -38,7 +38,7 @@ When `@nestjs/swagger` is installed, an explicit array here also names the gener
 
 ```ts
 @Kavo(User, {
-  allowlists: { selectable: { exclude: ["apiKey"] } },
+  allowed: { selectable: { exclude: ["apiKey"] } },
 })
 ```
 
@@ -63,4 +63,4 @@ Two more edges. A registered `dto.item`/`dto.list` with a runtime shape replaces
 
 `selectable` takes this entity's own columns and its declared computed-field names only. A relation-dotted entry (`"dictionary.id"`) is a bootstrap error ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)) — including in the `{ exclude }` form.
 
-An included relation's projection is governed by the **target** entity's own `selectable` ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection) decision 4), never the entity doing the including. To restrict what `?include=dictionary` embeds, narrow `selectable` on the `Dictionary` entity's own config; a `Dictionary` that never went through `@Kavo`/`createCrud` serves its full derived column set, so route it (even service-only) if you need to trim it. To drop the relation entirely, leave it off `allowlists.includable`.
+An included relation's projection is governed by the **target** entity's own `selectable` ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection) decision 4), never the entity doing the including. To restrict what `?include=dictionary` embeds, narrow `selectable` on the `Dictionary` entity's own config; a `Dictionary` that never went through `@Kavo`/`createCrud` serves its full derived column set, so route it (even service-only) if you need to trim it. To drop the relation entirely, leave it off `allowed.includable`.

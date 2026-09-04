@@ -11,13 +11,13 @@ import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
 
 /**
- * Allowlists after bootstrap resolution — complete, never optional.
+ * Allowed after bootstrap resolution — complete, never optional.
  *
  * `includable` resolves the opposite direction from the other three keys:
  * unconfigured, it is `[]` rather than "every relation" (ADR-0028) — see
- * `QueryAllowlists.includable`'s doc comment for why.
+ * `QueryAllowed.includable`'s doc comment for why.
  */
-export interface ResolvedQueryAllowlists<Entity = unknown> {
+export interface ResolvedQueryAllowed<Entity = unknown> {
   readonly filterable: readonly FieldPath<Entity>[];
   readonly sortable: readonly FieldPath<Entity>[];
   readonly selectable: readonly FieldPath<Entity>[];
@@ -42,18 +42,18 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly settings: KavoSettings;
   /** Per-operation settings view: entity settings + operation overrides. */
   settingsFor(operation: OperationId): KavoSettings;
-  readonly allowlists: ResolvedQueryAllowlists<Entity>;
+  readonly allowed: ResolvedQueryAllowed<Entity>;
   /**
    * The default response projection: what a read serves when the request
    * sends no `select=` and no `item`/`list` DTO is registered.
    *
    * `null` means "the entity-derived default" — every scalar column plus
    * every declared computed field. A non-null value is
-   * {@link ResolvedQueryAllowlists.selectable}, and it is non-null exactly
-   * when `allowlists.selectable` was configured explicitly (ADR-0026).
+   * {@link ResolvedQueryAllowed.selectable}, and it is non-null exactly
+   * when `allowed.selectable` was configured explicitly (ADR-0026).
    *
    * The provenance is the whole point, and is why this is not simply read
-   * off `allowlists.selectable`. Unconfigured, that list resolves to a base
+   * off `allowed.selectable`. Unconfigured, that list resolves to a base
    * set that is *almost* the derived projection but drops computed fields
    * declaring `selectable: false` — fields whose documented contract is to
    * stay in the projection while being unnameable in `select=`. Narrowing

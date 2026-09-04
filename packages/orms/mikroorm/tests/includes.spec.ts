@@ -65,24 +65,24 @@ beforeAll(async () => {
   kavo = createMikroOrmKavo(orm);
   keyArticles = createMikroOrmKavo(orm).createCrud(Article, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    allowlists: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    allowed: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   const nestedKavo = createMikroOrmKavo(orm);
   nestedKavo.createCrud(Article, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    allowlists: { includable: ["blog"] },
+    allowed: { includable: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(Blog, {
-    allowlists: { includable: ["articles"] },
+    allowed: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
   blogs = kavo.createCrud(Blog, {
-    allowlists: { includable: ["articles"] },
+    allowed: { includable: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    allowlists: {
+    allowed: {
       includable: ["blog", "notes"],
       // Filtering across a relation path is its own allowlist decision,
       // independent of whether the relation may be included.
@@ -91,7 +91,7 @@ beforeAll(async () => {
   } as never) as DefaultKavoService<Article>;
   notes = kavo.createCrud(Note, {
     softDelete: { strategy: "soft", field: "deletedAt" },
-    allowlists: { includable: ["article"] },
+    allowed: { includable: ["article"] },
   }) as DefaultKavoService<Note>;
 });
 

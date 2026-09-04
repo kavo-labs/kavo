@@ -11,7 +11,7 @@ Core surface — these apply whatever ORM you are on:
 | Skill                    | Covers                                                                                                                            |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | `quick-start`            | New project from scratch — install, minimal entity, zero-config `@Kavo` (TypeORM)                                                 |
-| `kavo-decorator`         | `@Kavo(Entity, config?)` — routes, `EntityConfig`, allowlists, relations, overrides                                               |
+| `kavo-decorator`         | `@Kavo(Entity, config?)` — routes, `EntityConfig`, allowed, relations, overrides                                                  |
 | `global-config`          | `KavoSettings` precedence chain, `KavoModule.forRoot`/`createKavo` wiring                                                         |
 | `query-grammar`          | The `filter`/`sort`/`fields`/pagination/`include` wire grammar                                                                    |
 | `dto-slots`              | The six optional DTO slots and entity-derived defaults                                                                            |

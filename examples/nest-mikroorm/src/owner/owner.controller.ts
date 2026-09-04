@@ -33,7 +33,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     list: OwnerListDto,
   },
   softDelete: { field: "deletedAt" },
-  allowlists: {
+  allowed: {
     filterable: { exclude: ["deletedAt"] },
     sortable: { exclude: ["deletedAt"] },
     selectable: { exclude: ["deletedAt"] },

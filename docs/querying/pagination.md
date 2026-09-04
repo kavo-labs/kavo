@@ -53,7 +53,7 @@ Pass it straight back as `?cursor=…` to get the next page, and keep every othe
 
 **The sort must end in the id field.** Keyset paging needs a total order, so `sort` (or the entity's `query.defaultSort`) has to end in the entity's primary key, like `?sort=-createdAt,id`. A request without one is a 400 naming the field it needs. The sort keys must also be plain scalar columns of the entity, not relation paths and not JSON columns.
 
-**Every cursor sort key must be filterable and selectable too, not just sortable.** A cursor turns each sort key into a filter comparison, and reads its value off the raw row into `meta.nextCursor`. So a field on `allowlists.sortable` but missing from `allowlists.filterable` or `allowlists.selectable` gets rejected with a 400 rather than quietly dropped from the sort. If you narrow one of the three allowlists, narrow all three the same way for any column you page by.
+**Every cursor sort key must be filterable and selectable too, not just sortable.** A cursor turns each sort key into a filter comparison, and reads its value off the raw row into `meta.nextCursor`. So a field on `allowed.sortable` but missing from `allowed.filterable` or `allowed.selectable` gets rejected with a 400 rather than quietly dropped from the sort. If you narrow one of the three allowlists, narrow all three the same way for any column you page by.
 
 **A bad cursor is a 400**, exactly like a malformed `page[number]`: `KAVO_QUERY_INVALID` with a `cursor` issue. That includes a token from a different sort, which is why changing `sort` means starting from the first page again.
 

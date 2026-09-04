@@ -155,7 +155,7 @@ const config = defineConfig({
           { text: "Realtime Events", link: "/features/realtime-events" },
           { text: "Caching & ETags", link: "/features/caching-and-etags" },
           { text: "Result Cache", link: "/features/result-cache" },
-          { text: "Allowlists", link: "/features/allowlists" },
+          { text: "Allowed", link: "/features/allowed" },
           { text: "Computed Fields", link: "/features/computed-fields" },
           { text: "Policy", link: "/features/policy" },
           { text: "Composite Primary Keys", link: "/features/composite-primary-keys" },
@@ -347,7 +347,7 @@ const config = defineConfig({
                 link: "/internals/adr/0027-an-override-inherits-the-etag-but-not-the-precondition",
               },
               {
-                text: "0028 — Relation inclusion permission moves into allowlists.includable",
+                text: "0028 — Relation inclusion permission moves into the allowed.includable allowlist",
                 link: "/internals/adr/0028-includable-relations-move-into-allowlists",
               },
               {
@@ -407,11 +407,11 @@ const config = defineConfig({
                 link: "/internals/adr/0042-filter-and-query-component-schemas",
               },
               {
-                text: "0044 — A relation-dotted allowlists.selectable entry caps an included relation's projection",
+                text: "0044 — A relation-dotted allowed.selectable allowlist entry caps an included relation's projection",
                 link: "/internals/adr/0044-relation-projection-ceiling-from-selectable",
               },
               {
-                text: "0045 — allowlists.selectable takes root paths only; the relation-dotted ceiling is removed",
+                text: "0045 — The allowed.selectable allowlist takes root paths only; the relation-dotted ceiling is removed",
                 link: "/internals/adr/0045-relation-projection-ceiling-removed",
               },
             ],

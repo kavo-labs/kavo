@@ -906,7 +906,7 @@ export class KavoEngine<Entity extends object> {
       // reject — `validateSettings` below never sees it.
       const scope = `${config.entityName} (per-call)`;
       validateSettings(scope, settings);
-      validateDefaultSort(scope, settings, config.allowlists);
+      validateDefaultSort(scope, settings, config.allowed);
     }
     if (settings === config.settings) {
       return config;
@@ -915,9 +915,9 @@ export class KavoEngine<Entity extends object> {
       entityName: config.entityName,
       settings,
       settingsFor: () => settings,
-      allowlists: config.allowlists,
+      allowed: config.allowed,
       // Structural, like `computed` below: the projection is derived from
-      // `allowlists.selectable` at bootstrap (ADR-0026), and allowlists are
+      // `allowed.selectable` at bootstrap (ADR-0026), and the allowlist is
       // outside the settings precedence chain, so a per-call override
       // cannot widen what a response serves.
       projection: config.projection,
@@ -1235,7 +1235,7 @@ export class KavoEngine<Entity extends object> {
    * `replace`-strategy behavior is byte-for-byte unchanged by this method
    * existing at all.
    *
-   * Bypasses `allowlists.includable` deliberately: `write` and
+   * Bypasses `allowed.includable` deliberately: `write` and
    * `includable` are independent opt-ins (ADR-0029's own doc comment on
    * `RelationEdgeSettings.write`), so a relation opted into `write` but
    * never into `includable` must still appear on `list<Relation>`'s own

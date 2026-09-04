@@ -14,7 +14,7 @@ import type { Policy } from "../policy/kavo-policy.js";
  * One allowlist key's raw configuration: either the explicit set of paths
  * to allow, or `{ exclude }` — every own column except the ones named.
  * `exclude` is resolved against the entity's own columns at bootstrap
- * (`resolveAllowlists`), never evaluated eagerly here — the `@Kavo(...)`
+ * (`resolveAllowed`), never evaluated eagerly here — the `@Kavo(...)`
  * config object is built at class-decoration time, before any ORM metadata
  * exists (ADR-0012), so there is nothing to resolve `exclude` against yet.
  *
@@ -37,13 +37,13 @@ export type WritableFieldSelector<Entity> =
   readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
 
 /**
- * `allowlists.selectable`'s raw configuration — the same array-or-
+ * `allowed.selectable`'s raw configuration — the same array-or-
  * `{ exclude }` shape as {@link QueryFieldSelector}, but capped to depth 1
  * ({@link FieldPath} with `MaxDepth` 1): `select=` addresses the entity's
  * own columns, and an included relation is projected through
  * `select[<relation>]=` against the target entity's own `selectable`, never
  * `select=<relation>.<field>` (ADR-0045). A relation-dotted entry does not
- * type-check here and is a bootstrap error if it reaches `resolveAllowlists`
+ * type-check here and is a bootstrap error if it reaches `resolveAllowed`
  * through an erased or cast config. `Extra` widens both forms with the
  * entity's declared computed-field names (ADR-0019).
  */
@@ -76,10 +76,10 @@ export type RelationFieldSelector<Entity> =
  * `selectable` is the only key computed-field names may appear in:
  * `filterable`/`sortable` stay typed to real paths, because a computed
  * field has no column to translate to `WHERE`/`ORDER BY` (ADR-0019). The
- * bootstrap check in `resolveAllowlists` catches the same mistake from an
+ * bootstrap check in `resolveAllowed` catches the same mistake from an
  * erased or cast config, where the type is not there to help.
  */
-export interface QueryAllowlists<Entity = unknown, Computed extends string = never> {
+export interface QueryAllowed<Entity = unknown, Computed extends string = never> {
   readonly filterable?: QueryFieldSelector<Entity>;
   readonly sortable?: QueryFieldSelector<Entity>;
   /**
@@ -165,7 +165,7 @@ export interface QueryAllowlists<Entity = unknown, Computed extends string = nev
    * rather than each getting its own — both mutate an existing row, so the
    * set of fields open to being overwritten is the same question either
    * way. Same default posture, narrowing behaviour, and DTO precedence as
-   * {@link QueryAllowlists.creatable} — see its note.
+   * {@link QueryAllowed.creatable} — see its note.
    */
   readonly updatable?: WritableFieldSelector<Entity>;
 }
@@ -382,7 +382,7 @@ export type CustomOperationsOf<Entity, Ops> = string extends keyof Ops
  * global scope for this entity.
  *
  * `Computed` is inferred from the keys of `computed` and exists so an
- * explicit `allowlists.selectable` list can name a computed field without
+ * explicit `allowed.selectable` list can name a computed field without
  * a cast; every other position stays typed to real entity paths.
  */
 export interface EntityConfig<
@@ -399,7 +399,7 @@ export interface EntityConfig<
   // caller registers per operation, which `DtoInputOf`/`DtoOutputOf`/
   // `DtoQueryOf` (dto.ts) then read back off `KavoService`'s `Ops`
   // parameter (issue #131) — the same "constrain, don't fix" shape
-  // `allowlists.selectable`'s `NoInfer<Computed>` already relies on. The
+  // `allowed.selectable`'s `NoInfer<Computed>` already relies on. The
   // constraint is `OperationsConfig` rather than `StandardOperationsConfig`
   // (issue #145) so that a key outside the standard eight is a permitted
   // custom operation rather than an excess property.
@@ -439,7 +439,7 @@ export interface EntityConfig<
    * sortable, or writable.
    */
   readonly computed?: Readonly<Record<Computed, ComputedFieldDescriptor<Entity>>>;
-  readonly allowlists?: QueryAllowlists<Entity, NoInfer<Computed>>;
+  readonly allowed?: QueryAllowed<Entity, NoInfer<Computed>>;
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an

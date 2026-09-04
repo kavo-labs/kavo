@@ -49,7 +49,7 @@ See [Errors](/reference/errors).
 | `relations.edges.<name>.strategy`       | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                             |
 | `relations.edges.<name>.write`          | `boolean \| { strategy }`              | `false`                              |
 
-Whether a relation is includable at all is `allowlists.includable` (entity scope only); see [Reference/Config keys §allowlists](#allowlists-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+Whether a relation is includable at all is `allowed.includable` (entity scope only); see [Reference/Config keys §allowed](#allowed-entity-scope-only). `relations.edges` is loading tuning for a relation that is already includable. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
 
 ## arrayMutation
 
@@ -99,21 +99,21 @@ See [Realtime events](/features/realtime-events).
 
 Coarser than the per-entity `EntityConfig.operations`, which also carries `handler`/`meta` and always wins over this global map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
 
-## allowlists (entity scope only)
+## allowed (entity scope only)
 
 Not part of `KavoSettings`. Declared on `EntityConfig` directly, so there's no global default and no per-operation override.
 
-| Key                     | Type                                                                                      | Default                                                                                                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `allowlists.filterable` | `FieldPath[] \| { exclude: FieldPath[] }`                                                 | every own column                                                                                                                                                          |
-| `allowlists.sortable`   | same shape                                                                                | every own column                                                                                                                                                          |
-| `allowlists.selectable` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` (plus computed-field names) | every own column + computed fields; depth 1 — a relation-dotted entry neither type-checks nor boots ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)) |
-| `allowlists.includable` | `IncludePath[] \| { exclude: IncludePath[] }`                                             | `[]`, no relation includable                                                                                                                                              |
-| `allowlists.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`                                                 | every own string-kind column                                                                                                                                              |
-| `allowlists.creatable`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }`                             | every non-generated own column except the id, plus every relation                                                                                                         |
-| `allowlists.updatable`  | same shape                                                                                | same default as `creatable`                                                                                                                                               |
+| Key                  | Type                                                                                      | Default                                                                                                                                                                   |
+| -------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowed.filterable` | `FieldPath[] \| { exclude: FieldPath[] }`                                                 | every own column                                                                                                                                                          |
+| `allowed.sortable`   | same shape                                                                                | every own column                                                                                                                                                          |
+| `allowed.selectable` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` (plus computed-field names) | every own column + computed fields; depth 1 — a relation-dotted entry neither type-checks nor boots ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)) |
+| `allowed.includable` | `IncludePath[] \| { exclude: IncludePath[] }`                                             | `[]`, no relation includable                                                                                                                                              |
+| `allowed.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`                                                 | every own string-kind column                                                                                                                                              |
+| `allowed.creatable`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }`                             | every non-generated own column except the id, plus every relation                                                                                                         |
+| `allowed.updatable`  | same shape                                                                                | same default as `creatable`                                                                                                                                               |
 
-See [Allowlists](/features/allowlists).
+See [Allowed](/features/allowed).
 
 ## dto / computed / operations (entity scope)
 

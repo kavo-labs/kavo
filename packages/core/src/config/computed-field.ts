@@ -72,7 +72,7 @@ export interface ComputedFieldDescriptor<Entity = unknown> {
    * uniformly and there is no way to ask for it back. `false` means "not
    * individually selectable", not "always present".
    *
-   * This flag and an explicit `allowlists.selectable` now say different
+   * This flag and an explicit `allowed.selectable` now say different
    * things, and the difference is deliberate (ADR-0026). The flag is a
    * default about *nameability* and leaves the projection alone; an
    * explicit list is a statement about the **response**, so a list that

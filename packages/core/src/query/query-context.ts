@@ -53,7 +53,7 @@ export interface QueryContext<Entity = unknown> {
 }
 
 /**
- * The post-normalization query: validated against the entity's allowlists,
+ * The post-normalization query: validated against the entity's allowed fields,
  * coerced, limit-enforced, and complete. Lives on `KavoContext.query` for
  * read operations; adapters consume it without re-validating.
  */

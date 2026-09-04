@@ -915,7 +915,7 @@ function parseSearch<Entity>(
     return filter;
   }
 
-  const searchable = config.allowlists.searchable as readonly string[];
+  const searchable = config.allowed.searchable as readonly string[];
   const search = config.settings.query.search;
   if (search === false) {
     issues.push({
@@ -933,7 +933,7 @@ function parseSearch<Entity>(
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",
       detail:
         `Query parameter 'search[query]' is not supported: ${config.entityName} has no searchable fields ` +
-        `('allowlists.searchable' resolves to an empty set).`,
+        `('allowed.searchable' resolves to an empty set).`,
     });
     return filter;
   }
@@ -1107,7 +1107,7 @@ function requireAllowlisted<Entity>(
   usage: AllowlistUsage,
   issues: QueryIssueDto[],
 ): boolean {
-  const allowed = config.allowlists[ALLOWLIST_FOR[usage]] as readonly string[];
+  const allowed = config.allowed[ALLOWLIST_FOR[usage]] as readonly string[];
   if (allowed.includes(field)) {
     return true;
   }

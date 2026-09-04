@@ -48,7 +48,7 @@ silently doing nothing. `arrayMutation: false` (the same convention
 config-populated via `relations.edges.<name>.write` — the same "config
 tunes an ORM-derived descriptor" seam `defaultInclude`/`maxDepth`/`strategy`
 already use, and the same one ADR-0014's Consequences section names.
-`write` is independent of `allowlists.includable`: a relation can be
+`write` is independent of `allowed.includable`: a relation can be
 write-opted without being read-includable, or vice versa. `write: true` on
 a to-one relation is a bootstrap `ConfigurationException`
 (`DefaultRelationRegistry`) — association by id already covers to-one
@@ -308,7 +308,7 @@ forces exactly one include node onto `list<Relation>`'s response alone
 machinery — not new cross-entity serialization machinery — but applying it
 unconditionally rather than waiting on a client `include=` that this
 operation has no query parameter to carry, and bypassing
-`allowlists.includable` on purpose: `write` and `includable` are
+`allowed.includable` on purpose: `write` and `includable` are
 independent opt-ins, so a relation opted into `write` but never into
 `includable` must still appear on the one response whose entire purpose is
 showing that relation's membership. `add`/`remove`/`replace<Relation>` do

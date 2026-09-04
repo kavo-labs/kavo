@@ -79,12 +79,12 @@ describe("allowlistHint", () => {
     const hint = allowlistHint("emial", "filtering", "User", ["email", "id"]);
     expect(hint).toContain("Did you mean 'email'?");
     expect(hint).toContain("Filterable fields on User: email, id.");
-    expect(hint).toContain("add it to allowlists.filterable on the User config");
+    expect(hint).toContain("add it to allowed.filterable on the User config");
   });
 
   it("makes the allowlist advice conditional on the field being a real column", () => {
     // An allowlist accepts whatever the config declares — nothing checks it
-    // against `EntityMetadata` — so "add it to allowlists.sortable" stated
+    // against `EntityMetadata` — so "add it to allowed.sortable" stated
     // flatly would trade this 400 for a 500 out of the driver the next time
     // the developer sorts by their typo.
     expect(allowlistHint("nmae", "sorting", "User", ["name", "id"])).toContain("If User has a 'nmae' column");
@@ -95,8 +95,8 @@ describe("allowlistHint", () => {
   });
 
   it("names the allowlist key matching the usage", () => {
-    expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("allowlists.sortable");
-    expect(allowlistHint("x", "selection", "User", ["id"])).toContain("allowlists.selectable");
+    expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("allowed.sortable");
+    expect(allowlistHint("x", "selection", "User", ["id"])).toContain("allowed.selectable");
     expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("Sortable fields on User");
     expect(allowlistHint("x", "selection", "User", ["id"])).toContain("Selectable fields on User");
   });
