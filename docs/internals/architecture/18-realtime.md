@@ -144,7 +144,7 @@ _whether_ they were authorized to.
 `RealtimeSettings.subscribableFields` (or `@kavo/sse`'s equivalent
 callback) bounds an outgoing `item` **unconditionally**, once configured —
 not only when a subscriber names a `fields` query param, the same way
-`allowlists.selectable` bounds a REST response whether or not the caller
+`allowed.selectable` bounds a REST response whether or not the caller
 asked for a subset. A `fields` param narrows further _within_ that bound;
 it can never widen past it. A `filter` field must also be in this
 allowlist (§4.1) — a subscriber cannot see, or scope itself by, a field

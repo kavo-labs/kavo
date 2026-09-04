@@ -2,7 +2,7 @@ import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
 import type { EntityConfig, OperationConfig, RelationFieldSelector, SelectableFieldSelector } from "./entity-config.js";
-import type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./resolved-entity-config.js";
+import type { ResolvedEntityConfig, ResolvedQueryAllowed } from "./resolved-entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
@@ -49,7 +49,7 @@ const SETTINGS_KEYS = [
 
 /**
  * An `EntityConfig`/`OperationConfig` mixes settings keys with structural
- * keys (`dto`, `allowlists`, `computed`, `handler`, …); only the settings
+ * keys (`dto`, `allowed`, `computed`, `handler`, …); only the settings
  * subset participates in the merge algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {
@@ -107,8 +107,8 @@ export function resolveEntityConfig<Entity extends object>(
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
-  const allowlists = resolveAllowlists(metadata, entityConfig, computed);
-  const projection = resolveProjection(metadata, entityConfig, computed, allowlists);
+  const allowed = resolveAllowed(metadata, entityConfig, computed);
+  const projection = resolveProjection(metadata, entityConfig, computed, allowed);
   const entitySettings = normalizeSearch(
     mergeSettings(
       BUILT_IN_DEFAULTS,
@@ -117,12 +117,12 @@ export function resolveEntityConfig<Entity extends object>(
     ),
   );
   validateSettings(entityName, entitySettings);
-  validateDefaultSort(entityName, entitySettings, allowlists);
-  validateSincePagination(entityName, metadata, entitySettings, allowlists);
-  validateIncludableRelations(entityName, entitySettings, allowlists);
+  validateDefaultSort(entityName, entitySettings, allowed);
+  validateSincePagination(entityName, metadata, entitySettings, allowed);
+  validateIncludableRelations(entityName, entitySettings, allowed);
   const relations = new DefaultRelationRegistry<Entity>(
     metadata.relations,
-    allowlists.includable as readonly string[],
+    allowed.includable as readonly string[],
     entitySettings.relations.edges,
     entityName,
     entitySettings.arrayMutation,
@@ -147,9 +147,9 @@ export function resolveEntityConfig<Entity extends object>(
     const merged = normalizeSearch(mergeSettings(entitySettings, settings));
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
-    validateDefaultSort(scope, merged, allowlists);
-    validateSincePagination(scope, metadata, merged, allowlists);
-    validateIncludableRelations(scope, merged, allowlists);
+    validateDefaultSort(scope, merged, allowed);
+    validateSincePagination(scope, metadata, merged, allowed);
+    validateIncludableRelations(scope, merged, allowed);
     // Resolve for its validation side effect: a per-operation scope that
     // demands soft delete on an entity without a marker field must fail at
     // bootstrap, not on the first request (the engine recomputes the
@@ -164,7 +164,7 @@ export function resolveEntityConfig<Entity extends object>(
     settingsFor(operation: OperationId): KavoSettings {
       return perOperation.get(operation) ?? entitySettings;
     },
-    allowlists,
+    allowed,
     projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
@@ -393,11 +393,11 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
  * outright — there is no column to translate to `WHERE`/`ORDER BY`
  * (ADR-0019).
  */
-function resolveAllowlists<Entity extends object>(
+function resolveAllowed<Entity extends object>(
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
   computed: ComputedFieldMap<Entity>,
-): ResolvedQueryAllowlists<Entity> {
+): ResolvedQueryAllowed<Entity> {
   const ownColumns = metadata.fields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
   const stringColumns = metadata.fields
     .filter((field) => field.kind === "string")
@@ -436,8 +436,8 @@ function resolveAllowlists<Entity extends object>(
       : ((writableBase as readonly string[]).filter(
           (name) => !compositeIdFields.includes(name),
         ) as unknown as readonly FieldPath<Entity, 1>[]);
-  const configured = entityConfig?.allowlists;
-  // `allowlists.selectable` addresses this entity's own columns and its
+  const configured = entityConfig?.allowed;
+  // `allowed.selectable` addresses this entity's own columns and its
   // declared computed-field names — nothing else (ADR-0045). A relation is
   // selected with `select[<relation>]=`, never `select=<relation>.<field>`,
   // and an included relation's projection is governed by the *target*
@@ -472,7 +472,7 @@ function resolveAllowlists<Entity extends object>(
   ];
   validateAllowlistFieldNames(metadata.name, "filterable", configured?.filterable, knownFieldNames);
   validateAllowlistFieldNames(metadata.name, "sortable", configured?.sortable, knownFieldNames);
-  const allowlists = {
+  const allowed = {
     filterable: resolveFieldSelector(ownColumns, configured?.filterable),
     sortable: resolveFieldSelector(ownColumns, configured?.sortable),
     selectable: selectableResolved,
@@ -490,14 +490,14 @@ function resolveAllowlists<Entity extends object>(
     searchable: { verb: "searched on", clause: "WHERE" },
   } as const;
   for (const key of ["filterable", "sortable", "searchable"] as const) {
-    for (const field of allowlists[key] as readonly string[]) {
+    for (const field of allowed[key] as readonly string[]) {
       if (!Object.prototype.hasOwnProperty.call(computed, field)) {
         continue;
       }
       const { verb, clause } = COMPUTED_REJECTION[key];
       throw new ConfigurationException(
         metadata.name,
-        `allowlists.${key}`,
+        `allowed.${key}`,
         `'${field}' is a computed field on '${metadata.name}', which can never be ${verb} — ` +
           `it has no column to translate to ${clause}`,
       );
@@ -508,13 +508,13 @@ function resolveAllowlists<Entity extends object>(
   // bootstrap for the same reason `rejectComputedWriteDtoKeys` rejects one
   // named in a write DTO, rather than letting it fall out silently later.
   for (const key of ["creatable", "updatable"] as const) {
-    for (const field of allowlists[key] as readonly string[]) {
+    for (const field of allowed[key] as readonly string[]) {
       if (!Object.prototype.hasOwnProperty.call(computed, field)) {
         continue;
       }
       throw new ConfigurationException(
         metadata.name,
-        `allowlists.${key}`,
+        `allowed.${key}`,
         `'${field}' is a computed field on '${metadata.name}', which is never writable (ADR-0019) — ` +
           `it has no column behind it`,
       );
@@ -530,7 +530,7 @@ function resolveAllowlists<Entity extends object>(
   // its target metadata isn't in scope — so it stays unchecked, the same
   // laxity `filterable`/`sortable` already have for relation paths.
   const fieldKinds = new Map(metadata.fields.map((field) => [field.name, field.kind]));
-  for (const field of allowlists.searchable as readonly string[]) {
+  for (const field of allowed.searchable as readonly string[]) {
     if (field.includes(".")) {
       continue;
     }
@@ -538,13 +538,13 @@ function resolveAllowlists<Entity extends object>(
     if (kind !== undefined && kind !== "string") {
       throw new ConfigurationException(
         metadata.name,
-        "allowlists.searchable",
+        "allowed.searchable",
         `'${field}' is a '${kind}'-kind column on '${metadata.name}', which an 'ILIKE' fragment ` +
           `cannot usefully match — 'searchable' entries must be string-kind columns, or relation paths`,
       );
     }
   }
-  return deepFreeze(allowlists);
+  return deepFreeze(allowed);
 }
 
 /**
@@ -556,9 +556,9 @@ function resolveAllowlists<Entity extends object>(
 export function validateDefaultSort<Entity>(
   scope: string,
   settings: KavoSettings,
-  allowlists: ResolvedQueryAllowlists<Entity>,
+  allowed: ResolvedQueryAllowed<Entity>,
 ): void {
-  const sortable = allowlists.sortable as readonly string[];
+  const sortable = allowed.sortable as readonly string[];
   for (const entry of settings.query.defaultSort) {
     if (!sortable.includes(entry.field)) {
       throw new ConfigurationException(
@@ -572,7 +572,7 @@ export function validateDefaultSort<Entity>(
 
 /**
  * Cross-checks `relations.edges.<name>.defaultInclude` against
- * `allowlists.includable` (ADR-0028): `defaultInclude: true` on a relation
+ * `allowed.includable` (ADR-0028): `defaultInclude: true` on a relation
  * the entity never opted into `include=` would load something clients
  * cannot ask for — the same rule `validate-settings.ts` enforced when
  * `defaultInclude` and `includable` lived on the same `edges` entry, now
@@ -581,15 +581,15 @@ export function validateDefaultSort<Entity>(
 function validateIncludableRelations<Entity>(
   scope: string,
   settings: KavoSettings,
-  allowlists: ResolvedQueryAllowlists<Entity>,
+  allowed: ResolvedQueryAllowed<Entity>,
 ): void {
-  const includable = new Set(allowlists.includable as readonly string[]);
+  const includable = new Set(allowed.includable as readonly string[]);
   for (const [name, edge] of Object.entries(settings.relations.edges)) {
     if (edge.defaultInclude === true && !includable.has(name)) {
       throw new ConfigurationException(
         scope,
         `relations.edges.${name}`,
-        `defaultInclude requires an includable relation — '${name}' is not on allowlists.includable, ` +
+        `defaultInclude requires an includable relation — '${name}' is not on allowed.includable, ` +
           `so it would load a relation clients cannot ask for`,
       );
     }
@@ -617,14 +617,14 @@ function validateSincePagination<Entity extends object>(
   scope: string,
   metadata: EntityMetadata<Entity>,
   settings: KavoSettings,
-  allowlists: ResolvedQueryAllowlists<Entity>,
+  allowed: ResolvedQueryAllowed<Entity>,
 ): void {
   if (settings.pagination.strategy !== "since") {
     return;
   }
   const { field } = settings.pagination.since;
-  const filterable = allowlists.filterable as readonly string[];
-  const selectable = allowlists.selectable as readonly string[];
+  const filterable = allowed.filterable as readonly string[];
+  const selectable = allowed.selectable as readonly string[];
 
   const sinceColumn = metadata.fields.find((column) => column.name === field);
   if (sinceColumn === undefined) {
@@ -706,14 +706,14 @@ function resolveProjection<Entity extends object>(
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
   computed: ComputedFieldMap<Entity>,
-  allowlists: ResolvedQueryAllowlists<Entity>,
+  allowed: ResolvedQueryAllowed<Entity>,
 ): readonly FieldPath<Entity>[] | null {
-  const selector = entityConfig?.allowlists?.selectable;
+  const selector = entityConfig?.allowed?.selectable;
   if (selector === undefined) {
     return null;
   }
   if (!("exclude" in selector)) {
-    return allowlists.selectable;
+    return allowed.selectable;
   }
   const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
   const excluded = new Set(selector.exclude as readonly string[]);
@@ -721,7 +721,7 @@ function resolveProjection<Entity extends object>(
 }
 
 /**
- * `allowlists.selectable` addresses this entity's own columns and its
+ * `allowed.selectable` addresses this entity's own columns and its
  * declared computed-field names — nothing else (ADR-0045). A relation is
  * selected with `select[<relation>]=`, and an included relation's
  * projection is governed by the *target* entity's own `selectable`
@@ -750,7 +750,7 @@ function rejectRelationDottedSelectable(
   }
   const knownNames = new Set(known);
   const entries = "exclude" in selector ? selector.exclude : selector;
-  const keyPath = "exclude" in selector ? "allowlists.selectable.exclude" : "allowlists.selectable";
+  const keyPath = "exclude" in selector ? "allowed.selectable.exclude" : "allowed.selectable";
   for (const entry of entries as readonly string[]) {
     if (!entry.includes(".") || knownNames.has(entry)) {
       continue;
@@ -758,9 +758,9 @@ function rejectRelationDottedSelectable(
     throw new ConfigurationException(
       entityName,
       keyPath,
-      `'${entry}' is a relation-dotted path. allowlists.selectable takes ${entityName}'s own columns and ` +
+      `'${entry}' is a relation-dotted path. allowed.selectable takes ${entityName}'s own columns and ` +
         `computed-field names only — an included relation's projection is governed by the target entity's own ` +
-        `allowlists.selectable (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
+        `allowed.selectable (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
     );
   }
 }
@@ -806,7 +806,7 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * configuration bug, not a client mistake. Naming a real relation or
  * computed field is still generally wrong (a relation isn't a scalar
  * column, a computed field has none) — that is caught by the existing,
- * more specific checks downstream in `resolveAllowlists`, which this
+ * more specific checks downstream in `resolveAllowed`, which this
  * function defers to rather than duplicating.
  */
 function validateAllowlistFieldNames(
@@ -825,8 +825,8 @@ function validateAllowlistFieldNames(
       if (!known.has(field)) {
         throw new ConfigurationException(
           entityName,
-          `allowlists.${key}`,
-          `'${field}' is not a column on '${entityName}' — allowlists.${key} entries must name a real ` +
+          `allowed.${key}`,
+          `'${field}' is not a column on '${entityName}' — allowed.${key} entries must name a real ` +
             `column, or a relation path ('relation.field') for a relation-dotted entry.`,
         );
       }
@@ -836,9 +836,9 @@ function validateAllowlistFieldNames(
       if (!IDENTIFIER.test(segment)) {
         throw new ConfigurationException(
           entityName,
-          `allowlists.${key}`,
+          `allowed.${key}`,
           `'${field}' is not a valid relation path — '${segment}' is not a valid identifier. ` +
-            `allowlists.${key} entries reach raw SQL unquoted, so every segment must be letters, digits, ` +
+            `allowed.${key} entries reach raw SQL unquoted, so every segment must be letters, digits, ` +
             `and underscores only.`,
         );
       }
@@ -849,7 +849,7 @@ function validateAllowlistFieldNames(
 /**
  * `includable`'s own resolver, not `resolveFieldSelector` reused: the
  * unconfigured default is `[]`, not `base` — the opt-in direction
- * `QueryAllowlists.includable`'s doc comment calls out (ADR-0028). An
+ * `QueryAllowed.includable`'s doc comment calls out (ADR-0028). An
  * explicit array is used verbatim (and is checked for typos later, when
  * `DefaultRelationRegistry` builds the registry); `{ exclude }` still
  * resolves against `base` (every relation), so `{ exclude: [] }` is the one
@@ -882,7 +882,7 @@ function resolveIncludableSelector<Entity>(
     }
     throw new ConfigurationException(
       entityName,
-      "allowlists.includable.exclude",
+      "allowed.includable.exclude",
       `'${name}' is not a relation of ${entityName} (relations: ${[...known].join(", ") || "none"})`,
     );
   }
@@ -902,7 +902,7 @@ export function describeResolvedConfig<Entity>(
   return {
     entityName: config.entityName,
     settings: config.settings,
-    allowlists: config.allowlists,
+    allowed: config.allowed,
     computed: Object.keys(config.computed),
     softDelete: config.softDelete,
     relations: config.relations.all().map((relation) => ({

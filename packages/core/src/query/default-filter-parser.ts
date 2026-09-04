@@ -258,7 +258,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     issues: QueryIssueDto[],
     out: FilterExpression<Entity>[],
   ): void {
-    const filterable = config.allowlists.filterable as readonly string[];
+    const filterable = config.allowed.filterable as readonly string[];
     if (!filterable.includes(field)) {
       // Same construction site as the programmatic path's
       // `requireAllowlisted`, so the two entry points cannot word one

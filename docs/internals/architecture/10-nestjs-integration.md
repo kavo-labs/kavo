@@ -425,9 +425,9 @@ do this. Per-route `ApiQuery`/`ApiHeader` descriptions then carry only what
 the guide can't say:
 
 - `filter`/`sort`/`select` carry the entity's actual
-  `allowlists.filterable`/`sortable`/`selectable` fields, when decoration
+  `allowed.filterable`/`sortable`/`selectable` fields, when decoration
   time can tell (issue #171). An **explicit array** selector resolves to
-  exactly the same value `resolveAllowlists` would produce, with no ORM
+  exactly the same value `resolveAllowed` would produce, with no ORM
   metadata involved, so reading it straight off the raw `EntityConfig` is
   not a guess. The unconfigured default and an `{ exclude }` selector both
   resolve against the entity's own columns — ORM metadata that doesn't
@@ -494,7 +494,7 @@ row associated by id — would synthesize an empty
 therefore gated on the synthesized schema ending up with zero properties,
 not on the allowlist being empty.
 
-The **response** fallback has the mirror case for `allowlists.includable`
+The **response** fallback has the mirror case for `allowed.includable`
 (ADR-0028, issue #349, then #356): a relation a client may `?include=` is
 emitted as an **optional** property on `<Entity>Item`/`<Entity>ListItem` —
 appended after the scalar columns and the computed fields, never in
@@ -521,11 +521,11 @@ in ADR-0045):
 A `-to-many` relation wraps that shape in `{ type: "array", items }`.
 The request-side nesting bound is the existing `relations.maxIncludeDepth`;
 there is no separate Swagger depth control. Driven off the resolved
-`allowlists.includable` names, not `RelationDescriptor.includable` (which
+`allowed.includable` names, not `RelationDescriptor.includable` (which
 reflects ORM-derived metadata, not the config grant).
 
 Two known over-statements, both narrowing documentation only — the schema
-stays open (no `additionalProperties: false`, matching `allowlists.md`'s
+stays open (no `additionalProperties: false`, matching `allowed.md`'s
 "narrows silently"), so neither lies about what the route accepts or
 returns. `FieldMetadata` exposes no `hasDefault`, so a non-nullable column
 with a database `default:` is reported `required` in `<Entity>Create`
@@ -639,9 +639,9 @@ the query shapes fully derivable from an entity's _resolved_ config — the
 page controls for the resolved `pagination.strategy` (`{ limit, offset }`
 for `offset`, `{ page[number], page[size] }` for `page`, `{ limit, cursor }`
 for `cursor`, `{ limit, since }` for `since`, issue #319), the top-level
-`allowlists.includable`
+`allowed.includable`
 relation names (ADR-0028 — `IncludePath<_, 1>`, so a nested path is dotted
-into one and is not enumerated), and the `allowlists.sortable` keys. Like
+into one and is not enumerated), and the `allowed.sortable` keys. Like
 `<Entity>ValidationError` they ride `KavoBinder.onModuleInit`, not
 decoration time: the resolved allowlists and the precedence-merged
 `pagination.strategy` (ADR-0030) only exist then. `applyQuerySchemaDocs`

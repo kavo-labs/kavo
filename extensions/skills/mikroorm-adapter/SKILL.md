@@ -121,7 +121,7 @@ included:
 
 ```ts
 @Kavo(Book, {
-  allowlists: { filterable: ["title", "author.name"] },
+  allowed: { filterable: ["title", "author.name"] },
   relations: { edges: { author: { includable: true } } },
 })
 @Controller("books")
@@ -139,7 +139,7 @@ export class BookController {}
 
 ## Where to go next
 
-- Routes, allowlists, relations, per-operation overrides → `kavo-decorator`
+- Routes, allowed, relations, per-operation overrides → `kavo-decorator`
 - The `filter`/`sort`/`fields`/`include` wire grammar → `query-grammar`
 - Narrowing request/response shapes → `dto-slots`
 - Restore/purge semantics → `soft-delete`

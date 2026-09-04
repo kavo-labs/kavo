@@ -301,12 +301,12 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
     string column, so a wide allowlist alone — with no unusually long query —
     can still exceed the cap.
 - **`search[fields]=<comma-list>`** — optional. Narrows which fields this
-  call searches to a subset of the entity's resolved `allowlists.searchable`
+  call searches to a subset of the entity's resolved `allowed.searchable`
   set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
   allowlist-rejection family `filter[...]`/`sort=`/`select=` use). Omitted,
   every field in `searchable` is searched.
 
-**Allowlist.** `EntityConfig.allowlists.searchable` — same
+**Allowlist.** `EntityConfig.allowed.searchable` — same
 `QueryFieldSelector` shape as `filterable`/`sortable`/`selectable`, and
 relation paths are permitted (`'brand.name'`), reusing the per-path join
 machinery `filter[...]` already has for relation filters. Unlike
@@ -364,7 +364,7 @@ through `filter`, the same way it composes any other filter.
 
 ## 5. Security & robustness
 
-- **Allowlists:** every entity resolves filterable/sortable/selectable
+- **Allowed:** every entity resolves filterable/sortable/selectable
   lists at bootstrap — explicitly configured, or defaulting to the
   entity's **own scalar columns** (relation paths are never allowlisted
   implicitly). Anything outside a list → 400
@@ -439,7 +439,7 @@ through `filter`, the same way it composes any other filter.
 ```
 raw query string (flat bracket keys)
   → DefaultFilterParser   (allowlist + coercion + limits → Filter AST)
-  → sort / select parsing (allowlists)
+  → sort / select parsing (allowed)
   → PaginationStrategy    (defaultLimit / maxLimit / 400s)
   → NormalizedQueryContext  { filter, sort, pagination, select,
                               include: {}, withDeleted: false,

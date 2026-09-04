@@ -98,7 +98,7 @@ layer in between.
 ## Debugging a resolved config
 
 `kavo.describe(entityName)` returns the frozen, fully-merged config for one
-entity — settings, allowlists, relations, and every per-operation view — as a
+entity — settings, allowed, relations, and every per-operation view — as a
 plain printable object. Useful for confirming what actually won the
 precedence chain without re-deriving it by hand.
 

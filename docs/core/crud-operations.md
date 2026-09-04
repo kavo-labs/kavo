@@ -19,7 +19,7 @@ Names always spell out cardinality (`findOne`/`findMany`, never bare `find`). Ev
 
 Every operation, standard or custom, is an entry in one **operation registry**, built fresh for each entity from `createOperationRegistry` ([ADR-0006](/internals/adr/0006-registry-driven-operations)). Both the request engine and `@kavo/nest`'s route generator read from this single registry. That's why adding an operation means adding a registry entry, not touching two separate systems that have to be kept in sync.
 
-Each entry carries a handler (the behavior), metadata (route options, in `@kavo/nest`'s case), and its own slice of the [configuration precedence chain](/guides/configuration/). So an operation can override settings (pagination, caching, allowlists, anything in [`KavoSettings`](/reference/config-keys)) independently of its entity's defaults.
+Each entry carries a handler (the behavior), metadata (route options, in `@kavo/nest`'s case), and its own slice of the [configuration precedence chain](/guides/configuration/). So an operation can override settings (pagination, caching, or anything else in [`KavoSettings`](/reference/config-keys)) independently of its entity's defaults.
 
 ## Enabling and disabling operations
 

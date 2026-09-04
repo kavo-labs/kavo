@@ -187,7 +187,7 @@ describe("buildEntityMetadata — never-expose properties", () => {
   it.each(["secret", "bulky"])("drops the %s property from the metadata seam entirely", (field) => {
     // Not merely hidden from responses: excluded from `fields`, so it never
     // reaches the derived DTOs *or* the default filterable/sortable
-    // allowlists. A column that is invisible in the body but filterable in
+    // allowed. A column that is invisible in the body but filterable in
     // the database is a blind extraction oracle —
     // `filter[secret][like]=sk_live_9%` answered by the row count.
     expect(byName[field]).toBeUndefined();

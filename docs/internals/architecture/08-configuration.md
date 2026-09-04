@@ -23,7 +23,7 @@ built-in defaults → global (createKavo) → entity (createCrud)
 | `query.search.driver`                                              | `"orm"`                                  | reserved discriminator — the only value accepted today; config-only, no wire counterpart                                                                                                                                                                                                                                        |
 | `errors.exposeInternals`                                           | `false`                                  | leak driver detail into responses                                                                                                                                                                                                                                                                                               |
 | `relations.maxIncludeDepth` / `maxIncludedNodes`                   | 2 / 10                                   | include depth budget and total node cap                                                                                                                                                                                                                                                                                         |
-| `relations.edges.<name>`                                           | `{}`                                     | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowlists.includable`, entity scope only (ADR-0028)                                                                                                                                                                                   |
+| `relations.edges.<name>`                                           | `{}`                                     | per-relation loading tuning — `defaultInclude` / `maxDepth` / `strategy`; permission is `allowed.includable`, entity scope only (ADR-0028)                                                                                                                                                                                      |
 | `relations.edges.<name>.write`                                     | unset (`false`)                          | `boolean \| { strategy }` — opts a to-many relation into `arrayMutation` writes, inheriting the entity default (`true`) or pinning its own strategy (`{ strategy }`, issue #223); rejected on a to-one relation                                                                                                                 |
 | `arrayMutation.strategy`                                           | unset — no built-in default (issue #221) | `"replace"` \| `"resource"` \| `"jsonPatch"` — all three are implemented; the entity-wide default a `write: true` relation inherits; a write-opted relation with no strategy resolvable anywhere demands one be declared; `false` disables the feature wholesale and wins over any per-relation override (ADR-0029, issue #223) |
 | `cache.ttl` / `etag`                                               | `0` / `true`                             | TTL result cache for `findOne`/`findMany` (a positive `ttl` turns it on, `0` = off — no separate `enabled` key) + ETag on single-item responses with `If-None-Match`/`If-Match`; the result cache's backing store is **not** here (ADR-0020, ADR-0031)                                                                          |
@@ -55,7 +55,7 @@ and an etag-only override (`cache: { etag: false }`) leaves the result
 cache off rather than accidentally flipping it on.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`allowlists`, `computed`, `operations`); only the settings subset
+`allowed`, `computed`, `operations`); only the settings subset
 participates in the merge. `computed` carries functions, so like `dto` it
 is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
@@ -120,7 +120,7 @@ deep-frozen `ResolvedEntityConfig`: entity-scope settings, precomputed
 per-operation views behind `settingsFor(operation)`, resolved allowlists
 (explicit, or derived from own scalar columns plus any selectable computed
 fields), the default response `projection` (`null` unless
-`allowlists.selectable` was configured explicitly —
+`allowed.selectable` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
 the cached `DtoResolver`, the validated `computed` map, the resolved
 `policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
@@ -161,7 +161,7 @@ bootstrap rather than as a surprising response later
   spellings, by name for `{ ["__proto__"]: … }` and by inspecting the
   declared record's prototype for the object-literal `{ __proto__: … }`,
   which invokes the prototype setter and never reaches `Object.keys`;
-- a computed name in a configured `allowlists.filterable`/`sortable`/
+- a computed name in a configured `allowed.filterable`/`sortable`/
   `searchable` — there is no column to translate to `WHERE`/`ORDER BY`, and
   in-memory post-fetch filtering is rejected rather than deferred;
 - a computed name declared by a registered `create`/`update`/`patch` DTO
@@ -199,7 +199,7 @@ fast at the scope that introduced it instead of producing a broken
 `ORDER BY` on the first request that hits it. Doc 05 covers the
 request-time semantics (client `sort` vs. this fallback).
 
-### `allowlists.searchable`
+### `allowed.searchable`
 
 Same `QueryFieldSelector` shape and resolution as `filterable`/`sortable`/
 `selectable`, but its zero-config default is narrower: every own
@@ -211,12 +211,12 @@ machinery `filter[...]` already resolves for relation filters. See doc 05
 
 ### `relations.edges.<name>.defaultInclude`
 
-`defaultInclude: true` on a relation absent from `allowlists.includable` is a
+`defaultInclude: true` on a relation absent from `allowed.includable` is a
 bootstrap `ConfigurationException` — it would load a relation clients cannot
 ask for ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 `validateSettings` only ever sees `KavoSettings`, which does not carry
-`allowlists`, so this cross-check runs separately, in
-`validateIncludableRelations` (`resolve-entity-config.ts`), once `allowlists`
+`allowed`, so this cross-check runs separately, in
+`validateIncludableRelations` (`resolve-entity-config.ts`), once `allowed`
 has resolved — the same reason `query.defaultSort` and
 `pagination.since.field` are checked outside `validateSettings` too.
 
@@ -232,6 +232,6 @@ route concerns via the `OperationMetadata` augmentation (ADR-0007).
 ## 6. Debug dump
 
 `kavo.describe(entityName)` (backed by `describeResolvedConfig`) returns
-the frozen result for one entity — settings, allowlists, the declared
+the frozen result for one entity — settings, allowed, the declared
 computed-field names, relations, and every per-operation view — as a plain
 printable object.

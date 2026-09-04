@@ -344,7 +344,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     });
 
     it("free-text searches every own string column by default (issue #156)", async () => {
-      // Owner leaves `allowlists.searchable` unconfigured, so it defaults to
+      // Owner leaves `allowed.searchable` unconfigured, so it defaults to
       // every own string column: `name` and `email` both match.
       await request(server()).post("/owners").send({ name: "Ada Lovelace", email: "lovelace@x.io" }).expect(201);
       await request(server()).post("/owners").send({ name: "Hopper", email: "grace.h@x.io" }).expect(201);

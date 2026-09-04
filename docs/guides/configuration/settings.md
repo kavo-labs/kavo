@@ -10,13 +10,13 @@
 
 - `offset` is flat `limit`/`offset`.
 - `page` is `page[number]`/`page[size]`.
-- `cursor` is keyset paging over an opaque `?cursor=` token. It requires the effective sort to end in the entity's id field, with every sort key on `allowlists.filterable` and `allowlists.selectable` as well as `sortable`. It reports the next token as `meta.nextCursor`.
+- `cursor` is keyset paging over an opaque `?cursor=` token. It requires the effective sort to end in the entity's id field, with every sort key on `allowed.filterable` and `allowed.selectable` as well as `sortable`. It reports the next token as `meta.nextCursor`.
 - `since` is polling by a plain, compound `?since=<value>|<id>` token against `since.field`. The sort is forced to `[since.field, id]`, delivery is exactly once (the id half breaks ties on `since.field`), and the next token is reported as `meta.nextSince`.
 - `none` opts the entity out of pagination entirely. `findMany` always serves the whole match set, `defaultLimit`/`maxLimit` go unused, and a client-sent `limit`/`offset` is rejected as an unsupported param rather than silently ignored. See [No pagination](/querying/pagination#no-pagination) for the caveats.
 
 Pair either keyset strategy with `count: false`, and index the sort tuple. The GraphQL and MCP bindings refuse both, since they can't page a keyset (see [Cursor and since pagination](/querying/pagination#cursor-keyset-pagination), [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union), and [ADR-0022](/internals/adr/0022-since-pagination-composes-a-value-id-keyset)).
 
-`since.field` (default `"updatedAt"`) is the column `?since=` seeks against, and is only consulted under `strategy: "since"`. It must be a `date`- or `string`-kind column on `allowlists.filterable` and `allowlists.selectable`. Kavo checks this at startup, so a missing or wrong-kind column fails immediately rather than on the first request.
+`since.field` (default `"updatedAt"`) is the column `?since=` seeks against, and is only consulted under `strategy: "since"`. It must be a `date`- or `string`-kind column on `allowed.filterable` and `allowed.selectable`. Kavo checks this at startup, so a missing or wrong-kind column fails immediately rather than on the first request.
 
 `count` (default `true`) controls whether list responses compute `total`, which costs an extra `COUNT` query per list call. Set it to `false` alongside `strategy: "cursor"`/`"since"`: the `COUNT` is `O(n)` over the whole match set and dominates the `O(limit)` keyset page it accompanies.
 
@@ -26,7 +26,7 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 `defaultSort` (default `[]`) is the sort order applied when a request supplies no `sort` of its own. A client-supplied `sort` always wins outright; it never merges with this. It's validated against the sortable allowlist, same as a client-supplied sort.
 
-`search` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until a scope sets it to an object (`{}` uses the defaults), even though `allowlists.searchable` itself defaults to every own string column; set it back to `false` at a narrower scope to disable it there. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token). A narrower scope re-enabling search from `false` may name only the keys it changes — the rest backfill from these defaults.
+`search` (default `false`) controls whether `search[query]` is accepted at all. It's a `400` until a scope sets it to an object (`{}` uses the defaults), even though `allowed.searchable` itself defaults to every own string column; set it back to `false` at a narrower scope to disable it there. See [Search](/querying/search). `search.mode` (default `"substring"`, or `"words"`) is the default `search[mode]` when a request doesn't override it per call. `search.driver` (default `"orm"`) is a reserved discriminator for a future pluggable search backend; it's the only value accepted today, and it's config-only (there is no `search[driver]` wire token). A narrower scope re-enabling search from `false` may name only the keys it changes — the rest backfill from these defaults.
 
 ## errors
 

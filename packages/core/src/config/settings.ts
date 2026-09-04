@@ -36,7 +36,7 @@ export interface PaginationSettings {
    * `?since=` seeks against and the effective sort's leading key —
    * `[since.field, idField]` ascending, forced regardless of client `sort`.
    * Must be a `date`- or `string`-kind column on the entity, and on the
-   * `filterable`/`selectable` allowlists; a bootstrap error otherwise
+   * `filterable`/`selectable` allowed; a bootstrap error otherwise
    * (`resolveEntityConfig`), the same treatment `softDelete.field` gets.
    */
   readonly since: {
@@ -101,7 +101,7 @@ export interface ErrorSettings {
  * Per-relation *tuning* — the config half of a `RelationDescriptor` other
  * than permission. ORM metadata supplies shape (name, target,
  * cardinality); this supplies loading behavior once a relation is already
- * includable. Permission itself lives on `allowlists.includable`
+ * includable. Permission itself lives on `allowed.includable`
  * (`EntityConfig`, entity-config.ts) instead, not here (ADR-0028) — naming
  * a relation in `edges` no longer opts it in.
  */
@@ -119,7 +119,7 @@ export interface RelationEdgeSettings {
    * `ConfigurationException` (`DefaultRelationRegistry`), since association
    * by id already covers to-one writes and there is no array to mutate.
    * Like `defaultInclude`, this is a permission a relation must be granted
-   * explicitly — it is independent of `allowlists.includable` (a relation
+   * explicitly — it is independent of `allowed.includable` (a relation
    * can be write-opted-in without being read-includable, or vice versa).
    *
    * Two spellings (issue #223, ADR-0029's per-relation amendment):
@@ -146,8 +146,8 @@ export interface RelationSettings {
   /**
    * Per-relation loading overrides, keyed by relation property name —
    * `defaultInclude`/`maxDepth`/`strategy` only. Whether a relation is
-   * includable at all is `allowlists.includable`'s question, not this
-   * one (ADR-0028); an entry here for a relation `allowlists.includable`
+   * includable at all is `allowed.includable`'s question, not this
+   * one (ADR-0028); an entry here for a relation `allowed.includable`
    * never named still validates and applies its tuning, but grants no
    * permission.
    */
@@ -224,9 +224,9 @@ export interface SoftDeleteSettings {
 
 /**
  * Which fields a transport may expose an individual subscription to — the
- * same array-or-`exclude` shape `allowlists.selectable` uses
+ * same array-or-`exclude` shape `allowed.selectable` uses
  * (`QueryFieldSelector`, entity-config.ts), but plain strings: unlike
- * `QueryAllowlists`, `KavoSettings` carries no `Entity` type parameter
+ * `QueryAllowed`, `KavoSettings` carries no `Entity` type parameter
  * (`relations.edges`'s keys are plain strings for the same reason), so
  * there is no layer here to check a field name against real entity paths.
  */

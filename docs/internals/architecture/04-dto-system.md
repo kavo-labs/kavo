@@ -43,7 +43,7 @@ the defaults derive from:
 
 - **Readable projection** (`item`/`list` default): every scalar column,
   plus every computed field the entity declares (§7), **intersected with
-  `allowlists.selectable` when that key is configured explicitly**
+  `allowed.selectable` when that key is configured explicitly**
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
   which is how a column is kept out of every response without registering a
   DTO at all. Relation properties
@@ -76,10 +76,10 @@ the defaults derive from:
   soft-delete state that way.
 
   This default projection can be narrowed further, without registering a
-  DTO at all, by `allowlists.creatable` (for `createOne`) and
-  `allowlists.updatable` (for `updateOne`/`patchOne` — the two share one
+  DTO at all, by `allowed.creatable` (for `createOne`) and
+  `allowed.updatable` (for `updateOne`/`patchOne` — the two share one
   list, since both mutate an existing row) — the write-side counterpart to
-  `allowlists.selectable` above, and subject to the same rules: it can only
+  `allowed.selectable` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the
   soft-delete marker there has no effect; and a registered write DTO with a
   runtime shape wins outright, exactly as a registered `item`/`list` DTO
@@ -156,7 +156,7 @@ The rules, all governed by
 
 | Aspect                  | Behavior                                                                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowlists.selectable` omits it (ADR-0026)                         |
+| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowed.selectable` omits it (ADR-0026)                            |
 | Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
 | `selectable`            | Joined by default, so `select=fullName` works; `selectable: false` opts out                                                      |
 | `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |
@@ -224,7 +224,7 @@ the type level: `EntityConfig`'s `operations` field is typed through
 `StandardOperationsConfig`, which `Pick`s only the applicable
 `OperationDtoOverride` fields per operation id, so e.g. `deleteOne` has no
 `dto` key to set at all. The runtime check exists for the same reason
-`resolveAllowlists` and `rejectComputedWriteDtoKeys` keep one: a config
+`resolveAllowed` and `rejectComputedWriteDtoKeys` keep one: a config
 built from an erased or cast type has no compiler to catch it.
 
 A custom operation (issue #145) is the one place the rule is runtime-only.

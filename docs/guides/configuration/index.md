@@ -10,5 +10,5 @@ If you don't set a field at a given scope, it falls through to the next one down
 
 - **[Module setup](/guides/configuration/module-setup)**: `KavoModule.forRoot`/`forRootAsync`, and the `app` context extractor.
 - **[Settings](/guides/configuration/settings)**: the app-wide `KavoSettings` fields: pagination, query, errors, relations, arrayMutation, cache, softDelete, realtime.
-- **[Entity config](/guides/configuration/entity-config)**: `@Kavo(Entity, config)`'s own fields: `dto`, `allowlists`, `computed`, plus where `policy` is set.
+- **[Entity config](/guides/configuration/entity-config)**: `@Kavo(Entity, config)`'s own fields: `dto`, `allowed`, `computed`, plus where `policy` is set.
 - **[Operations](/guides/configuration/operations)**: per-operation overrides, custom operations, and custom list metadata.

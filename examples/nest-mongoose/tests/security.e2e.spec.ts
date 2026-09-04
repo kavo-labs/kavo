@@ -17,7 +17,7 @@ import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
  * client trying to smuggle a Mongo query operator (`$ne`, `$gt`, `$where`,
  * …) into a filter through the field-name or value position instead of a
  * SQL keyword. `Article` (`article.controller.ts`) is used throughout
- * because it declares explicit allowlists, unlike the zero-config
+ * because it declares an explicit allowlist, unlike the zero-config
  * `AuthorController` — the identifier-injection tests need something to be
  * rejected *from*.
  */

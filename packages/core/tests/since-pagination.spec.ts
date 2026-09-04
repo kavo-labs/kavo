@@ -294,7 +294,7 @@ describe("QueryNormalizer.resolveSince enforces the allowlists directly, not onl
     const crud = createKavo({
       defaults: { pagination: { strategy: "poll", since: { field: "occurredAt" } } },
       paginationStrategies: [new ThirdPartySince()],
-    } as never).createCrud(Event, { allowlists: { filterable: { exclude: ["occurredAt"] } } } as never, {
+    } as never).createCrud(Event, { allowed: { filterable: { exclude: ["occurredAt"] } } } as never, {
       adapter,
       metadata: eventMetadata,
     });
@@ -339,7 +339,7 @@ describe("bootstrap validation of pagination.since.field", () => {
         defaults: {
           pagination: { strategy: "since", since: { field: "occurredAt" } },
         },
-      } as never).createCrud(Event, { allowlists: { filterable: { exclude: ["occurredAt"] } } } as never, {
+      } as never).createCrud(Event, { allowed: { filterable: { exclude: ["occurredAt"] } } } as never, {
         adapter: new InMemoryEventAdapter(),
         metadata: eventMetadata,
       }),
@@ -726,11 +726,11 @@ describe("bootstrap validation of pagination.since.field — the selectable allo
   // selectable half is what lets the engine read the next boundary back
   // off a returned row. Both are required, and each fails with its own
   // wording so the adopter knows which allowlist to fix.
-  function bootstrap(allowlists: unknown) {
+  function bootstrap(allowed: unknown) {
     return () =>
       createKavo({
         defaults: { pagination: { strategy: "since", since: { field: "occurredAt" } } },
-      } as never).createCrud(Event, { allowlists } as never, {
+      } as never).createCrud(Event, { allowed } as never, {
         adapter: new InMemoryEventAdapter(),
         metadata: eventMetadata,
       });

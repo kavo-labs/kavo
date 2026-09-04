@@ -30,7 +30,7 @@ import { hasPermission } from "./owner.policy.js";
  * these events over `text/event-stream`.
  *
  * Search: `GET /owners?search[query]=ada` free-text searches every own
- * string column — `name` and `email` — since `allowlists.searchable` is
+ * string column — `name` and `email` — since `allowed.searchable` is
  * left unconfigured here (contrast Cat's explicit array): the zero-config
  * default. `search[fields]=name` narrows a given request to just one.
  *
@@ -69,7 +69,7 @@ import { hasPermission } from "./owner.policy.js";
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves
   // to every own column except this one, without hand-enumerating the rest.
-  allowlists: {
+  allowed: {
     filterable: { exclude: ["deletedAt"] },
     sortable: { exclude: ["deletedAt"] },
     selectable: { exclude: ["deletedAt"] },

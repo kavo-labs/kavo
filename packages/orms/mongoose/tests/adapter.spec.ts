@@ -595,7 +595,7 @@ describe("MongooseRepositoryAdapter — a malformed id is only a 404 when an id 
 describe("MongooseRepositoryAdapter — relation paths are refused, not silently dropped", () => {
   it("rejects a filter on an allowlisted relation path", async () => {
     const books = kavo.createCrud(models.Book, {
-      allowlists: { filterable: ["title", "author.name"] },
+      allowed: { filterable: ["title", "author.name"] },
     } as never) as unknown as DefaultKavoService<Book>;
 
     const error = await rejectionOf(
@@ -629,7 +629,7 @@ describe("MongooseRepositoryAdapter — relation paths are refused, not silently
 
   it("rejects a sort on an allowlisted relation path", async () => {
     const books = kavo.createCrud(models.Book, {
-      allowlists: { sortable: ["title", "author.name"] },
+      allowed: { sortable: ["title", "author.name"] },
     } as never) as unknown as DefaultKavoService<Book>;
 
     const error = await rejectionOf(books.findMany({ sort: [{ field: "author.name" as never, direction: "asc" }] }));

@@ -38,7 +38,7 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     purgeOne: true,
   },
   pagination: { defaultLimit: 10, maxLimit: 50 },
-  allowlists: {
+  allowed: {
     filterable: ["_id", "title", "status", "tags", "author"],
     sortable: ["_id", "title", "createdAt"],
     selectable: ["_id", "title", "status", "tags", "body", "createdAt"],

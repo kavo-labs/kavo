@@ -131,7 +131,7 @@ type DtoOverrideField = "input" | "output" | "query";
  * standard operation — `StandardOperationsConfig` (`config/entity-config.ts`)
  * makes the same rule unrepresentable at the type level via `Pick`; this
  * is its runtime mirror, for configs built from an erased or cast type
- * (the same defence `resolveAllowlists` and `rejectComputedWriteDtoKeys`
+ * (the same defence `resolveAllowed` and `rejectComputedWriteDtoKeys`
  * apply to their own structural invariants). `deleteOne`/`purgeOne` are
  * void results with no query — neither field applies.
  */
@@ -331,7 +331,7 @@ export function createOperationRegistry<Entity extends object>(
  * way of getting it wrong is knowable then. The type system rejects most of
  * these already (`CustomOperationConfig` requires `handler` and closes
  * `kind`/`cardinality` to their unions); this is the runtime mirror, for
- * configs that arrive erased or cast — the same defence `resolveAllowlists`
+ * configs that arrive erased or cast — the same defence `resolveAllowed`
  * and `rejectComputedWriteDtoKeys` apply to their own invariants.
  */
 function registerCustomOperation<Entity extends object>(

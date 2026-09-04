@@ -1,10 +1,10 @@
-# ADR-0028 — Relation inclusion permission moves into `allowlists.includable`
+# ADR-0028 — Relation inclusion permission moves into `allowed.includable`
 
 **Status:** accepted
 
 ## Context
 
-`QueryAllowlists` (`filterable`/`sortable`/`selectable`, entity-config.ts) is
+`QueryAllowed` (`filterable`/`sortable`/`selectable`, entity-config.ts) is
 where every other request/response permission gate lives, and each key is
 typed against the entity's real paths (`FieldPath<Entity>`), so a typo fails
 at compile time. `include=` permission lived somewhere else entirely:
@@ -37,7 +37,7 @@ schema is not the layer to fix half a documented inconsistency.
 
 ## Decision
 
-**`includable` moves onto `QueryAllowlists`, typed against the entity's own
+**`includable` moves onto `QueryAllowed`, typed against the entity's own
 top-level relation names.** `IncludePath<Entity, 1>` — `IncludePath` capped
 to depth 1 — is exactly that set: `include=` grants permission one relation
 segment at a time from the root (`blog` is the unit `includable` grants;
@@ -49,7 +49,7 @@ array-or-`{ exclude }` shape.
 **`relations.edges` keeps only loading tuning.** `RelationEdgeSettings` drops
 `includable`; `defaultInclude`/`maxDepth`/`strategy` stay exactly where they
 were, because they are not a permission question — a relation `edges` tunes
-without also being named in `allowlists.includable` still validates and
+without also being named in `allowed.includable` still validates and
 applies its tuning, but grants nothing. This is the same split ADR-0026 drew
 between `selectable` (a permission/projection gate) and everything else
 `KavoSettings` tunes.
@@ -62,7 +62,7 @@ relation" when unconfigured (a disclosure posture: a client cannot even probe
 whether a relation exists until config says so — the same fail-closed
 reasoning `errors/message-hints.ts`'s disclosure rule documents for the
 rejection message itself). Moving the key does not get to also flip that
-default; `resolveAllowlists` (`resolve-entity-config.ts`) resolves
+default; `resolveAllowed` (`resolve-entity-config.ts`) resolves
 `includable` through its own resolver, `resolveIncludableSelector`, returning
 `[]` on `undefined` where every other key's resolver returns its base set.
 
@@ -74,18 +74,18 @@ _default_, not in how `{ exclude }` resolves once written.
 **The typo fail-fast moves with the permission, not with the tuning.**
 `DefaultRelationRegistry` now takes `includable` (resolved names) and `edges`
 (tuning) as two separate parameters. A name in `includable` that is not a
-real relation throws `ConfigurationException` at `allowlists.includable`; a
+real relation throws `ConfigurationException` at `allowed.includable`; a
 name in `edges` that is not a real relation still throws too, at
 `relations.edges.<name>` — the tuning-only entry gets the same fail-fast
 treatment it always had, it just no longer doubles as a permission grant.
 
 **The `defaultInclude` vs. permission cross-check moves out of
 `validateSettings`.** `defaultInclude: true` on a relation the entity did not
-open (`allowlists.includable`) is still a bootstrap `ConfigurationException`
+open (`allowed.includable`) is still a bootstrap `ConfigurationException`
 — "it would load a relation clients cannot ask for" — but `validateSettings`
 only ever sees `KavoSettings`, which no longer carries permission at all. The
 check is now `validateIncludableRelations` in `resolve-entity-config.ts`, run
-after `allowlists` resolves, alongside `validateDefaultSort`/
+after `allowed` resolves, alongside `validateDefaultSort`/
 `validateSincePagination`, which already cross-check settings against a
 resolved allowlist for the same reason.
 
@@ -93,21 +93,21 @@ resolved allowlist for the same reason.
 
 **This is a breaking change to `EntityConfig`/`RelationEdgeSettings`'s public
 shape.** Any app writing `relations.edges.<name>.includable` needs a
-migration: move the relation names to `allowlists.includable`, keep any
+migration: move the relation names to `allowed.includable`, keep any
 `maxDepth`/`strategy` on `relations.edges.<name>` as before. `defaultInclude`
 needs more care than a mechanical move if it was set at **global**
 (`defaults`) scope — see the next consequence.
 
 **`includable` can no longer be set at global (`createKavo`) or per-operation
 scope, and a global `defaultInclude` now fails loudly instead of silently.**
-`allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS` — it merges
+`allowed` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS` — it merges
 from nowhere but the entity's own `EntityConfig`, exactly like
 `filterable`/`sortable`/`selectable` already did (`swagger.ts` documents the
 same limitation for those three). Before this change, a global
 `defaults.relations.edges.<name>.defaultInclude: true` was safe: naming the
 relation in `edges` at all was itself the opt-in, so it needed no companion
 grant. It is not safe to leave in place now — `validateIncludableRelations`
-cross-checks `defaultInclude` against `allowlists.includable`, which cannot
+cross-checks `defaultInclude` against `allowed.includable`, which cannot
 be set at that same global scope, so a global `defaultInclude: true` with no
 matching entity-level grant is a bootstrap `ConfigurationException` on every
 entity that happens to have a relation of that name. This is deliberate
@@ -116,7 +116,7 @@ dropping the setting, which would be `defaultInclude`'s own contract broken
 silently), but it means the migration is not purely mechanical for this one
 sub-key: `defaultInclude` set at global scope has to move down to each
 entity's own `relations.edges.<name>`, alongside that entity's
-`allowlists.includable` grant, not just have its host relation renamed.
+`allowed.includable` grant, not just have its host relation renamed.
 Separately: a relation reachable only through `include=` and never given its
 own `createCrud`/`@Kavo` call — legitimate, and covered in doc 12 §2 — can no
 longer have that relation's own further relations opened by a caller-side
@@ -130,7 +130,7 @@ appended. Any caller constructing one directly (outside the
 `resolveEntityConfig` call this ADR's decision lives in) needs to add the new
 `includable: readonly string[]` argument in the right position.
 
-**Swagger's `include`/`select[relation]` docs read `allowlists.includable`
+**Swagger's `include`/`select[relation]` docs read `allowed.includable`
 instead of `relations.edges`, with one added case.** `{ exclude }` cannot be
 resolved at `@Kavo` decoration time (no ORM metadata exists yet, ADR-0012) —
 the same limitation the other three allowlist keys already have — so
@@ -153,7 +153,7 @@ allowlist whose whole posture is fail-closed by default. Unlike
 `selectable`'s version of the hazard, which costs one served column, this one
 would have cost the entire relation surface. `resolveIncludableSelector`
 therefore checks `{ exclude }`'s names against the entity's real relations
-and throws `ConfigurationException` at `allowlists.includable.exclude` on a
+and throws `ConfigurationException` at `allowed.includable.exclude` on a
 typo, the same fail-fast treatment the plain-array form already had.
 `IncludePath<Entity, 1>` still catches most typos at compile time for a
 properly typed config; this check is what catches the rest — a config built
@@ -163,8 +163,8 @@ lean-document shape (ADR-0017, ADR-0018).
 
 ## References
 
-- ADR-0026 (`allowlists.selectable` narrows the response projection), the
-  precedent for treating `allowlists` as the request/response permission
+- ADR-0026 (`allowed.selectable` narrows the response projection), the
+  precedent for treating `allowed` as the request/response permission
   surface and for splitting a permission gate out of unrelated tuning.
 - ADR-0008 (field-path recursion cap), whose depth counter `IncludePath`
   reuses and this decision caps at 1.

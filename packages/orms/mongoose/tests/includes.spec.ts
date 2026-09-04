@@ -69,28 +69,28 @@ beforeAll(async () => {
   // string. The interfaces above are the shape the service actually
   // returns, which is what these tests assert.
   blogs = kavo.createCrud(models.Blog, {
-    allowlists: { includable: ["articles"] },
+    allowed: { includable: ["articles"] },
   }) as unknown as DefaultKavoService<Blog>;
   articles = kavo.createCrud(models.Article, {
     softDelete: { field: "deletedAt" },
-    allowlists: { includable: ["blog", "notes"] },
+    allowed: { includable: ["blog", "notes"] },
   } as never) as unknown as DefaultKavoService<Article>;
   kavo.createCrud(models.Note);
   // Its own root instance so this Article config does not clobber the one
   // above in the shared catalog (issue #364).
   keyArticles = createMongooseKavo(database.connection).createCrud(models.Article, {
     softDelete: { field: "deletedAt" },
-    allowlists: { includable: ["blog"] },
+    allowed: { includable: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as unknown as DefaultKavoService<Article>;
   const nestedKavo = createMongooseKavo(database.connection);
   nestedKavo.createCrud(models.Article, {
     softDelete: { field: "deletedAt" },
-    allowlists: { includable: ["blog"] },
+    allowed: { includable: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(models.Blog, {
-    allowlists: { includable: ["articles"] },
+    allowed: { includable: ["articles"] },
   }) as unknown as DefaultKavoService<Blog>;
 });
 

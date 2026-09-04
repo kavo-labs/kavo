@@ -135,7 +135,7 @@ Each read route's own \`include\` parameter description names which relations ar
  * exactly when decoration time can name the entity's actual allowlisted
  * fields (issue #171):
  *
- * `allowlists` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
+ * `allowed` sits outside `resolveEntityConfig`'s `SETTINGS_KEYS`
  * (`packages/core/src/config/resolve-entity-config.ts`): it merges from
  * nowhere but the entity's own `EntityConfig` — no global default, no
  * per-operation override — so, unlike `cache.etag` (see
@@ -143,7 +143,7 @@ Each read route's own \`include\` parameter description names which relations ar
  * miss. Only its **shape** limits what can be
  * read here: an explicit array selector is used verbatim by
  * `resolveFieldSelector`, with no ORM metadata involved, so it is exactly
- * the value `ResolvedEntityConfig.allowlists` will carry — reading it off
+ * the value `ResolvedEntityConfig.allowed` will carry — reading it off
  * the raw config is not a guess. The unconfigured default and `{ exclude }`
  * both resolve against the entity's own columns, which come from ORM
  * metadata that does not exist yet at `@Kavo` decoration time (ADR-0012) —
@@ -152,11 +152,11 @@ Each read route's own \`include\` parameter description names which relations ar
  * general guide, rather than imply a narrower list than actually exists.
  */
 function listQueryParams(config: EntityConfig<object> | undefined): readonly { name: string; description?: string }[] {
-  const allowlists = config?.allowlists;
+  const allowed = config?.allowed;
   return [
-    { name: "filter", description: allowedFieldsDescription(allowlists?.filterable) },
-    { name: "sort", description: allowedFieldsDescription(allowlists?.sortable) },
-    { name: "select", description: allowedFieldsDescription(allowlists?.selectable) },
+    { name: "filter", description: allowedFieldsDescription(allowed?.filterable) },
+    { name: "sort", description: allowedFieldsDescription(allowed?.sortable) },
+    { name: "select", description: allowedFieldsDescription(allowed?.selectable) },
   ];
 }
 
@@ -455,7 +455,7 @@ export function applyConditionalRequestDocs(
  *
  * Unlike `filter`/`sort`/`select` at decoration time, this late binding is
  * strictly *better* documentation for `search[fields]`, not a fallback:
- * `service.engine.config.allowlists.searchable` is the fully **resolved**
+ * `service.engine.config.allowed.searchable` is the fully **resolved**
  * allowlist (ORM metadata already exists by `onModuleInit`), so the
  * `{ exclude }`/unconfigured-default cases that leave `filter`/`sort`/
  * `select` undescribed at decoration time (`listQueryParams`'s doc comment)
@@ -605,7 +605,7 @@ export function applyPaginationDocs(
  * runs `registerKavoSchemas` sees the raw blob on the route instead.
  *
  * Deferred to bind time for the same reason as `applyPaginationDocs`: the
- * resolved `allowlists.sortable` / `allowlists.includable` and the
+ * resolved `allowed.sortable` / `allowed.includable` and the
  * precedence-merged `pagination.strategy` only exist once
  * `KavoBinder.onModuleInit` runs, never at `@Kavo` decoration (ADR-0012,
  * ADR-0028, ADR-0030). An app with no `KavoModule.forRoot`/`forRootAsync`
@@ -626,7 +626,7 @@ export function applyPaginationDocs(
  *   carrying `UNPAGINATED_DESCRIPTION`, exactly as `applyPaginationDocs`
  *   annotates rather than drops `limit`/`offset` (ADR-0030).
  * - **`include`** — an array whose items enum the resolved
- *   `allowlists.includable` **top-level** relation names (`IncludePath<_, 1>`
+ *   `allowed.includable` **top-level** relation names (`IncludePath<_, 1>`
  *   — `blog`, not `blog.name`; `entity-config.ts` §"the unit `includable`
  *   grants"). A nested path is formed by dotting into one at request time,
  *   governed by the target entity's own config and `relations.maxIncludeDepth`,
@@ -637,7 +637,7 @@ export function applyPaginationDocs(
  *   wire value is a comma-separated *string*, so a bare
  *   `{ type: "string", enum }` would be a lie (`include=a,b` matches no
  *   member) — modelling the parsed value as `array<enum>` is honest.
- * - **`sort`** — the same `array<enum>` form over `allowlists.sortable`,
+ * - **`sort`** — the same `array<enum>` form over `allowed.sortable`,
  *   with each token present both bare (ascending) and `-`-prefixed
  *   (descending) so the enum stays machine-checkable rather than pushing the
  *   sign into a `pattern` a generator would ignore. An explicit empty
@@ -968,7 +968,7 @@ const alreadyBodySchemaDocumented = new WeakSet<object>();
  * undocumented (issue #264). Deferred to bind time for the same reason as
  * `applyConditionalRequestDocs`/`applySearchQueryDocs`/`applyPaginationDocs`:
  * the entity's own columns (`EntityMetadata.fields`) don't exist yet at
- * `@Kavo` decoration time (ADR-0012), and `allowlists.creatable`/`updatable`
+ * `@Kavo` decoration time (ADR-0012), and `allowed.creatable`/`updatable`
  * need the full precedence chain to be final.
  *
  * `KavoBinder.onModuleInit` calls this only when it re-derives that
@@ -982,7 +982,7 @@ const alreadyBodySchemaDocumented = new WeakSet<object>();
  * actually allow — generated columns excluded the same way the default
  * deserializer already strips them from write payloads — but deliberately
  * carries no `additionalProperties: false`: `creatable`/`updatable` narrow
- * *silently* (`docs/features/allowlists.md`'s opening line), the same way an
+ * *silently* (`docs/features/allowed.md`'s opening line), the same way an
  * unknown body key already does, so declaring the schema closed would tell a
  * validating client/gateway that a body Kavo actually accepts is invalid.
  * A schema that ends up with no properties at all still has to read as "no
@@ -1013,10 +1013,10 @@ export function applyBodySchemaDocs(
   methodName: string,
   descriptor: OperationDescriptor<object>,
   metadata: EntityMetadata<object>,
-  allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
+  writableAllowed: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
   relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
 ): void {
-  const allowed = allowedFieldsFor(descriptor.id, allowlists);
+  const allowed = allowedFieldsFor(descriptor.id, writableAllowed);
   if (allowed === null) {
     return;
   }
@@ -1090,14 +1090,14 @@ export function applyBodySchemaDocs(
 
 function allowedFieldsFor(
   id: string,
-  allowlists: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
+  allowed: { readonly creatable: readonly string[]; readonly updatable: readonly string[] },
 ): readonly string[] | null {
   switch (id) {
     case "createOne":
-      return allowlists.creatable;
+      return allowed.creatable;
     case "updateOne":
     case "patchOne":
-      return allowlists.updatable;
+      return allowed.updatable;
     default:
       return null;
   }
@@ -1337,7 +1337,7 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * documented a shape that has nothing to do with `selectable`, so this
  * leaves it alone. Deferred to bind time for the same reason as
  * `applyBodySchemaDocs`: both `metadata.fields` and the fully resolved
- * `allowlists.selectable` only exist once `KavoBinder.onModuleInit` runs.
+ * `allowed.selectable` only exist once `KavoBinder.onModuleInit` runs.
  *
  * A second `ApiResponse({ status, schema })` call for the same status
  * *replaces* the existing entry's `schema` while preserving its
@@ -1359,7 +1359,7 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * an own property `Object.assign` copies over), so the narrowed `schema`
  * is what the document actually emits.
  *
- * A relation on `allowlists.includable` (ADR-0028) can be embedded in the
+ * A relation on `allowed.includable` (ADR-0028) can be embedded in the
  * row (`?include=word`), so it is emitted as an **optional** property —
  * never in `required`, since it is only present when `include=` asks for
  * it, and this shape is shared with the write responses, which never
@@ -1451,7 +1451,7 @@ export function applyResponseSchemaDocs(
   // column backs them — but the engine serializes them into every response
   // and the resolved `selectable` allowlist carries their names by default.
   // Gate them by the same `selectable` check as the columns above, so an
-  // explicit `allowlists.selectable` that omits or `exclude`s one (ADR-0026),
+  // explicit `allowed.selectable` that omits or `exclude`s one (ADR-0026),
   // or a `selectable: false` descriptor, drops it here too. Computed
   // descriptors carry no type information, so the fragment is left untyped
   // and nullable rather than coerced to `string` (issue #302).
@@ -1464,7 +1464,7 @@ export function applyResponseSchemaDocs(
   // An includable relation (ADR-0028) is embedded only when `include=` asks
   // for it, so it is an *optional* property — appended after the column and
   // computed loops so those keep their exact order, and never pushed to
-  // `required`. Driven off the resolved `allowlists.includable` names rather
+  // `required`. Driven off the resolved `allowed.includable` names rather
   // than `RelationDescriptor.includable`, which reflects the ORM-derived
   // metadata, not the config grant.
   for (const relationName of includable) {
@@ -1588,11 +1588,11 @@ function schemaForHint(hint: SchemaHint, entityName: string): object {
 
 /**
  * Relation names this entity's config opens to `include=`
- * (`allowlists.includable`, ADR-0028) — or `null` when decoration time
+ * (`allowed.includable`, ADR-0028) — or `null` when decoration time
  * cannot know the set at all.
  *
  * Unlike `filterable`/`sortable`/`selectable`, `includable` is opt-in: an
- * unconfigured key resolves to `[]`, not "every relation" (`resolveAllowlists`
+ * unconfigured key resolves to `[]`, not "every relation" (`resolveAllowed`
  * in core), and that default needs no ORM metadata to compute — so `undefined`
  * here is a real, known empty set, not an unknown one. Only an `{ exclude }`
  * selector is unresolvable without ORM metadata (same limitation
@@ -1601,7 +1601,7 @@ function schemaForHint(hint: SchemaHint, entityName: string): object {
  * that may well do something.
  */
 function includableRelations(config: EntityConfig<object> | undefined): readonly string[] | null {
-  const selector = (config?.allowlists as { includable?: RelationFieldSelector<object> } | undefined)?.includable;
+  const selector = (config?.allowed as { includable?: RelationFieldSelector<object> } | undefined)?.includable;
   if (selector === undefined) {
     return [];
   }

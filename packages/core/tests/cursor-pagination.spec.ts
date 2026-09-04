@@ -483,7 +483,7 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
   function configWith(
     defaultSort: readonly Sort<User>[],
     strategy = "cursor",
-    allowlists: Partial<typeof DEFAULT_ALLOWLISTS> = {},
+    allowed: Partial<typeof DEFAULT_ALLOWLISTS> = {},
   ): ResolvedEntityConfig<User> {
     const settings = {
       pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true },
@@ -497,7 +497,7 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
       entityName: "User",
       settings,
       settingsFor: () => settings,
-      allowlists: { ...DEFAULT_ALLOWLISTS, ...allowlists },
+      allowed: { ...DEFAULT_ALLOWLISTS, ...allowed },
       softDelete: { strategy: "hard", field: "deletedAt" },
       dto: { resolve: () => null },
       relations: { all: () => [], get: () => undefined },

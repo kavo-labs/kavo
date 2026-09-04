@@ -31,7 +31,7 @@ function resolveArrayMutationStrategy(
 /**
  * Map-backed relation registry, built once at bootstrap from three
  * sources: the adapter's ORM metadata supplies *shape* — name, target,
- * cardinality; `allowlists.includable` (`EntityConfig`, entity-config.ts)
+ * cardinality; `allowed.includable` (`EntityConfig`, entity-config.ts)
  * supplies *permission*; `relations.edges` (`KavoSettings`, settings.ts)
  * supplies loading *tuning* (`defaultInclude`/`maxDepth`/`strategy`) for a
  * relation once it is includable (ADR-0028), and array-mutation write
@@ -62,7 +62,7 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
         // exactly like working config until the first client asks.
         throw new ConfigurationException(
           entityName,
-          "allowlists.includable",
+          "allowed.includable",
           `'${name}' is not a relation of ${entityName} (relations: ${[...byName.keys()].join(", ") || "none"})`,
         );
       }

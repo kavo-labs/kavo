@@ -56,7 +56,7 @@ config, and per-entity `@Kavo(Entity, config)`). Split into
   errors, relations, arrayMutation, caching, softDelete, realtime. Written
   as task-based "how do I turn on X" sections rather than one table per
   field.
-- **`entity-config.md`** — `@Kavo(Entity, config)`: `dto`, `allowlists`,
+- **`entity-config.md`** — `@Kavo(Entity, config)`: `dto`, `allowed`,
   `computed`.
 - **`operations.md`** — per-entity `operations`, custom operations, reaching
   the database from a handler, custom list metadata.

@@ -27,7 +27,7 @@ function bookFilterable(): FilterableEntity {
   const crud = kavo.createCrud(Book, undefined, { adapter: new InMemoryBookAdapter(), metadata: bookMetadata });
   // Same erasure cast `kavo.ts`'s own `catalog.register` uses to hand a
   // concretely-typed `ResolvedEntityConfig<Book>` to a type-erased consumer
-  // — `Entity`'s variance in `ResolvedQueryAllowlists` makes a direct
+  // — `Entity`'s variance in `ResolvedQueryAllowed` makes a direct
   // assignment to the `object`-parameterized shape fail structurally, even
   // though it's sound at runtime.
   return {
@@ -543,7 +543,7 @@ describe("createTransport — subscribe-time filtering (issue #160)", () => {
           },
         ],
       } as unknown as EntityMetadata<Book>;
-      const crud = kavo.createCrud(Book, { allowlists: { filterable: ["title", "status", "author"] } } as never, {
+      const crud = kavo.createCrud(Book, { allowed: { filterable: ["title", "status", "author"] } } as never, {
         adapter: new InMemoryBookAdapter(),
         metadata,
       });

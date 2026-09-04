@@ -112,7 +112,7 @@ export function allowlistHint(
   return (
     (suggestion === undefined ? "" : ` Did you mean '${suggestion}'?`) +
     ` ${ALLOWLIST_ADJECTIVES[usage]} fields on ${entityName}: ${nameList(allowed)}.` +
-    ` If ${entityName} has a '${field}' column, add it to allowlists.${ALLOWLIST_KEYS[usage]}` +
+    ` If ${entityName} has a '${field}' column, add it to allowed.${ALLOWLIST_KEYS[usage]}` +
     ` on the ${entityName} config to permit it.`
   );
 }

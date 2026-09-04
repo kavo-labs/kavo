@@ -81,7 +81,7 @@ void primitiveArray;
 
 /**
  * `IncludePath<Entity, 1>` is what `RelationFieldSelector` (entity-config.ts,
- * ADR-0028) types `allowlists.includable` against: exactly the entity's own
+ * ADR-0028) types `allowed.includable` against: exactly the entity's own
  * top-level relation names, with no dotted nesting — `include=` grants
  * permission one relation segment at a time from the root, the same unit
  * `relations.edges` keyed on before this change.

@@ -54,7 +54,7 @@ function selectionSet(selection: readonly string[] | null | undefined): Readonly
  * 1. An explicit DTO class with initialized fields → its key set.
  * 2. Otherwise the entity-derived default: every scalar column from
  *    adapter metadata, plus every declared computed field (ADR-0019),
- *    **intersected with an explicitly configured `allowlists.selectable`**
+ *    **intersected with an explicitly configured `allowed.selectable`**
  *    (ADR-0026). A DTO wins outright: it is the narrower, more specific
  *    statement, and intersecting the two would make a DTO that deliberately
  *    exposes a field silently not do so.
@@ -221,7 +221,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
 
 /**
  * The entity-derived key set, narrowed to an explicitly configured
- * `allowlists.selectable` (ADR-0026). `null` leaves it alone, which is what
+ * `allowed.selectable` (ADR-0026). `null` leaves it alone, which is what
  * an entity that never configured the key gets.
  *
  * Filtering the derived list rather than using the allowlist directly keeps
@@ -316,7 +316,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // A composite-key entity (issue #261) has no single `idField` to
     // exclude — its key columns are a natural key the client legitimately
     // supplies on `createOne`, so the derived default keeps them (narrowed
-    // back out of `updatable`'s default in `resolveAllowlists`, which is
+    // back out of `allowed.updatable`'s default in `resolveAllowed`, which is
     // what actually keeps them immutable after creation).
     const columns = metadata.fields
       .filter(
@@ -387,10 +387,10 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
   }
 
   /**
-   * Narrows {@link writableProjection} by `allowlists.creatable`/
-   * `updatable` (issue #259) for the operation the call is actually
-   * making — `createOne` reads `creatable`, `updateOne`/`patchOne` read
-   * `updatable`, and every other operation (a custom write) is left
+   * Narrows {@link writableProjection} by `allowed.creatable`/
+   * `allowed.updatable` (issue #259) for the operation the call is actually
+   * making — `createOne` reads `allowed.creatable`, `updateOne`/`patchOne` read
+   * `allowed.updatable`, and every other operation (a custom write) is left
    * unnarrowed, since neither key names it. Both lists already default to
    * the same base this class derives on its own, so an entity that never
    * configured either sees no change: the filter is a no-op intersection.
@@ -400,21 +400,21 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
    * that never went through the engine.
    */
   private narrowToWritableAllowlist(context: KavoContext<Entity>): readonly string[] {
-    const allowlists = context.config?.allowlists;
-    if (allowlists === undefined) {
+    const allowed = context.config?.allowed;
+    if (allowed === undefined) {
       return this.writableProjection;
     }
     let allowlist: readonly string[] | undefined;
     if (context.operation === "createOne") {
-      allowlist = allowlists.creatable as readonly string[];
+      allowlist = allowed.creatable as readonly string[];
     } else if (context.operation === "updateOne" || context.operation === "patchOne") {
-      allowlist = allowlists.updatable as readonly string[];
+      allowlist = allowed.updatable as readonly string[];
     }
     if (allowlist === undefined) {
       return this.writableProjection;
     }
-    const allowed = new Set(allowlist);
-    return this.writableProjection.filter((key) => allowed.has(key));
+    const allowedSet = new Set(allowlist);
+    return this.writableProjection.filter((key) => allowedSet.has(key));
   }
 }
 

@@ -95,7 +95,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       // A name that is not a relation at all and a relation the config never
       // opted in are the same rejection to the client, deliberately: the
       // registry keeps every metadata relation and flips `includable` only
-      // for names on `allowlists.includable` (ADR-0028), so wording the two
+      // for names on `allowed.includable` (ADR-0028), so wording the two
       // differently would confirm the existence of the relations that
       // allowlist closed on purpose (the disclosure rule in
       // `errors/message-hints.ts`). What issue #7 was actually about — the
@@ -112,7 +112,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
             `${suggestion(draft.name, includable)}` +
             ` Includable relations on ${owner.entityName}: ${nameList(includable)}.` +
             ` If ${owner.entityName} has a '${draft.name}' relation, opt in by naming it in` +
-            ` allowlists.includable on the ${owner.entityName} config.`,
+            ` allowed.includable on the ${owner.entityName} config.`,
         });
         continue;
       }
@@ -312,7 +312,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
       });
       return null;
     }
-    const allowed = target.allowlists.selectable as readonly string[];
+    const allowed = target.allowed.selectable as readonly string[];
     const fields: string[] = [];
     for (const field of requested) {
       if (!allowed.includes(field)) {

@@ -47,7 +47,7 @@ metadata from Prisma's DMMF, so an empty `class Book {}` still produces
 working routes. But the declared fields are what type `createCrud`'s generic
 parameters, so an empty marker class collapses `Entity` to `{}` and every
 typed surface built on it silently stops checking anything:
-`allowlists.filterable`/`sortable`/`selectable`, `query.defaultSort`, and the
+`allowed.filterable`/`sortable`/`selectable`, `query.defaultSort`, and the
 DTO slot generics all stop rejecting misspelled field names at compile time.
 
 Name-matching is what binds class to model, so a marker class named `Books`
@@ -127,7 +127,7 @@ about the database underneath them.
 
 ## Where to go next
 
-- Routes, allowlists, relations, per-operation overrides → `kavo-decorator`
+- Routes, allowed, relations, per-operation overrides → `kavo-decorator`
 - The `filter`/`sort`/`fields`/`include` wire grammar → `query-grammar`
 - Narrowing request/response shapes → `dto-slots`
 - Soft delete (declared in config, as with every non-TypeORM adapter) →

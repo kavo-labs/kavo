@@ -58,14 +58,14 @@ export interface SseTransportOptions {
    * app already configured via `createCrud` — this package has no config
    * resolution of its own, so the caller supplies the lookup. A request
    * naming a `fields` query param outside the allowlist is rejected with
-   * `400` before the stream opens, the same way `allowlists.selectable`
+   * `400` before the stream opens, the same way `allowed.selectable`
    * rejects an unlisted field over REST. Returning `undefined` (including
    * when the callback itself is omitted) means no allowlist is configured
    * for that entity, so any requested field is accepted.
    *
    * Once configured, this allowlist is also enforced **unconditionally** on
    * every outgoing `item` for that entity — not only when a subscriber
-   * names `fields` — the same way `allowlists.selectable` bounds a REST
+   * names `fields` — the same way `allowed.selectable` bounds a REST
    * response whether or not the caller asked for a subset. A `fields`
    * query param narrows further *within* that bound; it can never widen
    * past it.
