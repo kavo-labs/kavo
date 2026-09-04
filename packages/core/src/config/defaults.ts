@@ -16,23 +16,23 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // bootstrap `ConfigurationException`, not a silent fallback.
     since: Object.freeze({ field: "updatedAt" }),
   }),
-  query: Object.freeze({
-    maxFilterDepth: 3,
-    maxInValues: 100,
-    maxLikePatternLength: 200,
-    // Off by default, the same `false` sentinel `softDelete`/`realtime` use:
-    // `search[query]` is rejected until an entity or operation scope sets an
-    // object, even though `searchable`'s own default is permissive (doc 05
-    // §4). Any object turns it on; `mode`/`driver` are backfilled from
-    // `substring`/`orm` in `resolveEntityConfig`.
-    search: false,
+  limits: Object.freeze({
+    filterDepth: 3,
+    inValues: 100,
+    likePattern: 200,
+    includeDepth: 2,
+    includedNodes: 10,
   }),
+  // Off by default, the same `false` sentinel `softDelete`/`realtime` use:
+  // `search[query]` is rejected until an entity or operation scope sets an
+  // object, even though `searchable`'s own default is permissive (doc 05
+  // §4). Any object turns it on; `mode`/`driver` are backfilled from
+  // `substring`/`orm` in `resolveEntityConfig`.
+  search: false,
   errors: Object.freeze({
     exposeInternals: false,
   }),
   relations: Object.freeze({
-    maxIncludeDepth: 2,
-    maxIncludedNodes: 10,
     // Inclusion is opt-in: with no edges configured, `include=` has
     // nothing to reach.
     edges: Object.freeze({}),

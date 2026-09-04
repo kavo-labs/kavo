@@ -204,7 +204,7 @@ describe("@Kavo route generation", () => {
  * allowlist (every own string column) with no explicit configuration.
  */
 describe("@Kavo search[...] (issue #156)", () => {
-  @Kavo(Todo, { query: { search: {} } })
+  @Kavo(Todo, { search: {} })
   @Controller("todos")
   class SearchController {}
 
@@ -1740,13 +1740,13 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
  * `search[query]`/`search[mode]`/`search[fields]` docs (issue #156) are
  * applied later than the rest — deferred to `KavoModule`'s discovery binder
  * (`applySearchQueryDocs`), because whether they belong on the route
- * depends on whether `query.search` resolved to an object through the full precedence
+ * depends on whether `search` resolved to an object through the full precedence
  * chain, and `allowed.searchable`'s default/`{ exclude }` cases need ORM
  * metadata that doesn't exist at `@Kavo` decoration time.
  */
 describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   it("documents search[query]/search[mode]/search[fields] with the resolved searchable allowlist when enabled", async () => {
-    @Kavo(Todo, { query: { search: {} } })
+    @Kavo(Todo, { search: {} })
     @Controller("todos")
     class SearchDocsController {}
 
@@ -1779,7 +1779,7 @@ describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   });
 
   it("documents an explicit empty searchable allowlist as a closed door", async () => {
-    @Kavo(Todo, { query: { search: {} }, allowed: { searchable: [] } })
+    @Kavo(Todo, { search: {}, allowed: { searchable: [] } })
     @Controller("todos")
     class EmptySearchableController {}
 
@@ -3993,7 +3993,7 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
     // `search` isn't a component of its own — inlined only.
     const select = query?.properties?.select as { items?: { enum?: string[] } };
     expect(select.items?.enum).toEqual(["id", "title", "done", "priority", "deletedAt"]);
-    // `query.search` resolves `false` by default — no `search` property.
+    // `search` resolves `false` by default — no `search` property.
     expect(query?.properties?.search).toBeUndefined();
   });
 
@@ -4013,8 +4013,8 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
     expect(schemas(doc).TodoFilter?.description).toBe("No field is filterable.");
   });
 
-  it("inlines a search property on <Entity>Query only when query.search resolves to an object", async () => {
-    @Kavo(Todo, { query: { search: { mode: "words" } }, allowed: { searchable: ["title"] } })
+  it("inlines a search property on <Entity>Query only when search resolves to an object", async () => {
+    @Kavo(Todo, { search: { mode: "words" }, allowed: { searchable: ["title"] } })
     @Controller("todos")
     class C {}
 

@@ -448,7 +448,7 @@ export function applyConditionalRequestDocs(
  * The `search[query]`/`search[mode]`/`search[fields]` params on a list
  * route (issue #156) — deferred the same way `applyConditionalRequestDocs`
  * is, and for the same reason: whether they belong on the route depends on
- * whether `query.search` resolved to an object, through the *full* precedence chain
+ * whether `search` resolved to an object, through the *full* precedence chain
  * (built-in default → global → entity → operation), which only exists once
  * `KavoModule`'s discovery binder resolves the entity's config —
  * `KavoBinder.onModuleInit`, long after `@Kavo` decoration ran (ADR-0012).
@@ -629,7 +629,7 @@ export function applyPaginationDocs(
  *   `allowed.includable` **top-level** relation names (`IncludePath<_, 1>`
  *   — `blog`, not `blog.name`; `entity-config.ts` §"the unit `includable`
  *   grants"). A nested path is formed by dotting into one at request time,
- *   governed by the target entity's own config and `relations.maxIncludeDepth`,
+ *   governed by the target entity's own config and `limits.includeDepth`,
  *   so nested paths are deliberately *not* enumerated — the description says
  *   as much rather than let a client reject `include=a.b` that Kavo accepts.
  *   Omitted entirely when nothing is includable, matching
@@ -686,7 +686,7 @@ export function applyPaginationDocs(
  *   `sort`/`pagination`/`include`/`filter` `$ref` the entity's own other
  *   expected component names; `select`/`search` are inlined rather than
  *   hoisted, since this issue only asks for `Filter`/`Query` as named
- *   components. `search` is omitted when `query.search` doesn't resolve
+ *   components. `search` is omitted when `search` doesn't resolve
  *   to an object, the same gate `applySearchQueryDocs` uses.
  */
 const LIMIT_DESCRIPTION = "Page size, clamped to the configured maximum.";

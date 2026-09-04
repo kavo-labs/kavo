@@ -159,7 +159,7 @@ describe("evaluateFilter — logical operators", () => {
 
   it("nests AND and OR together", () => {
     // status = 'active' AND (age >= 65 OR age < 18) — within the default
-    // maxFilterDepth (3); NOT-nesting is covered on its own above.
+    // default limits.filterDepth (3); NOT-nesting is covered on its own above.
     const expression = filterOf({
       "filter[status][eq]": "active",
       "filter[or][0][age][gte]": "65",

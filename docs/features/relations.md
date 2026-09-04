@@ -1,8 +1,8 @@
 # Relations
 
-- `maxIncludeDepth` (default `2`): the max nesting depth for `include=` chains. `include=owner.tags` is depth 2.
-- `maxIncludedNodes` (default `10`): the max total number of included relation nodes per request, across every branch of the include tree.
-- `edges` (default `{}`): per-relation loading tuning, keyed by relation property name. See `relations.edges` below.
+- `limits.includeDepth` (default `2`): the max nesting depth for `include=` chains. `include=owner.tags` is depth 2.
+- `limits.includedNodes` (default `10`): the max total number of included relation nodes per request, across every branch of the include tree.
+- `relations.edges` (default `{}`): per-relation loading tuning, keyed by relation property name. See `relations.edges` below.
 
 Whether a relation may be included at all is a separate question, answered by `allowed.includable` (entity scope only). See [Allowed](/features/allowed) ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 
@@ -12,7 +12,7 @@ An entry in `edges` tunes loading for a relation that is already includable. It 
 
 ## `relations.edges.<name>` (`RelationEdgeSettings`)
 
-- `maxDepth` (default inherits `relations.maxIncludeDepth`): overrides the include-depth limit for the subtree below this relation only.
+- `maxDepth` (default inherits `limits.includeDepth`): overrides the include-depth limit for the subtree below this relation only.
 - `strategy` (default `"auto"`, or `"join"`/`"batch"`/`"key"`): controls how the relation loads. `join` runs a single query and is correct for to-one relations. `batch` runs a per-level `WHERE parentId IN (...)` and is correct for to-many relations. `auto` picks one of the two based on cardinality. `key` (owning-side to-one only) is the cheapest option when a caller wants nothing but the foreign key: it materializes the edge as `{ <pk>: value }` read straight off the parent row's own FK column — no join — and serializes a `null` FK as `null`. It grants no permission of its own (the edge is still includable only via `allowed.includable`), `select[<rel>]` may name only the primary key, and it is rejected at bootstrap on a to-many edge or an inverse `@OneToOne` (neither has a local FK). A composite-key target is not supported yet. How cheap it is depends on the ORM: MikroORM and Mongoose drop the edge's load entirely, TypeORM reads it from the row it already fetched for a many-to-one (one extra id-only query for an owning one-to-one), and Prisma still issues its own relation query but selects only the id.
 - `write` (default `false`): opts a to-many relation into `arrayMutation` writes (below). Two spellings: `write: true` opts in and inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` opts in and pins this relation's own strategy, independent of the entity default, so two relations on the same entity can use two different strategies.
 

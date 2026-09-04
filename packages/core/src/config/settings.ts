@@ -61,11 +61,23 @@ export interface SearchSettings {
   readonly driver: SearchDriver;
 }
 
-export interface QuerySettings {
+/**
+ * The request-cost ceilings — a filter's nesting depth, an `IN`/`NOT_IN`/
+ * `BETWEEN` array's length, a `like`/`ilike` pattern's character length, and
+ * relation-include depth/breadth. Consolidated into one block (issue #376,
+ * ADR-0047) so "the safety knobs" are discoverable in one place, distinct
+ * from the feature toggles that sit at the top level of `KavoSettings`. The
+ * `max` prefix each ceiling carried under `query`/`relations` is dropped
+ * here — the block name already says these are ceilings. `pagination.
+ * maxLimit` is the one exception: it stays in `pagination`, where `max`
+ * distinguishes it from `defaultLimit` and it is genuinely coupled to
+ * `strategy`.
+ */
+export interface LimitsSettings {
   /** Max nesting depth of the filter AST. */
-  readonly maxFilterDepth: number;
+  readonly filterDepth: number;
   /** Max array length for `IN`/`NOT_IN`/`BETWEEN` values. */
-  readonly maxInValues: number;
+  readonly inValues: number;
   /**
    * Max character length of a `like`/`ilike` pattern (issue #367 finding
    * 4). Values are always parameter-bound, so this is not an injection
@@ -73,15 +85,11 @@ export interface QuerySettings {
    * backtracking, e.g. `%a%b%c%…`) against an unindexed or relation-joined
    * column, which is otherwise unbounded.
    */
-  readonly maxLikePatternLength: number;
-  /**
-   * `search[query]` free-text search (doc 05 §4). `false` (the default)
-   * disables it — `search[query]` is rejected with a 400 until an entity or
-   * operation scope sets an object. The same `false` sentinel `softDelete`/
-   * `realtime` use; any object turns search on, with `mode`/`driver`
-   * backfilled from their defaults (`resolveEntityConfig`).
-   */
-  readonly search: SearchSettings | false;
+  readonly likePattern: number;
+  /** Max relation-include nesting depth (ADR-0008). Overridable per-subtree by `relations.edges.<name>.maxDepth`. */
+  readonly includeDepth: number;
+  /** Max total number of included relation nodes across the whole include tree. */
+  readonly includedNodes: number;
 }
 
 export interface ErrorSettings {
@@ -141,7 +149,7 @@ export interface DefaultsSettings {
  * a relation in `edges` no longer opts it in.
  */
 export interface RelationEdgeSettings {
-  /** Overrides `maxIncludeDepth` for the subtree below this node. */
+  /** Overrides `limits.includeDepth` for the subtree below this node. */
   readonly maxDepth?: number;
   readonly strategy?: RelationLoadStrategy;
   /**
@@ -172,10 +180,12 @@ export interface RelationEdgeSettings {
   readonly write?: boolean | { readonly strategy: ArrayMutationStrategy };
 }
 
-/** Relation inclusion limits and per-relation loading tuning. */
+/**
+ * Per-relation loading tuning. Inclusion *limits* live in `limits.
+ * includeDepth`/`limits.includedNodes` instead (issue #376) — this block is
+ * `edges` only.
+ */
 export interface RelationSettings {
-  readonly maxIncludeDepth: number;
-  readonly maxIncludedNodes: number;
   /**
    * Per-relation loading overrides, keyed by relation property name —
    * `maxDepth`/`strategy`/`write` only. Whether a relation is includable at
@@ -375,7 +385,16 @@ export interface AuthorizationSettings {
 /** The full settings tree. */
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
-  readonly query: QuerySettings;
+  /** The request-cost ceilings (issue #376) — filter depth, `IN` array length, `like` pattern length, include depth/breadth. */
+  readonly limits: LimitsSettings;
+  /**
+   * `search[query]` free-text search (doc 05 §4). `false` (the default)
+   * disables it — `search[query]` is rejected with a 400 until an entity or
+   * operation scope sets an object. The same `false` sentinel `softDelete`/
+   * `realtime` use; any object turns search on, with `mode`/`driver`
+   * backfilled from their defaults (`resolveEntityConfig`).
+   */
+  readonly search: SearchSettings | false;
   readonly errors: ErrorSettings;
   readonly relations: RelationSettings;
   /** What a request looks like when the client specifies nothing (issue #375). */

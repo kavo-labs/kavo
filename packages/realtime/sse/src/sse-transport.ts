@@ -26,7 +26,7 @@ const DEFAULT_BUFFER_LIMIT_BYTES = 64 * 1024;
  * string for one entity — the same two pieces `DefaultFilterParser` and
  * `Filter.parse` already need for REST: `metadata` for column-kind-aware
  * value coercion, `config` for the `filterable` allowlist and the
- * `query.maxFilterDepth`/`maxInValues` limits. `@kavo/sse` has no config
+ * `limits.filterDepth`/`limits.inValues` limits. `@kavo/sse` has no config
  * resolution of its own (same reason `subscribableFields` is a callback,
  * not a lookup this package performs itself), so the host app supplies
  * both — typically `service.engine.metadata`/`service.engine.config` off

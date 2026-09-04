@@ -16,18 +16,27 @@ Every key below is set the same way at every scope of the [precedence chain](/gu
 
 See [Pagination](/querying/pagination) and [Settings](/guides/configuration/settings#pagination).
 
-## query
+## limits
 
-| Key                          | Type                        | Default       |
-| ---------------------------- | --------------------------- | ------------- |
-| `query.maxFilterDepth`       | `number`                    | `3`           |
-| `query.maxInValues`          | `number`                    | `100`         |
-| `query.maxLikePatternLength` | `number`                    | `200`         |
-| `query.search`               | `{ mode, driver } \| false` | `false`       |
-| `query.search.mode`          | `"substring" \| "words"`    | `"substring"` |
-| `query.search.driver`        | `"orm"`                     | `"orm"`       |
+| Key                    | Type     | Default |
+| ---------------------- | -------- | ------- |
+| `limits.filterDepth`   | `number` | `3`     |
+| `limits.inValues`      | `number` | `100`   |
+| `limits.likePattern`   | `number` | `200`   |
+| `limits.includeDepth`  | `number` | `2`     |
+| `limits.includedNodes` | `number` | `10`    |
 
-See [Filtering](/querying/filtering), [Search](/querying/search), [Sorting](/querying/sorting).
+The request-cost ceilings: a filter's nesting depth, an `IN`/`NOT_IN`/`BETWEEN` array's length, a `like`/`ilike` pattern's character length, and relation-include depth/breadth. `limits.includeDepth` is overridable per-subtree by `relations.edges.<name>.maxDepth`, below. See [Filtering](/querying/filtering), [Relations](/features/relations).
+
+## search
+
+| Key             | Type                        | Default       |
+| --------------- | --------------------------- | ------------- |
+| `search`        | `{ mode, driver } \| false` | `false`       |
+| `search.mode`   | `"substring" \| "words"`    | `"substring"` |
+| `search.driver` | `"orm"`                     | `"orm"`       |
+
+See [Search](/querying/search), [Sorting](/querying/sorting).
 
 ## errors
 
@@ -39,13 +48,11 @@ See [Errors](/reference/errors).
 
 ## relations
 
-| Key                               | Type                                   | Default                              |
-| --------------------------------- | -------------------------------------- | ------------------------------------ |
-| `relations.maxIncludeDepth`       | `number`                               | `2`                                  |
-| `relations.maxIncludedNodes`      | `number`                               | `10`                                 |
-| `relations.edges.<name>.maxDepth` | `number`                               | inherits `relations.maxIncludeDepth` |
-| `relations.edges.<name>.strategy` | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                             |
-| `relations.edges.<name>.write`    | `boolean \| { strategy }`              | `false`                              |
+| Key                               | Type                                   | Default                        |
+| --------------------------------- | -------------------------------------- | ------------------------------ |
+| `relations.edges.<name>.maxDepth` | `number`                               | inherits `limits.includeDepth` |
+| `relations.edges.<name>.strategy` | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                       |
+| `relations.edges.<name>.write`    | `boolean \| { strategy }`              | `false`                        |
 
 Whether a relation is includable at all is `allowed.includable` (entity scope only); see [Reference/Config keys §allowed](#allowed-entity-scope-only). Which includable relations load by default is `defaults.include`, below. `relations.edges` is loading tuning only for a relation that is already includable — no permission, no default. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
 

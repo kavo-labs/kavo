@@ -492,9 +492,10 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
   ): ResolvedEntityConfig<User> {
     const settings = {
       pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true },
-      query: { maxFilterDepth: 5, maxInValues: 100 },
+      limits: { filterDepth: 5, inValues: 100, likePattern: 200, includeDepth: 3, includedNodes: 20 },
+      search: false,
       errors: { exposeInternals: false },
-      relations: { maxIncludeDepth: 3, maxIncludedNodes: 20, edges: {} },
+      relations: { edges: {} },
       defaults: { sort: defaultSort.map(sortWireToken), include: [] },
       softDelete: false,
       operations: {},

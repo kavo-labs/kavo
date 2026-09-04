@@ -519,7 +519,7 @@ in ADR-0045):
   the marker inline — still a valid object schema, just not `$ref`-composed.
 
 A `-to-many` relation wraps that shape in `{ type: "array", items }`.
-The request-side nesting bound is the existing `relations.maxIncludeDepth`;
+The request-side nesting bound is the existing `limits.includeDepth`;
 there is no separate Swagger depth control. Driven off the resolved
 `allowed.includable` names, not `RelationDescriptor.includable` (which
 reflects ORM-derived metadata, not the config grant).
@@ -698,7 +698,7 @@ a `style: deepObject` migration). `sort`/`pagination`/`include`/`filter`
 on `<Entity>Query` `$ref` the entity's own other expected component
 names; `select`/`search` are inlined rather than hoisted as their own
 components, since only `Filter`/`Query` were asked for. `search` is
-omitted from `<Entity>Query` when `query.search` doesn't resolve to an
+omitted from `<Entity>Query` when `search` doesn't resolve to an
 object, the same gate `applySearchQueryDocs` uses for the flat
 `search[...]` params.
 

@@ -38,7 +38,7 @@ Logical operators: `AND` (implicit), `OR`, `NOT` — wire tokens `and`, `or`,
   repeats on the same field: `filter[age][gte]=18&filter[age][lt]=65`.
 - **`in`/`notIn`**: comma-separated by default (`in=active,pending`); the
   repeated-key form `filter[status][in][]=a&filter[status][in][]=b` also
-  works. Capped by `query.maxInValues` (default 100).
+  works. Capped by `limits.inValues` (default 100).
 - **`between`**: exactly two comma-separated bounds.
 - **`isNull`/`isNotNull`**: boolean-valued; `isNull=false` ≡
   `isNotNull=true` — both spellings mean what they read as.
@@ -55,7 +55,7 @@ Logical operators: `AND` (implicit), `OR`, `NOT` — wire tokens `and`, `or`,
   producing the identical AST as the bracket form. Bracket notation is sugar
   for the flat common case; JSON is the full-power escape hatch. When both
   appear on the same request, they AND together.
-- Nesting depth is capped by `query.maxFilterDepth` (default 3).
+- Nesting depth is capped by `limits.filterDepth` (default 3).
 
 ### Combined example
 

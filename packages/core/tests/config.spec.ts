@@ -14,7 +14,7 @@ describe("mergeSettings — merge algebra", () => {
     expect(merged.pagination.maxLimit).toBe(50);
     // Untouched keys keep the farther scope's values.
     expect(merged.pagination.strategy).toBe("offset");
-    expect(merged.query.maxFilterDepth).toBe(3);
+    expect(merged.limits.filterDepth).toBe(3);
   });
 
   it("skips a key whose override value is explicitly undefined", () => {

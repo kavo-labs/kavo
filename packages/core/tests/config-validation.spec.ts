@@ -70,27 +70,27 @@ describe("validateSettings — pagination", () => {
   });
 });
 
-describe("validateSettings — query limits", () => {
-  it("rejects a maxFilterDepth that is not a positive integer", () => {
+describe("validateSettings — limits", () => {
+  it("rejects a filterDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ query: { maxFilterDepth: value } }, "query.maxFilterDepth", value);
+      expectRejected({ limits: { filterDepth: value } }, "limits.filterDepth", value);
     }
   });
 
-  it("rejects a maxInValues that is not a positive integer", () => {
+  it("rejects an inValues that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ query: { maxInValues: value } }, "query.maxInValues", value);
+      expectRejected({ limits: { inValues: value } }, "limits.inValues", value);
     }
   });
 
-  it("rejects a maxLikePatternLength that is not a positive integer", () => {
+  it("rejects a likePattern that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ query: { maxLikePatternLength: value } }, "query.maxLikePatternLength", value);
+      expectRejected({ limits: { likePattern: value } }, "limits.likePattern", value);
     }
   });
 
   it("accepts a depth, value cap, and like-pattern cap of 1", () => {
-    expect(() => accept({ query: { maxFilterDepth: 1, maxInValues: 1, maxLikePatternLength: 1 } })).not.toThrow();
+    expect(() => accept({ limits: { filterDepth: 1, inValues: 1, likePattern: 1 } })).not.toThrow();
   });
 });
 
@@ -126,29 +126,29 @@ describe("validateSettings — defaults", () => {
   });
 });
 
-describe("validateSettings — query.search", () => {
+describe("validateSettings — search", () => {
   it("defaults to disabled (false)", () => {
-    expect(BUILT_IN_DEFAULTS.query.search).toBe(false);
+    expect(BUILT_IN_DEFAULTS.search).toBe(false);
   });
 
   it("accepts search: false (disabled)", () => {
-    expect(() => accept({ query: { search: false } })).not.toThrow();
+    expect(() => accept({ search: false })).not.toThrow();
   });
 
   it("rejects a search.mode outside substring/words", () => {
     for (const value of ["Substring", "word", 1, null]) {
-      expectRejected({ query: { search: { mode: value } } }, "query.search.mode", value);
+      expectRejected({ search: { mode: value } }, "search.mode", value);
     }
   });
 
   it("rejects any search.driver other than 'orm'", () => {
     for (const value of ["postgres", "meilisearch", "", null]) {
-      expectRejected({ query: { search: { mode: "substring", driver: value } } }, "query.search.driver", value);
+      expectRejected({ search: { mode: "substring", driver: value } }, "search.driver", value);
     }
   });
 
   it("accepts an explicit, well-formed search setting", () => {
-    expect(() => accept({ query: { search: { mode: "words", driver: "orm" } } })).not.toThrow();
+    expect(() => accept({ search: { mode: "words", driver: "orm" } })).not.toThrow();
   });
 });
 
@@ -197,20 +197,20 @@ describe("validateSettings — cache", () => {
 });
 
 describe("validateSettings — relation limits", () => {
-  it("rejects a maxIncludeDepth that is not a positive integer", () => {
+  it("rejects an includeDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ relations: { maxIncludeDepth: value } }, "relations.maxIncludeDepth", value);
+      expectRejected({ limits: { includeDepth: value } }, "limits.includeDepth", value);
     }
   });
 
-  it("rejects a maxIncludedNodes that is not a positive integer", () => {
+  it("rejects an includedNodes that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ relations: { maxIncludedNodes: value } }, "relations.maxIncludedNodes", value);
+      expectRejected({ limits: { includedNodes: value } }, "limits.includedNodes", value);
     }
   });
 
   it("accepts a budget of one node at depth one", () => {
-    expect(() => accept({ relations: { maxIncludeDepth: 1, maxIncludedNodes: 1 } })).not.toThrow();
+    expect(() => accept({ limits: { includeDepth: 1, includedNodes: 1 } })).not.toThrow();
   });
 });
 
@@ -414,12 +414,12 @@ describe("validateSettings — the base of the precedence chain", () => {
     // The engine validates per-call overrides under a derived label, so
     // the entity name is a parameter, not a lookup.
     try {
-      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { query: { maxInValues: 0 } }));
+      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { limits: { inValues: 0 } }));
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "User (per-call)",
-        path: "query.maxInValues",
+        path: "limits.inValues",
       });
     }
   });
