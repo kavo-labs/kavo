@@ -92,35 +92,34 @@ describe("validateSettings — query limits", () => {
   it("accepts a depth, value cap, and like-pattern cap of 1", () => {
     expect(() => accept({ query: { maxFilterDepth: 1, maxInValues: 1, maxLikePatternLength: 1 } })).not.toThrow();
   });
+});
 
-  it("rejects a defaultSort that is not an array", () => {
-    for (const value of ["name", null, { field: "name", direction: "asc" }]) {
-      expectRejected({ query: { defaultSort: value } }, "query.defaultSort", value);
+describe("validateSettings — defaults", () => {
+  it("rejects a defaults.sort that is not an array of non-empty strings", () => {
+    for (const value of ["name", null, [1], [""], { field: "name", direction: "asc" }]) {
+      expectRejected({ defaults: { sort: value } }, "defaults.sort", value);
     }
   });
 
-  it("rejects a defaultSort entry missing a field or with a non-string field", () => {
-    for (const entry of [{}, { field: 1, direction: "asc" }, { direction: "asc" }]) {
-      expectRejected({ query: { defaultSort: [entry] } }, "query.defaultSort[0]", entry);
+  it("rejects a defaults.select that is not an array of non-empty strings", () => {
+    for (const value of ["name", null, [1], [""]]) {
+      expectRejected({ defaults: { select: value } }, "defaults.select", value);
     }
   });
 
-  it("rejects a defaultSort entry with an invalid direction", () => {
-    expectRejected(
-      { query: { defaultSort: [{ field: "name", direction: "up" }] } },
-      "query.defaultSort[0].direction",
-      "up",
-    );
+  it("rejects a defaults.include that is not an array of non-empty strings", () => {
+    for (const value of ["posts", null, [1], [""]]) {
+      expectRejected({ defaults: { include: value } }, "defaults.include", value);
+    }
   });
 
-  it("accepts a well-formed defaultSort", () => {
+  it("accepts a well-formed defaults block", () => {
     expect(() =>
       accept({
-        query: {
-          defaultSort: [
-            { field: "createdAt", direction: "desc" },
-            { field: "id", direction: "asc" },
-          ],
+        defaults: {
+          sort: ["-createdAt", "id"],
+          select: ["id", "name"],
+          include: ["posts"],
         },
       }),
     ).not.toThrow();
@@ -222,14 +221,6 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("rejects a non-boolean defaultInclude", () => {
-    expectRejected(
-      { relations: { edges: { posts: { defaultInclude: 1 } } } },
-      "relations.edges.posts.defaultInclude",
-      1,
-    );
-  });
-
   it("rejects a maxDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
       expectRejected({ relations: { edges: { posts: { maxDepth: value } } } }, "relations.edges.posts.maxDepth", value);
@@ -242,12 +233,12 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  // `defaultInclude` vs. permission (`allowed.includable`) is no longer
+  // `defaults.include` vs. permission (`allowed.includable`) is no longer
   // checkable by `validateSettings` alone — permission moved to entity-typed
   // `EntityConfig.allowed` (ADR-0028), outside the `KavoSettings` shape
   // this file exercises. See `config.spec.ts`'s
   // "resolveEntityConfig — allowed.includable" describe block for that
-  // cross-check, now performed by `validateIncludableRelations`.
+  // cross-check, now performed by `validateDefaults`.
 
   it("accepts an edge that configures nothing — every sub-key is optional", () => {
     expect(() => accept({ relations: { edges: { posts: {} } } })).not.toThrow();
@@ -259,10 +250,10 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("accepts defaultInclude/maxDepth shape regardless of includable permission", () => {
+  it("accepts maxDepth shape regardless of includable permission", () => {
     // `validateSettings` only checks shape now — whether `posts` is actually
     // includable is `resolveEntityConfig`'s `allowed`-aware cross-check.
-    expect(() => accept({ relations: { edges: { posts: { defaultInclude: true, maxDepth: 1 } } } })).not.toThrow();
+    expect(() => accept({ relations: { edges: { posts: { maxDepth: 1 } } } })).not.toThrow();
   });
 });
 

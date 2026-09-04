@@ -497,17 +497,17 @@ describe("MongooseRepositoryAdapter — schema constraints hold on every write",
   });
 });
 
-describe("MongooseRepositoryAdapter — query.defaultSort", () => {
+describe("MongooseRepositoryAdapter — defaults.sort", () => {
   function withDefaultSort(direction: "asc" | "desc"): DefaultKavoService<Author> {
     return kavo.createCrud(models.Author, {
-      query: { defaultSort: [{ field: "age", direction }] },
+      defaults: { sort: [direction === "desc" ? "-age" : "age"] },
     } as never) as unknown as DefaultKavoService<Author>;
   }
 
-  it("applies the configured defaultSort when the caller supplies no sort", async () => {
+  it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     // `buildSort` omits the `sort` key entirely for an empty list, so a
-    // regression that stopped defaultSort reaching the adapter would degrade
-    // silently to MongoDB's natural order rather than fail.
+    // regression that stopped defaults.sort reaching the adapter would
+    // degrade silently to MongoDB's natural order rather than fail.
     await seed();
     const list = await withDefaultSort("asc").findMany();
     expect(list.items.map((author) => (author as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
@@ -519,7 +519,7 @@ describe("MongooseRepositoryAdapter — query.defaultSort", () => {
     expect(list.items.map((author) => (author as Author).name)).toEqual(["Grace", "Alan", "Ada", "Joan"]);
   });
 
-  it("keeps defaultSort-ordered pages disjoint and stable across offsets", async () => {
+  it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const service = withDefaultSort("asc");
     const first = await service.findMany({ limit: 2, offset: 0 });

@@ -82,7 +82,7 @@ beforeAll(async () => {
   kavo = createTypeOrmKavo(dataSource, {
     defaults: {
       pagination: { strategy: "cursor" },
-      query: { defaultSort: [{ field: "id", direction: "asc" }] },
+      defaults: { sort: ["id"] },
     },
   });
   posts = kavo.createCrud(Post, {

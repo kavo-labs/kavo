@@ -3240,10 +3240,10 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     expectEveryRefResolves(doc);
   });
 
-  it("keeps a defaultInclude relation optional, still $ref'd (write responses carry no relations, ADR-0020)", async () => {
+  it("keeps a defaults.include relation optional, still $ref'd (write responses carry no relations, ADR-0020)", async () => {
     @Kavo(Todo, {
       allowed: { includable: ["list"] },
-      relations: { edges: { list: { defaultInclude: true } } },
+      defaults: { include: ["list"] },
     })
     @Controller("todos")
     class DefaultIncludeC {}

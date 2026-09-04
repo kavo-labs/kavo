@@ -109,9 +109,10 @@ export interface QueryAllowed<Entity = unknown, Computed extends string = never>
    * What a request may name in `include=` — which relations, one path
    * segment at a time from the root, a client may embed at all
    * (ADR-0028). `relations.edges.<name>` (`KavoSettings`, settings.ts)
-   * still tunes `defaultInclude`/`maxDepth`/`strategy` for a relation once
-   * it is includable, but grants no permission itself: naming a relation
-   * there without also naming it here does not open it.
+   * still tunes `maxDepth`/`strategy` for a relation once it is includable,
+   * and `defaults.include` (issue #375) names which includable relations
+   * load by default, but neither grants permission itself: naming a
+   * relation there without also naming it here does not open it.
    *
    * **Opt-in, unlike every other key on this interface.**
    * `filterable`/`sortable`/`selectable` default to "every own

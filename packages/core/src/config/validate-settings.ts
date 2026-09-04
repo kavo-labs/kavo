@@ -55,31 +55,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
   positiveInt("query.maxInValues", settings.query.maxInValues);
   positiveInt("query.maxLikePatternLength", settings.query.maxLikePatternLength);
 
-  if (!Array.isArray(settings.query.defaultSort)) {
-    throw new ConfigurationException(
-      entityName,
-      "query.defaultSort",
-      `expected an array, got ${JSON.stringify(settings.query.defaultSort)}`,
-    );
-  }
-  for (const [index, entry] of settings.query.defaultSort.entries()) {
-    const path = `query.defaultSort[${index}]`;
-    if (typeof entry !== "object" || entry === null || typeof entry.field !== "string" || entry.field.length === 0) {
-      throw new ConfigurationException(
-        entityName,
-        path,
-        `expected { field: string, direction: "asc" | "desc" }, got ${JSON.stringify(entry)}`,
-      );
-    }
-    if (entry.direction !== "asc" && entry.direction !== "desc") {
-      throw new ConfigurationException(
-        entityName,
-        `${path}.direction`,
-        `expected "asc" or "desc", got ${JSON.stringify(entry.direction)}`,
-      );
-    }
-  }
-
   const search = settings.query.search;
   if (search !== false) {
     if (search.mode !== "substring" && search.mode !== "words") {
@@ -106,9 +81,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     const path = `relations.edges.${name}`;
     if (typeof edge !== "object" || edge === null) {
       throw new ConfigurationException(entityName, path, `expected an object, got ${JSON.stringify(edge)}`);
-    }
-    if (edge.defaultInclude !== undefined) {
-      bool(`${path}.defaultInclude`, edge.defaultInclude);
     }
     if (edge.maxDepth !== undefined) {
       positiveInt(`${path}.maxDepth`, edge.maxDepth);
@@ -137,11 +109,27 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         );
       }
     }
-    // `defaultInclude` vs. `allowed.includable` (permission) is cross-
-    // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
-    // not here — this function only sees `KavoSettings`, and `allowed`
-    // is entity-typed config outside that schema (ADR-0028).
   }
+
+  const stringArray = (path: string, value: unknown): void => {
+    if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length === 0)) {
+      throw new ConfigurationException(
+        entityName,
+        path,
+        `expected an array of non-empty strings, got ${JSON.stringify(value)}`,
+      );
+    }
+  };
+  stringArray("defaults.sort", settings.defaults.sort);
+  if (settings.defaults.select !== undefined) {
+    stringArray("defaults.select", settings.defaults.select);
+  }
+  stringArray("defaults.include", settings.defaults.include);
+  // `defaults.sort`/`defaults.select` vs. `allowed.sortable`/`allowed.selectable`,
+  // and `defaults.include` vs. `allowed.includable` (permission, ADR-0028),
+  // are cross-checked in `resolve-entity-config.ts`'s `validateDefaults`, not
+  // here — this function only sees `KavoSettings`, and `allowed` is
+  // entity-typed config outside that schema.
 
   if (settings.cache !== false) {
     const cache = settings.cache;

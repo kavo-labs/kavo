@@ -20,6 +20,11 @@ const DEFAULT_ALLOWLISTS = {
   selectable: ["userId", "topic", "key"],
 };
 
+/** `{ field: "key", direction: "desc" }` → `"-key"` — the `defaults.sort` wire shorthand. */
+function sortWireToken(entry: Sort<CompositeEntity>): string {
+  return entry.direction === "desc" ? `-${entry.field as string}` : (entry.field as string);
+}
+
 function configWith(
   defaultSort: readonly Sort<CompositeEntity>[],
   strategy = "cursor",
@@ -28,9 +33,10 @@ function configWith(
 ): ResolvedEntityConfig<CompositeEntity> {
   const settings = {
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
-    query: { maxFilterDepth: 5, maxInValues: 100, defaultSort },
+    query: { maxFilterDepth: 5, maxInValues: 100 },
     errors: { exposeInternals: false },
     relations: { maxIncludeDepth: 3, maxIncludedNodes: 20, edges: {} },
+    defaults: { sort: defaultSort.map(sortWireToken), include: [] },
     softDelete: false,
     operations: {},
   } as unknown as KavoSettings;

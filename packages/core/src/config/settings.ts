@@ -1,6 +1,5 @@
 import type { RelationLoadStrategy } from "../relations/relation-descriptor.js";
 import type { StandardOperationId } from "../operations/operation.js";
-import type { Sort } from "../query/sort.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 
@@ -76,13 +75,6 @@ export interface QuerySettings {
    */
   readonly maxLikePatternLength: number;
   /**
-   * Order applied when a request supplies no `sort` — a client-supplied
-   * `sort` always wins outright, never merges with this. Fields are
-   * validated against the sortable allowlist at bootstrap, the same as
-   * client-supplied sort fields are at request time.
-   */
-  readonly defaultSort: readonly Sort[];
-  /**
    * `search[query]` free-text search (doc 05 §4). `false` (the default)
    * disables it — `search[query]` is rejected with a 400 until an entity or
    * operation scope sets an object. The same `false` sentinel `softDelete`/
@@ -98,6 +90,49 @@ export interface ErrorSettings {
 }
 
 /**
+ * What a request looks like when the client specifies nothing — the
+ * omission-side counterpart to `allowed` (`QueryAllowed`, entity-config.ts),
+ * which governs what a request may specify at all (issue #375). Applied
+ * only when the request omits that axis; a client-supplied value replaces
+ * it outright, never merges with it — the rule `query.defaultSort` used
+ * before this block existed.
+ *
+ * `KavoSettings` carries no `Entity` type parameter (see `RealtimeFieldSelector`'s
+ * doc for why), so every key here is a plain string, wire-shaped, rather
+ * than a `FieldPath<Entity>` — the same laxity `relations.edges`'s keys
+ * already have.
+ */
+export interface DefaultsSettings {
+  /**
+   * Order applied when a request supplies no `sort` — a client-supplied
+   * `sort` always wins outright, never merges with this. The same wire
+   * shorthand a `sort=` query parameter uses (`-field` for descending,
+   * `field` for ascending, comma-separated conceptually but declared as an
+   * array here), normalized to the internal `Sort` shape by the query
+   * normalizer. Fields are validated against the sortable allowlist at
+   * bootstrap, the same as client-supplied sort fields are at request time.
+   * `pagination.since` (ADR-0022) still forces its own sort when active,
+   * overriding this.
+   */
+  readonly sort: readonly string[];
+  /**
+   * The default response projection — what a read serves when the request
+   * sends no `select=` of its own. Absent (the default) leaves today's
+   * behavior unchanged: every selectable field (and, ultimately,
+   * `allowed.selectable`/the entity-derived projection, ADR-0026). Fields
+   * are validated against the selectable allowlist at bootstrap.
+   */
+  readonly select?: readonly string[];
+  /**
+   * Relations included even when the client's `include=` doesn't name them.
+   * Each entry must also be on `allowed.includable` (ADR-0028's cross-check,
+   * moved here from `relations.edges.<name>.defaultInclude`) — naming a
+   * relation here that clients cannot ask for is a bootstrap error.
+   */
+  readonly include: readonly string[];
+}
+
+/**
  * Per-relation *tuning* — the config half of a `RelationDescriptor` other
  * than permission. ORM metadata supplies shape (name, target,
  * cardinality); this supplies loading behavior once a relation is already
@@ -106,8 +141,6 @@ export interface ErrorSettings {
  * a relation in `edges` no longer opts it in.
  */
 export interface RelationEdgeSettings {
-  /** Included even when the client doesn't ask. */
-  readonly defaultInclude?: boolean;
   /** Overrides `maxIncludeDepth` for the subtree below this node. */
   readonly maxDepth?: number;
   readonly strategy?: RelationLoadStrategy;
@@ -118,7 +151,7 @@ export interface RelationEdgeSettings {
    * `write: true`/`write: {...}` on a to-one relation is a bootstrap
    * `ConfigurationException` (`DefaultRelationRegistry`), since association
    * by id already covers to-one writes and there is no array to mutate.
-   * Like `defaultInclude`, this is a permission a relation must be granted
+   * Like `defaults.include`, this is a permission a relation must be granted
    * explicitly — it is independent of `allowed.includable` (a relation
    * can be write-opted-in without being read-includable, or vice versa).
    *
@@ -145,10 +178,11 @@ export interface RelationSettings {
   readonly maxIncludedNodes: number;
   /**
    * Per-relation loading overrides, keyed by relation property name —
-   * `defaultInclude`/`maxDepth`/`strategy` only. Whether a relation is
-   * includable at all is `allowed.includable`'s question, not this
-   * one (ADR-0028); an entry here for a relation `allowed.includable`
-   * never named still validates and applies its tuning, but grants no
+   * `maxDepth`/`strategy`/`write` only. Whether a relation is includable at
+   * all is `allowed.includable`'s question, and whether it defaults into an
+   * empty request is `defaults.include`'s (issue #375) — neither lives here
+   * any more; an entry here for a relation `allowed.includable` never named
+   * still validates and applies its loading tuning, but grants no
    * permission.
    */
   readonly edges: Readonly<Record<string, RelationEdgeSettings>>;
@@ -344,6 +378,8 @@ export interface KavoSettings {
   readonly query: QuerySettings;
   readonly errors: ErrorSettings;
   readonly relations: RelationSettings;
+  /** What a request looks like when the client specifies nothing (issue #375). */
+  readonly defaults: DefaultsSettings;
   /** Result caching + the conditional-request subtree (ADRs 0020/0031). */
   readonly cache: CacheSettings | false;
   readonly softDelete: SoftDeleteSettings | false;

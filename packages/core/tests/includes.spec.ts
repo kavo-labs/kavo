@@ -250,7 +250,7 @@ describe("include resolution", () => {
     const fixture = blog({
       author: {
         allowed: { includable: ["posts"] },
-        relations: { edges: { posts: { defaultInclude: true } } },
+        defaults: { include: ["posts"] },
       },
     });
     const { authors, authorRows } = fixture;
@@ -680,7 +680,7 @@ describe("defaultInclude", () => {
     const fixture = blog({
       author: {
         allowed: { includable: ["posts"] },
-        relations: { edges: { posts: { defaultInclude: true } } },
+        defaults: { include: ["posts"] },
       },
       post: { allowed: { includable: ["comments"] } },
     } as never);
@@ -699,7 +699,7 @@ describe("defaultInclude", () => {
       author: { allowed: { includable: ["posts"] } },
       post: {
         allowed: { includable: ["comments"] },
-        relations: { edges: { comments: { defaultInclude: true } } },
+        defaults: { include: ["comments"] },
       },
     } as never);
 
@@ -714,8 +714,9 @@ describe("defaultInclude", () => {
  * ADR-0028: permission moved out of `relations.edges` into
  * `allowed.includable`. `relations.edges` naming a relation used to be
  * the opt-in itself (`includable: edge.includable ?? true`); it no longer
- * grants anything — it only tunes `defaultInclude`/`maxDepth`/`strategy`
- * for a relation `allowed.includable` has already opened.
+ * grants anything — it only tunes `maxDepth`/`strategy` for a relation
+ * `allowed.includable` has already opened. Which of those includable
+ * relations load by default is `defaults.include`'s question (issue #375).
  */
 describe("allowed.includable — where inclusion permission now lives", () => {
   it("does not open a relation that relations.edges only tunes", async () => {

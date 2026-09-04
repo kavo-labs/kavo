@@ -46,7 +46,11 @@ export interface RelationDescriptor {
    * filter/sort/select posture.
    */
   readonly includable: boolean;
-  /** Included even when the client doesn't ask. */
+  /**
+   * Included even when the client doesn't ask — granted by
+   * `defaults.include` (`KavoSettings`, settings.ts, issue #375), not by
+   * `relations.edges` (which tunes loading only).
+   */
   readonly defaultInclude?: boolean;
   /** Overrides the configured `maxIncludeDepth` below this node. */
   readonly maxDepth?: number;

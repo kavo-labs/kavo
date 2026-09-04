@@ -40,6 +40,7 @@ const SETTINGS_KEYS = [
   "query",
   "errors",
   "relations",
+  "defaults",
   "cache",
   "softDelete",
   "realtime",
@@ -117,15 +118,15 @@ export function resolveEntityConfig<Entity extends object>(
     ),
   );
   validateSettings(entityName, entitySettings);
-  validateDefaultSort(entityName, entitySettings, allowed);
+  validateDefaults(entityName, entitySettings, allowed);
   validateSincePagination(entityName, metadata, entitySettings, allowed);
-  validateIncludableRelations(entityName, entitySettings, allowed);
   const relations = new DefaultRelationRegistry<Entity>(
     metadata.relations,
     allowed.includable as readonly string[],
     entitySettings.relations.edges,
     entityName,
     entitySettings.arrayMutation,
+    entitySettings.defaults.include,
   );
 
   // Per-operation settings views, precomputed for every operation that
@@ -147,9 +148,8 @@ export function resolveEntityConfig<Entity extends object>(
     const merged = normalizeSearch(mergeSettings(entitySettings, settings));
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
-    validateDefaultSort(scope, merged, allowed);
+    validateDefaults(scope, merged, allowed);
     validateSincePagination(scope, metadata, merged, allowed);
-    validateIncludableRelations(scope, merged, allowed);
     // Resolve for its validation side effect: a per-operation scope that
     // demands soft delete on an entity without a marker field must fail at
     // bootstrap, not on the first request (the engine recomputes the
@@ -548,49 +548,49 @@ function resolveAllowed<Entity extends object>(
 }
 
 /**
- * `query.defaultSort` fields are checked against the same sortable
- * allowlist client-supplied `sort` fields are checked against at request
- * time — but here, at bootstrap, so a misconfigured default fails fast
- * instead of surfacing as a broken `ORDER BY` on the first request.
+ * Cross-checks the `defaults` block against the `allowed` allowlists it
+ * omission-defaults for (issue #375, ADR-0028's precedent for the
+ * `include` half): `defaults.sort` fields against `sortable`,
+ * `defaults.select` fields against `selectable`, and `defaults.include`
+ * relations against `includable` — the same checks each axis's
+ * client-supplied counterpart gets at request time, but here, at
+ * bootstrap, so a misconfigured default fails fast instead of surfacing as
+ * a broken `ORDER BY`, an over-wide response, or a relation clients cannot
+ * ask for on the first request.
  */
-export function validateDefaultSort<Entity>(
+export function validateDefaults<Entity>(
   scope: string,
   settings: KavoSettings,
   allowed: ResolvedQueryAllowed<Entity>,
 ): void {
   const sortable = allowed.sortable as readonly string[];
-  for (const entry of settings.query.defaultSort) {
-    if (!sortable.includes(entry.field)) {
-      throw new ConfigurationException(
-        scope,
-        "query.defaultSort",
-        `field '${entry.field}' is not in the sortable allowlist`,
-      );
+  for (const entry of settings.defaults.sort) {
+    const field = entry.startsWith("-") ? entry.slice(1) : entry;
+    if (!sortable.includes(field)) {
+      throw new ConfigurationException(scope, "defaults.sort", `field '${field}' is not in the sortable allowlist`);
     }
   }
-}
 
-/**
- * Cross-checks `relations.edges.<name>.defaultInclude` against
- * `allowed.includable` (ADR-0028): `defaultInclude: true` on a relation
- * the entity never opted into `include=` would load something clients
- * cannot ask for — the same rule `validate-settings.ts` enforced when
- * `defaultInclude` and `includable` lived on the same `edges` entry, now
- * checked against the allowlist that carries permission instead.
- */
-function validateIncludableRelations<Entity>(
-  scope: string,
-  settings: KavoSettings,
-  allowed: ResolvedQueryAllowed<Entity>,
-): void {
+  if (settings.defaults.select !== undefined) {
+    const selectable = allowed.selectable as readonly string[];
+    for (const field of settings.defaults.select) {
+      if (!selectable.includes(field)) {
+        throw new ConfigurationException(
+          scope,
+          "defaults.select",
+          `field '${field}' is not in the selectable allowlist`,
+        );
+      }
+    }
+  }
+
   const includable = new Set(allowed.includable as readonly string[]);
-  for (const [name, edge] of Object.entries(settings.relations.edges)) {
-    if (edge.defaultInclude === true && !includable.has(name)) {
+  for (const relation of settings.defaults.include) {
+    if (!includable.has(relation)) {
       throw new ConfigurationException(
         scope,
-        `relations.edges.${name}`,
-        `defaultInclude requires an includable relation — '${name}' is not on allowed.includable, ` +
-          `so it would load a relation clients cannot ask for`,
+        "defaults.include",
+        `'${relation}' is not on allowed.includable, so it would load a relation clients cannot ask for`,
       );
     }
   }

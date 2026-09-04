@@ -44,7 +44,7 @@ beforeAll(() => {
       caseInsensitiveFilters: false,
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: [{ field: "id", direction: "asc" }] },
+        defaults: { sort: ["id"] },
       },
     } as never,
   );
