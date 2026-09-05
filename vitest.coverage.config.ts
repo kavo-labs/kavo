@@ -32,7 +32,7 @@ export default mergeConfig(base, {
       // threshold would measure the wrong thing.
       include: ["packages/**/src/**/*.ts"],
       exclude: ["**/dist/**", "**/node_modules/**", "**/*.d.ts"],
-      reporter: ["text-summary", "json-summary", "html"],
+      reporter: ["text", "json-summary", "html"],
       reportsDirectory: "./.coverage",
       // Achieved at the time of writing: 98.92 / 97.67 / 99.68 / 99.07.
       //
