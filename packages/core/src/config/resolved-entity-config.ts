@@ -3,7 +3,7 @@ import type { SearchDriver, SearchMode } from "./entity-config.js";
 import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
-import type { DtoResolver } from "../dto/dto.js";
+import type { DtoResolver, WriteApply } from "../dto/dto.js";
 import type { FilterOperator } from "../query/filter.js";
 import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
@@ -163,4 +163,16 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * omission means "leave unchanged" rather than "reset").
    */
   readonly updateDefault: Readonly<Partial<Entity>>;
+  /**
+   * `create.apply` (issue #391), passed through unresolved — the write-side
+   * sibling of `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+   * (ADR-0048): forces field values into `createOne`'s body, overwriting
+   * whatever the client sent. `undefined` when unconfigured.
+   */
+  readonly createApply?: WriteApply<Entity>;
+  /**
+   * `update.apply` — same idea, `updateOne` only (never `patchOne`, matching
+   * {@link ResolvedEntityConfig.updateDefault}'s own scope).
+   */
+  readonly updateApply?: WriteApply<Entity>;
 }

@@ -310,6 +310,7 @@ export class KavoEngine<Entity extends object> {
     }
 
     const input = this.resolveInput(request, descriptor, context);
+    await this.applyWriteApply(request, descriptor, configView, context, input);
 
     const result = await descriptor.handler.execute(input, context);
     if (descriptor.id === "findOne") {
@@ -990,6 +991,10 @@ export class KavoEngine<Entity extends object> {
       // a per-call override cannot widen what a write is defaulted from.
       createDefault: config.createDefault,
       updateDefault: config.updateDefault,
+      // Same reasoning: a per-call override cannot loosen the unconditional
+      // constraint `create.apply`/`update.apply` forces (issue #391).
+      createApply: config.createApply,
+      updateApply: config.updateApply,
     };
   }
 
@@ -1058,6 +1063,48 @@ export class KavoEngine<Entity extends object> {
       include.apply?.(args),
     ]);
     return { filter: filterResult, sort: sortResult, select: selectResult, include: includeResult };
+  }
+
+  /**
+   * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side
+   * sibling): evaluated once per `createOne`/`updateOne`, after
+   * `resolveInput` has already produced the deserialized body, so its
+   * result can overwrite whatever the client sent for a forced field —
+   * `default` only fills a gap, `apply` always wins. `patchOne` never
+   * consults it, matching `update.default`'s own scope. Mutates `input` in
+   * place rather than returning a new object: `resolveInput`'s two write
+   * shapes differ (`createOne`'s input *is* the body; `updateOne`'s wraps it
+   * under `data`), and mutating the body object either shape already holds
+   * is simpler than reconstructing either wrapper.
+   */
+  private async applyWriteApply(
+    request: KavoRequest<Entity>,
+    descriptor: OperationDescriptor<Entity>,
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+    input: unknown,
+  ): Promise<void> {
+    const apply =
+      descriptor.id === "createOne"
+        ? configView.createApply
+        : descriptor.id === "updateOne"
+          ? configView.updateApply
+          : undefined;
+    if (apply === undefined) {
+      return;
+    }
+    const body = descriptor.id === "updateOne" ? (input as { data: object }).data : (input as object);
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const args: ApplyArgs<Entity> = {
+      context,
+      resource: context.entityName,
+      operation: descriptor.id,
+      params: { id },
+    };
+    const forced = await apply(args);
+    if (forced !== undefined) {
+      Object.assign(body, forced);
+    }
   }
 
   private resolveInput(

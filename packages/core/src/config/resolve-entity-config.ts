@@ -35,7 +35,7 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
-import type { DtoClass, WriteFieldsConfig } from "../dto/dto.js";
+import type { DtoClass, WriteApply, WriteFieldsConfig } from "../dto/dto.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
@@ -122,6 +122,8 @@ export function resolveEntityConfig<Entity extends object>(
   );
   const createDefault = resolveWriteDefault(entityName, "create.default", entityConfig?.create, ownColumnNames);
   const updateDefault = resolveWriteDefault(entityName, "update.default", entityConfig?.update, ownColumnNames);
+  const createApply = resolveWriteApply(entityName, "create.apply", entityConfig?.create);
+  const updateApply = resolveWriteApply(entityName, "update.apply", entityConfig?.update);
 
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
@@ -194,6 +196,8 @@ export function resolveEntityConfig<Entity extends object>(
     policy,
     createDefault,
     updateDefault,
+    createApply,
+    updateApply,
   };
   return Object.freeze(resolved);
 }
@@ -235,6 +239,34 @@ function resolveWriteDefault<Entity extends object>(
 }
 
 const EMPTY_WRITE_DEFAULT: Readonly<Record<string, never>> = Object.freeze({});
+
+/**
+ * Resolve `create.apply`/`update.apply` (issue #391): a plain function
+ * reference, passed through unresolved — the same treatment `filter.apply`/
+ * `sort.apply`/`select.apply`/`include.apply` already get (ADR-0048), for
+ * the same reason: it is evaluated per request with an arbitrary runtime
+ * value, so there is nothing here to validate ahead of time beyond "is it
+ * callable at all," which catches a JS or dynamically-built config the type
+ * system can't see.
+ */
+function resolveWriteApply<Entity extends object>(
+  entityName: string,
+  scope: string,
+  writeConfig: WriteFieldsConfig<Entity> | undefined,
+): WriteApply<Entity> | undefined {
+  const value = writeConfig?.apply;
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "function") {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a function — (args: ApplyArgs) => Partial<Entity> | undefined, got '${typeof value}'.`,
+    );
+  }
+  return value;
+}
 
 /**
  * Reject a `policy` value that isn't a function — TypeScript callers get a
