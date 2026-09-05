@@ -77,7 +77,6 @@ export interface KavoInstance {
     QueryDto = QueryContext<Entity>,
     ItemDto = Entity,
     ListDto = ItemDto,
-    Computed extends string = never,
     Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
       Entity,
       CreateDto,
@@ -89,7 +88,7 @@ export interface KavoInstance {
     >,
   >(
     entity: ClassRef<Entity>,
-    config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Computed, Ops>,
+    config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Ops>,
     runtime?: KavoRuntime<Entity>,
   ): DefaultKavoService<Entity, EntityId, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Ops>;
 
@@ -245,10 +244,9 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         serializer: new DefaultSerializer(
           metadata as EntityMetadata<Entity>,
           catalog,
-          resolved.computed,
           resolved.projection as readonly string[] | null,
         ),
-        deserializer: new DefaultDeserializer(metadata as EntityMetadata<Entity>, catalog, resolved.computed),
+        deserializer: new DefaultDeserializer(metadata as EntityMetadata<Entity>, catalog),
         normalizer: new QueryNormalizer(
           metadata as EntityMetadata<Entity>,
           options.paginationStrategies ?? [],
@@ -526,7 +524,6 @@ export function createCrud<
   QueryDto = QueryContext<Entity>,
   ItemDto = Entity,
   ListDto = ItemDto,
-  Computed extends string = never,
   Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
     Entity,
     CreateDto,
@@ -538,7 +535,7 @@ export function createCrud<
   >,
 >(
   entity: ClassRef<Entity>,
-  config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Computed, Ops>,
+  config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Ops>,
   runtime?: KavoRuntime<Entity>,
 ): DefaultKavoService<Entity, EntityId, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Ops> {
   return createKavo().createCrud(entity, config, runtime);

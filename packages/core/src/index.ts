@@ -102,7 +102,6 @@ export type {
   SelectableFieldSelector,
   WritableFieldSelector,
 } from "./config/entity-config.js";
-export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
 export type { ResolvedEntityConfig, ResolvedQueryAllowlists } from "./config/resolved-entity-config.js";
 
 // ── Policy (ADR-0037) ─────────────────────────────────────────────────

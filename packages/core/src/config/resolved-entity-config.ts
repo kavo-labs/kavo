@@ -1,5 +1,4 @@
 import type { KavoSettings } from "./settings.js";
-import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver } from "../dto/dto.js";
@@ -47,17 +46,12 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * The default response projection: what a read serves when the request
    * sends no `select=` and no `item`/`list` DTO is registered.
    *
-   * `null` means "the entity-derived default" — every scalar column plus
-   * every declared computed field. A non-null value is
-   * {@link ResolvedQueryAllowlists.selectable}, and it is non-null exactly
-   * when `allowlists.selectable` was configured explicitly (ADR-0026).
-   *
-   * The provenance is the whole point, and is why this is not simply read
-   * off `allowlists.selectable`. Unconfigured, that list resolves to a base
-   * set that is *almost* the derived projection but drops computed fields
-   * declaring `selectable: false` — fields whose documented contract is to
-   * stay in the projection while being unnameable in `select=`. Narrowing
-   * by a list nobody wrote would silently retire that contract.
+   * `null` means "the entity-derived default" — every scalar column, own
+   * derived fields excluded (ADR-0026, ADR-0046: a derived field is opt-in
+   * to the projection via `allowlists.selectable`, the same as a relation).
+   * A non-null value is {@link ResolvedQueryAllowlists.selectable}, and it
+   * is non-null exactly when `allowlists.selectable` was configured
+   * explicitly.
    */
   readonly projection: readonly FieldPath<Entity>[] | null;
   /**
@@ -68,13 +62,6 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly softDelete: ResolvedSoftDelete;
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
-  /**
-   * Declared computed fields, validated at bootstrap — an empty record when
-   * the entity declares none. Read by the serializer (to evaluate them) and
-   * by the deserializer (to keep them out of writes), for this entity and,
-   * through the catalog, for any relation target (ADR-0019).
-   */
-  readonly computed: ComputedFieldMap<Entity>;
   /** Relation edges of this entity. */
   readonly relations: RelationRegistry<Entity>;
   /**

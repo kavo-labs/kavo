@@ -686,8 +686,8 @@ export class KavoEngine<Entity extends object> {
    * id half names the row a `findOne` targets — `request.id` lives outside
    * the normalized query, so it has to be in the key or `findOne(1)` and
    * `findOne(2)` would share one entry (ADR-0031). The app half keeps
-   * one caller's values from leaking to another: computed fields and custom
-   * handlers may legitimately vary by `context.app`, so a response
+   * one caller's values from leaking to another: custom handlers may
+   * legitimately vary by `context.app`, so a response
    * baked for one caller must never be served to a different one —
    * an empty app context canonicalizes to `"{}"`, so calls that carry no
    * app context share one bucket (ADR-0031). `KavoAppContext` must be plain,
@@ -916,19 +916,16 @@ export class KavoEngine<Entity extends object> {
       settings,
       settingsFor: () => settings,
       allowlists: config.allowlists,
-      // Structural, like `computed` below: the projection is derived from
-      // `allowlists.selectable` at bootstrap (ADR-0026), and allowlists are
-      // outside the settings precedence chain, so a per-call override
-      // cannot widen what a response serves.
+      // Structural: the projection is derived from `allowlists.selectable`
+      // at bootstrap (ADR-0026), and allowlists are outside the settings
+      // precedence chain, so a per-call override cannot widen what a
+      // response serves.
       projection: config.projection,
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
       softDelete: resolveSoftDelete(this.deps.metadata, settings, `${config.entityName} (${request.operation})`),
       dto: config.dto,
-      // Structural entity config, outside the settings precedence chain
-      // entirely (ADR-0019) — a per-call settings override cannot reach it.
-      computed: config.computed,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.
@@ -936,9 +933,9 @@ export class KavoEngine<Entity extends object> {
       // Same reasoning, applied to the cache store (ADR-0031): a store is a
       // live object registered once per root, never per call.
       cacheStore: config.cacheStore,
-      // Structural, like `computed`/`relations` above (ADR-0037): resolved
-      // once at bootstrap, outside the settings precedence chain, so a
-      // per-call override cannot loosen what an entity's `policy` demands.
+      // Structural, like `relations` above (ADR-0037): resolved once at
+      // bootstrap, outside the settings precedence chain, so a per-call
+      // override cannot loosen what an entity's `policy` demands.
       policy: config.policy,
     };
   }
@@ -1621,9 +1618,9 @@ function cloneResponsePayload(response: KavoResponse): KavoResponse {
  * A custom operation is the one place a handler's result is not the entity
  * by contract, so it is the one place the projection can empty a value
  * entirely. `dto.output` is how a result with its own shape declares
- * itself; with none, the result is filtered to the entity's columns plus
- * its computed fields, and a result that shares none of them survives as an
- * empty object. Nothing said so — not a type error, not a log line — and
+ * itself; with none, the result is filtered to the entity's own columns,
+ * and a result that shares none of them survives as an empty object.
+ * Nothing said so — not a type error, not a log line — and
  * the static types actively disagreed: `CustomOperationResult` types
  * `run`'s return as the handler's own return type when no `dto.output` is
  * declared, so the signature promised the shape while the wire served `{}`.

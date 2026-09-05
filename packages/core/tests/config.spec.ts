@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
+import type { EntityMetadata } from "@kavo/core";
 import { BUILT_IN_DEFAULTS, ConfigurationException, createKavo, mergeSettings, resolveEntityConfig } from "@kavo/core";
 import { User, userMetadata } from "./support/user-fixture.js";
 import { authorMetadata, postMetadata } from "./support/blog-fixture.js";
+
+/** `userMetadata` plus an ORM-derived `fullName` field (no backing column). */
+const userMetadataWithDerivedFullName: EntityMetadata<User> = {
+  ...userMetadata,
+  fields: [
+    ...userMetadata.fields,
+    { name: "fullName", kind: "string", nullable: false, generated: false, derivedExpression: "concat" },
+  ],
+};
 
 describe("mergeSettings — merge algebra", () => {
   it("replaces scalars key-by-key, nearer scope wins", () => {
@@ -162,14 +172,11 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.searchable).toEqual(["name"]);
   });
 
-  it("rejects a computed field named in allowlists.searchable", () => {
+  it("rejects an ORM-derived field named in allowlists.searchable", () => {
     try {
       resolveEntityConfig(
-        userMetadata,
-        {
-          computed: { fullName: { resolve: () => "" } },
-          allowlists: { searchable: ["fullName" as never] },
-        },
+        userMetadataWithDerivedFullName,
+        { allowlists: { searchable: ["fullName" as never] } },
         undefined,
       );
       throw new Error("expected a ConfigurationException");
@@ -246,14 +253,11 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.allowlists.updatable).toEqual(["name", "email", "age"]);
   });
 
-  it("rejects a computed field named in allowlists.creatable or allowlists.updatable", () => {
+  it("rejects an ORM-derived field named in allowlists.creatable or allowlists.updatable", () => {
     try {
       resolveEntityConfig(
-        userMetadata,
-        {
-          computed: { fullName: { resolve: () => "" } },
-          allowlists: { creatable: ["fullName" as never] },
-        },
+        userMetadataWithDerivedFullName,
+        { allowlists: { creatable: ["fullName" as never] } },
         undefined,
       );
       throw new Error("expected a ConfigurationException");
@@ -266,6 +270,68 @@ describe("resolveEntityConfig — bootstrap", () => {
       });
       expect((error as ConfigurationException).message).toContain("never writable");
     }
+  });
+
+  describe("ORM-derived fields (issue #373)", () => {
+    it("excludes a derived field from every unconfigured default allowlist", () => {
+      const config = resolveEntityConfig(userMetadataWithDerivedFullName, undefined, undefined);
+      expect(config.allowlists.filterable).not.toContain("fullName");
+      expect(config.allowlists.sortable).not.toContain("fullName");
+      expect(config.allowlists.selectable).not.toContain("fullName");
+      expect(config.allowlists.searchable).not.toContain("fullName");
+    });
+
+    it("lets a derived field opt in to filterable/sortable/selectable by explicit array", () => {
+      const config = resolveEntityConfig(
+        userMetadataWithDerivedFullName,
+        {
+          allowlists: {
+            filterable: ["fullName" as never],
+            sortable: ["fullName" as never],
+            selectable: ["name", "fullName" as never],
+          },
+        },
+        undefined,
+      );
+      expect(config.allowlists.filterable).toEqual(["fullName"]);
+      expect(config.allowlists.sortable).toEqual(["fullName"]);
+      expect(config.allowlists.selectable).toEqual(["name", "fullName"]);
+    });
+
+    it("never surfaces a derived field through selectable's { exclude } form", () => {
+      // `{ exclude }` resolves against the entity's own (non-derived)
+      // columns only — a derived field is opt-in, like a relation, so there
+      // is no "everything" set for `{ exclude }` to include it in.
+      const config = resolveEntityConfig(
+        userMetadataWithDerivedFullName,
+        { allowlists: { selectable: { exclude: ["age"] } } },
+        undefined,
+      );
+      expect(config.allowlists.selectable).not.toContain("fullName");
+    });
+
+    it("rejects a create/update/patch DTO naming a derived field", () => {
+      class FullNameCreateDto {
+        name = "";
+        fullName = "";
+      }
+      try {
+        resolveEntityConfig(
+          userMetadataWithDerivedFullName,
+          { dto: { create: FullNameCreateDto as never } },
+          undefined,
+        );
+        throw new Error("expected a ConfigurationException");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigurationException);
+        expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+        expect((error as ConfigurationException).messageParams).toMatchObject({
+          entity: "User",
+          path: "dto.create",
+        });
+        expect((error as ConfigurationException).message).toContain("ORM-derived field");
+      }
+    });
   });
 
   it("resolves an entity-scope defaultSort", () => {
