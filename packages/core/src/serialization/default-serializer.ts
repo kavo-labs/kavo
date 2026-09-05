@@ -324,7 +324,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // A composite-key entity (issue #261) has no single `idField` to
     // exclude — its key columns are a natural key the client legitimately
     // supplies on `createOne`, so the derived default keeps them (narrowed
-    // back out of `allowed.updatable`'s default in `resolveAllowed`, which is
+    // back out of `update.fields`'s default in `resolveAllowed`, which is
     // what actually keeps them immutable after creation).
     const columns = metadata.fields
       .filter(
