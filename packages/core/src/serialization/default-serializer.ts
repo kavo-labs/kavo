@@ -3,10 +3,10 @@ import type { ComputedFieldMap } from "../config/computed-field.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { Deserializer, Serializer } from "./serializer.js";
 import type { EntityCatalog } from "../metadata/entity-catalog.js";
-import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
+import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
 
 /**
@@ -321,16 +321,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
 
   constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
     this.computedNames = new Set(Object.keys(computed));
-    // A composite-key entity (issue #261) has no single `idField` to
-    // exclude — its key columns are a natural key the client legitimately
-    // supplies on `createOne`, so the derived default keeps them (narrowed
-    // back out of `update.fields`'s default in `resolveAllowed`, which is
-    // what actually keeps them immutable after creation).
-    const columns = metadata.fields
-      .filter(
-        (field) => !field.generated && (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
-      )
-      .map((field) => field.name);
     const relations = new Map<string, () => RelationIdSpec | undefined>();
     for (const relation of metadata.relations) {
       // Lazily: the target may enter the catalog after this entity does.
@@ -345,9 +335,13 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       });
     }
     this.relationIdFields = relations;
-    // Relations join the derived default — associating by id is ordinary
-    // CRUD, not an opt-in extra.
-    this.writableProjection = [...columns, ...relations.keys()];
+    // The shared derivation (ADR-0014): every non-generated column except a
+    // single primary key (a composite natural key is kept — the client
+    // supplies it on `createOne`), plus every relation, writable by
+    // association. `EntityConfig.create.fields`/`update.fields`'s
+    // `{ exclude }` form subtracts from this same set (issue #397), so both
+    // sides read it from one place.
+    this.writableProjection = derivedWritableFieldNames(metadata);
   }
 
   deserialize<Shape>(raw: unknown, dto: DtoClass<Shape & object> | null, context: KavoContext<Entity>): Shape {

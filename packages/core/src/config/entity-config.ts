@@ -562,12 +562,17 @@ export interface EntityConfig<
    */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**
-   * What `createOne` (and `createMany`, once #137 lands) may write, via the
-   * same `{ fields: [...] }` shorthand `dto.patch`/`dto.item`/`dto.list`
-   * accept (issue #386) — moved to its own top-level key (issue #388) so
-   * `dto.create` stays reserved for a registered DTO class. Omitted, every
-   * own writable field is open: every non-generated scalar column except
-   * the primary key, plus every relation, by association (ADR-0014). A
+   * What `createOne` (and `createMany`, once #137 lands) may write. A
+   * `{ fields: [...] }` allowlist (the shorthand `dto.patch`/`dto.item`/
+   * `dto.list` also accept, issue #386), or the inverse `{ fields: { exclude:
+   * [...] } }` form the read-side field groups take (issue #397) — "every
+   * writable field except these", resolved at bootstrap against the ADR-0014
+   * writable projection, with an `exclude` entry that names nothing writable
+   * a bootstrap error. Moved to its own top-level key (issue #388) so
+   * `dto.create` stays reserved for a registered DTO class. Omitted — or an
+   * `{ exclude }` that removes nothing — every own writable field is open:
+   * every non-generated scalar column except the primary key, plus every
+   * relation, by association (ADR-0014). A
    * registered `dto.create` class with a runtime shape **replaces** this
    * projection rather than intersecting with it, and wins over this key —
    * where you register one, it, not this key, is the narrowing statement.
