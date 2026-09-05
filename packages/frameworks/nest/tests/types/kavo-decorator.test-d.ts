@@ -89,31 +89,27 @@ void CompatibleHandlerController;
 class WrongEntityController {}
 void WrongEntityController;
 
-// The `Computed` parameter (ADR-0019) is inferred from `computed`'s keys at
-// the decoration site, so an explicit selectable list can name a computed
-// field with no cast.
-@Kavo(Todo, {
-  computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
-  allowlists: { selectable: ["id", "title", "slug"] },
-})
-@Controller("computed-todos")
-class ComputedController {}
-void ComputedController;
+// An ORM-derived field (issue #373 — a TypeORM `@VirtualColumn`, say) is a
+// real class property, so it already type-checks as an ordinary `FieldPath`
+// with no separate `Extra`/`Computed` widening: naming it in `selectable`
+// (opt-in, ADR-0046), `filterable`, or `sortable` needs no cast.
+class TodoWithDerivedField {
+  id = 0;
+  title = "";
+  slug = "";
+}
 
-@Kavo(Todo, {
-  computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
-  // @ts-expect-error — and never a filterable one: it has no column.
-  allowlists: { filterable: ["slug"] },
-})
-@Controller("computed-filter-todos")
-class ComputedFilterController {}
-void ComputedFilterController;
+@Kavo(TodoWithDerivedField, { allowlists: { selectable: ["id", "title", "slug"] } })
+@Controller("derived-todos")
+class DerivedController {}
+void DerivedController;
 
-@Kavo(Todo, {
-  computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
-  // @ts-expect-error — nor a sortable one.
-  allowlists: { sortable: ["slug"] },
-})
-@Controller("computed-sort-todos")
-class ComputedSortController {}
-void ComputedSortController;
+@Kavo(TodoWithDerivedField, { allowlists: { filterable: ["slug"] } })
+@Controller("derived-filter-todos")
+class DerivedFilterController {}
+void DerivedFilterController;
+
+@Kavo(TodoWithDerivedField, { allowlists: { sortable: ["slug"] } })
+@Controller("derived-sort-todos")
+class DerivedSortController {}
+void DerivedSortController;
