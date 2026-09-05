@@ -426,7 +426,7 @@ export function createTransport(options: SseTransportOptions): SseTransport {
           const unevaluable = conditionFields.find((field) => !knownFields.has(field));
           if (unevaluable !== undefined) {
             sendJson(res, 400, {
-              error: `filter field '${unevaluable}' cannot be evaluated for a realtime subscription (relation and computed fields are not supported — only the entity's own columns)`,
+              error: `filter field '${unevaluable}' cannot be evaluated for a realtime subscription (relation fields are not supported — only the entity's own metadata fields)`,
             });
             return;
           }

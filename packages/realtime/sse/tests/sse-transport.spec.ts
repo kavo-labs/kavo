@@ -526,9 +526,9 @@ describe("createTransport — subscribe-time filtering (issue #160)", () => {
   });
 
   it("rejects a filter field that parses but cannot be evaluated — a relation, not an entity column", async () => {
-    // A relation (or computed field) can sit in the filterable allowlist and
-    // so parses cleanly, but realtime evaluation only knows the entity's own
-    // columns (sse-transport.ts's unevaluable guard).
+    // A relation can sit in the filterable allowlist and so parses cleanly,
+    // but realtime evaluation only knows the entity's own metadata fields
+    // (sse-transport.ts's unevaluable guard).
     const filterableWithRelation = (): FilterableEntity => {
       const kavo = createKavo();
       const metadata = {
