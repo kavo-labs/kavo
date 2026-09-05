@@ -1,7 +1,16 @@
 import "reflect-metadata";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DataSource } from "typeorm";
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryColumn, PrimaryGeneratedColumn } from "typeorm";
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  ManyToOne,
+  OneToMany,
+  PrimaryColumn,
+  PrimaryGeneratedColumn,
+  VirtualColumn,
+} from "typeorm";
 import {
   ConflictException,
   NotFoundException,
@@ -38,8 +47,23 @@ class Author {
   @CreateDateColumn()
   createdAt!: Date;
 
+  /** An ORM-derived field (issue #373): a correlated-subquery virtual column. */
+  @VirtualColumn({
+    query: (alias) => `SELECT COUNT(*) FROM Book WHERE Book.authorId = ${alias}.id`,
+  })
+  bookCount!: number;
+
   @OneToMany(() => Book, (book) => book.author)
   books!: Book[];
+
+  /**
+   * A plain class getter — not `@VirtualColumn`, no TypeORM decorator at
+   * all. Carries no `FieldMetadata`; the response-only getter test below
+   * exercises it through an explicit DTO.
+   */
+  get displayName(): string {
+    return `${this.email} <getter>`;
+  }
 }
 
 @Entity()
@@ -174,6 +198,87 @@ describe("metadata derivation seam", () => {
   // branch is unreachable through a real DataSource — defense in depth
   // for a metadata source that skipped TypeORM's own validation, not a
   // path this suite can exercise end-to-end.
+
+  it("carries a @VirtualColumn's query function as the opaque derivedExpression marker (issue #373)", () => {
+    const byName = Object.fromEntries(buildEntityMetadata(dataSource, Author).fields.map((f) => [f.name, f]));
+    expect(byName["bookCount"]?.derivedExpression).toBeTypeOf("function");
+    expect(byName["email"]).not.toHaveProperty("derivedExpression");
+  });
+});
+
+describe("ORM-derived fields — filter/sort/select (issue #373)", () => {
+  let derivedAuthors: DefaultKavoService<Author>;
+
+  beforeAll(() => {
+    derivedAuthors = kavo.createCrud(Author, {
+      allowlists: {
+        filterable: ["bookCount" as never],
+        sortable: ["bookCount" as never],
+        selectable: ["email", "bookCount" as never],
+      },
+    }) as DefaultKavoService<Author>;
+  });
+
+  it("selects an opted-in derived field, computed by the database", async () => {
+    await seed();
+    const ada = await dataSource.getRepository(Author).findOneByOrFail({ email: "ada@x.io" });
+    await dataSource.getRepository(Book).save({ title: "Notes", author: ada });
+
+    const found = (await derivedAuthors.findOne(ada.id)) as unknown as { bookCount: number };
+    expect(found.bookCount).toBe(1);
+  });
+
+  it("filters on it, inlined into WHERE", async () => {
+    await seed();
+    const ada = await dataSource.getRepository(Author).findOneByOrFail({ email: "ada@x.io" });
+    await dataSource.getRepository(Book).save({ title: "Notes", author: ada });
+
+    const list = await derivedAuthors.findMany({
+      filter: { kind: "condition", field: "bookCount", operator: "GT", value: 0 },
+    } as never);
+    expect(list.items.map((item) => (item as unknown as { email: string }).email)).toEqual(["ada@x.io"]);
+  });
+
+  it("sorts on it, inlined into ORDER BY", async () => {
+    await seed();
+    const ada = await dataSource.getRepository(Author).findOneByOrFail({ email: "ada@x.io" });
+    const grace = await dataSource.getRepository(Author).findOneByOrFail({ email: "grace@x.io" });
+    await dataSource.getRepository(Book).save({ title: "One", author: ada });
+    await dataSource.getRepository(Book).save({ title: "Two", author: grace });
+    await dataSource.getRepository(Book).save({ title: "Three", author: grace });
+
+    const list = await derivedAuthors.findMany({ sort: [{ field: "bookCount", direction: "desc" }] } as never);
+    expect((list.items[0] as unknown as { email: string }).email).toBe("grace@x.io");
+  });
+
+  it("serves a plain class getter (not @VirtualColumn) through an explicit DTO — response-only, no allowlist entry", async () => {
+    // Unlike `@VirtualColumn`, a plain getter carries no `FieldMetadata` at
+    // all — there is nothing for `resolveAllowlists` to opt in or reject,
+    // and no entry is needed in `allowlists`. It still reaches the response
+    // because TypeORM's QueryBuilder hands back real class instances:
+    // `DefaultSerializer.project` copies any key the projection names that
+    // is present on the row (`key in source`), and `key in source` is true
+    // for a prototype getter — the value at read time still comes off the
+    // real entity instance, not the DTO. The DTO's own job here is only to
+    // *name* the key: an own field (`displayName = ""`) is enough to put it
+    // in the projected key set, even though the getter, not this
+    // initializer, supplies the actual value. With no DTO, the
+    // entity-derived default is `metadata.fields` only, so the getter never
+    // shows up unasked.
+    class AuthorItemDto {
+      id = 0;
+      email = "";
+      displayName = "";
+    }
+    const gettersAuthors = kavo.createCrud(Author, {
+      dto: { item: AuthorItemDto as never },
+    }) as DefaultKavoService<Author>;
+    await seed();
+    const ada = await dataSource.getRepository(Author).findOneByOrFail({ email: "ada@x.io" });
+
+    const found = (await gettersAuthors.findOne(ada.id)) as unknown as { displayName: string };
+    expect(found.displayName).toBe("ada@x.io <getter>");
+  });
 });
 
 describe("TypeOrmRepositoryAdapter — CRUD", () => {
