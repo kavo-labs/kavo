@@ -81,10 +81,16 @@ the defaults derive from:
   list, since both mutate an existing row) — the write-side counterpart to
   `allowed.selectable` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the
-  soft-delete marker there has no effect; and a registered write DTO with a
-  runtime shape wins outright, exactly as a registered `item`/`list` DTO
-  wins over `selectable` — where you register one, it, not the allowlist,
-  is the narrowing statement. Unconfigured, both default to the same base
+  soft-delete marker in the plain array form has no effect; and a
+  registered write DTO with a runtime shape wins outright, exactly as a
+  registered `item`/`list` DTO wins over `selectable` — where you register
+  one, it, not the allowlist, is the narrowing statement. It also accepts
+  the `{ exclude: [...] }` form (issue #397) — "every writable field except
+  these" — resolved at bootstrap against that same base; there, unlike the
+  array form and unlike `allowed`'s lax `{ exclude }`, a name that is not in
+  the base set is a bootstrap `ConfigurationException` rather than a no-op,
+  matching `allowed.includable`'s strict `{ exclude }`. Unconfigured — or an
+  `{ exclude }` that removes nothing — both default to the same base
   described above, so an entity that never sets either sees no change
   (issue #259).
 

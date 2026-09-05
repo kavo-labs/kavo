@@ -20,7 +20,7 @@ import type {
   ResolvedSelectConfig,
   ResolvedSortConfig,
 } from "./resolved-entity-config.js";
-import type { EntityMetadata } from "../metadata/entity-metadata.js";
+import { entityWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { FilterExpression, FilterOperator, FilterOperatorToken } from "../query/filter.js";
@@ -108,7 +108,13 @@ export function resolveEntityConfig<Entity extends object>(
   globalPolicy?: Policy,
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
-  rejectDerivedWriteDtoKeys(entityName, metadata, entityConfig);
+  // The `{ exclude }` form of `create.fields`/`update.fields` (issue #397)
+  // is resolved to a concrete array here, against the same writable-field
+  // universe `DefaultDeserializer` enforces — so the two never drift.
+  const writableUniverse = entityWritableFieldNames(metadata);
+  const createFields = resolveWriteFields(entityName, "create.fields", entityConfig?.create, writableUniverse);
+  const updateFields = resolveWriteFields(entityName, "update.fields", entityConfig?.update, writableUniverse);
+  rejectDerivedWriteDtoKeys(entityName, metadata, entityConfig, createFields, updateFields);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
 
   const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig);
@@ -181,8 +187,10 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
-      create: entityConfig?.create,
-      update: entityConfig?.update,
+      // The resolved arrays, not the raw config: an `{ exclude }` shorthand
+      // is already expanded to a concrete writable-field list here (#397).
+      create: createFields === undefined ? undefined : ({ fields: createFields } as WriteFieldsConfig<Entity>),
+      update: updateFields === undefined ? undefined : ({ fields: updateFields } as WriteFieldsConfig<Entity>),
     }),
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
@@ -262,6 +270,67 @@ function resolveWriteApply<Entity extends object>(
     );
   }
   return value;
+}
+
+/**
+ * Resolve `create.fields`/`update.fields` (issue #397) to a concrete
+ * writable-field list, or `undefined` to leave the entity-derived default
+ * (`DefaultDeserializer`'s own writable projection) in place.
+ *
+ * The plain array form is passed through verbatim — a typo in it is caught
+ * later, when the synthesized DTO's keys are checked — the same laxity it
+ * has had since issue #388. The `{ exclude }` form follows
+ * `resolveIncludableSelector`'s strict precedent, not `resolveFieldSelector`'s
+ * lax one (which silently excludes nothing on a name that matches nothing):
+ * the writable universe is fully known at bootstrap, so an `exclude` entry
+ * that names nothing writable is a fixed-once declaration that can be judged
+ * wrong here, and a silent no-op would be the wrong report.
+ *
+ * `{ exclude: [] }` — or any `{ exclude }` that removes nothing — resolves
+ * to `undefined`, not the full universe. Returning the universe as an
+ * explicit list would synthesize a DTO class, and `DefaultDeserializer`
+ * drops the soft-delete marker column only on its *derived-default* path
+ * (`explicit === null`), so an explicit full list would widen writes by that
+ * one column versus omitting the key. This deliberately diverges from
+ * `include.fields`, where `{ exclude: [] }` is the meaningful "opt
+ * everything in" spelling.
+ */
+function resolveWriteFields<Entity extends object>(
+  entityName: string,
+  scope: string,
+  writeConfig: WriteFieldsConfig<Entity> | undefined,
+  universe: readonly string[],
+): readonly string[] | undefined {
+  const value = writeConfig?.fields;
+  if (value === undefined) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return Object.freeze([...(value as readonly string[])]);
+  }
+  if (typeof value !== "object" || value === null || !Array.isArray((value as { exclude?: unknown }).exclude)) {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a string array or { exclude: string[] }, got ${JSON.stringify(value)}`,
+    );
+  }
+  const exclude = (value as { readonly exclude: readonly string[] }).exclude;
+  const known = new Set(universe);
+  for (const name of exclude) {
+    if (!known.has(name)) {
+      throw new ConfigurationException(
+        entityName,
+        `${scope}.exclude`,
+        `'${name}' is not a writable field of ${entityName} (writable: ${universe.join(", ") || "none"})`,
+      );
+    }
+  }
+  const excluded = new Set(exclude);
+  if (excluded.size === 0) {
+    return undefined;
+  }
+  return Object.freeze(universe.filter((name) => !excluded.has(name)));
 }
 
 /**
@@ -363,6 +432,8 @@ function rejectDerivedWriteDtoKeys<Entity extends object>(
   entityName: string,
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
+  createFields: readonly string[] | undefined,
+  updateFields: readonly string[] | undefined,
 ): void {
   const names = new Set(
     metadata.fields.filter((field) => field.derivedExpression !== undefined).map((field) => field.name),
@@ -371,19 +442,13 @@ function rejectDerivedWriteDtoKeys<Entity extends object>(
     return;
   }
   const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
+  // `createFields`/`updateFields` are already `{ exclude }`-resolved (#397);
+  // a derived-field name can never be in the resolved list of an `{ exclude }`
+  // form (it has no writable storage), so this still only ever fires for a
+  // derived-field name written into the plain array form.
   const checks: readonly [slot: string, scope: string, dtoClass: DtoClass | null][] = [
-    [
-      "create",
-      "dto.create",
-      dto?.create ??
-        (entityConfig?.create ? dtoClassFromFields(entityConfig.create.fields as readonly string[]) : null),
-    ],
-    [
-      "update",
-      "dto.update",
-      dto?.update ??
-        (entityConfig?.update ? dtoClassFromFields(entityConfig.update.fields as readonly string[]) : null),
-    ],
+    ["create", "dto.create", dto?.create ?? (createFields ? dtoClassFromFields(createFields) : null)],
+    ["update", "dto.update", dto?.update ?? (updateFields ? dtoClassFromFields(updateFields) : null)],
     ["patch", "dto.patch", resolveDtoSlot(dto?.patch as Parameters<typeof resolveDtoSlot>[0])],
   ];
   for (const [slot, scope, dtoClass] of checks) {

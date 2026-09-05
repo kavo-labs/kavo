@@ -44,10 +44,8 @@ export class DefaultDtoResolver<Entity = unknown> implements DtoResolver<Entity>
     const map = dto as Record<Exclude<DtoSlot, "create" | "update" | "query">, Parameters<typeof resolveDtoSlot>[0]> &
       Record<"create" | "update", DtoClass | undefined> &
       Record<"query", DtoClass | undefined>;
-    const create =
-      map.create ?? (writable.create?.fields ? dtoClassFromFields(writable.create.fields as readonly string[]) : null);
-    const update =
-      map.update ?? (writable.update?.fields ? dtoClassFromFields(writable.update.fields as readonly string[]) : null);
+    const create = map.create ?? writableFieldsToDtoClass(writable.create?.fields);
+    const update = map.update ?? writableFieldsToDtoClass(writable.update?.fields);
     const item = resolveDtoSlot(map.item);
     this.slots = Object.freeze({
       create,
@@ -62,4 +60,23 @@ export class DefaultDtoResolver<Entity = unknown> implements DtoResolver<Entity>
   resolve(slot: DtoSlot, _operation: OperationId): DtoClass | null {
     return this.slots[slot];
   }
+}
+
+/**
+ * The top-level `create`/`update` `fields` shorthand → a synthesized
+ * `DtoClass`, or `null` to fall back to the entity-derived default.
+ *
+ * The `{ exclude }` form (issue #397) is resolved to a concrete array in
+ * `resolveEntityConfig` before it reaches the engine's resolver. A
+ * `{ exclude }` object still arriving here means this resolver was built
+ * straight from raw config — `@kavo/nest`'s decoration-time Swagger pass
+ * (`swagger.ts`), where no entity metadata exists to expand it (ADR-0012).
+ * Treat it as "no shorthand" so the generic fallback request body is
+ * documented, rather than an empty class synthesized from a non-array.
+ */
+function writableFieldsToDtoClass<Entity>(fields: WriteFieldsConfig<Entity>["fields"] | undefined): DtoClass | null {
+  if (fields === undefined || !Array.isArray(fields)) {
+    return null;
+  }
+  return dtoClassFromFields(fields as readonly string[]);
 }

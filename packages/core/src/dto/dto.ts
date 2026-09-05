@@ -51,7 +51,13 @@ export type WriteApply<Entity = unknown> = (
  * with `default` and, per issue #391, `apply`). Unlike {@link FieldsShorthand},
  * `fields` is optional here — a caller may configure only `default`/`apply`
  * and leave the writable-field list at its entity-derived default, which a
- * bare `{ fields: [...] }` shorthand can't express.
+ * bare `{ fields: [...] }` shorthand can't express — and it additionally
+ * accepts the `{ exclude: [...] }` form (issue #397) the read-side field
+ * groups (`filter.fields`/`sort.fields`/`select.fields`/`include.fields`)
+ * take: "every writable field except these", resolved at bootstrap against
+ * the ADR-0014 writable projection. An `exclude` entry that names nothing
+ * writable is a bootstrap error, and `{ exclude: [] }` (or any `{ exclude }`
+ * that removes nothing) is exactly equivalent to omitting the key.
  *
  * `default` fills in a value for any writable field the request body omits
  * — `createOne` only for `create.default`, `updateOne` only (never
@@ -74,7 +80,7 @@ export type WriteApply<Entity = unknown> = (
  * ADR-0048 already states for `filter.apply`/`select.apply`/`sort.apply`.
  */
 export interface WriteFieldsConfig<Entity> {
-  readonly fields?: readonly FieldPath<Entity, 1>[];
+  readonly fields?: readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
   /** Values for fields the request body doesn't set. Validated at bootstrap against the entity's own writable columns. */
   readonly default?: Partial<EntityInput<Entity>>;
   /** Values forced into the request body, overwriting whatever the client sent (issue #391). Not bootstrap-validated — see class doc. */
