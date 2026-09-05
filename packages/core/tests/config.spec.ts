@@ -270,7 +270,7 @@ describe("resolveEntityConfig — bootstrap", () => {
 
   it("defaults create/update's writable projection to every non-generated own column except the id, plus every relation", () => {
     const config = resolveEntityConfig(postMetadata, undefined, undefined);
-    // No `dto.create`/`dto.update` shorthand configured, so the engine falls
+    // No top-level `create`/`update` shorthand configured, so the engine falls
     // back to `DefaultDeserializer`'s own derived writable projection: `id`
     // (generated, and the primary key regardless) and `deletedAt`
     // (generated) are excluded; `title`/`authorId` and both relations join
@@ -279,10 +279,10 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.dto.resolve("update", "updateOne")).toBeNull();
   });
 
-  it("reaches creatable/updatable through dto.create/dto.update's { fields } shorthand", () => {
+  it("reaches creatable/updatable through the top-level create/update { fields } shorthand", () => {
     const config = resolveEntityConfig(
       userMetadata,
-      { dto: { create: { fields: ["name"] }, update: { fields: ["name", "email"] } } },
+      { create: { fields: ["name"] }, update: { fields: ["name", "email"] } },
       undefined,
     );
     const createDto = config.dto.resolve("create", "createOne");
@@ -295,13 +295,13 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.filter.fields).toContain("age");
   });
 
-  it("rejects a computed field named in dto.create's or dto.update's { fields } shorthand", () => {
+  it("rejects a computed field named in the top-level create's or update's { fields } shorthand", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           computed: { fullName: { resolve: () => "" } },
-          dto: { create: { fields: ["fullName" as never] } },
+          create: { fields: ["fullName" as never] },
         },
         undefined,
       );
@@ -351,6 +351,36 @@ describe("resolveEntityConfig — bootstrap", () => {
         path: "include.default",
       });
       expect((error as ConfigurationException).detail).toContain("posts");
+    }
+  });
+});
+
+/** `filter.fields`'s map form (issue #386): per-field operator restriction. */
+describe("resolveEntityConfig — filter.fields map form", () => {
+  it("restricts each named field to its own operator set", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      { filter: { fields: { name: ["eq"], age: ["gte", "lte"] } } },
+      undefined,
+    );
+    expect(config.filter.fields).toEqual(expect.arrayContaining(["name", "age"]));
+    expect(config.filter.operators?.get("name")).toEqual(new Set(["EQ"]));
+    expect(config.filter.operators?.get("age")).toEqual(new Set(["GTE", "LTE"]));
+  });
+
+  it("a field named in the map is implicitly on the allowlist, with no separate fields list needed", () => {
+    const config = resolveEntityConfig(userMetadata, { filter: { fields: { status: ["eq"] } } }, undefined);
+    expect(config.filter.fields).toEqual(["status"]);
+  });
+
+  it("rejects an unknown operator token", () => {
+    try {
+      resolveEntityConfig(userMetadata, { filter: { fields: { name: ["bogus" as never] } } }, undefined);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "filter.fields.name" });
+      expect((error as ConfigurationException).detail).toContain("bogus");
     }
   });
 });

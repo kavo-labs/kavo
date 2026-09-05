@@ -158,6 +158,7 @@ const config = defineConfig({
           { text: "Allowed", link: "/features/allowed" },
           { text: "Computed Fields", link: "/features/computed-fields" },
           { text: "Policy", link: "/features/policy" },
+          { text: "Apply", link: "/features/apply" },
           { text: "Composite Primary Keys", link: "/features/composite-primary-keys" },
         ],
       },

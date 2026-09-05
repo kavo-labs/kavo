@@ -3,12 +3,13 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
+import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { ComputedFieldDescriptor } from "./computed-field.js";
 import type { Policy } from "../policy/kavo-policy.js";
+import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { FilterOperatorToken } from "../query/filter.js";
 
 /**
@@ -123,6 +124,21 @@ export interface FilterConfig<Entity> {
    * new capability) — unconfigured, every own column, every operator.
    */
   readonly fields?: FilterFieldSelector<Entity>;
+  /**
+   * A mandatory server-side predicate (ADR-0048), `AND`ed into the client's
+   * own `filter=` on every read, and into the id lookup of every single-row
+   * write (`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/`purgeOne`) — a
+   * row outside it is never found, so those answer `404` rather than
+   * mutating or leaking existence. Unlike `fields`, this is not an
+   * allowlist: the client cannot widen, remove, or bypass it by supplying
+   * its own `filter=`, only narrow further inside the `AND`. Not a
+   * substitute for `filter.fields`/`filter.limits`, and — unlike a
+   * `default` (`sort.default`/`select.default`/`include.default`) — not a
+   * fallback for an absent client value either: it always applies. See
+   * ADR-0048 for the full composition rules and why single-row writes are
+   * gated the way they are.
+   */
+  readonly apply?: FilterApply<Entity>;
   readonly limits?: FilterLimits;
 }
 
@@ -165,6 +181,15 @@ export interface IncludeConfig<Entity> {
    * error.
    */
   readonly default?: readonly IncludePath<Entity, 1>[];
+  /**
+   * Relation paths force-included on every request, unioned into the
+   * client's own `include=` before resolution (ADR-0048) — unlike
+   * `default`, this is not overridden by a client-supplied `include=`, it
+   * always applies. Forced paths still pass through the same
+   * `IncludeResolver` validation (depth/breadth limits, `fields`
+   * allowlist) as any client-requested path.
+   */
+  readonly apply?: IncludeApply<Entity>;
   readonly limits?: IncludeLimits;
 }
 
@@ -183,6 +208,14 @@ export interface SortConfig<Entity> {
    * bootstrap, the same as client-supplied sort fields are at request time.
    */
   readonly default?: readonly string[];
+  /**
+   * Sort keys forced ahead of the client's own `sort=` (or `default`
+   * above) — unlike `default`, always applied, never overridden by a
+   * client-supplied `sort=` (ADR-0048). Prepended to the effective sort;
+   * a client field already named among them is deduplicated out of its
+   * own position rather than sorted on twice.
+   */
+  readonly apply?: SortApply<Entity>;
 }
 
 /**
@@ -225,6 +258,16 @@ export interface SelectConfig<Entity, Computed extends string = never> {
    * at bootstrap.
    */
   readonly default?: readonly (FieldPath<Entity, 1> | Computed)[];
+  /**
+   * Fields force-included in the projection, unioned into whatever the
+   * request would otherwise project (its own `select=`, or `default`
+   * above) — additive only, never a mask, and always applied regardless
+   * of what the client asked for (ADR-0048). A `null`/unconfigured
+   * projection already means "everything", so a forced field there is a
+   * no-op. Narrowing the projection per caller is a different feature,
+   * not this one.
+   */
+  readonly apply?: SelectApply<Entity>;
 }
 
 /**
@@ -498,14 +541,48 @@ export interface EntityConfig<
   >,
 > extends Omit<DeepPartial<KavoSettings>, "operations"> {
   /**
-   * `create`/`update`/`patch`/`item`/`list` each accept either a registered
-   * DTO class (today's behavior) or an inline `{ fields: [...] }` shorthand
-   * (issue #386) that derives a projection/writable-field list without a
-   * hand-written class — `dto.create`/`dto.update`'s shorthand is also how
-   * `creatable`/`updatable` are reached now, in place of a separate
-   * `allowed.creatable`/`allowed.updatable` key.
+   * `create`/`update`/`patch`/`item`/`list` each accept a registered DTO
+   * class; `patch`/`item`/`list` additionally accept an inline
+   * `{ fields: [...] }` shorthand (issue #386) that derives a
+   * projection/writable-field list without a hand-written class.
+   * `create`/`update` do not accept that shorthand here — their writable-
+   * field list is the top-level `create`/`update` keys below (issue #388),
+   * keeping this map DTO-class-only for the two write slots.
    */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  /**
+   * What `createOne` (and `createMany`, once #137 lands) may write, via the
+   * same `{ fields: [...] }` shorthand `dto.patch`/`dto.item`/`dto.list`
+   * accept (issue #386) — moved to its own top-level key (issue #388) so
+   * `dto.create` stays reserved for a registered DTO class. Omitted, every
+   * own writable field is open: every non-generated scalar column except
+   * the primary key, plus every relation, by association (ADR-0014). A
+   * registered `dto.create` class with a runtime shape **replaces** this
+   * projection rather than intersecting with it, and wins over this key —
+   * where you register one, it, not this key, is the narrowing statement.
+   *
+   * `default` fills in a value for a writable field the request body
+   * doesn't set (`createOne` only) — a body that *does* send the field
+   * always wins outright, the same one-way relationship a client value has
+   * with `sort.default`/`select.default`/`include.default`. Validated at
+   * bootstrap against the entity's own writable columns.
+   */
+  readonly create?: WriteFieldsConfig<Entity>;
+  /**
+   * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
+   * may write. `update` (PUT) and `patch` (PATCH) share this one list
+   * rather than each getting its own — both mutate an existing row, so the
+   * set of fields open to being overwritten is the same question either
+   * way. Same default posture, narrowing behaviour, and DTO precedence as
+   * {@link EntityConfig.create} — see its note.
+   *
+   * `default` is `updateOne`-only, never `patchOne`: a `PATCH` omitting a
+   * field means "leave it unchanged", so filling it in there would
+   * silently overwrite a value the caller never touched. `updateOne` (PUT)
+   * is a full replacement, so a value it omits filling in from `default`
+   * matches PUT's own replace-the-whole-resource semantics.
+   */
+  readonly update?: WriteFieldsConfig<Entity>;
   /**
    * Default authorization for every operation on this entity (ADR-0037): a
    * single function, not a per-operation map — a map invited "which of the

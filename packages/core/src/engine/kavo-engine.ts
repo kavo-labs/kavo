@@ -30,6 +30,8 @@ import {
   QueryValidationException,
 } from "../errors/exceptions.js";
 import type { Policy, WhenParams } from "../policy/kavo-policy.js";
+import type { ApplyArgs, ResolvedApply } from "../policy/kavo-apply.js";
+import type { FilterExpression } from "../query/filter.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
@@ -256,7 +258,14 @@ export class KavoEngine<Entity extends object> {
     // resolved config.
     const configView = this.configViewFor(request);
 
-    const query = descriptor.kind === "read" ? this.normalizeQuery(request, configView) : null;
+    // `filter`/`sort`/`select`/`include`'s `apply` (ADR-0048) is resolved
+    // ahead of query normalization on a read, so it can compose into the
+    // very `NormalizedQueryContext` the client's own query is turned into —
+    // not applied afterward, which is too late to widen a `WHERE` or an
+    // include tree that has already been built.
+    const serverApply =
+      descriptor.kind === "read" ? await this.resolveReadApply(descriptor, request, configView, correlationId) : null;
+    const query = descriptor.kind === "read" ? this.normalizeQuery(request, configView, serverApply) : null;
     const context = createKavoContext<Entity>({
       operation: descriptor.id,
       config: configView,
@@ -373,7 +382,17 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const standard = isStandardOperationId(descriptor.id);
     const policy = standard ? configView.policy[descriptor.id] : undefined;
-    if (policy === undefined) {
+    // `filter.apply` (ADR-0048) gates single-row writes the same way
+    // `policy` gates them, and for the same reason a plain function can't
+    // be inspected up front: `updateOne`/`patchOne`/`deleteOne`/
+    // `restoreOne`/`purgeOne` never run `QueryNormalizer` (they mutate by
+    // id alone), so this is the only place their id lookup can be widened
+    // by a mandatory server-side filter. Reads don't reach this branch at
+    // all — `filter.apply` already composed into their `NormalizedQueryContext`
+    // before `context` was built (`KavoEngine.resolveReadApply`).
+    const applyFilter =
+      standard && descriptor.kind === "write" && request.id !== null ? configView.filter.apply : undefined;
+    if (policy === undefined && applyFilter === undefined) {
       // `authorization.required` also gates the array-mutation operations
       // Kavo itself synthesizes (`replace<Relation>` etc., ADR-0014/0029) —
       // never a `policy.<id>` entry, since `resolvePolicy` only recognizes
@@ -400,7 +419,11 @@ export class KavoEngine<Entity extends object> {
 
     let entity: Entity | undefined;
     if (id !== null) {
-      const found = await context.repository.findOneById(id, this.policyPrefetchQuery(), context);
+      const filterRoot =
+        applyFilter !== undefined
+          ? ((await applyFilter({ context, resource: context.entityName, operation: descriptor.id, params })) ?? null)
+          : null;
+      const found = await context.repository.findOneById(id, this.policyPrefetchQuery(filterRoot), context);
       if (found === null) {
         throw new NotFoundException({
           messageParams: { entity: configView.entityName, id: String(request.id) },
@@ -414,7 +437,9 @@ export class KavoEngine<Entity extends object> {
       entity = found;
     }
 
-    await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+    if (policy !== undefined) {
+      await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+    }
   }
 
   /** `findOne`'s deferred half of the policy stage — see `checkPolicy`'s doc comment. */
@@ -465,10 +490,16 @@ export class KavoEngine<Entity extends object> {
    * row that is soft-deleted by definition. No `include` is loaded either —
    * a policy that needs a relation can load it itself through
    * `context.repository` (ADR-0037).
+   *
+   * `filterRoot` (ADR-0048) widens the fetch's own filter beyond `id` alone
+   * — `filter.apply`'s result, when the entity configures one. A row
+   * outside it is exactly as invisible to this pre-fetch as a row that
+   * doesn't exist, so `checkPolicy` answers `404` either way, before a
+   * policy or handler ever sees it.
    */
-  private policyPrefetchQuery(): NormalizedQueryContext<Entity> {
+  private policyPrefetchQuery(filterRoot: FilterExpression<Entity> | null = null): NormalizedQueryContext<Entity> {
     return {
-      filter: { root: null },
+      filter: { root: filterRoot },
       sort: [],
       pagination: { limit: 1, offset: 0 },
       select: { root: null, relations: {} },
@@ -955,19 +986,78 @@ export class KavoEngine<Entity extends object> {
       // once at bootstrap, outside the settings precedence chain, so a
       // per-call override cannot loosen what an entity's `policy` demands.
       policy: config.policy,
+      // Structural, like `create`/`update`'s own field-group config above —
+      // a per-call override cannot widen what a write is defaulted from.
+      createDefault: config.createDefault,
+      updateDefault: config.updateDefault,
     };
   }
 
   private normalizeQuery(
     request: KavoRequest<Entity>,
     config: ResolvedEntityConfig<Entity>,
+    serverApply: ResolvedApply<Entity> | null,
   ): NormalizedQueryContext<Entity> {
     const { normalizer } = this.deps;
     const query = request.query;
     if (query instanceof WireQuery) {
-      return normalizer.normalizeWire(query.params, config);
+      return normalizer.normalizeWire(query.params, config, serverApply ?? undefined);
     }
-    return normalizer.normalizeInput((query as QueryContext<Entity> | null) ?? undefined, config);
+    return normalizer.normalizeInput(
+      (query as QueryContext<Entity> | null) ?? undefined,
+      config,
+      serverApply ?? undefined,
+    );
+  }
+
+  /**
+   * Evaluate `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+   * (ADR-0048) once per read, before `NormalizedQueryContext` exists — their
+   * whole purpose is to shape that query, so they cannot be handed it. The
+   * context built here carries `query: null` for exactly that reason; a
+   * second, complete context (with the real, composed query) is built
+   * afterward for the rest of the pipeline. `undefined` when the entity
+   * configures none of the four, so an unconfigured entity pays nothing
+   * beyond the one property-existence check.
+   */
+  private async resolveReadApply(
+    descriptor: OperationDescriptor<Entity>,
+    request: KavoRequest<Entity>,
+    configView: ResolvedEntityConfig<Entity>,
+    correlationId: string,
+  ): Promise<ResolvedApply<Entity> | null> {
+    const { filter, sort, select, include } = configView;
+    if (
+      filter.apply === undefined &&
+      sort.apply === undefined &&
+      select.apply === undefined &&
+      include.apply === undefined
+    ) {
+      return null;
+    }
+    const context = createKavoContext<Entity>({
+      operation: descriptor.id,
+      config: configView,
+      repository: this.deps.repository,
+      app: request.options?.app,
+      transaction: request.options?.transaction ?? null,
+      query: null,
+      correlationId,
+    });
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const args: ApplyArgs<Entity> = {
+      context,
+      resource: context.entityName,
+      operation: descriptor.id,
+      params: { id },
+    };
+    const [filterResult, sortResult, selectResult, includeResult] = await Promise.all([
+      filter.apply?.(args),
+      sort.apply?.(args),
+      select.apply?.(args),
+      include.apply?.(args),
+    ]);
+    return { filter: filterResult, sort: sortResult, select: selectResult, include: includeResult };
   }
 
   private resolveInput(

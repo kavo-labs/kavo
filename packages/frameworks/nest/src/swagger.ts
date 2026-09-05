@@ -299,8 +299,12 @@ export function applySwaggerMetadata(
   // The slot fallbacks (`patch`→`update`, `list`→`item`) belong to the core
   // resolver, not to this file: documenting a shape the engine would not
   // actually use is a lie that no test would catch. The resolver needs only
-  // the DTO map, so it is legal at decoration time (ADR-0012).
-  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined);
+  // the DTO map and the top-level `create`/`update` shorthand, both legal
+  // at decoration time (ADR-0012).
+  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined, {
+    create: config?.create,
+    update: config?.update,
+  });
 
   const bodyDto = bodyDtoFor(descriptor, dtoResolver);
   if (bodyDto !== null) {

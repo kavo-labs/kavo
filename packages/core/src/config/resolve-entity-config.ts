@@ -35,8 +35,9 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
+import type { DtoClass, WriteFieldsConfig } from "../dto/dto.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
-import { resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
+import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
@@ -116,6 +117,12 @@ export function resolveEntityConfig<Entity extends object>(
   const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, select);
 
+  const ownColumnNames = new Set(
+    metadata.fields.filter((field) => !field.generated).map((field) => field.name) as readonly string[],
+  );
+  const createDefault = resolveWriteDefault(entityName, "create.default", entityConfig?.create, ownColumnNames);
+  const updateDefault = resolveWriteDefault(entityName, "update.default", entityConfig?.update, ownColumnNames);
+
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
     globalDefaults,
@@ -174,7 +181,10 @@ export function resolveEntityConfig<Entity extends object>(
     include,
     projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
-    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
+    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
+      create: entityConfig?.create,
+      update: entityConfig?.update,
+    }),
     computed,
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
@@ -182,9 +192,49 @@ export function resolveEntityConfig<Entity extends object>(
     realtimeTransports: Object.freeze([...realtimeTransports]),
     cacheStore,
     policy,
+    createDefault,
+    updateDefault,
   };
   return Object.freeze(resolved);
 }
+
+/**
+ * Resolve `create.default`/`update.default`: a plain object of field values,
+ * validated against the entity's own non-generated columns (the only
+ * fields either slot's writable projection ever includes). `undefined`
+ * resolves to a frozen empty object, so callers never have to guard against
+ * a missing key.
+ */
+function resolveWriteDefault<Entity extends object>(
+  entityName: string,
+  scope: string,
+  writeConfig: WriteFieldsConfig<Entity> | undefined,
+  ownColumnNames: ReadonlySet<string>,
+): Readonly<Partial<Entity>> {
+  const value = writeConfig?.default;
+  if (value === undefined) {
+    return EMPTY_WRITE_DEFAULT as Readonly<Partial<Entity>>;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a plain object of field values, got '${typeof value}'.`,
+    );
+  }
+  for (const key of Object.keys(value)) {
+    if (!ownColumnNames.has(key)) {
+      throw new ConfigurationException(
+        entityName,
+        scope,
+        `unknown field '${key}' in '${scope}' — expected one of ${[...ownColumnNames].join(", ")}`,
+      );
+    }
+  }
+  return Object.freeze({ ...value }) as Readonly<Partial<Entity>>;
+}
+
+const EMPTY_WRITE_DEFAULT: Readonly<Record<string, never>> = Object.freeze({});
 
 /**
  * Reject a `policy` value that isn't a function — TypeScript callers get a
@@ -202,6 +252,17 @@ function assertIsPolicyFunction(entityName: string, scope: string, value: unknow
       `'${scope}' must be a function — ({ resource, operation, params, context, entity }) => boolean, got ` +
         `'${typeof value}'. A per-operation entry may also be 'false', to opt out of an inherited entity- or ` +
         `global-scope default.`,
+    );
+  }
+}
+
+/** `filter.apply`/`sort.apply`/`select.apply`/`include.apply` (ADR-0048) must all be plain functions. */
+function assertIsApplyFunction(entityName: string, scope: string, value: unknown): void {
+  if (value !== undefined && typeof value !== "function") {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a function — (args) => result, got '${typeof value}'.`,
     );
   }
 }
@@ -253,9 +314,6 @@ const NO_COMPUTED_FIELDS: Readonly<Record<string, never>> = Object.freeze({});
 const PROTO_NOT_A_NAME =
   `'__proto__' cannot name a computed field — it is not an ordinary object key, ` +
   `so the declaration would silently disappear instead of producing a response field`;
-
-/** The DTO slots whose classes describe a **write** payload (ADR-0019 §4). */
-const WRITE_DTO_SLOTS = ["create", "update", "patch"] as const;
 
 /**
  * Computed-field resolution (ADR-0019). `computed` carries functions, so
@@ -357,8 +415,12 @@ function resolveComputedFields<Entity extends object>(
  * Only classes with a runtime shape are checkable; a purely declarative
  * DTO yields `null` from `dtoShapeKeys` and falls back to the derived
  * writable projection, which never contains a computed name. A `{ fields }`
- * shorthand (issue #386) is resolved to its synthesized class first
- * (`resolveDtoSlot`), so its declared fields are checked the same way.
+ * shorthand — `dto.patch`'s own (issue #386), or the top-level
+ * `create`/`update` shorthand that replaced `dto.create`/`dto.update`'s
+ * (issue #388) — is resolved to its synthesized class first, so its
+ * declared fields are checked the same way. `create`/`update` check the
+ * registered `dto.<slot>` class first, matching `DefaultDtoResolver`'s own
+ * precedence: a registered class wins over the top-level shorthand.
  */
 function rejectComputedWriteDtoKeys<Entity extends object>(
   entityName: string,
@@ -369,18 +431,30 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
   if (names.size === 0) {
     return;
   }
-  const dto = entityConfig?.dto as Readonly<Record<string, Parameters<typeof resolveDtoSlot>[0]>> | undefined;
-  if (dto === undefined) {
-    return;
-  }
-  for (const slot of WRITE_DTO_SLOTS) {
-    const declared = dtoShapeKeys(resolveDtoSlot(dto[slot]))?.find((key) => names.has(key));
+  const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
+  const checks: readonly [slot: string, scope: string, dtoClass: DtoClass | null][] = [
+    [
+      "create",
+      "dto.create",
+      dto?.create ??
+        (entityConfig?.create ? dtoClassFromFields(entityConfig.create.fields as readonly string[]) : null),
+    ],
+    [
+      "update",
+      "dto.update",
+      dto?.update ??
+        (entityConfig?.update ? dtoClassFromFields(entityConfig.update.fields as readonly string[]) : null),
+    ],
+    ["patch", "dto.patch", resolveDtoSlot(dto?.patch as Parameters<typeof resolveDtoSlot>[0])],
+  ];
+  for (const [slot, scope, dtoClass] of checks) {
+    const declared = dtoShapeKeys(dtoClass)?.find((key) => names.has(key));
     if (declared === undefined) {
       continue;
     }
     throw new ConfigurationException(
       entityName,
-      `dto.${slot}`,
+      scope,
       `the '${slot}' DTO declares '${declared}', which is a computed field on '${entityName}' — ` +
         `a computed field has no column behind it, so the value is stripped from every write ` +
         `payload while the generated OpenAPI body still advertises the property; drop it from the ` +
@@ -748,18 +822,28 @@ function resolveFieldGroups<Entity extends object>(
     }
   }
 
+  assertIsApplyFunction(entityName, "filter.apply", filterConfig?.apply);
+  assertIsApplyFunction(entityName, "sort.apply", sortConfig?.apply);
+  assertIsApplyFunction(entityName, "select.apply", selectConfig?.apply);
+  assertIsApplyFunction(entityName, "include.apply", includeConfig?.apply);
+
   const filter: ResolvedFilterConfig<Entity> = deepFreeze({
     fields: filterFields,
     operators,
+    apply: filterConfig?.apply,
     limits: resolveFilterLimits(entityName, filterConfig?.limits),
   });
-  const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields });
+  const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields, apply: sortConfig?.apply });
   const selectDefault = resolveSelectDefault(
     entityName,
     selectConfig?.default as readonly string[] | undefined,
     selectFields,
   );
-  const select: ResolvedSelectConfig<Entity> = deepFreeze({ fields: selectFields, default: selectDefault });
+  const select: ResolvedSelectConfig<Entity> = deepFreeze({
+    fields: selectFields,
+    default: selectDefault,
+    apply: selectConfig?.apply,
+  });
   const includeDefault = resolveIncludeDefault(
     entityName,
     includeConfig?.default as readonly string[] | undefined,
@@ -769,6 +853,7 @@ function resolveFieldGroups<Entity extends object>(
     fields: includeFields,
     limits: resolveIncludeLimits(entityName, includeConfig?.limits),
     default: includeDefault,
+    apply: includeConfig?.apply,
   });
   const sortDefault = resolveSortDefault(entityName, sortConfig?.default, sortFields);
 

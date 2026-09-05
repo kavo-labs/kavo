@@ -20,9 +20,37 @@ export type DtoClass<Shape extends Dto = Dto> = new () => Shape;
  * `DtoClass` from it at bootstrap (`resolveDtoSlot`), tagged so downstream
  * consumers (`@kavo/nest`'s Swagger generation) can tell it apart from a
  * hand-registered class.
+ *
+ * `create`/`update` no longer accept this shorthand directly (issue #388)
+ * — their writable-field list is the top-level `EntityConfig.create.fields`
+ * / `EntityConfig.update.fields` (`config/entity-config.ts`) instead, so
+ * `dto.create`/`dto.update` stay `DtoClass`-only. `patch`/`item`/`list`
+ * still accept it here.
  */
 export interface FieldsShorthand<Entity> {
   readonly fields: readonly FieldPath<Entity, 1>[];
+}
+
+/**
+ * `EntityConfig.create`/`.update`'s own config shape (issue #388, extended
+ * with `default`). Unlike {@link FieldsShorthand}, `fields` is optional here
+ * — a caller may configure only `default` and leave the writable-field list
+ * at its entity-derived default, which a bare `{ fields: [...] }` shorthand
+ * can't express.
+ *
+ * `default` fills in a value for any writable field the request body omits
+ * — `createOne` only for `create.default`, `updateOne` only (never
+ * `patchOne`) for `update.default`: a `PATCH` omitting a field means "leave
+ * it unchanged", so filling it in there would silently overwrite a value
+ * the caller never touched. A `createOne`/`updateOne` body that *does* send
+ * the field always wins outright — `default` never overrides an explicit
+ * value, the same one-way relationship `sort.default`/`select.default`/
+ * `include.default` already have with their own client-supplied values.
+ */
+export interface WriteFieldsConfig<Entity> {
+  readonly fields?: readonly FieldPath<Entity, 1>[];
+  /** Values for fields the request body doesn't set. Validated at bootstrap against the entity's own writable columns. */
+  readonly default?: Partial<EntityInput<Entity>>;
 }
 
 /** The six DTO positions, one per REST verb/context. */
@@ -54,8 +82,8 @@ export interface OperationDtoMap<
   ItemDto = Entity,
   ListDto = ItemDto,
 > {
-  readonly create?: DtoClass<CreateDto & Dto> | FieldsShorthand<Entity>;
-  readonly update?: DtoClass<UpdateDto & Dto> | FieldsShorthand<Entity>;
+  readonly create?: DtoClass<CreateDto & Dto>;
+  readonly update?: DtoClass<UpdateDto & Dto>;
   readonly patch?: DtoClass<PatchDto & Dto> | FieldsShorthand<Entity>;
   readonly query?: DtoClass<QueryDto & Dto>;
   readonly item?: DtoClass<ItemDto & Dto> | FieldsShorthand<Entity>;

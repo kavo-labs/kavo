@@ -45,11 +45,13 @@ export type KavoGraphQLOption = boolean | { readonly path?: string };
 
 /**
  * The entity-derived writable default `DefaultDeserializer` falls back to
- * when `dto.create`/`dto.update` names no `{ fields }` shorthand (issue
- * #386): every non-generated column except the primary key (kept for a
- * composite key, which has no single column to exclude), plus every
- * relation, associable by id (ADR-0014). Used only as a Swagger fallback —
- * `applyBodySchemaDocs`'s decoration-time schema when no real DTO exists.
+ * when neither `dto.create`/`dto.update` names a real class nor the
+ * top-level `create`/`update` `{ fields }` shorthand (issue #388, formerly
+ * `dto.create`/`dto.update`'s own shorthand, issue #386) is set: every
+ * non-generated column except the primary key (kept for a composite key,
+ * which has no single column to exclude), plus every relation, associable
+ * by id (ADR-0014). Used only as a Swagger fallback — `applyBodySchemaDocs`'s
+ * decoration-time schema when no real DTO exists.
  */
 function writableBaseOf(metadata: EntityMetadata<object>): readonly string[] {
   const compositeIdFields = metadata.compositeIdFields;
@@ -438,7 +440,10 @@ class KavoBinder implements OnModuleInit {
         readonly KavoConditionalDocEntry[] | undefined;
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
-        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined);
+        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined, {
+          create: metadata.config?.create,
+          update: metadata.config?.update,
+        });
         // The target entity's own metadata for each relation a synthesized
         // schema references — includable ones so `applyResponseSchemaDocs`
         // can name the `x-kavo-includable-ref` marker `registerKavoSchemas`
