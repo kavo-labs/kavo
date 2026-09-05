@@ -7,7 +7,7 @@ import type {
   KavoOptions,
   NormalizedQueryContext,
 } from "@kavo/core";
-import { NotFoundException, createKavo, hasKeyset } from "@kavo/core";
+import { NotFoundException, QueryNormalizer, createKavo, hasKeyset, resolveEntityConfig } from "@kavo/core";
 import {
   Author,
   Comment,
@@ -280,6 +280,16 @@ describe("filter.apply — enforced on single-row writes by id (ADR-0048)", () =
     );
     await expect(crud.deleteOne(1, { app: { userId: "u-1" } as never })).resolves.toBeUndefined();
   });
+
+  it("apply returning undefined on a write leaves the id lookup unconstrained", async () => {
+    const { crud, adapter } = makeCrud({ filter: { apply: ownFilter("authorId") } } as never);
+    adapter.rows.push(
+      ...posts([{ id: 1, title: "anyone's", authorId: "u-2" as never, author: null, comments: [], deletedAt: null }]),
+    );
+    // No `context.app.userId` — `ownFilter` returns `undefined`, so `apply` contributes no constraint this time.
+    await crud.updateOne(1, { title: "edited" } as never);
+    expect(adapter.rows[0]?.title).toBe("edited");
+  });
 });
 
 describe("filter.apply — scopes count/total the same way it scopes items (findMany's shared filter)", () => {
@@ -376,5 +386,78 @@ describe("apply — existing default/backward-compatible behavior is unchanged",
 describe("apply — bootstrap validation", () => {
   it("rejects a non-function apply", () => {
     expect(() => makeCrud({ filter: { apply: "nope" } } as never)).toThrow(/filter\.apply/);
+  });
+});
+
+describe("QueryNormalizer — composing a resolved apply result directly (both entry points)", () => {
+  const config = resolveEntityConfig(
+    postMetadata,
+    {
+      filter: { fields: ["title", "authorId"] },
+      sort: { fields: ["title"] },
+      select: { fields: ["title", "authorId"] },
+    },
+    undefined,
+  );
+  const normalizer = new QueryNormalizer<Post>(postMetadata);
+
+  const serverApply = {
+    filter: { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" } as FilterExpression<Post>,
+    sort: [{ field: "id", direction: "asc" }] as const,
+    select: ["authorId"] as const,
+  };
+
+  it("normalizeWire (the HTTP/wire entry point) composes filter/sort/select the same way normalizeInput does", () => {
+    const query = normalizer.normalizeWire(
+      { "filter[title][eq]": "hello", sort: "-title", select: "title" },
+      config,
+      serverApply,
+    );
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        { kind: "condition", field: "title", operator: "EQ", value: "hello" },
+        { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" },
+      ],
+    });
+    expect(query.sort).toEqual([
+      { field: "id", direction: "asc" },
+      { field: "title", direction: "desc" },
+    ]);
+    expect(query.select.root).toEqual(expect.arrayContaining(["title", "authorId"]));
+  });
+
+  it("normalizeWire with no client query still gets the server constraint alone", () => {
+    const query = normalizer.normalizeWire({}, config, serverApply);
+    expect(query.filter.root).toEqual({ kind: "condition", field: "authorId", operator: "EQ", value: "u-1" });
+  });
+
+  it("normalizeInput (the programmatic entry point) composes the same way", () => {
+    const query = normalizer.normalizeInput(
+      {
+        filter: { kind: "condition", field: "title", operator: "EQ", value: "hello" },
+        sort: [{ field: "title", direction: "desc" }],
+      },
+      config,
+      serverApply,
+    );
+    expect(query.filter.root).toEqual({
+      kind: "group",
+      operator: "AND",
+      children: [
+        { kind: "condition", field: "title", operator: "EQ", value: "hello" },
+        { kind: "condition", field: "authorId", operator: "EQ", value: "u-1" },
+      ],
+    });
+    expect(query.sort).toEqual([
+      { field: "id", direction: "asc" },
+      { field: "title", direction: "desc" },
+    ]);
+  });
+
+  it("normalizeInput with no serverApply argument at all behaves exactly as before (backward compatible)", () => {
+    const query = normalizer.normalizeInput(undefined, config);
+    expect(query.filter.root).toBeNull();
   });
 });
