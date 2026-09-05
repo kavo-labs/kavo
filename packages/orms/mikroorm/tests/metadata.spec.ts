@@ -64,6 +64,10 @@ class Widget {
   @Property({ type: "string", persist: false })
   computed!: string;
 
+  /** An ORM-derived field (issue #373): a `formula` property. */
+  @Property({ type: "string", formula: (cols: unknown) => `upper(${String(cols)}.name)` })
+  nameUpper!: string;
+
   /** MikroORM's "never expose this" — a password hash, an API key. */
   @Property({ type: "string", hidden: true, nullable: true })
   secret: string | null = null;
@@ -174,12 +178,23 @@ describe("buildEntityMetadata — generated properties", () => {
     ["updatedAt", "an onUpdate hook"],
     ["version", "an optimistic-lock version"],
     ["computed", "a non-persisted property"],
+    ["nameUpper", "a formula property"],
   ])("marks %s generated (%s)", (field) => {
     expect(byName[field]).toMatchObject({ generated: true });
   });
 
   it.each(["name", "count", "status", "payload"])("leaves %s writable by the caller", (field) => {
     expect(byName[field]).toMatchObject({ generated: false });
+  });
+});
+
+describe("buildEntityMetadata — ORM-derived fields (issue #373)", () => {
+  it("carries the formula callback as the opaque derivedExpression marker", () => {
+    expect(byName["nameUpper"]?.derivedExpression).toBeTypeOf("function");
+  });
+
+  it("leaves an ordinary column's derivedExpression absent", () => {
+    expect(byName["name"]).not.toHaveProperty("derivedExpression");
   });
 });
 
