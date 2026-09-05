@@ -76,6 +76,9 @@ export class QueryNormalizer<Entity = unknown> {
     } catch (error) {
       collectIssues(error, issues);
     }
+    if (filter.root === null && config.filter.default !== null) {
+      filter = { root: config.filter.default };
+    }
     filter = parseSearch(rawParams, filter, config, issues);
     filter = applyServerFilter(filter, serverApply?.filter);
 
@@ -167,10 +170,11 @@ export class QueryNormalizer<Entity = unknown> {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
 
-    const root = input.filter ?? null;
-    if (root !== null) {
-      validateExpression(root, config, issues);
+    const clientFilterRoot = input.filter ?? null;
+    if (clientFilterRoot !== null) {
+      validateExpression(clientFilterRoot, config, issues);
     }
+    const root = clientFilterRoot ?? config.filter.default;
     const filter = applyServerFilter({ root }, serverApply?.filter);
 
     const clientSort = input.sort ?? [];
