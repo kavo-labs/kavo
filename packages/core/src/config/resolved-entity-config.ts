@@ -8,6 +8,7 @@ import type { FilterOperator } from "../query/filter.js";
 import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { Policy } from "../policy/kavo-policy.js";
+import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
@@ -18,6 +19,8 @@ export interface ResolvedFilterConfig<Entity = unknown> {
   readonly fields: readonly FieldPath<Entity>[];
   /** Per-field allowed operators (the map form), or `null` when every allowed field permits every operator. */
   readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null;
+  /** `filter.apply` (ADR-0048), passed through unresolved — see that ADR for composition. `undefined` when unconfigured. */
+  readonly apply?: FilterApply<Entity>;
   readonly limits: {
     readonly maxDepth: number;
     readonly maxInValues: number;
@@ -28,6 +31,8 @@ export interface ResolvedFilterConfig<Entity = unknown> {
 /** `EntityConfig.sort` after bootstrap resolution — complete, never optional (issue #386). */
 export interface ResolvedSortConfig<Entity = unknown> {
   readonly fields: readonly FieldPath<Entity>[];
+  /** `sort.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: SortApply<Entity>;
 }
 
 /** `EntityConfig.select` after bootstrap resolution — complete, never optional (issue #386). */
@@ -35,6 +40,8 @@ export interface ResolvedSelectConfig<Entity = unknown> {
   readonly fields: readonly FieldPath<Entity>[];
   /** `select.default`, bootstrap-validated against `fields`. `undefined` when unconfigured. */
   readonly default?: readonly FieldPath<Entity, 1>[];
+  /** `select.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: SelectApply<Entity>;
 }
 
 /** `EntityConfig.search` after bootstrap resolution, or `false` when search is disabled (issue #386). */
@@ -55,6 +62,8 @@ export interface ResolvedSearchConfig<Entity = unknown> {
  */
 export interface ResolvedIncludeConfig<Entity = unknown> {
   readonly fields: readonly IncludePath<Entity, 1>[];
+  /** `include.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: IncludeApply<Entity>;
   readonly limits: {
     readonly maxDepth: number;
     readonly maxNodes: number;

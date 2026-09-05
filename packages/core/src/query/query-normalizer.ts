@@ -10,6 +10,7 @@ import type { QueryIssueDto } from "../errors/problem-details.js";
 import type { IncludeResolver } from "../relations/include-resolver.js";
 import type { IncludeTree } from "../relations/include-tree.js";
 import type { AllowlistUsage } from "../errors/message-hints.js";
+import type { ResolvedApply } from "../policy/kavo-apply.js";
 import { ConfigurationException, QueryValidationException } from "../errors/exceptions.js";
 import { pushAllowlistIssue } from "../errors/message-hints.js";
 import { DefaultFilterParser } from "./default-filter-parser.js";
@@ -59,6 +60,7 @@ export class QueryNormalizer<Entity = unknown> {
   normalizeWire(
     rawParams: Readonly<Record<string, unknown>>,
     config: ResolvedEntityConfig<Entity>,
+    serverApply?: ResolvedApply<Entity>,
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
 
@@ -75,11 +77,21 @@ export class QueryNormalizer<Entity = unknown> {
       collectIssues(error, issues);
     }
     filter = parseSearch(rawParams, filter, config, issues);
+    filter = applyServerFilter(filter, serverApply?.filter);
 
     const clientSort = parseSort(rawParams["sort"], config, issues);
     let sort = clientSort.length > 0 ? clientSort : config.sortDefault;
-    const select: FieldSelection<Entity> = parseSelect(rawParams, config, issues);
-    const include = this.resolveIncludes(parseIncludePaths(rawParams["include"], issues), select, config, issues);
+    sort = prependServerSort(sort, serverApply?.sort);
+    const select: FieldSelection<Entity> = unionServerSelect(
+      parseSelect(rawParams, config, issues),
+      serverApply?.select,
+    );
+    const include = this.resolveIncludes(
+      [...parseIncludePaths(rawParams["include"], issues), ...(serverApply?.include ?? [])],
+      select,
+      config,
+      issues,
+    );
 
     let pagination: Pagination<Entity> = { limit: 0, offset: 0 };
     try {
@@ -145,6 +157,7 @@ export class QueryNormalizer<Entity = unknown> {
   normalizeInput(
     query: QueryContext<Entity> | undefined,
     config: ResolvedEntityConfig<Entity>,
+    serverApply?: ResolvedApply<Entity>,
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
     const input = query ?? {};
@@ -158,12 +171,14 @@ export class QueryNormalizer<Entity = unknown> {
     if (root !== null) {
       validateExpression(root, config, issues);
     }
+    const filter = applyServerFilter({ root }, serverApply?.filter);
 
     const clientSort = input.sort ?? [];
     for (const entry of clientSort) {
       requireAllowlisted(entry.field as string, config, "sorting", issues);
     }
     let sort = clientSort.length > 0 ? clientSort : config.sortDefault;
+    sort = prependServerSort(sort, serverApply?.sort);
 
     const { root: rootFields, relations: relationFields } = collapseFieldSelection<Entity>(input.select, issues);
     if (rootFields != null) {
@@ -171,11 +186,16 @@ export class QueryNormalizer<Entity = unknown> {
         requireAllowlisted(field as string, config, "selection", issues);
       }
     }
-    const select: FieldSelection<Entity> = {
-      root: rootFields,
-      relations: relationFields,
-    };
-    const include = this.resolveIncludes(input.include ?? [], select, config, issues);
+    const select: FieldSelection<Entity> = unionServerSelect(
+      { root: rootFields, relations: relationFields },
+      serverApply?.select,
+    );
+    const include = this.resolveIncludes(
+      [...(input.include ?? []), ...(serverApply?.include ?? [])],
+      select,
+      config,
+      issues,
+    );
 
     const { defaultLimit, maxLimit, strategy } = config.settings.pagination;
     // `NonePaginationStrategy` (`pagination-strategies.ts`) is never invoked
@@ -239,7 +259,7 @@ export class QueryNormalizer<Entity = unknown> {
       });
     }
     return {
-      filter: { root },
+      filter,
       sort,
       pagination,
       select,
@@ -571,6 +591,58 @@ export class QueryNormalizer<Entity = unknown> {
     }
     return strategy;
   }
+}
+
+/**
+ * `filter.apply` composition (ADR-0048): `AND`ed into the client's own
+ * filter, the same node shape `parseSearch`'s free-text-AND already builds
+ * below — never a bypassable shallow merge. `undefined` (nothing configured,
+ * or `apply` returned nothing this time) leaves `filter` untouched.
+ */
+function applyServerFilter<Entity>(
+  filter: Filter<Entity>,
+  serverFilter: FilterExpression<Entity> | undefined,
+): Filter<Entity> {
+  if (serverFilter === undefined) {
+    return filter;
+  }
+  if (filter.root === null) {
+    return { root: serverFilter };
+  }
+  return { root: { kind: "group", operator: "AND", children: [filter.root, serverFilter] } };
+}
+
+/**
+ * `sort.apply` composition (ADR-0048): forced fields are prepended ahead of
+ * the effective sort (client `sort=`, or `sort.default`), deduplicated out
+ * of their own later position rather than sorted on twice.
+ */
+function prependServerSort<Entity>(
+  sort: readonly Sort<Entity>[],
+  serverSort: readonly Sort<Entity>[] | undefined,
+): readonly Sort<Entity>[] {
+  if (serverSort === undefined || serverSort.length === 0) {
+    return sort;
+  }
+  const forced = new Set(serverSort.map((entry) => entry.field as string));
+  return [...serverSort, ...sort.filter((entry) => !forced.has(entry.field as string))];
+}
+
+/**
+ * `select.apply` composition (ADR-0048): forced fields are unioned into the
+ * root projection — additive only, never a mask. A `null` root already
+ * means "everything the resolved DTO allows", a superset of any forced
+ * field, so it is left untouched.
+ */
+function unionServerSelect<Entity>(
+  select: FieldSelection<Entity>,
+  serverSelect: readonly FieldPath<Entity, 1>[] | undefined,
+): FieldSelection<Entity> {
+  if (serverSelect === undefined || serverSelect.length === 0 || select.root === null) {
+    return select;
+  }
+  const merged = new Set([...(select.root as readonly string[]), ...(serverSelect as readonly string[])]);
+  return { root: [...merged] as unknown as readonly FieldPath<Entity, 1>[], relations: select.relations };
 }
 
 /** Whether a raw `cursor`/`since` wire param was actually supplied (empty means "first page"). */

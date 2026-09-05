@@ -210,6 +210,17 @@ function assertIsPolicyFunction(entityName: string, scope: string, value: unknow
   }
 }
 
+/** `filter.apply`/`sort.apply`/`select.apply`/`include.apply` (ADR-0048) must all be plain functions. */
+function assertIsApplyFunction(entityName: string, scope: string, value: unknown): void {
+  if (value !== undefined && typeof value !== "function") {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a function — (args) => result, got '${typeof value}'.`,
+    );
+  }
+}
+
 /**
  * Resolve `policy` (ADR-0037): nearest scope wins, wholesale —
  * `operations.<id>.policy`, else `EntityConfig.policy`, else
@@ -765,18 +776,28 @@ function resolveFieldGroups<Entity extends object>(
     }
   }
 
+  assertIsApplyFunction(entityName, "filter.apply", filterConfig?.apply);
+  assertIsApplyFunction(entityName, "sort.apply", sortConfig?.apply);
+  assertIsApplyFunction(entityName, "select.apply", selectConfig?.apply);
+  assertIsApplyFunction(entityName, "include.apply", includeConfig?.apply);
+
   const filter: ResolvedFilterConfig<Entity> = deepFreeze({
     fields: filterFields,
     operators,
+    apply: filterConfig?.apply,
     limits: resolveFilterLimits(entityName, filterConfig?.limits),
   });
-  const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields });
+  const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields, apply: sortConfig?.apply });
   const selectDefault = resolveSelectDefault(
     entityName,
     selectConfig?.default as readonly string[] | undefined,
     selectFields,
   );
-  const select: ResolvedSelectConfig<Entity> = deepFreeze({ fields: selectFields, default: selectDefault });
+  const select: ResolvedSelectConfig<Entity> = deepFreeze({
+    fields: selectFields,
+    default: selectDefault,
+    apply: selectConfig?.apply,
+  });
   const includeDefault = resolveIncludeDefault(
     entityName,
     includeConfig?.default as readonly string[] | undefined,
@@ -786,6 +807,7 @@ function resolveFieldGroups<Entity extends object>(
     fields: includeFields,
     limits: resolveIncludeLimits(entityName, includeConfig?.limits),
     default: includeDefault,
+    apply: includeConfig?.apply,
   });
   const sortDefault = resolveSortDefault(entityName, sortConfig?.default, sortFields);
 

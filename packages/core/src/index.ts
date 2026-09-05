@@ -123,6 +123,16 @@ export type {
 // ── Policy (ADR-0037) ─────────────────────────────────────────────────
 export { type Policy, type PolicyArgs, type WhenParams } from "./policy/kavo-policy.js";
 
+// ── Apply (ADR-0048) ──────────────────────────────────────────────────
+export {
+  type ApplyArgs,
+  type FilterApply,
+  type SortApply,
+  type SelectApply,
+  type IncludeApply,
+  type ResolvedApply,
+} from "./policy/kavo-apply.js";
+
 // ── Realtime ──────────────────────────────────────────────────────────
 export type { RealtimeEventDto, RealtimeEventId } from "./realtime/realtime-event.js";
 export type { RealtimeTransport } from "./realtime/realtime-transport.js";
