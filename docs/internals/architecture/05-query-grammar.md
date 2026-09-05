@@ -382,7 +382,7 @@ through `filter`, the same way it composes any other filter.
   reports as ORM-derived (doc 04 §7) joins `filterable`/`sortable`/
   `selectable` only when named explicitly — the same opt-in rule a
   relation follows — and never `searchable` at all, opted in or not
-  ([ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata)).
+  ([ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata)).
   Whether an opted-in filter/sort actually works is per-adapter: TypeORM
   and MikroORM can translate the expression into `WHERE`/`ORDER BY`;
   Prisma and Mongoose report no such field to Kavo at all, so naming one

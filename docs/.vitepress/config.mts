@@ -156,7 +156,7 @@ const config = defineConfig({
           { text: "Caching & ETags", link: "/features/caching-and-etags" },
           { text: "Result Cache", link: "/features/result-cache" },
           { text: "Allowed", link: "/features/allowed" },
-          { text: "Computed Fields", link: "/features/computed-fields" },
+          { text: "Virtual Fields", link: "/features/virtual-fields" },
           { text: "Policy", link: "/features/policy" },
           { text: "Apply", link: "/features/apply" },
           { text: "Composite Primary Keys", link: "/features/composite-primary-keys" },
@@ -422,6 +422,18 @@ const config = defineConfig({
               {
                 text: "0047 — The settings tree groups limits and lifts search to top level",
                 link: "/internals/adr/0047-settings-tree-groups-limits-and-lifts-search",
+              },
+              {
+                text: "0048 — apply adds an unconditional, per-axis server-side query constraint",
+                link: "/internals/adr/0048-apply-server-side-query-constraint",
+              },
+              {
+                text: "0049 — create.apply/update.apply force write-body values",
+                link: "/internals/adr/0049-write-apply-forces-create-update-body-values",
+              },
+              {
+                text: "0050 — Derived fields come from ORM metadata; core stays expression-agnostic",
+                link: "/internals/adr/0050-derived-fields-come-from-orm-metadata",
               },
             ],
           },

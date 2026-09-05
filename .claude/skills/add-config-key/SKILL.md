@@ -112,7 +112,7 @@ strictly the query-side allowlists. Issue #259's original addition of
    `resolveFieldSelector` (generic over the path type, so it serves both
    depth-3 and depth-1 selectors already). If the key can never legally name
    an ORM-derived field (as `creatable`/`updatable` can't — a derived field
-   has no writable storage, ADR-0046), reject one at bootstrap with a
+   has no writable storage, ADR-0050), reject one at bootstrap with a
    `ConfigurationException`, the same way `searchable`
    already rejects one unconditionally.
 4. **Where the resolved list actually gates something** — an allowlist key is

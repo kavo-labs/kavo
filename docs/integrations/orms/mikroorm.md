@@ -123,7 +123,7 @@ GET /books?filter[titleLower][eq]=dune&sort=titleLower
 
 A derived field is **opt-in** to `filterable`/`sortable`/`selectable`, the same rule a relation follows — leave it off `allowlists` and it never appears, is never filterable, and is never sortable.
 
-Unlike `@kavo/typeorm`, a plain JavaScript getter is **not** a second way to get a response-only field here: every row this adapter hands to core has already gone through `wrap(entity).toObject()` (see [MikroORM adapter](/internals/architecture/17-mikroorm-adapter)), which serializes MikroORM's own declared properties, not arbitrary class getters — a getter that isn't a `@Property` is simply absent from the plain object core receives. `@Formula` is the one mechanism. See [Virtual fields](/features/virtual-fields) for the full picture and [ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata) for the design.
+Unlike `@kavo/typeorm`, a plain JavaScript getter is **not** a second way to get a response-only field here: every row this adapter hands to core has already gone through `wrap(entity).toObject()` (see [MikroORM adapter](/internals/architecture/17-mikroorm-adapter)), which serializes MikroORM's own declared properties, not arbitrary class getters — a getter that isn't a `@Property` is simply absent from the plain object core receives. `@Formula` is the one mechanism. See [Virtual fields](/features/virtual-fields) for the full picture and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
 
 ## Case-insensitive filtering is opt-in
 

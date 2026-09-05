@@ -211,11 +211,9 @@ describe("ORM-derived fields — filter/sort/select (issue #373)", () => {
 
   beforeAll(() => {
     derivedAuthors = kavo.createCrud(Author, {
-      allowlists: {
-        filterable: ["bookCount" as never],
-        sortable: ["bookCount" as never],
-        selectable: ["email", "bookCount" as never],
-      },
+      filter: { fields: ["bookCount" as never] },
+      sort: { fields: ["bookCount" as never] },
+      select: { fields: ["email", "bookCount" as never] },
     }) as DefaultKavoService<Author>;
   });
 

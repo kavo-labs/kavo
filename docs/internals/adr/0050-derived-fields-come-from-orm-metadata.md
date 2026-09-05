@@ -1,4 +1,4 @@
-# ADR-0046 — Derived fields come from ORM metadata; core stays expression-agnostic
+# ADR-0050 — Derived fields come from ORM metadata; core stays expression-agnostic
 
 **Status:** accepted
 
