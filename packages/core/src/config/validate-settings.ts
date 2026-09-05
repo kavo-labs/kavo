@@ -51,32 +51,8 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     );
   }
 
-  positiveInt("limits.filterDepth", settings.limits.filterDepth);
-  positiveInt("limits.inValues", settings.limits.inValues);
-  positiveInt("limits.likePattern", settings.limits.likePattern);
-
-  const search = settings.search;
-  if (search !== false) {
-    if (search.mode !== "substring" && search.mode !== "words") {
-      throw new ConfigurationException(
-        entityName,
-        "search.mode",
-        `expected "substring" or "words", got ${JSON.stringify(search.mode)}`,
-      );
-    }
-    if (search.driver !== "orm") {
-      throw new ConfigurationException(
-        entityName,
-        "search.driver",
-        `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(search.driver)}`,
-      );
-    }
-  }
-
   bool("errors.exposeInternals", settings.errors.exposeInternals);
 
-  positiveInt("limits.includeDepth", settings.limits.includeDepth);
-  positiveInt("limits.includedNodes", settings.limits.includedNodes);
   for (const [name, edge] of Object.entries(settings.relations.edges)) {
     const path = `relations.edges.${name}`;
     if (typeof edge !== "object" || edge === null) {
@@ -110,26 +86,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       }
     }
   }
-
-  const stringArray = (path: string, value: unknown): void => {
-    if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length === 0)) {
-      throw new ConfigurationException(
-        entityName,
-        path,
-        `expected an array of non-empty strings, got ${JSON.stringify(value)}`,
-      );
-    }
-  };
-  stringArray("defaults.sort", settings.defaults.sort);
-  if (settings.defaults.select !== undefined) {
-    stringArray("defaults.select", settings.defaults.select);
-  }
-  stringArray("defaults.include", settings.defaults.include);
-  // `defaults.sort`/`defaults.select` vs. `allowed.sortable`/`allowed.selectable`,
-  // and `defaults.include` vs. `allowed.includable` (permission, ADR-0028),
-  // are cross-checked in `resolve-entity-config.ts`'s `validateDefaults`, not
-  // here — this function only sees `KavoSettings`, and `allowed` is
-  // entity-typed config outside that schema.
 
   if (settings.cache !== false) {
     const cache = settings.cache;

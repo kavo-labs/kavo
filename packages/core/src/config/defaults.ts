@@ -4,6 +4,12 @@ import type { KavoSettings } from "./settings.js";
  * The built-in defaults — the base of the precedence chain
  * `built-in defaults → global → entity → operation → per-call`.
  * The zero-config `createCrud(Entity)` path runs on exactly these values.
+ *
+ * Field-group defaults and ceilings (`filter`, `sort`, `select`, `search`,
+ * `include` — issue #386) are not here: they are entity-scope-only and
+ * resolved directly from `EntityConfig` by `resolve-entity-config.ts`, with
+ * their own built-in fallbacks (`BUILT_IN_FILTER_LIMITS` etc.) — there is no
+ * global default for them.
  */
 export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   pagination: Object.freeze({
@@ -16,19 +22,6 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // bootstrap `ConfigurationException`, not a silent fallback.
     since: Object.freeze({ field: "updatedAt" }),
   }),
-  limits: Object.freeze({
-    filterDepth: 3,
-    inValues: 100,
-    likePattern: 200,
-    includeDepth: 2,
-    includedNodes: 10,
-  }),
-  // Off by default, the same `false` sentinel `softDelete`/`realtime` use:
-  // `search[query]` is rejected until an entity or operation scope sets an
-  // object, even though `searchable`'s own default is permissive (doc 05
-  // §4). Any object turns it on; `mode`/`driver` are backfilled from
-  // `substring`/`orm` in `resolveEntityConfig`.
-  search: false,
   errors: Object.freeze({
     exposeInternals: false,
   }),
@@ -36,13 +29,6 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // Inclusion is opt-in: with no edges configured, `include=` has
     // nothing to reach.
     edges: Object.freeze({}),
-  }),
-  // Unset: today's no-`sort`-means-no-`ORDER BY`, no-`select=`-means-every-
-  // selectable-field, and no-`include=`-means-nothing-included behavior is
-  // unchanged for apps that don't declare a default (issue #375).
-  defaults: Object.freeze({
-    sort: Object.freeze([]),
-    include: Object.freeze([]),
   }),
   // Off by default. A full object rather than `false` — like `softDelete`'s
   // default — so a partial `cache: { ttl: 60 }` override merges against a

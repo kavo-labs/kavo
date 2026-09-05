@@ -176,7 +176,7 @@ describe("ETag generation", () => {
       },
     });
     const posts = kavo.createCrud(Post, {
-      allowed: { includable: ["author"] },
+      include: { fields: ["author"] },
     } as never);
     kavo.createCrud(Author);
 
@@ -567,8 +567,7 @@ describe("a write response's tag describes that response, not the canonical read
       },
     });
     const crud = kavo.createCrud(Author, {
-      allowed: { includable: ["posts"] },
-      defaults: { include: ["posts"] },
+      include: { fields: ["posts"], default: ["posts"] },
     } as never);
     kavo.createCrud(Post);
     return { crud, adapter };

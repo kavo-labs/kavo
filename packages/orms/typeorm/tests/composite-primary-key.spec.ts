@@ -174,7 +174,7 @@ describe("composite primary keys — @kavo/typeorm (issue #261)", () => {
   it("pages stably across a boundary with cursor pagination, using the full composite tiebreaker (issue #263)", async () => {
     const cursorGrants = kavo.createCrud(Grant, {
       pagination: { strategy: "cursor" },
-      defaults: { sort: ["note", "userId", "topic"] },
+      sort: { default: ["note", "userId", "topic"] },
     } as never) as DefaultKavoService<Grant>;
 
     // Three rows share the same `note` — without the full compositeIdFields

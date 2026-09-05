@@ -7,11 +7,10 @@ import type {
   FieldMetadata,
   OperationDescriptor,
   OperationDtoMap,
-  QueryFieldSelector,
   RelationCardinality,
   RelationFieldSelector,
 } from "@kavo/core";
-import { DefaultDtoResolver } from "@kavo/core";
+import { DefaultDtoResolver, shorthandFieldsOf } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
 import { isSchemaHint, readSchemaHint, type SchemaHint } from "./schema-hints.js";
 
@@ -152,15 +151,14 @@ Each read route's own \`include\` parameter description names which relations ar
  * general guide, rather than imply a narrower list than actually exists.
  */
 function listQueryParams(config: EntityConfig<object> | undefined): readonly { name: string; description?: string }[] {
-  const allowed = config?.allowed;
   return [
-    { name: "filter", description: allowedFieldsDescription(allowed?.filterable) },
-    { name: "sort", description: allowedFieldsDescription(allowed?.sortable) },
-    { name: "select", description: allowedFieldsDescription(allowed?.selectable) },
+    { name: "filter", description: allowedFieldsDescription(config?.filter?.fields) },
+    { name: "sort", description: allowedFieldsDescription(config?.sort?.fields) },
+    { name: "select", description: allowedFieldsDescription(config?.select?.fields) },
   ];
 }
 
-function allowedFieldsDescription(selector: QueryFieldSelector<object> | undefined): string | undefined {
+function allowedFieldsDescription(selector: unknown): string | undefined {
   const fields = explicitAllowlist(selector);
   if (fields === null) {
     return undefined;
@@ -171,11 +169,14 @@ function allowedFieldsDescription(selector: QueryFieldSelector<object> | undefin
   return fields.length === 0 ? "No field is allowed." : `Allowed fields: ${fields.join(", ")}.`;
 }
 
-function explicitAllowlist(selector: QueryFieldSelector<object> | undefined): readonly string[] | null {
-  if (selector === undefined || "exclude" in selector) {
-    return null;
-  }
-  return selector;
+/**
+ * The plain-array spelling only — `{ exclude }` resolves against ORM
+ * metadata that doesn't exist at `@Kavo` decoration time (ADR-0012), and
+ * `filter.fields`'s map form (issue #386) names a *restriction* per field,
+ * not a flat field list, so neither can be read here.
+ */
+function explicitAllowlist(selector: unknown): readonly string[] | null {
+  return Array.isArray(selector) ? (selector as readonly string[]) : null;
 }
 
 /**
@@ -1601,7 +1602,7 @@ function schemaForHint(hint: SchemaHint, entityName: string): object {
  * that may well do something.
  */
 function includableRelations(config: EntityConfig<object> | undefined): readonly string[] | null {
-  const selector = (config?.allowed as { includable?: RelationFieldSelector<object> } | undefined)?.includable;
+  const selector = config?.include?.fields as RelationFieldSelector<object> | undefined;
   if (selector === undefined) {
     return [];
   }
@@ -1615,8 +1616,15 @@ export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver:
   if (descriptor.input !== null) {
     return descriptor.input as ClassRef;
   }
-  const resolve = (slot: "create" | "update" | "patch"): ClassRef | null =>
-    dtoResolver.resolve(slot, descriptor.id) as ClassRef | null;
+  // A `dto.<slot>` `{ fields }` shorthand (issue #386) synthesizes a real
+  // class so the engine's own DTO machinery treats it uniformly, but it
+  // carries no type information of its own — treated as "no real DTO" here
+  // so the richer ORM-metadata-driven fallback below still runs instead of
+  // NestJS's generic (untyped) class introspection.
+  const resolve = (slot: "create" | "update" | "patch"): ClassRef | null => {
+    const resolved = dtoResolver.resolve(slot, descriptor.id) as (new () => object) | null;
+    return shorthandFieldsOf(resolved) !== null ? null : (resolved as ClassRef | null);
+  };
   switch (descriptor.id) {
     case "createOne":
       return resolve("create");

@@ -334,7 +334,7 @@ describe("findOne caching", () => {
       cacheStore: createMemoryCacheStore(),
     });
     const posts = kavo.createCrud(Post, {
-      allowed: { includable: ["author"] },
+      include: { fields: ["author"] },
       cache: { ttl: 60 },
     } as never);
     kavo.createCrud(Author);

@@ -1,12 +1,31 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
-import type { EntityConfig, OperationConfig, RelationFieldSelector, SelectableFieldSelector } from "./entity-config.js";
-import type { ResolvedEntityConfig, ResolvedQueryAllowed } from "./resolved-entity-config.js";
-import type { DtoClass } from "../dto/dto.js";
+import type {
+  EntityConfig,
+  FilterFieldSelector,
+  FilterLimits,
+  FilterOperatorMap,
+  IncludeLimits,
+  OperationConfig,
+  RelationFieldSelector,
+  SearchDriver,
+  SearchMode,
+  SelectableFieldSelector,
+} from "./entity-config.js";
+import type {
+  ResolvedEntityConfig,
+  ResolvedFilterConfig,
+  ResolvedIncludeConfig,
+  ResolvedSearchConfig,
+  ResolvedSelectConfig,
+  ResolvedSortConfig,
+} from "./resolved-entity-config.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
+import type { FilterOperator, FilterOperatorToken } from "../query/filter.js";
+import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
@@ -17,6 +36,7 @@ import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
+import { resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
@@ -34,14 +54,16 @@ import { ConfigurationException } from "../errors/exceptions.js";
  * `mergeSettings(BUILT_IN_DEFAULTS, globalDefaults, …)` — `globalDefaults`
  * is a `KavoSettings`-shaped `DeepPartial`, so its `operations` key merges
  * normally even though `pickSettings` never reads it off `entityConfig`.
+ *
+ * `filter`/`sort`/`select`/`search`/`include` are **not** here: those
+ * field-group blocks (issue #386) are entity-scope-only, resolved once by
+ * this module directly from `EntityConfig`, never through the settings
+ * precedence chain — there is no global or per-operation default for them.
  */
 const SETTINGS_KEYS = [
   "pagination",
-  "limits",
-  "search",
   "errors",
   "relations",
-  "defaults",
   "cache",
   "softDelete",
   "realtime",
@@ -51,8 +73,9 @@ const SETTINGS_KEYS = [
 
 /**
  * An `EntityConfig`/`OperationConfig` mixes settings keys with structural
- * keys (`dto`, `allowed`, `computed`, `handler`, …); only the settings
- * subset participates in the merge algebra.
+ * keys (`dto`, `filter`/`sort`/`select`/`search`/`include`, `computed`,
+ * `handler`, …); only the settings subset participates in the merge
+ * algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {
   if (config === undefined) {
@@ -67,26 +90,9 @@ function pickSettings(config: Readonly<Record<string, unknown>> | undefined): De
   return picked as DeepPartial<KavoSettings>;
 }
 
-/**
- * Backfill `search`'s `mode`/`driver` after a merge. `false` (the
- * default) stays `false` — search off. Any object turns search on, and a
- * nearer scope re-enabling from `false` may name only the keys it changes
- * (`search: { mode: "words" }`), so the missing ones fall back to the
- * built-in defaults here rather than being left `undefined`.
- */
-function normalizeSearch(settings: KavoSettings): KavoSettings {
-  const search = settings.search;
-  if (search === false) {
-    return settings;
-  }
-  const defaults = BUILT_IN_DEFAULT_SEARCH;
-  return {
-    ...settings,
-    search: { mode: search.mode ?? defaults.mode, driver: search.driver ?? defaults.driver },
-  };
-}
-
-const BUILT_IN_DEFAULT_SEARCH = Object.freeze({ mode: "substring" as const, driver: "orm" as const });
+const BUILT_IN_FILTER_LIMITS = Object.freeze({ maxDepth: 3, maxInValues: 100, maxLikePatternLength: 200 });
+const BUILT_IN_INCLUDE_LIMITS = Object.freeze({ maxDepth: 2, maxNodes: 10 });
+const BUILT_IN_SEARCH_DEFAULTS = Object.freeze({ mode: "substring" as SearchMode, driver: "orm" as SearchDriver });
 
 /**
  * Merge and validate one entity's configuration, once, at bootstrap:
@@ -106,25 +112,24 @@ export function resolveEntityConfig<Entity extends object>(
   const computed = resolveComputedFields(metadata, entityConfig);
   rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
-  const allowed = resolveAllowed(metadata, entityConfig, computed);
-  const projection = resolveProjection(metadata, entityConfig, computed, allowed);
-  const entitySettings = normalizeSearch(
-    mergeSettings(
-      BUILT_IN_DEFAULTS,
-      globalDefaults,
-      pickSettings(entityConfig as Readonly<Record<string, unknown>> | undefined),
-    ),
+
+  const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig, computed);
+  const projection = resolveProjection(metadata, entityConfig, computed, select);
+
+  const entitySettings = mergeSettings(
+    BUILT_IN_DEFAULTS,
+    globalDefaults,
+    pickSettings(entityConfig as Readonly<Record<string, unknown>> | undefined),
   );
   validateSettings(entityName, entitySettings);
-  validateDefaults(entityName, entitySettings, allowed);
-  validateSincePagination(entityName, metadata, entitySettings, allowed);
+  validateSincePagination(entityName, metadata, entitySettings, filter, select);
   const relations = new DefaultRelationRegistry<Entity>(
     metadata.relations,
-    allowed.includable as readonly string[],
+    include.fields as readonly string[],
     entitySettings.relations.edges,
     entityName,
     entitySettings.arrayMutation,
-    entitySettings.defaults.include,
+    include.default ?? [],
   );
 
   // Per-operation settings views, precomputed for every operation that
@@ -143,11 +148,10 @@ export function resolveEntityConfig<Entity extends object>(
     if (settings === undefined || Object.keys(settings).length === 0) {
       continue;
     }
-    const merged = normalizeSearch(mergeSettings(entitySettings, settings));
+    const merged = mergeSettings(entitySettings, settings);
     const scope = `${entityName}.operations.${operation}`;
     validateSettings(scope, merged);
-    validateDefaults(scope, merged, allowed);
-    validateSincePagination(scope, metadata, merged, allowed);
+    validateSincePagination(scope, metadata, merged, filter, select);
     // Resolve for its validation side effect: a per-operation scope that
     // demands soft delete on an entity without a marker field must fail at
     // bootstrap, not on the first request (the engine recomputes the
@@ -162,7 +166,12 @@ export function resolveEntityConfig<Entity extends object>(
     settingsFor(operation: OperationId): KavoSettings {
       return perOperation.get(operation) ?? entitySettings;
     },
-    allowed,
+    filter,
+    sort,
+    sortDefault,
+    select,
+    search,
+    include,
     projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
@@ -347,7 +356,9 @@ function resolveComputedFields<Entity extends object>(
  *
  * Only classes with a runtime shape are checkable; a purely declarative
  * DTO yields `null` from `dtoShapeKeys` and falls back to the derived
- * writable projection, which never contains a computed name.
+ * writable projection, which never contains a computed name. A `{ fields }`
+ * shorthand (issue #386) is resolved to its synthesized class first
+ * (`resolveDtoSlot`), so its declared fields are checked the same way.
  */
 function rejectComputedWriteDtoKeys<Entity extends object>(
   entityName: string,
@@ -358,12 +369,12 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
   if (names.size === 0) {
     return;
   }
-  const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
+  const dto = entityConfig?.dto as Readonly<Record<string, Parameters<typeof resolveDtoSlot>[0]>> | undefined;
   if (dto === undefined) {
     return;
   }
   for (const slot of WRITE_DTO_SLOTS) {
-    const declared = dtoShapeKeys(dto[slot] ?? null)?.find((key) => names.has(key));
+    const declared = dtoShapeKeys(resolveDtoSlot(dto[slot]))?.find((key) => names.has(key));
     if (declared === undefined) {
       continue;
     }
@@ -378,24 +389,280 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
   }
 }
 
+/** Letters, digits, underscore, not leading with a digit — same charset `@kavo/typeorm`'s `columnRef` enforces at request time. */
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
- * Allowlist derivation (security posture): when a list is not
- * configured explicitly, it defaults to the entity's **own scalar
- * columns** — relation paths are never filterable/sortable/selectable
- * unless opted in explicitly. Anything outside the list is a 400 at query
- * time, never a silent drop.
+ * Generic over the path type so it serves both `QueryFieldSelector`
+ * (depth-capped-3 `FieldPath`) and a relation selector (depth-1) — the
+ * array-or-`{ exclude }` resolution logic is identical either way.
+ */
+function resolveFieldSelector<Path extends string>(
+  base: readonly Path[],
+  selector: readonly Path[] | { readonly exclude: readonly Path[] } | undefined,
+): readonly Path[] {
+  if (selector === undefined) {
+    return base;
+  }
+  if (!("exclude" in selector)) {
+    return selector;
+  }
+  const excluded = new Set(selector.exclude);
+  return base.filter((path) => !excluded.has(path));
+}
+
+/**
+ * `filter.fields`'s map form (issue #386): `{ field: [operators] }`
+ * restricting which operators are permitted per field, distinguished from
+ * the plain array/`{ exclude }` forms by shape — an array is never a map,
+ * and neither is `{ exclude }`.
+ */
+function isFilterOperatorMap(selector: unknown): selector is FilterOperatorMap<unknown> {
+  return (
+    typeof selector === "object" &&
+    selector !== null &&
+    !Array.isArray(selector) &&
+    !("exclude" in (selector as Record<string, unknown>))
+  );
+}
+
+const WIRE_TO_FILTER_OPERATOR: Readonly<Record<FilterOperatorToken, FilterOperator>> = Object.freeze({
+  eq: "EQ",
+  ne: "NE",
+  gt: "GT",
+  gte: "GTE",
+  lt: "LT",
+  lte: "LTE",
+  in: "IN",
+  notIn: "NOT_IN",
+  like: "LIKE",
+  ilike: "ILIKE",
+  between: "BETWEEN",
+  isNull: "IS_NULL",
+  isNotNull: "IS_NOT_NULL",
+});
+
+/** Resolve `filter.fields`'s raw selector into the field allowlist plus, for the map form, per-field operator restrictions. */
+function resolveFilterFields<Entity extends object>(
+  entityName: string,
+  base: readonly FieldPath<Entity>[],
+  selector: FilterFieldSelector<Entity> | undefined,
+): {
+  readonly fields: readonly FieldPath<Entity>[];
+  readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null;
+} {
+  if (!isFilterOperatorMap(selector)) {
+    return { fields: resolveFieldSelector(base, selector), operators: null };
+  }
+  const map = selector as FilterOperatorMap<Entity>;
+  const operators = new Map<string, ReadonlySet<FilterOperator>>();
+  for (const [field, tokens] of Object.entries(map)) {
+    const resolved = new Set<FilterOperator>();
+    for (const token of tokens as readonly FilterOperatorToken[]) {
+      const operator = WIRE_TO_FILTER_OPERATOR[token];
+      if (operator === undefined) {
+        throw new ConfigurationException(
+          entityName,
+          `filter.fields.${field}`,
+          `unknown filter operator token '${token}' — expected one of ${Object.keys(WIRE_TO_FILTER_OPERATOR).join(", ")}`,
+        );
+      }
+      resolved.add(operator);
+    }
+    operators.set(field, resolved);
+  }
+  return { fields: [...operators.keys()] as unknown as readonly FieldPath<Entity>[], operators };
+}
+
+/** Resolve `filter.limits`, falling back to the built-in ceilings. */
+function resolveFilterLimits(entityName: string, limits: FilterLimits | undefined): ResolvedFilterConfig["limits"] {
+  const positiveInt = (path: string, value: number | undefined, fallback: number): number => {
+    if (value === undefined) {
+      return fallback;
+    }
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new ConfigurationException(entityName, path, `expected a positive integer, got ${JSON.stringify(value)}`);
+    }
+    return value;
+  };
+  return {
+    maxDepth: positiveInt("filter.limits.maxDepth", limits?.maxDepth, BUILT_IN_FILTER_LIMITS.maxDepth),
+    maxInValues: positiveInt("filter.limits.maxInValues", limits?.maxInValues, BUILT_IN_FILTER_LIMITS.maxInValues),
+    maxLikePatternLength: positiveInt(
+      "filter.limits.maxLikePatternLength",
+      limits?.maxLikePatternLength,
+      BUILT_IN_FILTER_LIMITS.maxLikePatternLength,
+    ),
+  };
+}
+
+/** Resolve `include.limits`, falling back to the built-in ceilings. */
+function resolveIncludeLimits(entityName: string, limits: IncludeLimits | undefined): ResolvedIncludeConfig["limits"] {
+  const positiveInt = (path: string, value: number | undefined, fallback: number): number => {
+    if (value === undefined) {
+      return fallback;
+    }
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new ConfigurationException(entityName, path, `expected a positive integer, got ${JSON.stringify(value)}`);
+    }
+    return value;
+  };
+  return {
+    maxDepth: positiveInt("include.limits.maxDepth", limits?.maxDepth, BUILT_IN_INCLUDE_LIMITS.maxDepth),
+    maxNodes: positiveInt("include.limits.maxNodes", limits?.maxNodes, BUILT_IN_INCLUDE_LIMITS.maxNodes),
+  };
+}
+
+/** `-field` → `{ field, direction: "desc" }`; `field` → `{ field, direction: "asc" }`. */
+function parseSortToken<Entity>(token: string): Sort<Entity> {
+  const descending = token.startsWith("-");
+  const field = descending ? token.slice(1) : token;
+  return { field: field as FieldPath<Entity>, direction: descending ? "desc" : "asc" };
+}
+
+/** Resolve and bootstrap-validate `sort.default` against `sort.fields`. */
+function resolveSortDefault<Entity extends object>(
+  entityName: string,
+  tokens: readonly string[] | undefined,
+  sortable: readonly FieldPath<Entity>[],
+): readonly Sort<Entity>[] {
+  if (tokens === undefined) {
+    return [];
+  }
+  if (!Array.isArray(tokens)) {
+    throw new ConfigurationException(
+      entityName,
+      "sort.default",
+      `expected an array of strings, got ${JSON.stringify(tokens)}`,
+    );
+  }
+  const sortableSet = new Set(sortable as readonly string[]);
+  const result: Sort<Entity>[] = [];
+  for (const raw of tokens) {
+    if (typeof raw !== "string" || raw === "" || raw === "-") {
+      throw new ConfigurationException(
+        entityName,
+        "sort.default",
+        `expected a non-empty field name, got ${JSON.stringify(raw)}`,
+      );
+    }
+    const entry = parseSortToken<Entity>(raw);
+    if (!sortableSet.has(entry.field as string)) {
+      throw new ConfigurationException(
+        entityName,
+        "sort.default",
+        `field '${entry.field as string}' is not in 'sort.fields'`,
+      );
+    }
+    result.push(entry);
+  }
+  return result;
+}
+
+/** Resolve and bootstrap-validate `select.default` against `select.fields`. */
+function resolveSelectDefault<Entity extends object>(
+  entityName: string,
+  fields: readonly string[] | undefined,
+  selectable: readonly FieldPath<Entity>[],
+): readonly FieldPath<Entity, 1>[] | undefined {
+  if (fields === undefined) {
+    return undefined;
+  }
+  const selectableSet = new Set(selectable as readonly string[]);
+  for (const field of fields) {
+    if (!selectableSet.has(field)) {
+      throw new ConfigurationException(entityName, "select.default", `field '${field}' is not in 'select.fields'`);
+    }
+  }
+  return fields as unknown as readonly FieldPath<Entity, 1>[];
+}
+
+/** Resolve and bootstrap-validate `include.default` against `include.fields`. */
+function resolveIncludeDefault<Entity extends object>(
+  entityName: string,
+  names: readonly string[] | undefined,
+  includable: readonly IncludePath<Entity, 1>[],
+): readonly string[] {
+  if (names === undefined) {
+    return [];
+  }
+  const includableSet = new Set(includable as readonly string[]);
+  for (const name of names) {
+    if (!includableSet.has(name)) {
+      throw new ConfigurationException(
+        entityName,
+        "include.default",
+        `'${name}' is not on include.fields, so it would load a relation clients cannot ask for`,
+      );
+    }
+  }
+  return names;
+}
+
+/**
+ * Resolve `search`, backfilling `mode`/`driver` from their defaults. `false`
+ * (the default) means search stays off.
+ */
+function resolveSearchConfig<Entity extends object>(
+  entityName: string,
+  stringColumns: readonly FieldPath<Entity>[],
+  configured: EntityConfig<Entity>["search"],
+): ResolvedSearchConfig<Entity> | false {
+  if (configured === false || configured === undefined) {
+    return false;
+  }
+  const mode = configured.mode === undefined ? BUILT_IN_SEARCH_DEFAULTS.mode : configured.mode;
+  if (mode !== "substring" && mode !== "words") {
+    throw new ConfigurationException(
+      entityName,
+      "search.mode",
+      `expected "substring" or "words", got ${JSON.stringify(mode)}`,
+    );
+  }
+  const driver = configured.driver === undefined ? BUILT_IN_SEARCH_DEFAULTS.driver : configured.driver;
+  if (driver !== "orm") {
+    throw new ConfigurationException(
+      entityName,
+      "search.driver",
+      `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(driver)}`,
+    );
+  }
+  return {
+    fields: resolveFieldSelector(stringColumns, configured.fields),
+    default: configured.default ?? null,
+    mode,
+    driver,
+  };
+}
+
+/**
+ * Resolves every field-group block in one pass: `filter`, `sort`, `select`,
+ * `search`, `include` (issue #386, replacing `resolveAllowed`). Each block's
+ * `fields` derives from the entity's **own scalar columns** when not
+ * configured explicitly — relation paths are never filterable/sortable/
+ * selectable unless opted in explicitly, and `include.fields` defaults the
+ * other way (opt-in, ADR-0028). Anything outside a block's `fields` is a
+ * 400 at query time, never a silent drop.
  *
- * Computed fields join the `selectable` base set (so `select=fullName`
+ * Computed fields join the `select.fields` base set (so `select=fullName`
  * works with no further configuration) unless the descriptor opts out with
- * `selectable: false`, and are barred from `filterable`/`sortable`
+ * `selectable: false`, and are barred from `filter.fields`/`sort.fields`
  * outright — there is no column to translate to `WHERE`/`ORDER BY`
  * (ADR-0019).
  */
-function resolveAllowed<Entity extends object>(
+function resolveFieldGroups<Entity extends object>(
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
   computed: ComputedFieldMap<Entity>,
-): ResolvedQueryAllowed<Entity> {
+): {
+  readonly filter: ResolvedFilterConfig<Entity>;
+  readonly sort: ResolvedSortConfig<Entity>;
+  readonly sortDefault: readonly Sort<Entity>[];
+  readonly select: ResolvedSelectConfig<Entity>;
+  readonly search: ResolvedSearchConfig<Entity> | false;
+  readonly include: ResolvedIncludeConfig<Entity> & { readonly default?: readonly string[] };
+} {
+  const entityName = metadata.name;
   const ownColumns = metadata.fields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
   const stringColumns = metadata.fields
     .filter((field) => field.kind === "string")
@@ -408,221 +675,289 @@ function resolveAllowed<Entity extends object>(
     Entity,
     1
   >[];
-  // The same base `DefaultDeserializer`'s derived writable projection uses:
-  // every non-generated scalar column except the primary key, plus every
-  // relation (associable by id, ADR-0014). Kept in lockstep with that
-  // constructor deliberately — `creatable`/`updatable` narrow the same set
-  // the deserializer falls back to when no DTO is registered.
-  //
-  // A composite-key entity (issue #261) has no single `idField` to exclude
-  // — its key columns are a *natural* key the client supplies on
-  // `createOne`, so they stay in the writable base and `creatable`'s
-  // default. They are immutable afterward, so `updatable`'s default
-  // excludes them explicitly instead — the one place `creatable` and
-  // `updatable` genuinely diverge from their shared `writableBase`.
-  const compositeIdFields = metadata.compositeIdFields;
-  const writableColumns = metadata.fields
-    .filter((field) => !field.generated && (compositeIdFields !== undefined || field.name !== metadata.idField))
-    .map((field) => field.name);
-  const writableBase = [...writableColumns, ...(relationNames as readonly string[])] as unknown as readonly FieldPath<
-    Entity,
-    1
-  >[];
-  const updatableBase =
-    compositeIdFields === undefined
-      ? writableBase
-      : ((writableBase as readonly string[]).filter(
-          (name) => !compositeIdFields.includes(name),
-        ) as unknown as readonly FieldPath<Entity, 1>[]);
-  const configured = entityConfig?.allowed;
-  // `allowed.selectable` addresses this entity's own columns and its
-  // declared computed-field names — nothing else (ADR-0045). A relation is
-  // selected with `select[<relation>]=`, never `select=<relation>.<field>`,
-  // and an included relation's projection is governed by the *target*
-  // entity's own `selectable` (ADR-0026 decision 4). A relation-dotted
-  // entry here — an ADR-0044 ceiling, a relation-headed typo, or an `a.b.c`
-  // deep path — is therefore a bootstrap error, not a silently inert line.
-  rejectRelationDottedSelectable(metadata.name, selectableBase as readonly string[], configured?.selectable);
-  const selectableResolved = resolveFieldSelector(
-    selectableBase,
-    configured?.selectable,
-  ) as unknown as readonly FieldPath<Entity>[];
-  // `filterable`/`sortable` feed `@kavo/typeorm`'s `columnRef`, which
-  // interpolates the field string raw into SQL (join paths, `where(...)`,
-  // `addOrderBy(...)`) — identifiers can't be parameter-bound. An explicit
-  // array override is used verbatim (`resolveFieldSelector`'s plain-array
-  // branch), so an entry here is the *only* thing standing between an HTTP
-  // client and a raw SQL identifier. A bare (non-dotted) entry is checked
-  // against this entity's own columns, its relation names (filtering by a
-  // to-one relation's FK directly, e.g. `filter[author][eq]=1`), and its
-  // computed-field names (left for the existing, more specific
-  // COMPUTED_REJECTION check below to name); a relation-dotted entry can't
-  // be checked the same way — its target metadata isn't in scope here — so
-  // each of its segments is instead checked against a strict identifier
-  // charset, closing the injection surface even without cross-entity
-  // metadata (issue #367 finding 1). `@kavo/typeorm`'s `columnRef`
-  // re-checks the charset at request time as defense in depth; this is the
-  // fail-fast bootstrap half.
+
   const knownFieldNames = [
     ...(ownColumns as readonly string[]),
     ...(relationNames as readonly string[]),
     ...Object.keys(computed),
   ];
-  validateAllowlistFieldNames(metadata.name, "filterable", configured?.filterable, knownFieldNames);
-  validateAllowlistFieldNames(metadata.name, "sortable", configured?.sortable, knownFieldNames);
-  const allowed = {
-    filterable: resolveFieldSelector(ownColumns, configured?.filterable),
-    sortable: resolveFieldSelector(ownColumns, configured?.sortable),
-    selectable: selectableResolved,
-    includable: resolveIncludableSelector(metadata.name, relationNames, configured?.includable),
-    // Unlike `filterable`/`sortable`, its unconfigured default is narrower
-    // than "every own column" — a non-string column has nothing an `ILIKE`
-    // fragment can usefully match (doc 05 §4).
-    searchable: resolveFieldSelector(stringColumns, configured?.searchable),
-    creatable: resolveFieldSelector(writableBase, configured?.creatable),
-    updatable: resolveFieldSelector(updatableBase, configured?.updatable),
-  };
+
+  const filterConfig = entityConfig?.filter;
+  validateFieldNames(entityName, "filter.fields", filterConfig?.fields, knownFieldNames);
+  const { fields: filterFields, operators } = resolveFilterFields(entityName, ownColumns, filterConfig?.fields);
+
+  const sortConfig = entityConfig?.sort;
+  validateFieldNames(entityName, "sort.fields", sortConfig?.fields, knownFieldNames);
+  const sortFields = resolveFieldSelector(ownColumns, sortConfig?.fields);
+
+  const selectConfig = entityConfig?.select;
+  rejectRelationDottedSelectable(entityName, selectableBase as readonly string[], selectConfig?.fields);
+  const selectFields = resolveFieldSelector(
+    selectableBase,
+    selectConfig?.fields as SelectableFieldSelector<Entity, string> | undefined,
+  ) as unknown as readonly FieldPath<Entity>[];
+
+  const includeConfig = entityConfig?.include;
+  const includeFields = resolveIncludableSelector(entityName, relationNames, includeConfig?.fields);
+
   const COMPUTED_REJECTION = {
-    filterable: { verb: "filtered on", clause: "WHERE" },
-    sortable: { verb: "sorted on", clause: "ORDER BY" },
-    searchable: { verb: "searched on", clause: "WHERE" },
+    "filter.fields": { verb: "filtered on", clause: "WHERE" },
+    "sort.fields": { verb: "sorted on", clause: "ORDER BY" },
   } as const;
-  for (const key of ["filterable", "sortable", "searchable"] as const) {
-    for (const field of allowed[key] as readonly string[]) {
+  for (const [key, fields] of [
+    ["filter.fields", filterFields],
+    ["sort.fields", sortFields],
+  ] as const) {
+    for (const field of fields as readonly string[]) {
       if (!Object.prototype.hasOwnProperty.call(computed, field)) {
         continue;
       }
       const { verb, clause } = COMPUTED_REJECTION[key];
       throw new ConfigurationException(
-        metadata.name,
-        `allowed.${key}`,
-        `'${field}' is a computed field on '${metadata.name}', which can never be ${verb} — ` +
+        entityName,
+        key,
+        `'${field}' is a computed field on '${entityName}', which can never be ${verb} — ` +
           `it has no column to translate to ${clause}`,
       );
     }
   }
-  // Computed fields have no column behind them, so they can never be
-  // written (ADR-0019) — `creatable`/`updatable` reject one by name at
-  // bootstrap for the same reason `rejectComputedWriteDtoKeys` rejects one
-  // named in a write DTO, rather than letting it fall out silently later.
-  for (const key of ["creatable", "updatable"] as const) {
-    for (const field of allowed[key] as readonly string[]) {
-      if (!Object.prototype.hasOwnProperty.call(computed, field)) {
+
+  const search = resolveSearchConfig(entityName, stringColumns, entityConfig?.search);
+  if (search !== false) {
+    for (const field of search.fields as readonly string[]) {
+      if (Object.prototype.hasOwnProperty.call(computed, field)) {
+        throw new ConfigurationException(
+          entityName,
+          "search.fields",
+          `'${field}' is a computed field on '${entityName}', which can never be searched on — ` +
+            `it has no column to translate to WHERE`,
+        );
+      }
+      if (field.includes(".")) {
         continue;
       }
-      throw new ConfigurationException(
-        metadata.name,
-        `allowed.${key}`,
-        `'${field}' is a computed field on '${metadata.name}', which is never writable (ADR-0019) — ` +
-          `it has no column behind it`,
-      );
-    }
-  }
-  // `searchable`'s *default* is filtered to string-kind own columns, but an
-  // explicit override is used verbatim (`resolveFieldSelector`) — so a
-  // deliberately (or mistakenly) named non-string own column would
-  // otherwise slip past bootstrap and only fail at request time, as a raw
-  // driver error (`LOWER(int)` has no meaning) rather than the clean 400
-  // every other misconfiguration in this file produces. Own columns are
-  // checkable here; a relation-path entry (`'brand.createdAt'`) is not —
-  // its target metadata isn't in scope — so it stays unchecked, the same
-  // laxity `filterable`/`sortable` already have for relation paths.
-  const fieldKinds = new Map(metadata.fields.map((field) => [field.name, field.kind]));
-  for (const field of allowed.searchable as readonly string[]) {
-    if (field.includes(".")) {
-      continue;
-    }
-    const kind = fieldKinds.get(field);
-    if (kind !== undefined && kind !== "string") {
-      throw new ConfigurationException(
-        metadata.name,
-        "allowed.searchable",
-        `'${field}' is a '${kind}'-kind column on '${metadata.name}', which an 'ILIKE' fragment ` +
-          `cannot usefully match — 'searchable' entries must be string-kind columns, or relation paths`,
-      );
-    }
-  }
-  return deepFreeze(allowed);
-}
-
-/**
- * Cross-checks the `defaults` block against the `allowed` allowlists it
- * omission-defaults for (issue #375, ADR-0028's precedent for the
- * `include` half): `defaults.sort` fields against `sortable`,
- * `defaults.select` fields against `selectable`, and `defaults.include`
- * relations against `includable` — the same checks each axis's
- * client-supplied counterpart gets at request time, but here, at
- * bootstrap, so a misconfigured default fails fast instead of surfacing as
- * a broken `ORDER BY`, an over-wide response, or a relation clients cannot
- * ask for on the first request.
- */
-export function validateDefaults<Entity>(
-  scope: string,
-  settings: KavoSettings,
-  allowed: ResolvedQueryAllowed<Entity>,
-): void {
-  const sortable = allowed.sortable as readonly string[];
-  for (const entry of settings.defaults.sort) {
-    const field = entry.startsWith("-") ? entry.slice(1) : entry;
-    if (!sortable.includes(field)) {
-      throw new ConfigurationException(scope, "defaults.sort", `field '${field}' is not in the sortable allowlist`);
-    }
-  }
-
-  if (settings.defaults.select !== undefined) {
-    const selectable = allowed.selectable as readonly string[];
-    for (const field of settings.defaults.select) {
-      if (!selectable.includes(field)) {
+      const fieldKind = metadata.fields.find((column) => column.name === field)?.kind;
+      if (fieldKind !== undefined && fieldKind !== "string") {
         throw new ConfigurationException(
-          scope,
-          "defaults.select",
-          `field '${field}' is not in the selectable allowlist`,
+          entityName,
+          "search.fields",
+          `'${field}' is a '${fieldKind}'-kind column on '${entityName}', which an 'ILIKE' fragment ` +
+            `cannot usefully match — 'search.fields' entries must be string-kind columns, or relation paths`,
         );
       }
     }
   }
 
-  const includable = new Set(allowed.includable as readonly string[]);
-  for (const relation of settings.defaults.include) {
-    if (!includable.has(relation)) {
-      throw new ConfigurationException(
-        scope,
-        "defaults.include",
-        `'${relation}' is not on allowed.includable, so it would load a relation clients cannot ask for`,
-      );
+  const filter: ResolvedFilterConfig<Entity> = deepFreeze({
+    fields: filterFields,
+    operators,
+    limits: resolveFilterLimits(entityName, filterConfig?.limits),
+  });
+  const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields });
+  const selectDefault = resolveSelectDefault(
+    entityName,
+    selectConfig?.default as readonly string[] | undefined,
+    selectFields,
+  );
+  const select: ResolvedSelectConfig<Entity> = deepFreeze({ fields: selectFields, default: selectDefault });
+  const includeDefault = resolveIncludeDefault(
+    entityName,
+    includeConfig?.default as readonly string[] | undefined,
+    includeFields,
+  );
+  const include: ResolvedIncludeConfig<Entity> & { readonly default?: readonly string[] } = deepFreeze({
+    fields: includeFields,
+    limits: resolveIncludeLimits(entityName, includeConfig?.limits),
+    default: includeDefault,
+  });
+  const sortDefault = resolveSortDefault(entityName, sortConfig?.default, sortFields);
+
+  return { filter, sort, sortDefault, select, search, include };
+}
+
+/**
+ * The default response projection, or `null` for "leave it derived"
+ * (ADR-0026).
+ *
+ * Explicit configuration is the trigger: an unwritten `select.fields`
+ * narrows nothing, which is what keeps this change confined to entities
+ * that asked for it.
+ *
+ * The two spellings resolve against **different bases**, and that asymmetry
+ * is the whole point rather than an oversight. A plain array is the author's
+ * own list and is used verbatim. `{ exclude }` means "everything except
+ * these", and *everything* here has to be the readable projection — every
+ * column plus **every** declared computed field — not `selectableBase`,
+ * which drops computed fields declaring `selectable: false`.
+ *
+ * Resolving `{ exclude }` against the narrower base retires a contract the
+ * author never touched: `selectable: false` is documented as keeping a field
+ * in the projection while making its name a 400 in `select=`, so
+ * `{ exclude: ["email"] }` would silently delete an unrelated audit field
+ * from every response. That is the same "narrowing by a list nobody wrote"
+ * this function exists to prevent, one level down.
+ */
+function resolveProjection<Entity extends object>(
+  metadata: EntityMetadata<Entity>,
+  entityConfig: EntityConfig<Entity> | undefined,
+  computed: ComputedFieldMap<Entity>,
+  select: ResolvedSelectConfig<Entity>,
+): readonly FieldPath<Entity>[] | null {
+  const selector = entityConfig?.select?.fields;
+  if (selector === undefined) {
+    return null;
+  }
+  if (!("exclude" in selector)) {
+    return select.fields;
+  }
+  const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
+  const excluded = new Set(selector.exclude as readonly string[]);
+  return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
+}
+
+/**
+ * `select.fields` addresses this entity's own columns and its declared
+ * computed-field names — nothing else (ADR-0045). A relation is selected
+ * with `select[<relation>]=`, and an included relation's projection is
+ * governed by the *target* entity's own `select.fields` (ADR-0026
+ * decision 4), never the including entity's config.
+ *
+ * So a relation-dotted `select.fields` entry has no meaning here and is a
+ * bootstrap `ConfigurationException`, in both the array and the
+ * `{ exclude }` form.
+ */
+function rejectRelationDottedSelectable(
+  entityName: string,
+  known: readonly string[],
+  selector: SelectableFieldSelector<object, string> | undefined,
+): void {
+  if (selector === undefined) {
+    return;
+  }
+  const knownNames = new Set(known);
+  const entries = "exclude" in selector ? selector.exclude : selector;
+  const keyPath = "exclude" in selector ? "select.fields.exclude" : "select.fields";
+  for (const entry of entries as readonly string[]) {
+    if (!entry.includes(".") || knownNames.has(entry)) {
+      continue;
+    }
+    throw new ConfigurationException(
+      entityName,
+      keyPath,
+      `'${entry}' is a relation-dotted path. select.fields takes ${entityName}'s own columns and ` +
+        `computed-field names only — an included relation's projection is governed by the target entity's own ` +
+        `select.fields (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
+    );
+  }
+}
+
+/**
+ * Bootstrap check for an explicit `filter.fields`/`sort.fields` array
+ * override (issue #367 finding 1). These allowlists gate the *only* two
+ * client inputs `@kavo/typeorm` interpolates raw into SQL — a join path and
+ * a `where`/`addOrderBy` column reference, neither of which can be
+ * parameter-bound — so an explicit array here is used verbatim
+ * (`resolveFieldSelector`'s plain-array branch) with nothing else standing
+ * between it and the driver. `{ exclude }` overrides are skipped: they
+ * subtract from `base`, which is already known-safe own columns. The map
+ * form (`filter.fields` only) is skipped the same way — its keys are
+ * checked by `resolveFilterFields` itself.
+ */
+function validateFieldNames(
+  entityName: string,
+  key: "filter.fields" | "sort.fields",
+  selector: unknown,
+  knownFieldNames: readonly string[],
+): void {
+  if (selector === undefined || !Array.isArray(selector)) {
+    return;
+  }
+  const known = new Set(knownFieldNames);
+  for (const field of selector as readonly string[]) {
+    const segments = field.split(".");
+    if (segments.length === 1) {
+      if (!known.has(field)) {
+        throw new ConfigurationException(
+          entityName,
+          key,
+          `'${field}' is not a column on '${entityName}' — ${key} entries must name a real ` +
+            `column, or a relation path ('relation.field') for a relation-dotted entry.`,
+        );
+      }
+      continue;
+    }
+    for (const segment of segments) {
+      if (!IDENTIFIER.test(segment)) {
+        throw new ConfigurationException(
+          entityName,
+          key,
+          `'${field}' is not a valid relation path — '${segment}' is not a valid identifier. ` +
+            `${key} entries reach raw SQL unquoted, so every segment must be letters, digits, ` +
+            `and underscores only.`,
+        );
+      }
     }
   }
 }
 
 /**
+ * `include.fields`'s own resolver, not `resolveFieldSelector` reused: the
+ * unconfigured default is `[]`, not `base` — the opt-in direction
+ * `IncludeConfig.fields`'s doc comment calls out (ADR-0028). An explicit
+ * array is used verbatim (and is checked for typos later, when
+ * `DefaultRelationRegistry` builds the registry); `{ exclude }` still
+ * resolves against `base` (every relation), so `{ exclude: [] }` is the one
+ * spelling that opts every relation in at once.
+ */
+function resolveIncludableSelector<Entity>(
+  entityName: string,
+  base: readonly IncludePath<Entity, 1>[],
+  selector: RelationFieldSelector<Entity> | undefined,
+): readonly IncludePath<Entity, 1>[] {
+  if (selector === undefined) {
+    return [];
+  }
+  if (!("exclude" in selector)) {
+    return selector;
+  }
+  const known = new Set<string>(base as readonly string[]);
+  for (const name of selector.exclude) {
+    if (known.has(name as string)) {
+      continue;
+    }
+    throw new ConfigurationException(
+      entityName,
+      "include.fields.exclude",
+      `'${name}' is not a relation of ${entityName} (relations: ${[...known].join(", ") || "none"})`,
+    );
+  }
+  const excluded = new Set(selector.exclude);
+  return base.filter((path) => !excluded.has(path));
+}
+
+/**
  * Bootstrap validation for `pagination.strategy: "since"` (ADR-0022):
  * `pagination.since.field` names a real, `date`- or `string`-kind column
- * on `filterable` and `selectable`, and `idField` (the forced sort's
+ * on `filter.fields` and `select.fields`, and `idField` (the forced sort's
  * tiebreaker) is too. Unlike cursor pagination's equivalent check
  * (`QueryNormalizer.resolveKeyset`, run per request against the *effective*
  * sort, which is client-choosable), the since strategy's sort is *forced*
  * and entirely config-known — the same reason `resolveSoftDelete` validates
- * its marker field here rather than per request. A third-party strategy
- * that also emits a `since`-shaped `Pagination` under another name is not
- * covered — this check is name-gated on the literal `"since"`, the same
- * way the settings-shape checks above are.
- *
- * No-op for any other strategy, including a custom one registered as
- * `"since"` by name coincidence — that misconfiguration surfaces instead
- * as a normal per-request query issue once `QueryNormalizer` runs.
+ * its marker field here rather than per request.
  */
 function validateSincePagination<Entity extends object>(
   scope: string,
   metadata: EntityMetadata<Entity>,
   settings: KavoSettings,
-  allowed: ResolvedQueryAllowed<Entity>,
+  filter: ResolvedFilterConfig<Entity>,
+  select: ResolvedSelectConfig<Entity>,
 ): void {
   if (settings.pagination.strategy !== "since") {
     return;
   }
   const { field } = settings.pagination.since;
-  const filterable = allowed.filterable as readonly string[];
-  const selectable = allowed.selectable as readonly string[];
+  const filterable = filter.fields as readonly string[];
+  const selectable = select.fields as readonly string[];
 
   const sinceColumn = metadata.fields.find((column) => column.name === field);
   if (sinceColumn === undefined) {
@@ -657,235 +992,17 @@ function validateSincePagination<Entity extends object>(
       throw new ConfigurationException(
         scope,
         "pagination.since.field",
-        `${reason} '${column}' must be on the filterable allowlist for 'since' pagination to compose its keyset predicate`,
+        `${reason} '${column}' must be on 'filter.fields' for 'since' pagination to compose its keyset predicate`,
       );
     }
     if (!selectable.includes(column)) {
       throw new ConfigurationException(
         scope,
         "pagination.since.field",
-        `${reason} '${column}' must be on the selectable allowlist for 'since' pagination to read the next boundary off a row`,
+        `${reason} '${column}' must be on 'select.fields' for 'since' pagination to read the next boundary off a row`,
       );
     }
   }
-}
-
-/**
- * Resolves one allowlist key's raw selector against that key's **base
- * set** — own columns for `filterable`/`sortable`, own columns plus the
- * selectable computed fields for `selectable`. An explicit array is used
- * as-is; `{ exclude }` resolves to `base` minus the named paths, so a path
- * outside `base` can never appear via `exclude` and stays fail-closed like
- * the plain default.
- */
-/**
- * The default response projection, or `null` for "leave it derived"
- * (ADR-0026).
- *
- * Explicit configuration is the trigger: an unwritten `selectable` narrows
- * nothing, which is what keeps this change confined to entities that asked
- * for it.
- *
- * The two spellings resolve against **different bases**, and that asymmetry
- * is the whole point rather than an oversight. A plain array is the author's
- * own list and is used verbatim. `{ exclude }` means "everything except
- * these", and *everything* here has to be the readable projection — every
- * column plus **every** declared computed field — not `selectableBase`,
- * which drops computed fields declaring `selectable: false`.
- *
- * Resolving `{ exclude }` against the narrower base retires a contract the
- * author never touched: `selectable: false` is documented as keeping a field
- * in the projection while making its name a 400 in `select=`, so
- * `{ exclude: ["email"] }` would silently delete an unrelated audit field
- * from every response. That is the same "narrowing by a list nobody wrote"
- * this function exists to prevent, one level down.
- */
-function resolveProjection<Entity extends object>(
-  metadata: EntityMetadata<Entity>,
-  entityConfig: EntityConfig<Entity> | undefined,
-  computed: ComputedFieldMap<Entity>,
-  allowed: ResolvedQueryAllowed<Entity>,
-): readonly FieldPath<Entity>[] | null {
-  const selector = entityConfig?.allowed?.selectable;
-  if (selector === undefined) {
-    return null;
-  }
-  if (!("exclude" in selector)) {
-    return allowed.selectable;
-  }
-  const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
-  const excluded = new Set(selector.exclude as readonly string[]);
-  return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
-}
-
-/**
- * `allowed.selectable` addresses this entity's own columns and its
- * declared computed-field names — nothing else (ADR-0045). A relation is
- * selected with `select[<relation>]=`, and an included relation's
- * projection is governed by the *target* entity's own `selectable`
- * (ADR-0026 decision 4), never the including entity's config.
- *
- * So a relation-dotted `selectable` entry has no meaning here and is a
- * bootstrap `ConfigurationException`, in both the array and the
- * `{ exclude }` form. The check: an entry that contains a `.` and is not
- * itself a known field name — which catches an ADR-0044 ceiling entry
- * (`dictionary.id`), a relation-headed typo (`notARelation.field`), and an
- * `a.b.c` deep path in one rule. A genuine dotted column name (no adapter
- * emits one today, but the rule stays precise) is left alone.
- *
- * `known` is the entity's own column names plus its computed-field names —
- * `selectableBase`. Computed-field descriptors declaring `selectable:
- * false` are absent from that set but also never carry a `.`, so the
- * distinction does not matter here.
- */
-function rejectRelationDottedSelectable(
-  entityName: string,
-  known: readonly string[],
-  selector: SelectableFieldSelector<object, string> | undefined,
-): void {
-  if (selector === undefined) {
-    return;
-  }
-  const knownNames = new Set(known);
-  const entries = "exclude" in selector ? selector.exclude : selector;
-  const keyPath = "exclude" in selector ? "allowed.selectable.exclude" : "allowed.selectable";
-  for (const entry of entries as readonly string[]) {
-    if (!entry.includes(".") || knownNames.has(entry)) {
-      continue;
-    }
-    throw new ConfigurationException(
-      entityName,
-      keyPath,
-      `'${entry}' is a relation-dotted path. allowed.selectable takes ${entityName}'s own columns and ` +
-        `computed-field names only — an included relation's projection is governed by the target entity's own ` +
-        `allowed.selectable (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
-    );
-  }
-}
-
-/**
- * Generic over the path type so it serves both `QueryFieldSelector`
- * (depth-capped-3 `FieldPath`) and `WritableFieldSelector` (depth-1) — the
- * array-or-`{ exclude }` resolution logic is identical either way.
- */
-function resolveFieldSelector<Path extends string>(
-  base: readonly Path[],
-  selector: readonly Path[] | { readonly exclude: readonly Path[] } | undefined,
-): readonly Path[] {
-  if (selector === undefined) {
-    return base;
-  }
-  if (!("exclude" in selector)) {
-    return selector;
-  }
-  const excluded = new Set(selector.exclude);
-  return base.filter((path) => !excluded.has(path));
-}
-
-/** Letters, digits, underscore, not leading with a digit — same charset `@kavo/typeorm`'s `columnRef` enforces at request time. */
-const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-
-/**
- * Bootstrap check for an explicit `filterable`/`sortable` array override
- * (issue #367 finding 1). These allowlists gate the *only* two client
- * inputs `@kavo/typeorm` interpolates raw into SQL — a join path and a
- * `where`/`addOrderBy` column reference, neither of which can be
- * parameter-bound — so an explicit array here is used verbatim
- * (`resolveFieldSelector`'s plain-array branch) with nothing else standing
- * between it and the driver. `{ exclude }` overrides are skipped: they
- * subtract from `base`, which is already known-safe own columns.
- *
- * A bare entry must name a real own column, relation, or computed field on
- * the entity; a relation-dotted entry (`profile.city`) can't be checked
- * against real metadata here — the target entity is out of scope for a
- * single entity's config resolution — so each of its segments is instead
- * required to look like an identifier. Either failure is a bootstrap
- * `ConfigurationException`, not a runtime 400: a bad allowlist entry is a
- * configuration bug, not a client mistake. Naming a real relation or
- * computed field is still generally wrong (a relation isn't a scalar
- * column, a computed field has none) — that is caught by the existing,
- * more specific checks downstream in `resolveAllowed`, which this
- * function defers to rather than duplicating.
- */
-function validateAllowlistFieldNames(
-  entityName: string,
-  key: "filterable" | "sortable",
-  selector: readonly string[] | { readonly exclude: readonly string[] } | undefined,
-  knownFieldNames: readonly string[],
-): void {
-  if (selector === undefined || "exclude" in selector) {
-    return;
-  }
-  const known = new Set(knownFieldNames);
-  for (const field of selector) {
-    const segments = field.split(".");
-    if (segments.length === 1) {
-      if (!known.has(field)) {
-        throw new ConfigurationException(
-          entityName,
-          `allowed.${key}`,
-          `'${field}' is not a column on '${entityName}' — allowed.${key} entries must name a real ` +
-            `column, or a relation path ('relation.field') for a relation-dotted entry.`,
-        );
-      }
-      continue;
-    }
-    for (const segment of segments) {
-      if (!IDENTIFIER.test(segment)) {
-        throw new ConfigurationException(
-          entityName,
-          `allowed.${key}`,
-          `'${field}' is not a valid relation path — '${segment}' is not a valid identifier. ` +
-            `allowed.${key} entries reach raw SQL unquoted, so every segment must be letters, digits, ` +
-            `and underscores only.`,
-        );
-      }
-    }
-  }
-}
-
-/**
- * `includable`'s own resolver, not `resolveFieldSelector` reused: the
- * unconfigured default is `[]`, not `base` — the opt-in direction
- * `QueryAllowed.includable`'s doc comment calls out (ADR-0028). An
- * explicit array is used verbatim (and is checked for typos later, when
- * `DefaultRelationRegistry` builds the registry); `{ exclude }` still
- * resolves against `base` (every relation), so `{ exclude: [] }` is the one
- * spelling that opts every relation in at once.
- *
- * `{ exclude }`'s own names *are* checked here, unlike `resolveFieldSelector`'s
- * — a name that matches nothing in `base` would otherwise silently exclude
- * nothing, so `{ exclude: ["ptes"] }` on an entity whose relation is actually
- * `pets` would open *every* relation instead of the one name meant to stay
- * closed. That is a worse failure mode here than on `filterable`/`sortable`/
- * `selectable`: this is the one allowlist that is fail-closed by default, so
- * a typo silently flipping it wide open is exactly the mistake the opt-in
- * default exists to prevent.
- */
-function resolveIncludableSelector<Entity>(
-  entityName: string,
-  base: readonly IncludePath<Entity, 1>[],
-  selector: RelationFieldSelector<Entity> | undefined,
-): readonly IncludePath<Entity, 1>[] {
-  if (selector === undefined) {
-    return [];
-  }
-  if (!("exclude" in selector)) {
-    return selector;
-  }
-  const known = new Set<string>(base as readonly string[]);
-  for (const name of selector.exclude) {
-    if (known.has(name as string)) {
-      continue;
-    }
-    throw new ConfigurationException(
-      entityName,
-      "allowed.includable.exclude",
-      `'${name}' is not a relation of ${entityName} (relations: ${[...known].join(", ") || "none"})`,
-    );
-  }
-  const excluded = new Set(selector.exclude);
-  return base.filter((path) => !excluded.has(path));
 }
 
 /**
@@ -900,7 +1017,11 @@ export function describeResolvedConfig<Entity>(
   return {
     entityName: config.entityName,
     settings: config.settings,
-    allowed: config.allowed,
+    filter: config.filter,
+    sort: config.sort,
+    select: config.select,
+    search: config.search,
+    include: config.include,
     computed: Object.keys(config.computed),
     softDelete: config.softDelete,
     relations: config.relations.all().map((relation) => ({

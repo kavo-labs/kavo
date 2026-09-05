@@ -548,7 +548,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
   it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["age"] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((author) => (author as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
@@ -557,7 +557,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
   it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["age"] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const page1 = await withDefault.findMany({ limit: 2, offset: 0 });
     const page2 = await withDefault.findMany({ limit: 2, offset: 2 });
@@ -612,7 +612,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);
@@ -637,7 +637,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("sorts on an allowlisted relation path", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { sortable: ["title", "author.name" as never] },
+      sort: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);

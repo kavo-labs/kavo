@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  DeepPartial,
   EntityId,
   EntityMetadata,
   KavoSettings,
@@ -45,15 +44,18 @@ function sortWireToken(entry: Sort<User>): string {
   return entry.direction === "desc" ? `-${entry.field as string}` : (entry.field as string);
 }
 
-function cursorCrud(overrides: DeepPartial<KavoSettings> = {}) {
+function cursorCrud(
+  overrides: { pagination?: Partial<KavoSettings["pagination"]>; sortDefault?: readonly string[] } = {},
+) {
   const adapter = new InMemoryUserAdapter();
   const crud = createKavo({
     defaults: {
-      ...overrides,
       pagination: { strategy: "cursor", ...overrides.pagination },
-      defaults: { sort: SORT_BY_ID.map(sortWireToken), ...overrides.defaults },
     },
-  } as never).createCrud(User, undefined, { adapter, metadata: userMetadata });
+  } as never).createCrud(User, { sort: { default: overrides.sortDefault ?? SORT_BY_ID.map(sortWireToken) } } as never, {
+    adapter,
+    metadata: userMetadata,
+  });
   return { crud, adapter };
 }
 
@@ -479,24 +481,26 @@ describe("CursorPaginationStrategy", () => {
 describe("QueryNormalizer — cursor pagination requires a total order", () => {
   const normalizer = new QueryNormalizer<User>(userMetadata);
 
-  const DEFAULT_ALLOWLISTS = {
-    filterable: ["id", "name", "age", "status", "createdAt"],
-    sortable: ["id", "name", "age", "status", "createdAt"],
-    selectable: ["id", "name", "email", "age", "status", "createdAt"],
+  const DEFAULT_FIELD_GROUPS = {
+    filter: {
+      fields: ["id", "name", "age", "status", "createdAt"],
+      operators: null,
+      limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 },
+    },
+    sort: { fields: ["id", "name", "age", "status", "createdAt"] },
+    select: { fields: ["id", "name", "email", "age", "status", "createdAt"] },
+    include: { fields: [], limits: { maxDepth: 3, maxNodes: 20 } },
   };
 
   function configWith(
     defaultSort: readonly Sort<User>[],
     strategy = "cursor",
-    allowed: Partial<typeof DEFAULT_ALLOWLISTS> = {},
+    fieldGroups: { filter?: { fields: string[] }; sort?: { fields: string[] }; select?: { fields: string[] } } = {},
   ): ResolvedEntityConfig<User> {
     const settings = {
       pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true },
-      limits: { filterDepth: 5, inValues: 100, likePattern: 200, includeDepth: 3, includedNodes: 20 },
-      search: false,
       errors: { exposeInternals: false },
       relations: { edges: {} },
-      defaults: { sort: defaultSort.map(sortWireToken), include: [] },
       softDelete: false,
       operations: {},
     } as unknown as KavoSettings;
@@ -504,7 +508,12 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
       entityName: "User",
       settings,
       settingsFor: () => settings,
-      allowed: { ...DEFAULT_ALLOWLISTS, ...allowed },
+      ...DEFAULT_FIELD_GROUPS,
+      filter: { ...DEFAULT_FIELD_GROUPS.filter, ...fieldGroups.filter },
+      sort: { ...DEFAULT_FIELD_GROUPS.sort, ...fieldGroups.sort },
+      select: { ...DEFAULT_FIELD_GROUPS.select, ...fieldGroups.select },
+      sortDefault: defaultSort,
+      search: false,
       softDelete: { strategy: "hard", field: "deletedAt" },
       dto: { resolve: () => null },
       relations: { all: () => [], get: () => undefined },
@@ -528,9 +537,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
     expect(issues[0]).toMatchObject({ field: "sort", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
   });
 
-  it("rejects an empty effective sort and names the missing defaults.sort", () => {
+  it("rejects an empty effective sort and names the missing sort.default", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({}, configWith([])));
-    expect(issues[0]?.detail).toContain("defaults.sort");
+    expect(issues[0]?.detail).toContain("sort.default");
   });
 
   it("falls back to a conforming default sort without the client sending sort", () => {
@@ -609,9 +618,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
     // without this gate `?sort=email,id&cursor=…` is a comparison oracle
     // over a field `?filter[email][gt]=…` is a 400 for.
     const config = configWith([], "cursor", {
-      sortable: ["id", "email"],
-      filterable: ["id", "status"],
-      selectable: ["id", "email", "status"],
+      sort: { fields: ["id", "email"] },
+      filter: { fields: ["id", "status"] },
+      select: { fields: ["id", "email", "status"] },
     });
     const issues = issuesOf(() => normalizer.normalizeWire({ sort: "email,id" }, config));
     expect(issues[0]).toMatchObject({ field: "email", code: "KAVO_QUERY_INVALID_FIELD" });
@@ -623,9 +632,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
     // the serializer, so a non-selectable key would land in
     // `meta.nextCursor` base64-encoded regardless of the item DTO.
     const config = configWith([], "cursor", {
-      sortable: ["id", "email"],
-      filterable: ["id", "email"],
-      selectable: ["id", "status"],
+      sort: { fields: ["id", "email"] },
+      filter: { fields: ["id", "email"] },
+      select: { fields: ["id", "status"] },
     });
     const issues = issuesOf(() => normalizer.normalizeWire({ sort: "email,id" }, config));
     expect(issues[0]).toMatchObject({ field: "email", code: "KAVO_QUERY_INVALID_FIELD" });
@@ -634,18 +643,18 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
 
   it("rejects rather than omits — dropping the key would break the total order", () => {
     const config = configWith([], "cursor", {
-      sortable: ["id", "email"],
-      filterable: ["id"],
-      selectable: ["id"],
+      sort: { fields: ["id", "email"] },
+      filter: { fields: ["id"] },
+      select: { fields: ["id"] },
     });
     expect(() => normalizer.normalizeWire({ sort: "email,id" }, config)).toThrow();
   });
 
   it("applies the same three allowlists on the programmatic path", () => {
     const config = configWith([], "cursor", {
-      sortable: ["id", "email"],
-      filterable: ["id", "status"],
-      selectable: ["id", "email", "status"],
+      sort: { fields: ["id", "email"] },
+      filter: { fields: ["id", "status"] },
+      select: { fields: ["id", "email", "status"] },
     });
     const issues = issuesOf(() =>
       normalizer.normalizeInput({ sort: [{ field: "email", direction: "asc" }, ...SORT_BY_ID] } as never, config),
@@ -655,9 +664,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
 
   it("accepts a sort key that clears sortable, filterable and selectable alike", () => {
     const config = configWith([], "cursor", {
-      sortable: ["id", "name"],
-      filterable: ["id", "name"],
-      selectable: ["id", "name"],
+      sort: { fields: ["id", "name"] },
+      filter: { fields: ["id", "name"] },
+      select: { fields: ["id", "name"] },
     });
     expect(() => normalizer.normalizeWire({ sort: "name,id" }, config)).not.toThrow();
   });
@@ -665,7 +674,10 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
   // ── The two `cursorSortIssue` branches ──────────────────────────────
 
   it("rejects a sort key that is not a scalar column of the entity", () => {
-    const config = configWith([], "cursor", { sortable: ["id", "posts"], filterable: ["id", "posts"] });
+    const config = configWith([], "cursor", {
+      sort: { fields: ["id", "posts"] },
+      filter: { fields: ["id", "posts"] },
+    });
     const issues = issuesOf(() => normalizer.normalizeWire({ sort: "posts,id" }, config));
     expect(issues[0]).toMatchObject({ field: "sort", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
     expect(issues[0]?.detail).toContain("not a scalar column");
@@ -678,9 +690,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
     };
     const jsonNormalizer = new QueryNormalizer<User>(withJson);
     const config = configWith([], "cursor", {
-      sortable: ["id", "profile"],
-      filterable: ["id", "profile"],
-      selectable: ["id", "profile"],
+      sort: { fields: ["id", "profile"] },
+      filter: { fields: ["id", "profile"] },
+      select: { fields: ["id", "profile"] },
     });
     const issues = issuesOf(() => jsonNormalizer.normalizeWire({ sort: "profile,id" }, config));
     expect(issues[0]).toMatchObject({ field: "sort", code: "KAVO_QUERY_CONFLICTING_PARAMS" });
@@ -785,9 +797,7 @@ describe("cursor pagination end to end", () => {
   });
 
   it("pages a descending sort correctly", async () => {
-    const { crud } = cursorCrud({
-      defaults: { sort: ["-age", "id"] },
-    });
+    const { crud } = cursorCrud({ sortDefault: ["-age", "id"] });
     await seed(crud, 5);
 
     const { names } = await walk(crud, 2);
@@ -795,9 +805,7 @@ describe("cursor pagination end to end", () => {
   });
 
   it("pages a mixed asc/desc sort correctly", async () => {
-    const { crud, adapter } = cursorCrud({
-      defaults: { sort: ["status", "-age", "id"] },
-    });
+    const { crud, adapter } = cursorCrud({ sortDefault: ["status", "-age", "id"] });
     await seed(crud, 6);
     // Two status buckets, so the leading key really has ties to break.
     for (const row of adapter.rows) {
@@ -880,9 +888,7 @@ describe("cursor pagination end to end", () => {
     // request is where that becomes an error. This is the loud half of the
     // null story — ADR-0021 §4 records the quiet half (a NULLS-LAST
     // ordering omits the null-keyed rows entirely, with no error at all).
-    const { crud, adapter } = cursorCrud({
-      defaults: { sort: ["name", "id"] },
-    });
+    const { crud, adapter } = cursorCrud({ sortDefault: ["name", "id"] });
     await seed(crud, 4);
     // sqlite-style NULLS FIRST: the null-named row sorts to the front and
     // lands on the page-1 boundary.
@@ -911,11 +917,11 @@ describe("cursor pagination end to end", () => {
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        defaults: { sort: SORT_BY_ID.map(sortWireToken) },
       },
     } as never).createCrud(
       User,
       {
+        sort: { default: SORT_BY_ID.map(sortWireToken) },
         operations: {
           createOne: true,
           findMany: {
@@ -1011,9 +1017,11 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        defaults: { sort: SORT_BY_ID.map(sortWireToken) },
       },
-    } as never).createCrud(User, undefined, { adapter, metadata: userMetadata });
+    } as never).createCrud(User, { sort: { default: SORT_BY_ID.map(sortWireToken) } } as never, {
+      adapter,
+      metadata: userMetadata,
+    });
     return { crud, adapter };
   }
 

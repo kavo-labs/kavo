@@ -44,11 +44,11 @@ async function seeded(config: EntityConfig<User>) {
 
 /** `email` stands in for #149's `apiKey`: present on the entity, off the list. */
 const HIDES_EMAIL: EntityConfig<User> = {
-  allowed: { selectable: ["id", "name", "age", "status", "createdAt"] },
+  select: { fields: ["id", "name", "age", "status", "createdAt"] },
 } as EntityConfig<User>;
 
 const EXCLUDES_EMAIL: EntityConfig<User> = {
-  allowed: { selectable: { exclude: ["email"] } },
+  select: { fields: { exclude: ["email"] } },
 } as EntityConfig<User>;
 
 describe("allowed.selectable narrows the response projection", () => {
@@ -165,7 +165,7 @@ describe("allowed.selectable narrows the response projection", () => {
       kavo.createCrud(Author, authorConfig as never);
       kavo.createCrud(Comment);
       return kavo.createCrud(Post, {
-        allowed: { includable: ["author"] },
+        include: { fields: ["author"] },
       } as never) as DefaultKavoService<Post>;
     }
 
@@ -177,9 +177,7 @@ describe("allowed.selectable narrows the response projection", () => {
     }
 
     it("applies the target's own selectable to the included rows", async () => {
-      expect(Object.keys(await includedAuthor({ allowed: { selectable: ["id"] } } as EntityConfig<Author>))).toEqual([
-        "id",
-      ]);
+      expect(Object.keys(await includedAuthor({ select: { fields: ["id"] } } as EntityConfig<Author>))).toEqual(["id"]);
     });
 
     it("leaves the target alone when the target configured nothing", async () => {
@@ -198,7 +196,7 @@ describe("allowed.selectable narrows the response projection", () => {
       email = "";
     }
     const { crud, id } = await seeded({
-      allowed: { selectable: ["id", "name"] },
+      select: { fields: ["id", "name"] },
       dto: { item: UserItemDto },
     } as never);
     expect(await crud.findOne(id)).toEqual({ id, email: "ada@example.com" });

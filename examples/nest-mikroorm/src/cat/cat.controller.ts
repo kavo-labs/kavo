@@ -26,12 +26,10 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
   // `indoor`, `livesLeft`, and `createdAt` are still returned in every
   // response (`CatItemDto` includes them), just not queryable — narrower
   // than "every own column" without excluding anything by name.
-  allowed: {
-    filterable: ["id", "name", "age", "size", "owner.name"],
-    sortable: ["id", "name", "age", "owner.name"],
-    selectable: ["id", "name", "age", "size"],
-    includable: ["owner", "tags"],
-  },
+  filter: { fields: ["id", "name", "age", "size", "owner.name"] },
+  sort: { fields: ["id", "name", "age", "owner.name"] },
+  select: { fields: ["id", "name", "age", "size"] },
+  include: { fields: ["owner", "tags"] },
   operations: {
     createOne: true,
     findOne: true,

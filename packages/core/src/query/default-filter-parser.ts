@@ -1,4 +1,11 @@
-import type { Filter, FilterCondition, FilterExpression, FilterOperator, FilterScalar } from "./filter.js";
+import type {
+  Filter,
+  FilterCondition,
+  FilterExpression,
+  FilterOperator,
+  FilterOperatorToken,
+  FilterScalar,
+} from "./filter.js";
 import type { FilterParser } from "./filter-parser.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";
@@ -33,7 +40,7 @@ const OPERATOR_TOKENS = {
   BETWEEN: "between",
   IS_NULL: "isNull",
   IS_NOT_NULL: "isNotNull",
-} as const satisfies Record<FilterOperator, string>;
+} as const satisfies Record<FilterOperator, FilterOperatorToken>;
 
 /**
  * The parse-direction lookup, derived so the two directions cannot drift.
@@ -69,7 +76,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     const issues: QueryIssueDto[] = [];
     const roots: FilterExpression<Entity>[] = [];
 
-    const guard: DepthGuard = { maxDepth: config.settings.limits.filterDepth, exceeded: false };
+    const guard: DepthGuard = { maxDepth: config.filter.limits.maxDepth, exceeded: false };
 
     const bracketTree = this.collectBracketTree(rawParams);
     if (bracketTree !== null) {
@@ -258,7 +265,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     issues: QueryIssueDto[],
     out: FilterExpression<Entity>[],
   ): void {
-    const filterable = config.allowed.filterable as readonly string[];
+    const filterable = config.filter.fields as readonly string[];
     if (!filterable.includes(field)) {
       // Same construction site as the programmatic path's
       // `requireAllowlisted`, so the two entry points cannot word one
@@ -282,6 +289,32 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     }
   }
 
+  /**
+   * `filter.fields`'s map form (issue #386): when the field carries a
+   * per-field operator restriction, an operator outside it is a 400 —
+   * the same rejection shape as a field outside `filter.fields` at all.
+   */
+  private checkOperatorAllowed(
+    field: string,
+    token: string,
+    operator: FilterOperator,
+    config: ResolvedEntityConfig<Entity>,
+    issues: QueryIssueDto[],
+  ): boolean {
+    const allowed = config.filter.operators?.get(field);
+    if (allowed === undefined || allowed.has(operator)) {
+      return true;
+    }
+    issues.push({
+      field,
+      code: "KAVO_QUERY_INVALID_OPERATOR",
+      detail:
+        `Operator '${token}' is not permitted on field '${field}' — allowed operators: ` +
+        `${[...allowed].map((one) => OPERATOR_TOKENS[one]).join(", ") || "none"}.`,
+    });
+    return false;
+  }
+
   private buildCondition(
     field: string,
     token: string,
@@ -296,6 +329,9 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         code: "KAVO_QUERY_INVALID_OPERATOR",
         detail: `Unknown filter operator '${token}' on field '${field}'.`,
       });
+      return null;
+    }
+    if (!this.checkOperatorAllowed(field, token, operator, config, issues)) {
       return null;
     }
     const metadata = this.fields.get(field);
@@ -338,7 +374,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
           });
           return null;
         }
-        const max = config.settings.limits.inValues;
+        const max = config.filter.limits.maxInValues;
         if (parts.length > max) {
           issues.push({
             field,
@@ -383,7 +419,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         // `%`/`_` are escaped with a backslash (`\%`) — the adapter emits
         // the matching ESCAPE clause.
         const pattern = String(raw);
-        const max = config.settings.limits.likePattern;
+        const max = config.filter.limits.maxLikePatternLength;
         if (pattern.length > max) {
           // Values are parameter-bound (never SQLi), but an unbounded
           // pattern — heavy wildcard backtracking, e.g. `%a%b%c%…` — can

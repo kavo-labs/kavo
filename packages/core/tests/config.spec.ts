@@ -14,7 +14,6 @@ describe("mergeSettings — merge algebra", () => {
     expect(merged.pagination.maxLimit).toBe(50);
     // Untouched keys keep the farther scope's values.
     expect(merged.pagination.strategy).toBe("offset");
-    expect(merged.limits.filterDepth).toBe(3);
   });
 
   it("skips a key whose override value is explicitly undefined", () => {
@@ -52,8 +51,8 @@ describe("resolveEntityConfig — bootstrap", () => {
     const config = resolveEntityConfig(userMetadata, undefined, undefined);
     expect(config.entityName).toBe("User");
     expect(config.settings.pagination.defaultLimit).toBe(20);
-    // Allowed derive from own scalar columns.
-    expect(config.allowed.filterable).toEqual(["id", "name", "email", "age", "status", "createdAt"]);
+    // Field-group `fields` derive from own scalar columns.
+    expect(config.filter.fields).toEqual(["id", "name", "email", "age", "status", "createdAt"]);
   });
 
   it("applies the precedence chain global → entity → operation", () => {
@@ -97,24 +96,24 @@ describe("resolveEntityConfig — bootstrap", () => {
     );
   });
 
-  it("uses explicit allowlists verbatim when configured", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { filterable: ["name", "age"] } }, undefined);
-    expect(config.allowed.filterable).toEqual(["name", "age"]);
+  it("uses explicit field lists verbatim when configured", () => {
+    const config = resolveEntityConfig(userMetadata, { filter: { fields: ["name", "age"] } }, undefined);
+    expect(config.filter.fields).toEqual(["name", "age"]);
     // Unconfigured lists still derive.
-    expect(config.allowed.sortable).toContain("email");
+    expect(config.sort.fields).toContain("email");
   });
 
-  // Issue #367 finding 1: `filterable`/`sortable` feed `@kavo/typeorm`'s raw
-  // SQL identifier interpolation, so an explicit array override — used
+  // Issue #367 finding 1: `filter.fields`/`sort.fields` feed `@kavo/typeorm`'s
+  // raw SQL identifier interpolation, so an explicit array override — used
   // verbatim, unlike `{ exclude }` — is validated at bootstrap rather than
   // trusted blindly.
-  describe("validates explicit filterable/sortable entries (issue #367)", () => {
-    it.each(["filterable", "sortable"] as const)(
-      "rejects a bare %s entry that names no real column, relation, or computed field",
-      (key) => {
+  describe("validates explicit filter.fields/sort.fields entries (issue #367)", () => {
+    it.each(["filter", "sort"] as const)(
+      "rejects a bare %s.fields entry that names no real column, relation, or computed field",
+      (block) => {
         let caught: unknown;
         try {
-          resolveEntityConfig(userMetadata, { allowed: { [key]: ["notAColumn"] } }, undefined);
+          resolveEntityConfig(userMetadata, { [block]: { fields: ["notAColumn"] } }, undefined);
         } catch (error) {
           caught = error;
         }
@@ -124,9 +123,9 @@ describe("resolveEntityConfig — bootstrap", () => {
       },
     );
 
-    it.each(["filterable", "sortable"] as const)(
-      "rejects a %s entry whose relation path carries a non-identifier segment",
-      (key) => {
+    it.each(["filter", "sort"] as const)(
+      "rejects a %s.fields entry whose relation path carries a non-identifier segment",
+      (block) => {
         for (const poisoned of [
           "profile.city; DROP TABLE users; --",
           "profile.`city`",
@@ -135,7 +134,7 @@ describe("resolveEntityConfig — bootstrap", () => {
         ]) {
           let caught: unknown;
           try {
-            resolveEntityConfig(userMetadata, { allowed: { [key]: [poisoned] } }, undefined);
+            resolveEntityConfig(userMetadata, { [block]: { fields: [poisoned] } }, undefined);
           } catch (error) {
             caught = error;
           }
@@ -146,92 +145,90 @@ describe("resolveEntityConfig — bootstrap", () => {
       },
     );
 
-    it.each(["filterable", "sortable"] as const)("accepts a well-formed relation-path %s entry", (key) => {
+    it.each(["filter", "sort"] as const)("accepts a well-formed relation-path %s.fields entry", (block) => {
       expect(() =>
-        resolveEntityConfig(userMetadata, { allowed: { [key]: ["profile.city"] } }, undefined),
+        resolveEntityConfig(userMetadata, { [block]: { fields: ["profile.city"] } }, undefined),
       ).not.toThrow();
     });
 
-    it.each(["filterable", "sortable"] as const)(
-      "accepts a bare relation name as a %s entry (e.g. filtering a to-one relation's FK directly)",
-      (key) => {
+    it.each(["filter", "sort"] as const)(
+      "accepts a bare relation name as a %s.fields entry (e.g. filtering a to-one relation's FK directly)",
+      (block) => {
         const metadata = {
           ...userMetadata,
           relations: [{ name: "posts", target: () => class {}, cardinality: "one", includable: false }],
         } as unknown as typeof userMetadata;
-        expect(() => resolveEntityConfig(metadata, { allowed: { [key]: ["posts"] } }, undefined)).not.toThrow();
+        expect(() => resolveEntityConfig(metadata, { [block]: { fields: ["posts"] } }, undefined)).not.toThrow();
       },
     );
 
     it("still lets { exclude } through unchecked, same as before (it only subtracts from known-safe own columns)", () => {
       const notAColumn = "notAColumn" as unknown as keyof User;
       expect(() =>
-        resolveEntityConfig(userMetadata, { allowed: { filterable: { exclude: [notAColumn] } } }, undefined),
+        resolveEntityConfig(userMetadata, { filter: { fields: { exclude: [notAColumn] } } }, undefined),
       ).not.toThrow();
     });
   });
 
   it("resolves { exclude } to every own column except the ones named", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { filterable: { exclude: ["email"] } } }, undefined);
-    expect(config.allowed.filterable).toEqual(["id", "name", "age", "status", "createdAt"]);
+    const config = resolveEntityConfig(userMetadata, { filter: { fields: { exclude: ["email"] } } }, undefined);
+    expect(config.filter.fields).toEqual(["id", "name", "age", "status", "createdAt"]);
     // Unconfigured lists still derive in full.
-    expect(config.allowed.sortable).toContain("email");
+    expect(config.sort.fields).toContain("email");
   });
 
   it("never lets { exclude } surface a column outside own columns", () => {
     // A name that isn't an own column is a no-op to exclude — the result
     // stays a subset of own columns, never an arbitrary string added in.
     const notAColumn = "notAColumn" as unknown as keyof User;
-    const config = resolveEntityConfig(userMetadata, { allowed: { filterable: { exclude: [notAColumn] } } }, undefined);
-    expect(config.allowed.filterable).toEqual(["id", "name", "email", "age", "status", "createdAt"]);
+    const config = resolveEntityConfig(userMetadata, { filter: { fields: { exclude: [notAColumn] } } }, undefined);
+    expect(config.filter.fields).toEqual(["id", "name", "email", "age", "status", "createdAt"]);
   });
 
-  it("resolves { exclude } independently for sortable and selectable too", () => {
+  it("resolves { exclude } independently for sort and select too", () => {
     const config = resolveEntityConfig(
       userMetadata,
       {
-        allowed: {
-          sortable: { exclude: ["status"] },
-          selectable: { exclude: ["age", "status"] },
-        },
+        sort: { fields: { exclude: ["status"] } },
+        select: { fields: { exclude: ["age", "status"] } },
       },
       undefined,
     );
-    expect(config.allowed.sortable).toEqual(["id", "name", "email", "age", "createdAt"]);
-    expect(config.allowed.selectable).toEqual(["id", "name", "email", "createdAt"]);
-    // Unconfigured filterable still derives in full.
-    expect(config.allowed.filterable).toContain("status");
+    expect(config.sort.fields).toEqual(["id", "name", "email", "age", "createdAt"]);
+    expect(config.select.fields).toEqual(["id", "name", "email", "createdAt"]);
+    // Unconfigured filter.fields still derives in full.
+    expect(config.filter.fields).toContain("status");
   });
 
-  it("defaults searchable to every own string-kind column, unlike filterable's every-column default", () => {
-    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+  it("defaults search.fields to every own string-kind column, unlike filter.fields's every-column default", () => {
+    const config = resolveEntityConfig(userMetadata, { search: {} }, undefined);
     // `age` (number), `status` (enum), `createdAt` (date), `id` (number) are
     // excluded — only `name`/`email` are string-kind.
-    expect(config.allowed.searchable).toEqual(["name", "email"]);
-    expect(config.allowed.filterable).toContain("age");
+    expect(config.search !== false && config.search.fields).toEqual(["name", "email"]);
+    expect(config.filter.fields).toContain("age");
   });
 
-  it("uses an explicit searchable array verbatim, including a relation path", () => {
+  it("uses an explicit search.fields array verbatim, including a relation path", () => {
     const config = resolveEntityConfig(
       authorMetadata,
-      { allowed: { searchable: ["name", "posts.title" as never] } },
+      { search: { fields: ["name", "posts.title" as never] } },
       undefined,
     );
-    expect(config.allowed.searchable).toEqual(["name", "posts.title"]);
+    expect(config.search !== false && config.search.fields).toEqual(["name", "posts.title"]);
   });
 
-  it("resolves searchable { exclude } against the string-column base, not every column", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { searchable: { exclude: ["email"] } } }, undefined);
-    expect(config.allowed.searchable).toEqual(["name"]);
+  it("resolves search.fields { exclude } against the string-column base, not every column", () => {
+    const config = resolveEntityConfig(userMetadata, { search: { fields: { exclude: ["email"] } } }, undefined);
+    expect(config.search !== false && config.search.fields).toEqual(["name"]);
   });
 
-  it("rejects a computed field named in allowed.searchable", () => {
+  it("rejects a computed field named in search.fields", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           computed: { fullName: { resolve: () => "" } },
-          allowed: { searchable: ["fullName" as never] },
+          search: { fields: ["fullName" as never] },
         },
         undefined,
       );
@@ -241,81 +238,70 @@ describe("resolveEntityConfig — bootstrap", () => {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "User",
-        path: "allowed.searchable",
+        path: "search.fields",
       });
       expect((error as ConfigurationException).message).toContain("searched on");
     }
   });
 
-  it("rejects an explicit searchable entry naming a non-string own column", () => {
+  it("rejects an explicit search.fields entry naming a non-string own column", () => {
     try {
-      resolveEntityConfig(userMetadata, { allowed: { searchable: ["age" as never] } }, undefined);
+      resolveEntityConfig(userMetadata, { search: { fields: ["age" as never] } }, undefined);
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "User",
-        path: "allowed.searchable",
+        path: "search.fields",
       });
       expect((error as ConfigurationException).message).toContain("'number'-kind");
     }
   });
 
-  it("does not kind-check a relation-path searchable entry (no target metadata in scope)", () => {
+  it("does not kind-check a relation-path search.fields entry (no target metadata in scope)", () => {
     // `posts.authorId` is a number-kind column on the relation target, not
     // on `Author` itself — unreachable from `Author`'s own `metadata.fields`,
     // so it is accepted verbatim rather than rejected, the same laxity
-    // `filterable`/`sortable` already have for relation paths.
-    const config = resolveEntityConfig(
-      authorMetadata,
-      { allowed: { searchable: ["posts.authorId" as never] } },
-      undefined,
-    );
-    expect(config.allowed.searchable).toEqual(["posts.authorId"]);
+    // `filter.fields`/`sort.fields` already have for relation paths.
+    const config = resolveEntityConfig(authorMetadata, { search: { fields: ["posts.authorId" as never] } }, undefined);
+    expect(config.search !== false && config.search.fields).toEqual(["posts.authorId"]);
   });
 
-  it("defaults creatable/updatable to every non-generated own column except the id, plus every relation", () => {
+  it("defaults create/update's writable projection to every non-generated own column except the id, plus every relation", () => {
     const config = resolveEntityConfig(postMetadata, undefined, undefined);
-    // `id` (generated, and the primary key regardless) and `deletedAt`
+    // No `dto.create`/`dto.update` shorthand configured, so the engine falls
+    // back to `DefaultDeserializer`'s own derived writable projection: `id`
+    // (generated, and the primary key regardless) and `deletedAt`
     // (generated) are excluded; `title`/`authorId` and both relations join
-    // the default, the same base `DefaultDeserializer`'s own derived
-    // writable projection uses.
-    expect(config.allowed.creatable).toEqual(["title", "authorId", "author", "comments"]);
-    expect(config.allowed.updatable).toEqual(["title", "authorId", "author", "comments"]);
+    // the default.
+    expect(config.dto.resolve("create", "createOne")).toBeNull();
+    expect(config.dto.resolve("update", "updateOne")).toBeNull();
   });
 
-  it("uses explicit creatable/updatable arrays verbatim, independently of each other", () => {
+  it("reaches creatable/updatable through dto.create/dto.update's { fields } shorthand", () => {
     const config = resolveEntityConfig(
       userMetadata,
-      { allowed: { creatable: ["name"], updatable: ["name", "email"] } },
+      { dto: { create: { fields: ["name"] }, update: { fields: ["name", "email"] } } },
       undefined,
     );
-    expect(config.allowed.creatable).toEqual(["name"]);
-    expect(config.allowed.updatable).toEqual(["name", "email"]);
-    // Unconfigured allowlists still derive.
-    expect(config.allowed.filterable).toContain("age");
+    const createDto = config.dto.resolve("create", "createOne");
+    const updateDto = config.dto.resolve("update", "updateOne");
+    expect(createDto).not.toBeNull();
+    expect(updateDto).not.toBeNull();
+    expect(Object.keys(new (createDto as new () => object)())).toEqual(["name"]);
+    expect(Object.keys(new (updateDto as new () => object)())).toEqual(["name", "email"]);
+    // Unconfigured field-groups still derive.
+    expect(config.filter.fields).toContain("age");
   });
 
-  it("resolves creatable/updatable { exclude } against the writable base, not every column", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      { allowed: { creatable: { exclude: ["age"] }, updatable: { exclude: ["status"] } } },
-      undefined,
-    );
-    // `id`/`createdAt` are excluded from the base itself (generated/id), so
-    // naming them in `exclude` would be a no-op either way.
-    expect(config.allowed.creatable).toEqual(["name", "email", "status"]);
-    expect(config.allowed.updatable).toEqual(["name", "email", "age"]);
-  });
-
-  it("rejects a computed field named in allowed.creatable or allowed.updatable", () => {
+  it("rejects a computed field named in dto.create's or dto.update's { fields } shorthand", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           computed: { fullName: { resolve: () => "" } },
-          allowed: { creatable: ["fullName" as never] },
+          dto: { create: { fields: ["fullName" as never] } },
         },
         undefined,
       );
@@ -323,53 +309,21 @@ describe("resolveEntityConfig — bootstrap", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        entity: "User",
-        path: "allowed.creatable",
-      });
-      expect((error as ConfigurationException).message).toContain("never writable");
+      expect((error as ConfigurationException).message).toContain("computed field");
     }
   });
 
-  it("resolves an entity-scope defaults.sort", () => {
-    const config = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
-    expect(config.settings.defaults.sort).toEqual(["-createdAt"]);
+  it("resolves an entity-scope sort.default", () => {
+    const config = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
+    expect(config.sortDefault).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
-  it("lets an operation override the entity-scope defaults.sort", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      {
-        defaults: { sort: ["-createdAt"] },
-        operations: { findMany: { defaults: { sort: ["name"] } } },
-      },
-      undefined,
-    );
-    expect(config.settingsFor("findMany").defaults.sort).toEqual(["name"]);
-    expect(config.settingsFor("findOne").defaults.sort).toEqual(["-createdAt"]);
-  });
-
-  it("applies the precedence chain global -> entity for defaults.sort", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      { defaults: { sort: ["name"] } },
-      { defaults: { sort: ["-createdAt"] } },
-    );
-    expect(config.settings.defaults.sort).toEqual(["name"]); // entity beats global
-
-    const globalOnly = resolveEntityConfig(userMetadata, undefined, {
-      defaults: { sort: ["-createdAt"] },
-    });
-    expect(globalOnly.settings.defaults.sort).toEqual(["-createdAt"]);
-  });
-
-  it("rejects an entity-scope defaults.sort field outside the sortable allowlist", () => {
+  it("rejects an entity-scope sort.default field outside sort.fields", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
-          allowed: { sortable: ["name"] },
-          defaults: { sort: ["email"] },
+          sort: { fields: ["name"], default: ["email"] },
         },
         undefined,
       );
@@ -380,32 +334,12 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
-  it("rejects an operation-scope defaults.sort field outside the sortable allowlist", () => {
-    try {
-      resolveEntityConfig(
-        userMetadata,
-        {
-          allowed: { sortable: ["name"] },
-          operations: { findMany: { defaults: { sort: ["email"] } } },
-        },
-        undefined,
-      );
-      expect.unreachable();
-    } catch (error) {
-      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
-      expect((error as ConfigurationException).detail).toContain("email");
-    }
-  });
-
-  it("rejects an operation-scope defaults.include on a relation absent from allowed.includable", () => {
-    // `validateDefaults` runs for the per-operation settings view too, not
-    // only entity scope — an operation override can name `defaults.include`
-    // just as the entity config can.
+  it("rejects an include.default entry absent from include.fields", () => {
     try {
       resolveEntityConfig(
         authorMetadata,
         {
-          operations: { findMany: { defaults: { include: ["posts"] } } },
+          include: { default: ["posts"] },
         },
         undefined,
       );
@@ -413,56 +347,36 @@ describe("resolveEntityConfig — bootstrap", () => {
     } catch (error) {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
-        entity: "Author.operations.findMany",
-        path: "defaults.include",
+        entity: "Author",
+        path: "include.default",
       });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
   });
 });
 
-/**
- * ADR-0028: `defaults.include` vs. permission is cross-checked against
- * `allowed.includable`, not `relations.edges`'s own (now-removed)
- * `includable` key — `validateDefaults` in resolve-entity-config.ts, run
- * after `allowed` is resolved.
- */
-describe("resolveEntityConfig — allowed.includable", () => {
-  it("rejects defaults.include on a relation absent from allowed.includable", () => {
+/** ADR-0028: `include.default` vs. permission is cross-checked against `include.fields`. */
+describe("resolveEntityConfig — include.fields", () => {
+  it("rejects include.default on a relation absent from include.fields", () => {
     try {
-      resolveEntityConfig(authorMetadata, { defaults: { include: ["posts"] } }, undefined);
+      resolveEntityConfig(authorMetadata, { include: { default: ["posts"] } }, undefined);
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "defaults.include",
+        path: "include.default",
       });
       expect((error as ConfigurationException).detail).toContain("posts");
     }
   });
 
-  it("rejects defaults.include set at global scope when no entity opts the relation into allowed.includable", () => {
-    // Migration hazard: `defaults.include` at global scope used to be safe
-    // under the old `relations.edges.<name>.defaultInclude` — naming the
-    // relation at all was the opt-in before this PR. It is not safe now:
-    // `allowed.includable` is entity-scope-only, so a global
-    // `defaults.include` with no matching entity grant is a bootstrap crash
-    // on every entity sharing that relation name, not a silent no-op.
-    // Pinning the crash here so a future change to this cross-check doesn't
-    // silently turn it into the no-op adopters might expect.
-    expect(() => resolveEntityConfig(authorMetadata, undefined, { defaults: { include: ["posts"] } })).toThrow(
-      ConfigurationException,
-    );
-  });
-
-  it("accepts defaults.include on a relation allowed.includable named", () => {
+  it("accepts include.default on a relation include.fields named", () => {
     expect(() =>
       resolveEntityConfig(
         authorMetadata,
         {
-          allowed: { includable: ["posts"] },
-          defaults: { include: ["posts"] },
+          include: { fields: ["posts"], default: ["posts"] },
           relations: { edges: { posts: { maxDepth: 1 } } },
         },
         undefined,
@@ -470,50 +384,49 @@ describe("resolveEntityConfig — allowed.includable", () => {
     ).not.toThrow();
   });
 
-  it("fails fast on a typo'd relation name in allowed.includable", () => {
+  it("fails fast on a typo'd relation name in include.fields", () => {
     try {
-      resolveEntityConfig(authorMetadata, { allowed: { includable: ["ghosts" as never] } }, undefined);
+      resolveEntityConfig(authorMetadata, { include: { fields: ["ghosts" as never] } }, undefined);
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "allowed.includable",
+        path: "include.fields",
       });
-      expect((error as ConfigurationException).detail).toContain("ghosts");
     }
   });
 
-  it("fails fast on a typo'd relation name in allowed.includable's { exclude } form", () => {
-    // Unlike `resolveFieldSelector`'s `{ exclude }` (filterable/sortable/
-    // selectable), which silently excludes nothing on a name that matches
-    // nothing, `includable`'s `{ exclude }` checks its own names — a typo
-    // here would otherwise open every relation instead of leaving the
-    // intended one closed, the opposite of what the author wrote.
+  it("fails fast on a typo'd relation name in include.fields's { exclude } form", () => {
+    // Unlike `resolveFieldSelector`'s `{ exclude }` (filter/sort/select),
+    // which silently excludes nothing on a name that matches nothing,
+    // `include.fields`'s `{ exclude }` checks its own names — a typo here
+    // would otherwise open every relation instead of leaving the intended
+    // one closed, the opposite of what the author wrote.
     try {
-      resolveEntityConfig(authorMetadata, { allowed: { includable: { exclude: ["ptes" as never] } } }, undefined);
+      resolveEntityConfig(authorMetadata, { include: { fields: { exclude: ["ptes" as never] } } }, undefined);
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "allowed.includable.exclude",
+        path: "include.fields.exclude",
       });
       expect((error as ConfigurationException).detail).toContain("ptes");
     }
   });
 
-  it("defaults to no relation includable when the key is unconfigured (opt-in, unlike the other allowlists)", () => {
+  it("defaults to no relation includable when the key is unconfigured (opt-in, unlike the other field-groups)", () => {
     const config = resolveEntityConfig(authorMetadata, undefined, undefined);
-    expect(config.allowed.includable).toEqual([]);
+    expect(config.include.fields).toEqual([]);
     expect(config.relations.get("posts")?.includable).toBe(false);
   });
 
   it("opts every own relation in via an explicit { exclude: [] }", () => {
-    const config = resolveEntityConfig(authorMetadata, { allowed: { includable: { exclude: [] } } }, undefined);
-    expect(config.allowed.includable).toEqual(["posts"]);
+    const config = resolveEntityConfig(authorMetadata, { include: { fields: { exclude: [] } } }, undefined);
+    expect(config.include.fields).toEqual(["posts"]);
   });
 });
 

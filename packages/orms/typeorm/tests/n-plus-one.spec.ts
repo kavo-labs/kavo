@@ -85,12 +85,12 @@ beforeAll(async () => {
   blogs = kavo.createCrud(Blog, {
     // Default relation strategy is `auto`, which batches a to-many rather
     // than joining it — the case this whole file is about.
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
   kavo.createCrud(Article, {
-    allowed: { includable: ["blog", "notes"] },
+    include: { fields: ["blog", "notes"] },
   });
-  kavo.createCrud(Note, { allowed: { includable: ["article"] } });
+  kavo.createCrud(Note, { include: { fields: ["article"] } });
 
   // Seed N blogs, each with M articles, each with K notes — the shape an
   // unbounded per-row loop would blow up on.

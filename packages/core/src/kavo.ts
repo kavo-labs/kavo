@@ -247,6 +247,7 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
           catalog,
           resolved.computed,
           resolved.projection as readonly string[] | null,
+          (resolved.select.default as readonly string[] | undefined) ?? null,
         ),
         deserializer: new DefaultDeserializer(metadata as EntityMetadata<Entity>, catalog, resolved.computed),
         normalizer: new QueryNormalizer(

@@ -224,7 +224,7 @@ describe("computed fields — selection", () => {
     // default-selector cases above, because that is a different branch.
     const { crud } = await seeded({
       computed: { shout },
-      allowed: { selectable: { exclude: ["email"] } },
+      select: { fields: { exclude: ["email"] } },
     } as never);
     expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
     await expect(crud.findOne(1, { select: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
@@ -243,7 +243,7 @@ describe("computed fields — selection", () => {
     // response.
     const { crud } = await seeded({
       computed: { shout },
-      allowed: { selectable: { exclude: ["shout"] } },
+      select: { fields: { exclude: ["shout"] } },
     } as never);
     expect(await crud.findOne(1)).not.toHaveProperty("shout");
     await expect(crud.findOne(1, { select: ["shout"] } as never)).rejects.toMatchObject({
@@ -261,7 +261,7 @@ describe("computed fields — selection", () => {
     // every response, because they excluded an unrelated column.
     const { crud } = await seeded({
       computed: { shout: { ...shout, selectable: false } },
-      allowed: { selectable: { exclude: ["email"] } },
+      select: { fields: { exclude: ["email"] } },
     } as never);
 
     const item = (await crud.findOne(1)) as unknown as Record<string, unknown>;
@@ -275,7 +275,7 @@ describe("computed fields — selection", () => {
     // list always is, so it wins — the flag is a default, not a veto.
     const { crud } = await seeded({
       computed: { shout: { ...shout, selectable: false } },
-      allowed: { selectable: ["id", "shout"] },
+      select: { fields: ["id", "shout"] },
     } as never);
     expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
   });
@@ -294,16 +294,16 @@ describe("computed fields — selection", () => {
 describe("computed fields — bootstrap validation", () => {
   it("rejects a computed field listed as filterable", () => {
     expectConfigError(
-      () => makeCrud({ computed: { shout }, allowed: { filterable: ["shout"] } } as never),
-      "allowed.filterable",
+      () => makeCrud({ computed: { shout }, filter: { fields: ["shout"] } } as never),
+      "filter.fields",
       "'shout' is a computed field on 'User', which can never be filtered on",
     );
   });
 
   it("rejects a computed field listed as sortable", () => {
     expectConfigError(
-      () => makeCrud({ computed: { shout }, allowed: { sortable: ["shout"] } } as never),
-      "allowed.sortable",
+      () => makeCrud({ computed: { shout }, sort: { fields: ["shout"] } } as never),
+      "sort.fields",
       "'shout' is a computed field on 'User', which can never be sorted on",
     );
   });
@@ -373,7 +373,7 @@ describe("computed fields — bootstrap validation", () => {
   it("still accepts an explicit selectable list naming the computed field", async () => {
     const { crud } = await seeded({
       computed: { shout },
-      allowed: { selectable: ["id", "shout"] },
+      select: { fields: ["id", "shout"] },
     } as never);
     expect(await crud.findOne(1, { select: ["shout"] } as never)).toEqual({ shout: "ADA" });
     await expect(crud.findOne(1, { select: ["email"] } as never)).rejects.toBeInstanceOf(QueryValidationException);
@@ -537,7 +537,7 @@ describe("computed fields — on an included relation target", () => {
           initials: { resolve: (author: Author) => author.name.slice(0, 2) },
           label: { resolve: (author: Author) => `author:${author.name}` },
         },
-        allowed: { includable: ["posts"] },
+        include: { fields: ["posts"] },
       }) as never,
     ) as DefaultKavoService<Author>;
     kavo.createCrud(
@@ -550,7 +550,7 @@ describe("computed fields — on an included relation target", () => {
       Post,
       (configs.post ?? {
         computed: { label: { resolve: (post: Post) => `post:${post.title}` } },
-        allowed: { includable: ["author", "comments"] },
+        include: { fields: ["author", "comments"] },
       }) as never,
     ) as DefaultKavoService<Post>;
     postAdapter.rows.push(

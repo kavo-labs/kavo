@@ -44,13 +44,13 @@ beforeAll(() => {
       caseInsensitiveFilters: false,
       defaults: {
         pagination: { strategy: "cursor" },
-        defaults: { sort: ["id"] },
       },
     } as never,
   );
   posts = kavo.createCrud(Post, {
     softDelete: { field: "deletedAt" },
-    allowed: { includable: ["comments"] },
+    sort: { default: ["id"] },
+    include: { fields: ["comments"] },
   } as never) as DefaultKavoService<Post>;
 });
 

@@ -1,6 +1,7 @@
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationId } from "../operations/operation.js";
+import type { FieldPath } from "../types/field-path.js";
 
 /**
  * Marker for anything usable as a DTO: any non-primitive object shape.
@@ -11,6 +12,18 @@ export type Dto = object;
 
 /** A registerable DTO class. DTO classes are plain, no-argument shapes. */
 export type DtoClass<Shape extends Dto = Dto> = new () => Shape;
+
+/**
+ * An inline field-list shorthand for a `dto.<slot>` position (issue #386):
+ * `{ fields: [...] }` derives a projection/writable-field list without a
+ * hand-written class. `dto-fields-shorthand.ts` synthesizes a real
+ * `DtoClass` from it at bootstrap (`resolveDtoSlot`), tagged so downstream
+ * consumers (`@kavo/nest`'s Swagger generation) can tell it apart from a
+ * hand-registered class.
+ */
+export interface FieldsShorthand<Entity> {
+  readonly fields: readonly FieldPath<Entity, 1>[];
+}
 
 /** The six DTO positions, one per REST verb/context. */
 export type DtoSlot = "create" | "update" | "patch" | "query" | "item" | "list";
@@ -41,13 +54,13 @@ export interface OperationDtoMap<
   ItemDto = Entity,
   ListDto = ItemDto,
 > {
-  readonly create?: DtoClass<CreateDto & Dto>;
-  readonly update?: DtoClass<UpdateDto & Dto>;
-  readonly patch?: DtoClass<PatchDto & Dto>;
+  readonly create?: DtoClass<CreateDto & Dto> | FieldsShorthand<Entity>;
+  readonly update?: DtoClass<UpdateDto & Dto> | FieldsShorthand<Entity>;
+  readonly patch?: DtoClass<PatchDto & Dto> | FieldsShorthand<Entity>;
   readonly query?: DtoClass<QueryDto & Dto>;
-  readonly item?: DtoClass<ItemDto & Dto>;
+  readonly item?: DtoClass<ItemDto & Dto> | FieldsShorthand<Entity>;
   /** Element type inside `ListResultDto.items` — not the envelope. */
-  readonly list?: DtoClass<ListDto & Dto>;
+  readonly list?: DtoClass<ListDto & Dto> | FieldsShorthand<Entity>;
 }
 
 /**

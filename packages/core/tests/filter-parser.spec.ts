@@ -381,11 +381,7 @@ describe("DefaultFilterParser — malformed bracket keys", () => {
  * which cannot show that the parser wires them together this way.
  */
 describe("DefaultFilterParser — relation paths", () => {
-  const relationConfig = resolveEntityConfig(
-    postMetadata,
-    { allowed: { filterable: ["title", "author.name"] } },
-    undefined,
-  );
+  const relationConfig = resolveEntityConfig(postMetadata, { filter: { fields: ["title", "author.name"] } }, undefined);
   const relationParser = new DefaultFilterParser(postMetadata);
   const parseRelation = (params: Record<string, unknown>) => relationParser.parse(params, relationConfig);
 
@@ -402,7 +398,7 @@ describe("DefaultFilterParser — relation paths", () => {
     // `Post.id` is a number column, but `author.id` is not in this entity's
     // column map — so the string reaches the adapter and the database
     // compares it.
-    const relaxed = resolveEntityConfig(postMetadata, { allowed: { filterable: ["author.id"] } }, undefined);
+    const relaxed = resolveEntityConfig(postMetadata, { filter: { fields: ["author.id"] } }, undefined);
     expect(relationParser.parse({ "filter[author.id][eq]": "7" }, relaxed).root).toMatchObject({ value: "7" });
   });
 

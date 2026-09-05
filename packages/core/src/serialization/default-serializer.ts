@@ -27,6 +27,12 @@ interface Projection {
   /** Allowed keys, or `null` when the shape is unknown (own keys apply). */
   readonly keys: readonly string[] | null;
   /**
+   * The default response projection: what serves when the request sends
+   * no `select=` of its own (`select.default`, issue #386). `null` means
+   * "no configured default" — `keys` (or every own key) applies instead.
+   */
+  readonly defaultKeys?: readonly string[] | null;
+  /**
    * Relation property names — never emitted unless the node is included.
    * A `Set` rather than an array: `project` tests every key against it, so
    * an array would make the per-row cost quadratic in the entity's width.
@@ -54,7 +60,7 @@ function selectionSet(selection: readonly string[] | null | undefined): Readonly
  * 1. An explicit DTO class with initialized fields → its key set.
  * 2. Otherwise the entity-derived default: every scalar column from
  *    adapter metadata, plus every declared computed field (ADR-0019),
- *    **intersected with an explicitly configured `allowed.selectable`**
+ *    **intersected with an explicitly configured `select.fields`**
  *    (ADR-0026). A DTO wins outright: it is the narrower, more specific
  *    statement, and intersecting the two would make a DTO that deliberately
  *    exposes a field silently not do so.
@@ -78,9 +84,11 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     private readonly catalog?: EntityCatalog,
     computed: ComputedFieldMap<Entity> = {},
     projection: readonly string[] | null = null,
+    selectDefault: readonly string[] | null = null,
   ) {
     this.rootProjection = {
       keys: narrowToProjection([...metadata.fields.map((field) => field.name), ...Object.keys(computed)], projection),
+      defaultKeys: selectDefault,
       relations: new Set(metadata.relations.map((relation) => relation.name)),
       computed,
     };
@@ -131,7 +139,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     context: KavoContext<Entity>,
   ): Record<string, unknown> {
     const source = entity as Record<string, unknown>;
-    const keys = projection.keys ?? Object.keys(source);
+    const keys = (selection === null ? projection.defaultKeys : null) ?? projection.keys ?? Object.keys(source);
     const result: Record<string, unknown> = {};
     for (const key of keys) {
       if (projection.relations.has(key)) {
@@ -221,7 +229,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
 
 /**
  * The entity-derived key set, narrowed to an explicitly configured
- * `allowed.selectable` (ADR-0026). `null` leaves it alone, which is what
+ * `select.fields` (ADR-0026). `null` leaves it alone, which is what
  * an entity that never configured the key gets.
  *
  * Filtering the derived list rather than using the allowlist directly keeps
@@ -347,12 +355,13 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       return {} as Shape;
     }
     const explicit = dtoShapeKeys(dto);
-    // Only the derived default is narrowed by `creatable`/`updatable` — an
-    // explicit DTO's own key set is deliberately left alone, exactly as it
-    // already is for the id and the soft-delete marker below: a registered
-    // DTO *replaces* the projection rather than intersecting with it
-    // (ADR-0026's `selectable`-vs-`dto.item` precedent).
-    const allowed = explicit ?? this.narrowToWritableAllowlist(context);
+    // A registered `create`/`update`/`patch` DTO — including one synthesized
+    // from the `{ fields }` shorthand (issue #386, `dto-fields-shorthand.ts`)
+    // — *replaces* the derived writable projection rather than narrowing it
+    // (ADR-0026's `select.fields`-vs-`dto.item` precedent): `creatable`/
+    // `updatable` are reached through `dto.create`/`dto.update`'s shorthand
+    // now, not a separate allowlist key.
+    const allowed = explicit ?? this.writableProjection;
     // Only the derived default excludes the marker — an explicit DTO's own
     // key set is deliberately left alone, same as the id (see class doc).
     // Optional chaining: this class is exported and constructible directly
@@ -384,37 +393,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       result[key] = spec === undefined ? source[key] : associate(source[key], spec, key, context);
     }
     return result as Shape;
-  }
-
-  /**
-   * Narrows {@link writableProjection} by `allowed.creatable`/
-   * `allowed.updatable` (issue #259) for the operation the call is actually
-   * making — `createOne` reads `allowed.creatable`, `updateOne`/`patchOne` read
-   * `allowed.updatable`, and every other operation (a custom write) is left
-   * unnarrowed, since neither key names it. Both lists already default to
-   * the same base this class derives on its own, so an entity that never
-   * configured either sees no change: the filter is a no-op intersection.
-   *
-   * Optional chaining on `context.config`, same reason as the soft-delete
-   * lookup above: this class is constructible directly against a context
-   * that never went through the engine.
-   */
-  private narrowToWritableAllowlist(context: KavoContext<Entity>): readonly string[] {
-    const allowed = context.config?.allowed;
-    if (allowed === undefined) {
-      return this.writableProjection;
-    }
-    let allowlist: readonly string[] | undefined;
-    if (context.operation === "createOne") {
-      allowlist = allowed.creatable as readonly string[];
-    } else if (context.operation === "updateOne" || context.operation === "patchOne") {
-      allowlist = allowed.updatable as readonly string[];
-    }
-    if (allowlist === undefined) {
-      return this.writableProjection;
-    }
-    const allowedSet = new Set(allowlist);
-    return this.writableProjection.filter((key) => allowedSet.has(key));
   }
 }
 

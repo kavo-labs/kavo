@@ -22,6 +22,7 @@ export type {
   Filter,
   FilterCondition,
   FilterGroup,
+  FilterOperatorToken,
   LogicalOperator,
 } from "./query/filter.js";
 export type {
@@ -55,12 +56,14 @@ export type {
   DtoSlot,
   Dto,
   DtoResolver,
+  FieldsShorthand,
   OperationDtoMap,
   OperationDtoOverride,
   DtoInputOf,
   DtoOutputOf,
   DtoQueryOf,
 } from "./dto/dto.js";
+export { shorthandFieldsOf } from "./dto/dto-fields-shorthand.js";
 export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 
 // ── Errors ────────────────────────────────────────────────────────────
@@ -76,15 +79,11 @@ export type {
   CacheSettings,
   EtagSettings,
   ErrorSettings,
-  LimitsSettings,
   PaginationSettings,
   RealtimeFieldSelector,
   RealtimeSettings,
   RelationEdgeSettings,
   RelationSettings,
-  SearchDriver,
-  SearchMode,
-  SearchSettings,
   SoftDeleteMode,
   SoftDeleteSettings,
   PaginationStrategyName,
@@ -96,14 +95,30 @@ export type {
   OperationConfig,
   OperationsConfig,
   StandardOperationsConfig,
-  QueryAllowed,
   QueryFieldSelector,
   RelationFieldSelector,
   SelectableFieldSelector,
-  WritableFieldSelector,
+  FilterFieldSelector,
+  FilterOperatorMap,
+  FilterConfig,
+  FilterLimits,
+  SortConfig,
+  SelectConfig,
+  SearchConfig,
+  SearchDriver,
+  SearchMode,
+  IncludeConfig,
+  IncludeLimits,
 } from "./config/entity-config.js";
 export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
-export type { ResolvedEntityConfig, ResolvedQueryAllowed } from "./config/resolved-entity-config.js";
+export type {
+  ResolvedEntityConfig,
+  ResolvedFilterConfig,
+  ResolvedSortConfig,
+  ResolvedSelectConfig,
+  ResolvedSearchConfig,
+  ResolvedIncludeConfig,
+} from "./config/resolved-entity-config.js";
 
 // ── Policy (ADR-0037) ─────────────────────────────────────────────────
 export { type Policy, type PolicyArgs, type WhenParams } from "./policy/kavo-policy.js";
