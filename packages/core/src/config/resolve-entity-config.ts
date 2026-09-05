@@ -722,10 +722,7 @@ function resolveFieldGroups<Entity extends object>(
     1
   >[];
 
-  const knownFieldNames = [
-    ...metadata.fields.map((field) => field.name),
-    ...(relationNames as readonly string[]),
-  ];
+  const knownFieldNames = [...metadata.fields.map((field) => field.name), ...(relationNames as readonly string[])];
 
   const filterConfig = entityConfig?.filter;
   validateFieldNames(entityName, "filter.fields", filterConfig?.fields, knownFieldNames);
