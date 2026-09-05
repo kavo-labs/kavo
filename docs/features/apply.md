@@ -31,10 +31,11 @@ With that config, `GET /posts?filter[status][eq]=published` runs as if the calle
 
 ## `apply` is not `default`
 
-`sort.default`/`select.default`/`include.default` answer "what does a request that supplied nothing on this axis get" — a client-supplied value on that axis replaces the default outright, no composition. `apply` answers a different question: "what does **every** request get, regardless of what it supplied." It composes with a client value rather than being replaced by one, and (for `filter`) it composes even when the client sent nothing at all. There is no `filter.default` today — only `apply` — because a filter has no natural "value when absent" the way a sort order or a projection does.
+`filter.default`/`sort.default`/`select.default`/`include.default` answer "what does a request that supplied nothing on this axis get" — a client-supplied value on that axis replaces the default outright, no composition. `apply` answers a different question: "what does **every** request get, regardless of what it supplied." It composes with a client value rather than being replaced by one, and (for `filter`) it composes even when the client sent nothing at all — including when a `filter.default` supplied the base filter that request is scored against.
 
 | Key                | Runs when the client sends nothing | Runs when the client sends its own value | Can the client override it   |
 | ------------------ | ---------------------------------- | ---------------------------------------- | ---------------------------- |
+| `filter.default`   | yes                                | no — replaced                            | yes, by supplying `filter=`  |
 | `sort.default`     | yes                                | no — replaced                            | yes, by supplying `sort=`    |
 | `select.default`   | yes                                | no — replaced                            | yes, by supplying `select=`  |
 | `include.default`  | yes                                | no — replaced                            | yes, by supplying `include=` |

@@ -24,7 +24,7 @@ import type {
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
-import type { FilterOperator, FilterOperatorToken } from "../query/filter.js";
+import type { FilterExpression, FilterOperator, FilterOperatorToken } from "../query/filter.js";
 import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
@@ -626,6 +626,40 @@ function parseSortToken<Entity>(token: string): Sort<Entity> {
   return { field: field as FieldPath<Entity>, direction: descending ? "desc" : "asc" };
 }
 
+/** Bootstrap-validate every field named inside a `filter.default` expression against `filter.fields`. */
+function validateFilterDefaultFields<Entity>(
+  entityName: string,
+  expression: FilterExpression<Entity>,
+  filterable: ReadonlySet<string>,
+): void {
+  if (expression.kind === "condition") {
+    if (!filterable.has(expression.field as string)) {
+      throw new ConfigurationException(
+        entityName,
+        "filter.default",
+        `field '${expression.field as string}' is not in 'filter.fields'`,
+      );
+    }
+    return;
+  }
+  for (const child of expression.children) {
+    validateFilterDefaultFields(entityName, child, filterable);
+  }
+}
+
+/** Resolve and bootstrap-validate `filter.default` against `filter.fields`. */
+function resolveFilterDefault<Entity extends object>(
+  entityName: string,
+  expression: FilterExpression<Entity> | undefined,
+  filterable: readonly FieldPath<Entity>[],
+): FilterExpression<Entity> | null {
+  if (expression === undefined) {
+    return null;
+  }
+  validateFilterDefaultFields(entityName, expression, new Set(filterable as readonly string[]));
+  return expression;
+}
+
 /** Resolve and bootstrap-validate `sort.default` against `sort.fields`. */
 function resolveSortDefault<Entity extends object>(
   entityName: string,
@@ -862,6 +896,7 @@ function resolveFieldGroups<Entity extends object>(
   const filter: ResolvedFilterConfig<Entity> = deepFreeze({
     fields: filterFields,
     operators,
+    default: resolveFilterDefault(entityName, filterConfig?.default, filterFields),
     apply: filterConfig?.apply,
     limits: resolveFilterLimits(entityName, filterConfig?.limits),
   });

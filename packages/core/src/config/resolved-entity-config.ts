@@ -4,7 +4,7 @@ import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver, WriteApply } from "../dto/dto.js";
-import type { FilterOperator } from "../query/filter.js";
+import type { FilterExpression, FilterOperator } from "../query/filter.js";
 import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { Policy } from "../policy/kavo-policy.js";
@@ -19,6 +19,8 @@ export interface ResolvedFilterConfig<Entity = unknown> {
   readonly fields: readonly FieldPath<Entity>[];
   /** Per-field allowed operators (the map form), or `null` when every allowed field permits every operator. */
   readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null;
+  /** `filter.default` (issue #394), bootstrap-validated against `fields`. `null` when unconfigured. */
+  readonly default: FilterExpression<Entity> | null;
   /** `filter.apply` (ADR-0048), passed through unresolved — see that ADR for composition. `undefined` when unconfigured. */
   readonly apply?: FilterApply<Entity>;
   readonly limits: {

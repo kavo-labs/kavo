@@ -10,7 +10,7 @@ import type { OperationCardinality, OperationKind, StandardOperationId } from ".
 import type { ComputedFieldDescriptor } from "./computed-field.js";
 import type { Policy } from "../policy/kavo-policy.js";
 import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
-import type { FilterOperatorToken } from "../query/filter.js";
+import type { FilterExpression, FilterOperatorToken } from "../query/filter.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths
@@ -124,6 +124,17 @@ export interface FilterConfig<Entity> {
    * new capability) — unconfigured, every own column, every operator.
    */
   readonly fields?: FilterFieldSelector<Entity>;
+  /**
+   * The predicate applied when a request supplies no `filter=` at all — a
+   * client-supplied `filter=` always wins outright, never merges with this
+   * (mirroring `sort.default`/`select.default`/`include.default`, issue
+   * #394). Composes with `search` (ADR'd into the same tree) and with
+   * `apply` below, which still `AND`s in afterward regardless of which of
+   * the two produced the base filter. Fields named here are validated
+   * against `fields` at bootstrap, the same as client-supplied filters are
+   * at request time.
+   */
+  readonly default?: FilterExpression<Entity>;
   /**
    * A mandatory server-side predicate (ADR-0048), `AND`ed into the client's
    * own `filter=` on every read, and into the id lookup of every single-row
