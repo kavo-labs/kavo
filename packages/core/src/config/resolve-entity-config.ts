@@ -21,7 +21,6 @@ import type {
   ResolvedSelectConfig,
   ResolvedSortConfig,
 } from "./resolved-entity-config.js";
-import type { DtoClass } from "../dto/dto.js";
 import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
@@ -597,11 +596,23 @@ function resolveSearchConfig<Entity extends object>(
   if (configured === false || configured === undefined) {
     return false;
   }
+  const mode = configured.mode === undefined ? BUILT_IN_SEARCH_DEFAULTS.mode : configured.mode;
+  if (mode !== "substring" && mode !== "words") {
+    throw new ConfigurationException(entityName, "search.mode", `expected "substring" or "words", got ${JSON.stringify(mode)}`);
+  }
+  const driver = configured.driver === undefined ? BUILT_IN_SEARCH_DEFAULTS.driver : configured.driver;
+  if (driver !== "orm") {
+    throw new ConfigurationException(
+      entityName,
+      "search.driver",
+      `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(driver)}`,
+    );
+  }
   return {
     fields: resolveFieldSelector(stringColumns, configured.fields),
     default: configured.default ?? null,
-    mode: configured.mode ?? BUILT_IN_SEARCH_DEFAULTS.mode,
-    driver: configured.driver ?? BUILT_IN_SEARCH_DEFAULTS.driver,
+    mode,
+    driver,
   };
 }
 

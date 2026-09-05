@@ -14,30 +14,24 @@ import { compositeMetadata, CompositeEntity } from "./support/composite-fixture.
  * end-to-end against a real database.
  */
 
-const DEFAULT_ALLOWLISTS = {
-  filterable: ["userId", "topic", "key"],
-  sortable: ["userId", "topic", "key"],
-  selectable: ["userId", "topic", "key"],
+const DEFAULT_FIELD_GROUPS = {
+  filter: { fields: ["userId", "topic", "key"], operators: null, limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 } },
+  sort: { fields: ["userId", "topic", "key"] },
+  select: { fields: ["userId", "topic", "key"] },
+  include: { fields: [], limits: { maxDepth: 3, maxNodes: 20 } },
 };
 
-/** `{ field: "key", direction: "desc" }` → `"-key"` — the `defaults.sort` wire shorthand. */
-function sortWireToken(entry: Sort<CompositeEntity>): string {
-  return entry.direction === "desc" ? `-${entry.field as string}` : (entry.field as string);
-}
 
 function configWith(
   defaultSort: readonly Sort<CompositeEntity>[],
   strategy = "cursor",
   sinceField = "key",
-  allowed: Partial<typeof DEFAULT_ALLOWLISTS> = {},
+  fieldGroups: Partial<typeof DEFAULT_FIELD_GROUPS> = {},
 ): ResolvedEntityConfig<CompositeEntity> {
   const settings = {
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
-    limits: { filterDepth: 5, inValues: 100, likePattern: 200, includeDepth: 3, includedNodes: 20 },
-    search: false,
     errors: { exposeInternals: false },
     relations: { edges: {} },
-    defaults: { sort: defaultSort.map(sortWireToken), include: [] },
     softDelete: false,
     operations: {},
   } as unknown as KavoSettings;
@@ -45,7 +39,10 @@ function configWith(
     entityName: "CompositeEntity",
     settings,
     settingsFor: () => settings,
-    allowed: { ...DEFAULT_ALLOWLISTS, ...allowed },
+    ...DEFAULT_FIELD_GROUPS,
+    ...fieldGroups,
+    sortDefault: defaultSort,
+    search: false,
     softDelete: { strategy: "hard", field: "deletedAt" },
     dto: { resolve: () => null },
     relations: { all: () => [], get: () => undefined },

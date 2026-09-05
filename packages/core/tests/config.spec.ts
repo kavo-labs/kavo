@@ -397,7 +397,7 @@ describe("resolveEntityConfig — include.fields", () => {
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "relations.edges.ghosts",
+        path: "include.fields",
       });
     }
   });

@@ -543,7 +543,7 @@ describe("createTransport — subscribe-time filtering (issue #160)", () => {
           },
         ],
       } as unknown as EntityMetadata<Book>;
-      const crud = kavo.createCrud(Book, { allowed: { filterable: ["title", "status", "author"] } } as never, {
+      const crud = kavo.createCrud(Book, { filter: { fields: ["title", "status", "author"] } } as never, {
         adapter: new InMemoryBookAdapter(),
         metadata,
       });

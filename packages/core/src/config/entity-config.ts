@@ -3,14 +3,13 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { FieldsShorthand, OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
+import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { ComputedFieldDescriptor } from "./computed-field.js";
 import type { Policy } from "../policy/kavo-policy.js";
 import type { FilterOperatorToken } from "../query/filter.js";
-import type { Sort } from "../query/sort.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths

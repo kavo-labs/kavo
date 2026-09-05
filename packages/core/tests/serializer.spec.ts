@@ -435,15 +435,16 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("keeps the primary key excluded even when explicitly named in the create shorthand", () => {
-    // `{ fields: ["id", "name"] }` synthesizes a class carrying both keys,
-    // but `deserialize` still strips the primary key unconditionally
-    // (commit 8aa8d65) — a shorthand's key set is not exempt.
+  it("lets an explicit create shorthand reach the primary key — an explicit DTO replaces the derived default rather than narrowing it", () => {
+    // `{ fields: ["id", "name"] }` synthesizes a class carrying both keys —
+    // same as a hand-written DTO naming `id` (ADR-0026's `dto.item`
+    // precedent), unlike the *derived* default, which excludes the primary
+    // key unconditionally (commit 8aa8d65).
     const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["id" as never, "name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const dto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));
-    expect(payload).toEqual({ name: "Ada" });
+    expect(payload).toEqual({ id: 5, name: "Ada" });
   });
 
   it("keeps the soft-delete marker excluded only for the derived default, not for an explicit DTO/shorthand", () => {

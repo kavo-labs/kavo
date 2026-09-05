@@ -7,11 +7,10 @@ import type {
   FieldMetadata,
   OperationDescriptor,
   OperationDtoMap,
-  QueryFieldSelector,
   RelationCardinality,
   RelationFieldSelector,
 } from "@kavo/core";
-import { DefaultDtoResolver } from "@kavo/core";
+import { DefaultDtoResolver, shorthandFieldsOf } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
 import { isSchemaHint, readSchemaHint, type SchemaHint } from "./schema-hints.js";
 
@@ -1617,8 +1616,15 @@ export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver:
   if (descriptor.input !== null) {
     return descriptor.input as ClassRef;
   }
-  const resolve = (slot: "create" | "update" | "patch"): ClassRef | null =>
-    dtoResolver.resolve(slot, descriptor.id) as ClassRef | null;
+  // A `dto.<slot>` `{ fields }` shorthand (issue #386) synthesizes a real
+  // class so the engine's own DTO machinery treats it uniformly, but it
+  // carries no type information of its own — treated as "no real DTO" here
+  // so the richer ORM-metadata-driven fallback below still runs instead of
+  // NestJS's generic (untyped) class introspection.
+  const resolve = (slot: "create" | "update" | "patch"): ClassRef | null => {
+    const resolved = dtoResolver.resolve(slot, descriptor.id) as (new () => object) | null;
+    return shorthandFieldsOf(resolved) !== null ? null : (resolved as ClassRef | null);
+  };
   switch (descriptor.id) {
     case "createOne":
       return resolve("create");

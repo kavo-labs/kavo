@@ -226,21 +226,25 @@ describe("validateSettings — cache", () => {
   });
 });
 
-describe("validateSettings — relation limits", () => {
-  it("rejects an includeDepth that is not a positive integer", () => {
+describe("resolveEntityConfig — include.limits", () => {
+  it("rejects a maxDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ limits: { includeDepth: value } }, "limits.includeDepth", value);
+      const error = rejectedEntityConfig({ include: { limits: { maxDepth: value } } });
+      expect(error.messageParams).toMatchObject({ path: "include.limits.maxDepth" });
     }
   });
 
-  it("rejects an includedNodes that is not a positive integer", () => {
+  it("rejects a maxNodes that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ limits: { includedNodes: value } }, "limits.includedNodes", value);
+      const error = rejectedEntityConfig({ include: { limits: { maxNodes: value } } });
+      expect(error.messageParams).toMatchObject({ path: "include.limits.maxNodes" });
     }
   });
 
   it("accepts a budget of one node at depth one", () => {
-    expect(() => accept({ limits: { includeDepth: 1, includedNodes: 1 } })).not.toThrow();
+    expect(() =>
+      resolveEntityConfig(userMetadata, { include: { limits: { maxDepth: 1, maxNodes: 1 } } }, undefined),
+    ).not.toThrow();
   });
 });
 

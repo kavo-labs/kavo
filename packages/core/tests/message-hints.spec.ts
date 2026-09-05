@@ -79,7 +79,7 @@ describe("allowlistHint", () => {
     const hint = allowlistHint("emial", "filtering", "User", ["email", "id"]);
     expect(hint).toContain("Did you mean 'email'?");
     expect(hint).toContain("Filterable fields on User: email, id.");
-    expect(hint).toContain("add it to allowed.filterable on the User config");
+    expect(hint).toContain("add it to filter.fields on the User config");
   });
 
   it("makes the allowlist advice conditional on the field being a real column", () => {
@@ -95,8 +95,8 @@ describe("allowlistHint", () => {
   });
 
   it("names the allowlist key matching the usage", () => {
-    expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("allowed.sortable");
-    expect(allowlistHint("x", "selection", "User", ["id"])).toContain("allowed.selectable");
+    expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("sort.fields");
+    expect(allowlistHint("x", "selection", "User", ["id"])).toContain("select.fields");
     expect(allowlistHint("x", "sorting", "User", ["id"])).toContain("Sortable fields on User");
     expect(allowlistHint("x", "selection", "User", ["id"])).toContain("Selectable fields on User");
   });

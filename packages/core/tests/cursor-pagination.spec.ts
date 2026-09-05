@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  DeepPartial,
   EntityId,
   EntityMetadata,
   KavoSettings,
@@ -505,7 +504,9 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
       settings,
       settingsFor: () => settings,
       ...DEFAULT_FIELD_GROUPS,
-      ...fieldGroups,
+      filter: { ...DEFAULT_FIELD_GROUPS.filter, ...fieldGroups.filter },
+      sort: { ...DEFAULT_FIELD_GROUPS.sort, ...fieldGroups.sort },
+      select: { ...DEFAULT_FIELD_GROUPS.select, ...fieldGroups.select },
       sortDefault: defaultSort,
       search: false,
       softDelete: { strategy: "hard", field: "deletedAt" },

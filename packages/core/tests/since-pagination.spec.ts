@@ -294,7 +294,7 @@ describe("QueryNormalizer.resolveSince enforces the allowlists directly, not onl
     const crud = createKavo({
       defaults: { pagination: { strategy: "poll", since: { field: "occurredAt" } } },
       paginationStrategies: [new ThirdPartySince()],
-    } as never).createCrud(Event, { allowed: { filterable: { exclude: ["occurredAt"] } } } as never, {
+    } as never).createCrud(Event, { filter: { fields: { exclude: ["occurredAt"] } } } as never, {
       adapter,
       metadata: eventMetadata,
     });
@@ -307,10 +307,10 @@ describe("QueryNormalizer.resolveSince enforces the allowlists directly, not onl
     expect(() => pollCrud()).not.toThrow();
   });
 
-  it("still rejects a since.field excluded from the filterable allowlist at request time", async () => {
+  it("still rejects a since.field excluded from filter.fields at request time", async () => {
     const client = pollCrud();
     const issues = await issuesOfAsync(() => client.findMany({ since: "2024-01-01T00:00:00.000Z|1" } as never));
-    expect(issues[0]?.detail).toContain("filterable");
+    expect(issues[0]?.detail).toContain("filter.fields");
   });
 });
 
@@ -333,17 +333,17 @@ describe("bootstrap validation of pagination.since.field", () => {
     ).toThrow(/'date'- or 'string'-kind/);
   });
 
-  it("fails fast when the since field is excluded from the filterable allowlist", () => {
+  it("fails fast when the since field is excluded from filter.fields", () => {
     expect(() =>
       createKavo({
         defaults: {
           pagination: { strategy: "since", since: { field: "occurredAt" } },
         },
-      } as never).createCrud(Event, { allowed: { filterable: { exclude: ["occurredAt"] } } } as never, {
+      } as never).createCrud(Event, { filter: { fields: { exclude: ["occurredAt"] } } } as never, {
         adapter: new InMemoryEventAdapter(),
         metadata: eventMetadata,
       }),
-    ).toThrow(/filterable allowlist/);
+    ).toThrow(/'filter.fields'/);
   });
 
   it("accepts the documented default ('updatedAt') when the entity declares no override — a missing column is fine unless strategy is 'since'", () => {
@@ -726,25 +726,25 @@ describe("bootstrap validation of pagination.since.field — the selectable allo
   // selectable half is what lets the engine read the next boundary back
   // off a returned row. Both are required, and each fails with its own
   // wording so the adopter knows which allowlist to fix.
-  function bootstrap(allowed: unknown) {
+  function bootstrap(entityConfig: unknown) {
     return () =>
       createKavo({
         defaults: { pagination: { strategy: "since", since: { field: "occurredAt" } } },
-      } as never).createCrud(Event, { allowed } as never, {
+      } as never).createCrud(Event, entityConfig as never, {
         adapter: new InMemoryEventAdapter(),
         metadata: eventMetadata,
       });
   }
 
-  it("fails fast when the since field is excluded from selectable", () => {
-    expect(bootstrap({ selectable: { exclude: ["occurredAt"] } })).toThrow(/selectable allowlist/);
+  it("fails fast when the since field is excluded from select.fields", () => {
+    expect(bootstrap({ select: { fields: { exclude: ["occurredAt"] } } })).toThrow(/'select.fields'/);
   });
 
-  it("fails fast when the forced idField tiebreaker is excluded from selectable", () => {
-    expect(bootstrap({ selectable: { exclude: ["id"] } })).toThrow(/forced tiebreaker 'idField'/);
+  it("fails fast when the forced idField tiebreaker is excluded from select.fields", () => {
+    expect(bootstrap({ select: { fields: { exclude: ["id"] } } })).toThrow(/forced tiebreaker 'idField'/);
   });
 
-  it("fails fast when the forced idField tiebreaker is excluded from filterable", () => {
-    expect(bootstrap({ filterable: { exclude: ["id"] } })).toThrow(/forced tiebreaker 'idField'/);
+  it("fails fast when the forced idField tiebreaker is excluded from filter.fields", () => {
+    expect(bootstrap({ filter: { fields: { exclude: ["id"] } } })).toThrow(/forced tiebreaker 'idField'/);
   });
 });
