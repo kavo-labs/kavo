@@ -1413,7 +1413,6 @@ export function applyResponseSchemaDocs(
   route: RouteShape,
   metadata: EntityMetadata<object>,
   selectable: readonly string[],
-  computedFieldNames: readonly string[],
   includable: readonly string[],
   relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
   dtoResolver: DtoResolver<object>,
@@ -1446,29 +1445,17 @@ export function applyResponseSchemaDocs(
     }
     properties[field.name] = fieldSchema(field);
     // A non-nullable column is always present in a serialized row, so it is
-    // `required` in the response shape. Computed fields (below) carry no type
-    // information and are left optional.
+    // `required` in the response shape. An ORM-derived field (issue #373)
+    // is an ordinary `FieldMetadata` entry here — same schema derivation,
+    // gated the same way by `selectable`, since it is opt-in there
+    // (ADR-0050) — so it needs no separate loop.
     if (!field.nullable) {
       required.push(field.name);
     }
   }
-  // Declared computed fields (ADR-0019) aren't in `metadata.fields` — no
-  // column backs them — but the engine serializes them into every response
-  // and the resolved `selectable` allowlist carries their names by default.
-  // Gate them by the same `selectable` check as the columns above, so an
-  // explicit `allowed.selectable` that omits or `exclude`s one (ADR-0026),
-  // or a `selectable: false` descriptor, drops it here too. Computed
-  // descriptors carry no type information, so the fragment is left untyped
-  // and nullable rather than coerced to `string` (issue #302).
-  for (const name of computedFieldNames) {
-    if (!selectable.includes(name)) {
-      continue;
-    }
-    properties[name] = { nullable: true };
-  }
   // An includable relation (ADR-0028) is embedded only when `include=` asks
-  // for it, so it is an *optional* property — appended after the column and
-  // computed loops so those keep their exact order, and never pushed to
+  // for it, so it is an *optional* property — appended after the column
+  // loop so that one keeps its exact order, and never pushed to
   // `required`. Driven off the resolved `allowed.includable` names rather
   // than `RelationDescriptor.includable`, which reflects the ORM-derived
   // metadata, not the config grant.

@@ -1,5 +1,4 @@
 import type { KavoContext } from "../context/kavo-context.js";
-import type { ComputedFieldMap } from "../config/computed-field.js";
 import type { DtoClass } from "../dto/dto.js";
 import type { Deserializer, Serializer } from "./serializer.js";
 import type { EntityCatalog } from "../metadata/entity-catalog.js";
@@ -9,17 +8,6 @@ import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
 
-/**
- * Computed fields as the projector consumes them: entity type erased,
- * because one serializer projects rows of several entity types — the
- * root's, and every included relation target's, which it reads off the
- * catalog. The entity-typed contract is `ComputedFieldDescriptor<Entity>`,
- * which is what the *caller* declares and what every `ComputedFieldMap`
- * flowing in here satisfies.
- */
-type ErasedComputedFields = Readonly<Record<string, { resolve(entity: never, context: never): unknown }>>;
-
-const NO_COMPUTED_FIELDS: ErasedComputedFields = Object.freeze({});
 const NO_RELATIONS: ReadonlySet<string> = new Set<string>();
 
 /** The projection rules for one entity type, resolved from the catalog. */
@@ -38,8 +26,6 @@ interface Projection {
    * an array would make the per-row cost quadratic in the entity's width.
    */
   readonly relations: ReadonlySet<string>;
-  /** Computed fields, evaluated instead of read off the row (ADR-0019). */
-  readonly computed: ErasedComputedFields;
 }
 
 /**
@@ -58,17 +44,18 @@ function selectionSet(selection: readonly string[] | null | undefined): Readonly
  *
  * Projection sources, in order:
  * 1. An explicit DTO class with initialized fields → its key set.
- * 2. Otherwise the entity-derived default: every scalar column from
- *    adapter metadata, plus every declared computed field (ADR-0019),
+ * 2. Otherwise the entity-derived default: every own scalar column from
+ *    adapter metadata — an ORM-derived field (`FieldMetadata.
+ *    derivedExpression`) joins the projection only through an explicitly
+ *    configured `select.fields` (ADR-0050) —
  *    **intersected with an explicitly configured `select.fields`**
  *    (ADR-0026). A DTO wins outright: it is the narrower, more specific
  *    statement, and intersecting the two would make a DTO that deliberately
  *    exposes a field silently not do so.
  *
- * A key that names a computed field is produced by calling the
- * descriptor's `resolve`, never by reading it off the row — which is what
- * makes computed fields behave identically over a TypeORM class instance
- * and a Prisma/Mongoose plain object.
+ * Every key is read straight off the row — a derived field's value is
+ * whatever the adapter's query already inlined it as (ADR-0050), no
+ * separate evaluation step.
  *
  * Relation properties are emitted **only** for nodes on the request's
  * include tree, each projected through its own target entity's
@@ -82,15 +69,24 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
   constructor(
     metadata: EntityMetadata<Entity>,
     private readonly catalog?: EntityCatalog,
-    computed: ComputedFieldMap<Entity> = {},
     projection: readonly string[] | null = null,
     selectDefault: readonly string[] | null = null,
   ) {
     this.rootProjection = {
-      keys: narrowToProjection([...metadata.fields.map((field) => field.name), ...Object.keys(computed)], projection),
+      // `projection` is `null` exactly when `select.fields` was never
+      // configured, and the unconfigured default is own columns only — a
+      // derived field is opt-in (ADR-0050). A configured `projection` may
+      // legitimately name an opted-in derived field, so the full field
+      // list — derived fields included — is what it narrows.
+      keys:
+        projection === null
+          ? metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name)
+          : narrowToProjection(
+              metadata.fields.map((field) => field.name),
+              projection,
+            ),
       defaultKeys: selectDefault,
       relations: new Set(metadata.relations.map((relation) => relation.name)),
-      computed,
     };
   }
 
@@ -145,30 +141,9 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
       if (projection.relations.has(key)) {
         continue;
       }
-      // Before the computed branch: a deselected computed field's `resolve`
-      // must never run, or `select=` would pay for work it discards.
       if (selection !== null && !selection.has(key)) {
         continue;
       }
-      // Own properties only: `keys` can come from a DTO class or from the
-      // row itself, and an inherited `constructor`/`toString` must not be
-      // mistaken for a declared computed field.
-      if (Object.prototype.hasOwnProperty.call(projection.computed, key)) {
-        const value = projection.computed[key]?.resolve(entity as never, context as never);
-        // `undefined` is absence, `null` is data — the same distinction the
-        // column branch draws below, so a resolver that opts out of
-        // emitting a value reads the same programmatically as it does once
-        // `JSON.stringify` has dropped the key.
-        if (value !== undefined) {
-          result[key] = value;
-        }
-        continue;
-      }
-      // Reached only when the key names no computed field: the branch order
-      // above is normative, because a row *can* carry a computed key —
-      // a TypeORM entity with a `get fullName()`, or an adapter row with a
-      // column the metadata seam does not describe. Resolving wins; reading
-      // the row here would resurrect the exact accident ADR-0019 replaced.
       if (key in source) {
         result[key] = source[key];
       }
@@ -198,18 +173,17 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
   /**
    * The target entity's own projection: its registered `item` DTO (or
    * `list` for a to-many, which itself falls back to `item`), else the
-   * target's columns plus its own computed fields — which is how a
-   * computed field on an included relation resolves without this class
-   * ever knowing more than one entity (ADR-0019).
+   * target's own columns — which is how an included relation resolves
+   * without this class ever knowing more than one entity.
    */
   private projectionFor(node: IncludeNode): Projection {
     const info = this.catalog?.get(node.relation.target());
     if (info === undefined) {
-      return { keys: null, relations: NO_RELATIONS, computed: NO_COMPUTED_FIELDS };
+      return { keys: null, relations: NO_RELATIONS };
     }
     const dto = info.config.dto.resolve(node.relation.cardinality === "many" ? "list" : "item", "findMany");
-    const computed: ErasedComputedFields = info.config.computed;
-    // The target's own `selectable`, not the root's: an include never
+    const targetProjection = info.config.projection as readonly string[] | null;
+    // The target's own `select.fields`, not the root's: an include never
     // widens what its target exposes, and that has to hold for the
     // projection allowlist as well as for the DTO (ADR-0026). Without it,
     // hiding a credential on `User` would leak it again the moment some
@@ -217,12 +191,13 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     return {
       keys:
         dtoShapeKeys(dto) ??
-        narrowToProjection(
-          [...info.metadata.fields.map((field) => field.name), ...Object.keys(computed)],
-          info.config.projection as readonly string[] | null,
-        ),
+        (targetProjection === null
+          ? info.metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name)
+          : narrowToProjection(
+              info.metadata.fields.map((field) => field.name),
+              targetProjection,
+            )),
       relations: new Set(info.metadata.relations.map((relation) => relation.name)),
-      computed,
     };
   }
 }
@@ -248,9 +223,8 @@ function narrowToProjection(derived: readonly string[], projection: readonly str
 /**
  * DTO mapping, step one of the normative order: a registered class with a
  * runtime shape replaces the projection's key set and nothing else — the
- * relation and computed tables still describe the same entity, so a DTO
- * that names a computed field still gets it evaluated, and one that omits
- * it narrows it away like any other field.
+ * relation table still describes the same entity, so a DTO that omits a
+ * field narrows it away like any other field.
  */
 function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
   const keys = dtoShapeKeys(dto);
@@ -271,15 +245,17 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * narrowed to the id, because a deep nested write is not something this
  * layer should do by accident.
  *
- * Computed fields are **never** writable (ADR-0019), and this class is the
- * inner of the two layers that make that true. A registered
- * `create`/`update`/`patch` DTO naming a computed field is rejected at
- * bootstrap (`resolveComputedFields`' neighbour in `resolve-entity-config`),
- * so through `createCrud` the derived writable projection is the only one
- * that reaches here and it never carries a computed name. The explicit
- * strip below is what keeps that true for a `DefaultDeserializer`
- * constructed directly — it is exported, and its contract is "computed
- * names never reach the adapter", not "the config resolver checked first".
+ * ORM-derived fields (`FieldMetadata.derivedExpression`) are **never**
+ * writable, and this class is the inner of the two layers that make that
+ * true. A registered `create`/`update`/`patch` DTO naming one is rejected
+ * at bootstrap (`rejectDerivedWriteDtoKeys` in `resolve-entity-config`), so
+ * through `createCrud` the derived writable projection is the only one
+ * that reaches here and it never carries a derived-field name. The
+ * exclusion below (derived fields never enter {@link writableProjection} in
+ * the first place) is what keeps that true for a `DefaultDeserializer`
+ * constructed directly — it is exported, and its contract is "a derived
+ * field never reaches the adapter", not "the config resolver checked
+ * first".
  *
  * The primary key is excluded from the derived default **regardless of
  * `generated`**: an app-assigned id (a natural key, a
@@ -301,11 +277,11 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * writable column with no special exclusion otherwise — either gap would
  * let a client rewrite a row's identity or its deleted state through the
  * generic write route instead of `create`'s intentional choice of id or
- * `deleteOne`/`restoreOne`'s state machine. Unlike computed fields, both are
+ * `deleteOne`/`restoreOne`'s state machine. Unlike a derived field, both are
  * a deliberately narrower guarantee: an explicit write DTO naming the id or
  * marker field still reaches it, because both are real columns with
  * legitimate opt-in uses (assigning a natural key on `create`) that a
- * computed field never has.
+ * derived field never has.
  */
 /**
  * What `associate()` needs to know about a relation's target, resolved
@@ -317,18 +293,21 @@ type RelationIdSpec = { readonly idField: string } | { readonly compositeIdField
 export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entity> {
   private readonly writableProjection: readonly string[];
   private readonly relationIdFields: ReadonlyMap<string, () => RelationIdSpec | undefined>;
-  private readonly computedNames: ReadonlySet<string>;
 
-  constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog, computed: ComputedFieldMap<Entity> = {}) {
-    this.computedNames = new Set(Object.keys(computed));
+  constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog) {
     // A composite-key entity (issue #261) has no single `idField` to
     // exclude — its key columns are a natural key the client legitimately
     // supplies on `createOne`, so the derived default keeps them (narrowed
     // back out of `update.fields`'s default in `resolveAllowed`, which is
-    // what actually keeps them immutable after creation).
+    // what actually keeps them immutable after creation). An ORM-derived
+    // field (`derivedExpression`) has no writable storage and never enters
+    // the derived default at all.
     const columns = metadata.fields
       .filter(
-        (field) => !field.generated && (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
+        (field) =>
+          !field.generated &&
+          field.derivedExpression === undefined &&
+          (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
       )
       .map((field) => field.name);
     const relations = new Map<string, () => RelationIdSpec | undefined>();
@@ -367,7 +346,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // Optional chaining: this class is exported and constructible directly
     // against a context that never went through the engine (a test stub,
     // say), and the exclusion degrading to "none" there is the same
-    // graceful fallback the id/computed-field guards already make.
+    // graceful fallback the id exclusion already makes.
     const softDeleteField = explicit === null ? (context.config?.softDelete?.field ?? null) : null;
     // `create.default`/`update.default` (`createOne` and `updateOne` only —
     // never `patchOne`, whose omission means "leave unchanged" rather than
@@ -383,11 +362,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     const source = raw as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const key of allowed) {
-      // A computed field has no column behind it, so a value for it could
-      // only ever reach the adapter as an unknown write (ADR-0019).
-      if (this.computedNames.has(key)) {
-        continue;
-      }
       if (key === softDeleteField) {
         continue;
       }

@@ -32,8 +32,8 @@ export interface KavoAppContextRequest {
  * (a 500 problem-details document), which is deliberate — an extractor that
  * cannot answer must not quietly answer an empty context.
  *
- * Return **plain, shallow data** — the fields policies and computed fields
- * read, not `request.user` passed straight through. With the result cache
+ * Return **plain, shallow data** — the fields policies and custom operation
+ * handlers read, not `request.user` passed straight through. With the result cache
  * on, `KavoContext.app` is canonicalized into the cache key: a framework/ORM
  * object with prototype getters hashes the same for every caller (bucket
  * collapse) and a cyclic one throws a `RangeError` on the read.

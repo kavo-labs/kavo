@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
+import type { EntityMetadata } from "@kavo/core";
 import { BUILT_IN_DEFAULTS, ConfigurationException, createKavo, mergeSettings, resolveEntityConfig } from "@kavo/core";
 import { User, userMetadata } from "./support/user-fixture.js";
 import { authorMetadata, postMetadata } from "./support/blog-fixture.js";
+
+/** `userMetadata` plus an ORM-derived `fullName` field (no backing column). */
+const userMetadataWithDerivedFullName: EntityMetadata<User> = {
+  ...userMetadata,
+  fields: [
+    ...userMetadata.fields,
+    { name: "fullName", kind: "string", nullable: false, generated: false, derivedExpression: "concat" },
+  ],
+};
 
 describe("mergeSettings — merge algebra", () => {
   it("replaces scalars key-by-key, nearer scope wins", () => {
@@ -222,12 +232,11 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.search !== false && config.search.fields).toEqual(["name"]);
   });
 
-  it("rejects a computed field named in search.fields", () => {
+  it("rejects an ORM-derived field named in search.fields", () => {
     try {
       resolveEntityConfig(
-        userMetadata,
+        userMetadataWithDerivedFullName,
         {
-          computed: { fullName: { resolve: () => "" } },
           search: { fields: ["fullName" as never] },
         },
         undefined,
@@ -295,12 +304,11 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.filter.fields).toContain("age");
   });
 
-  it("rejects a computed field named in the top-level create's or update's { fields } shorthand", () => {
+  it("rejects an ORM-derived field named in the top-level create's or update's { fields } shorthand", () => {
     try {
       resolveEntityConfig(
-        userMetadata,
+        userMetadataWithDerivedFullName,
         {
-          computed: { fullName: { resolve: () => "" } },
           create: { fields: ["fullName" as never] },
         },
         undefined,
@@ -309,7 +317,7 @@ describe("resolveEntityConfig — bootstrap", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
-      expect((error as ConfigurationException).message).toContain("computed field");
+      expect((error as ConfigurationException).message).toContain("ORM-derived field");
     }
   });
 
