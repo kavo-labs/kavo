@@ -15,12 +15,15 @@ import { compositeMetadata, CompositeEntity } from "./support/composite-fixture.
  */
 
 const DEFAULT_FIELD_GROUPS = {
-  filter: { fields: ["userId", "topic", "key"], operators: null, limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 } },
+  filter: {
+    fields: ["userId", "topic", "key"],
+    operators: null,
+    limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 },
+  },
   sort: { fields: ["userId", "topic", "key"] },
   select: { fields: ["userId", "topic", "key"] },
   include: { fields: [], limits: { maxDepth: 3, maxNodes: 20 } },
 };
-
 
 function configWith(
   defaultSort: readonly Sort<CompositeEntity>[],

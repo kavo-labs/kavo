@@ -1,4 +1,11 @@
-import type { Filter, FilterCondition, FilterExpression, FilterOperator, FilterOperatorToken, FilterScalar } from "./filter.js";
+import type {
+  Filter,
+  FilterCondition,
+  FilterExpression,
+  FilterOperator,
+  FilterOperatorToken,
+  FilterScalar,
+} from "./filter.js";
 import type { FilterParser } from "./filter-parser.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { ResolvedEntityConfig } from "../config/resolved-entity-config.js";

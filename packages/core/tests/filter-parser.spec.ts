@@ -381,11 +381,7 @@ describe("DefaultFilterParser — malformed bracket keys", () => {
  * which cannot show that the parser wires them together this way.
  */
 describe("DefaultFilterParser — relation paths", () => {
-  const relationConfig = resolveEntityConfig(
-    postMetadata,
-    { filter: { fields: ["title", "author.name"] } },
-    undefined,
-  );
+  const relationConfig = resolveEntityConfig(postMetadata, { filter: { fields: ["title", "author.name"] } }, undefined);
   const relationParser = new DefaultFilterParser(postMetadata);
   const parseRelation = (params: Record<string, unknown>) => relationParser.parse(params, relationConfig);
 

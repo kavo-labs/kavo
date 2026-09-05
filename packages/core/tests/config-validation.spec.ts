@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { KavoSettings, DeepPartial } from "@kavo/core";
-import { BUILT_IN_DEFAULTS, ConfigurationException, mergeSettings, resolveEntityConfig, validateSettings } from "@kavo/core";
+import {
+  BUILT_IN_DEFAULTS,
+  ConfigurationException,
+  mergeSettings,
+  resolveEntityConfig,
+  validateSettings,
+} from "@kavo/core";
 import { userMetadata } from "./support/user-fixture.js";
 
 /**

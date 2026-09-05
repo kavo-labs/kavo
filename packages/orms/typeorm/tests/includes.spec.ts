@@ -89,9 +89,9 @@ beforeAll(async () => {
   articles = kavo.createCrud(Article, {
     softDelete: { strategy: "soft" },
     include: { fields: ["blog", "notes"] },
-            // Filtering across a relation path is its own allowlist decision,
-      // independent of whether the relation may be included.
-filter: { fields: ["id", "title", "blog.name"] },
+    // Filtering across a relation path is its own allowlist decision,
+    // independent of whether the relation may be included.
+    filter: { fields: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
   kavo.createCrud(Note, { include: { fields: ["article"] } });
   // The same entity with the to-many forced to `join`: the case the
@@ -112,7 +112,8 @@ filter: { fields: ["id", "title", "blog.name"] },
   // path still resolves through its own join.
   keyArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
     softDelete: { strategy: "soft" },
-    include: { fields: ["blog"] }, filter: { fields: ["id", "title", "blog.name"] },
+    include: { fields: ["blog"] },
+    filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   // A key edge nested under a batched to-many parent: Blog → articles (batch)

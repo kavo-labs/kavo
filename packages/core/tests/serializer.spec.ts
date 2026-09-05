@@ -397,7 +397,11 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const dto = config.dto.resolve("create", "createOne");
-    const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, dto, writeContext("createOne", config));
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      dto,
+      writeContext("createOne", config),
+    );
     expect(payload).toEqual({ name: "Ada" });
   });
 
@@ -440,7 +444,11 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     // same as a hand-written DTO naming `id` (ADR-0026's `dto.item`
     // precedent), unlike the *derived* default, which excludes the primary
     // key unconditionally (commit 8aa8d65).
-    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["id" as never, "name"] } } }, undefined);
+    const config = resolveEntityConfig(
+      userMetadata,
+      { dto: { create: { fields: ["id" as never, "name"] } } },
+      undefined,
+    );
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const dto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));

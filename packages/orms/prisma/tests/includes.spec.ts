@@ -44,7 +44,8 @@ beforeAll(() => {
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    include: { fields: ["blog", "notes"] }, filter: { fields: ["id", "title", "blog.name"] },
+    include: { fields: ["blog", "notes"] },
+    filter: { fields: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
   kavo.createCrud(Note, { include: { fields: ["article"] } } as never);
   // A separate root instance so this Article config does not clobber the
@@ -55,7 +56,8 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   }).createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    include: { fields: ["blog"] }, filter: { fields: ["id", "title", "blog.name"] },
+    include: { fields: ["blog"] },
+    filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   const nestedKavo = createPrismaKavo(client as never, {

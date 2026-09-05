@@ -489,9 +489,12 @@ class KavoBinder implements OnModuleInit {
               descriptor,
               service.engine.metadata,
               {
-                creatable: shorthandFieldsOf(dtoResolver.resolve("create", descriptor.id)) ?? writableBaseOf(service.engine.metadata),
+                creatable:
+                  shorthandFieldsOf(dtoResolver.resolve("create", descriptor.id)) ??
+                  writableBaseOf(service.engine.metadata),
                 updatable:
-                  shorthandFieldsOf(dtoResolver.resolve("update", descriptor.id)) ?? writableBaseOf(service.engine.metadata),
+                  shorthandFieldsOf(dtoResolver.resolve("update", descriptor.id)) ??
+                  writableBaseOf(service.engine.metadata),
               },
               relationTargetMetadata,
             );

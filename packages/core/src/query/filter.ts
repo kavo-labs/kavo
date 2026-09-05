@@ -41,19 +41,7 @@ export type FilterOperator =
  * in `default-filter-parser.ts`.
  */
 export type FilterOperatorToken =
-  | "eq"
-  | "ne"
-  | "gt"
-  | "gte"
-  | "lt"
-  | "lte"
-  | "in"
-  | "notIn"
-  | "like"
-  | "ilike"
-  | "between"
-  | "isNull"
-  | "isNotNull";
+  "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "notIn" | "like" | "ilike" | "between" | "isNull" | "isNotNull";
 
 /** Logical connectives for filter groups. */
 export type LogicalOperator = "AND" | "OR" | "NOT";

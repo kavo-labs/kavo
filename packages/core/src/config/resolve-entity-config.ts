@@ -447,7 +447,10 @@ function resolveFilterFields<Entity extends object>(
   entityName: string,
   base: readonly FieldPath<Entity>[],
   selector: FilterFieldSelector<Entity> | undefined,
-): { readonly fields: readonly FieldPath<Entity>[]; readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null } {
+): {
+  readonly fields: readonly FieldPath<Entity>[];
+  readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null;
+} {
   if (!isFilterOperatorMap(selector)) {
     return { fields: resolveFieldSelector(base, selector), operators: null };
   }
@@ -527,17 +530,29 @@ function resolveSortDefault<Entity extends object>(
     return [];
   }
   if (!Array.isArray(tokens)) {
-    throw new ConfigurationException(entityName, "sort.default", `expected an array of strings, got ${JSON.stringify(tokens)}`);
+    throw new ConfigurationException(
+      entityName,
+      "sort.default",
+      `expected an array of strings, got ${JSON.stringify(tokens)}`,
+    );
   }
   const sortableSet = new Set(sortable as readonly string[]);
   const result: Sort<Entity>[] = [];
   for (const raw of tokens) {
     if (typeof raw !== "string" || raw === "" || raw === "-") {
-      throw new ConfigurationException(entityName, "sort.default", `expected a non-empty field name, got ${JSON.stringify(raw)}`);
+      throw new ConfigurationException(
+        entityName,
+        "sort.default",
+        `expected a non-empty field name, got ${JSON.stringify(raw)}`,
+      );
     }
     const entry = parseSortToken<Entity>(raw);
     if (!sortableSet.has(entry.field as string)) {
-      throw new ConfigurationException(entityName, "sort.default", `field '${entry.field as string}' is not in 'sort.fields'`);
+      throw new ConfigurationException(
+        entityName,
+        "sort.default",
+        `field '${entry.field as string}' is not in 'sort.fields'`,
+      );
     }
     result.push(entry);
   }
@@ -598,7 +613,11 @@ function resolveSearchConfig<Entity extends object>(
   }
   const mode = configured.mode === undefined ? BUILT_IN_SEARCH_DEFAULTS.mode : configured.mode;
   if (mode !== "substring" && mode !== "words") {
-    throw new ConfigurationException(entityName, "search.mode", `expected "substring" or "words", got ${JSON.stringify(mode)}`);
+    throw new ConfigurationException(
+      entityName,
+      "search.mode",
+      `expected "substring" or "words", got ${JSON.stringify(mode)}`,
+    );
   }
   const driver = configured.driver === undefined ? BUILT_IN_SEARCH_DEFAULTS.driver : configured.driver;
   if (driver !== "orm") {
@@ -735,9 +754,17 @@ function resolveFieldGroups<Entity extends object>(
     limits: resolveFilterLimits(entityName, filterConfig?.limits),
   });
   const sort: ResolvedSortConfig<Entity> = deepFreeze({ fields: sortFields });
-  const selectDefault = resolveSelectDefault(entityName, selectConfig?.default as readonly string[] | undefined, selectFields);
+  const selectDefault = resolveSelectDefault(
+    entityName,
+    selectConfig?.default as readonly string[] | undefined,
+    selectFields,
+  );
   const select: ResolvedSelectConfig<Entity> = deepFreeze({ fields: selectFields, default: selectDefault });
-  const includeDefault = resolveIncludeDefault(entityName, includeConfig?.default as readonly string[] | undefined, includeFields);
+  const includeDefault = resolveIncludeDefault(
+    entityName,
+    includeConfig?.default as readonly string[] | undefined,
+    includeFields,
+  );
   const include: ResolvedIncludeConfig<Entity> & { readonly default?: readonly string[] } = deepFreeze({
     fields: includeFields,
     limits: resolveIncludeLimits(entityName, includeConfig?.limits),

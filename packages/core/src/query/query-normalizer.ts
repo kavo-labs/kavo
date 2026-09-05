@@ -890,7 +890,7 @@ function parseSearch<Entity>(
   const fieldsRaw = rawParams["search[fields]"];
   // `search.default` (issue #386): the free-text term a request gets when
   // it sends no `search[query]` of its own.
-  const query = hasValue(explicitQuery) ? explicitQuery : (config.search !== false ? config.search.default : null);
+  const query = hasValue(explicitQuery) ? explicitQuery : config.search !== false ? config.search.default : null;
 
   if (!hasValue(query)) {
     if (hasValue(modeRaw) || hasValue(fieldsRaw)) {

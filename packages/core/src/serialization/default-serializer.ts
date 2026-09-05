@@ -394,7 +394,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     }
     return result as Shape;
   }
-
 }
 
 /**

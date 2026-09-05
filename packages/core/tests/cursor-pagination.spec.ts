@@ -44,17 +44,18 @@ function sortWireToken(entry: Sort<User>): string {
   return entry.direction === "desc" ? `-${entry.field as string}` : (entry.field as string);
 }
 
-function cursorCrud(overrides: { pagination?: Partial<KavoSettings["pagination"]>; sortDefault?: readonly string[] } = {}) {
+function cursorCrud(
+  overrides: { pagination?: Partial<KavoSettings["pagination"]>; sortDefault?: readonly string[] } = {},
+) {
   const adapter = new InMemoryUserAdapter();
   const crud = createKavo({
     defaults: {
       pagination: { strategy: "cursor", ...overrides.pagination },
     },
-  } as never).createCrud(
-    User,
-    { sort: { default: overrides.sortDefault ?? SORT_BY_ID.map(sortWireToken) } } as never,
-    { adapter, metadata: userMetadata },
-  );
+  } as never).createCrud(User, { sort: { default: overrides.sortDefault ?? SORT_BY_ID.map(sortWireToken) } } as never, {
+    adapter,
+    metadata: userMetadata,
+  });
   return { crud, adapter };
 }
 
@@ -481,7 +482,11 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
   const normalizer = new QueryNormalizer<User>(userMetadata);
 
   const DEFAULT_FIELD_GROUPS = {
-    filter: { fields: ["id", "name", "age", "status", "createdAt"], operators: null, limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 } },
+    filter: {
+      fields: ["id", "name", "age", "status", "createdAt"],
+      operators: null,
+      limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 },
+    },
     sort: { fields: ["id", "name", "age", "status", "createdAt"] },
     select: { fields: ["id", "name", "email", "age", "status", "createdAt"] },
     include: { fields: [], limits: { maxDepth: 3, maxNodes: 20 } },

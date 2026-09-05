@@ -177,9 +177,7 @@ describe("allowed.selectable narrows the response projection", () => {
     }
 
     it("applies the target's own selectable to the included rows", async () => {
-      expect(Object.keys(await includedAuthor({ select: { fields: ["id"] } } as EntityConfig<Author>))).toEqual([
-        "id",
-      ]);
+      expect(Object.keys(await includedAuthor({ select: { fields: ["id"] } } as EntityConfig<Author>))).toEqual(["id"]);
     });
 
     it("leaves the target alone when the target configured nothing", async () => {

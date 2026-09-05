@@ -264,11 +264,7 @@ describe("resolveEntityConfig — bootstrap", () => {
     // on `Author` itself — unreachable from `Author`'s own `metadata.fields`,
     // so it is accepted verbatim rather than rejected, the same laxity
     // `filter.fields`/`sort.fields` already have for relation paths.
-    const config = resolveEntityConfig(
-      authorMetadata,
-      { search: { fields: ["posts.authorId" as never] } },
-      undefined,
-    );
+    const config = resolveEntityConfig(authorMetadata, { search: { fields: ["posts.authorId" as never] } }, undefined);
     expect(config.search !== false && config.search.fields).toEqual(["posts.authorId"]);
   });
 
