@@ -2540,6 +2540,25 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     expect(Object.keys(bodySchema("/todos/{id}", "patch")?.properties ?? {})).toEqual(["done"]);
   });
 
+  it("narrows the documented body for a create.fields/update.fields { exclude } form (issue #397)", async () => {
+    // The `{ exclude }` form can only be expanded once ORM metadata exists,
+    // so the bind-time fallback reads the field list from the engine's
+    // *resolved* DTO resolver — the documented body is the narrowed set the
+    // engine enforces, not the full writable base. Todo's writable base is
+    // title, done, priority, list.
+    @Kavo(Todo, {
+      create: { fields: { exclude: ["priority"] } },
+      update: { fields: { exclude: ["title", "done"] } },
+    })
+    @Controller("todos")
+    class ExcludeController {}
+    await bootstrap(ExcludeController);
+    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "list"]);
+    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["priority", "list"]);
+  });
+
   it("leaves a configured DTO's own documented body untouched", async () => {
     class CreateTodoDto {
       title = "";
