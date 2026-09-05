@@ -114,6 +114,17 @@ describe("buildEntityMetadata — scalar field shapes", () => {
     // `| null` into the DTO for a value that can never arrive as null.
     expect(fieldsByName()["tags"]).toMatchObject({ nullable: false });
   });
+
+  it("never surfaces a client-extension result field as a FieldMetadata entry (issue #373)", () => {
+    // `$extends({ result: { shapes: { displayName: { compute } } } })` is
+    // pure JavaScript, evaluated by the client after a query returns —
+    // Prisma's own DMMF (what `shapesDatamodel` stands in for here) knows
+    // nothing about it, so it produces no field here at all. `displayName`
+    // is not even a real field on the `Shapes` model, which is exactly the
+    // point: an extension field is indistinguishable, from this function's
+    // point of view, from a name the model never declared.
+    expect(fieldsByName()["displayName"]).toBeUndefined();
+  });
 });
 
 describe("buildEntityMetadata — bootstrap error paths", () => {
