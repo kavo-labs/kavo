@@ -83,3 +83,26 @@ export class AppModule {}
 ```
 
 List every marker class this Kavo root will use in `entities`. That's how a relation on one model resolves back to the right marker class for its target model. Set `caseInsensitiveFilters: false` in that same options object if your database isn't Postgres or MongoDB (MySQL, SQLite, and SQL Server reject Prisma's `mode: "insensitive"` outright).
+
+## Virtual fields
+
+Prisma has no schema-level virtual/generated-column syntax. Its one mechanism is a **client extension**'s `result` field, computed in JavaScript on the client after the query runs:
+
+```ts
+const prisma = new PrismaClient().$extends({
+  result: {
+    book: {
+      displayTitle: {
+        needs: { title: true, year: true },
+        compute(book) {
+          return `${book.title} (${book.year})`;
+        },
+      },
+    },
+  },
+});
+```
+
+This is **invisible to Kavo entirely** — `@kavo/prisma` builds `FieldMetadata` from `Prisma.dmmf.datamodel`, which knows nothing about a client extension's `result` fields, so `displayTitle` produces no metadata entry at all (not an entry with an absent `derivedExpression` — no entry, period). It can never be named in `allowlists.filterable`/`sortable`/`selectable`; doing so is a bootstrap error the same way naming a nonexistent column would be. There is also no adapter-level hook here: `createInfrastructure`'s `PrismaClient` and your extended client are two different objects, and Kavo's generated routes query through the former.
+
+To actually surface an extension field over HTTP, reach for a **custom operation** that queries the extended client directly and returns its own shape (`dto.output`) — the extension's field never needs to pass through `@kavo/prisma`'s adapter at all. See [Virtual fields](/features/virtual-fields) for the full picture (including the other three ORMs, which _can_ push a derived field into `WHERE`/`ORDER BY`) and [ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata) for the design.

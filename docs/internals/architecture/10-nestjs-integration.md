@@ -466,8 +466,8 @@ The `issue #264` fallback body/response schemas — synthesized at bind time
 for a route with no explicit DTO, from `metadata.fields` narrowed to the
 resolved `creatable`/`updatable` (bodies) or `selectable` (responses)
 allowlist — also emit a `required` array off column nullability: a
-non-`nullable` column is listed in `required`, a nullable column and an
-untyped computed field stay optional. A `generated` column is already
+non-`nullable` column is listed in `required`, a nullable column (an
+opted-in ORM-derived field included) stays optional. A `generated` column is already
 excluded from a body (it isn't writable), so it never reaches the body's
 `required`; on the response side a non-`nullable` `generated` column (a
 primary key, a `@CreateDateColumn`) _is_ in `required`, because the row
@@ -497,7 +497,7 @@ not on the allowlist being empty.
 The **response** fallback has the mirror case for `allowlists.includable`
 (ADR-0028, issue #349, then #356): a relation a client may `?include=` is
 emitted as an **optional** property on `<Entity>Item`/`<Entity>ListItem` —
-appended after the scalar columns and the computed fields, never in
+appended after the scalar columns, never in
 `required`, since it is only in the body when `include=` asks for it, and
 the shape is shared with the write responses, which resolve no `include=`
 at all (ADR-0020). The property defers wholly to the relation target's own

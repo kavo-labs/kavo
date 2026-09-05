@@ -55,11 +55,8 @@ and an etag-only override (`cache: { etag: false }`) leaves the result
 cache off rather than accidentally flipping it on.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`allowlists`, `computed`, `operations`); only the settings subset
-participates in the merge. `computed` carries functions, so like `dto` it
-is entity-scope-only and never merges through the chain — see
-[ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
-`policy` is the same shape of exception, for the same reason (it is itself
+`allowlists`, `operations`); only the settings subset participates in the
+merge. `policy` is the same shape of exception, for the same reason (it is itself
 a closure): it resolves through its own nearest-scope-wins walk in
 `resolveEntityConfig` — `operations.<id>.policy`, then `EntityConfig.policy`
 (one default function for the whole entity), then a `GlobalConfig.policy`
@@ -118,11 +115,12 @@ checks the key against the standard table.
 All merging happens **once at bootstrap** (`resolveEntityConfig`) into a
 deep-frozen `ResolvedEntityConfig`: entity-scope settings, precomputed
 per-operation views behind `settingsFor(operation)`, resolved allowlists
-(explicit, or derived from own scalar columns plus any selectable computed
-fields), the default response `projection` (`null` unless
+(explicit, or derived from own scalar columns — an ORM-derived field is
+opt-in only, [ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata)),
+the default response `projection` (`null` unless
 `allowlists.selectable` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
-the cached `DtoResolver`, the validated `computed` map, the resolved
+the cached `DtoResolver`, the resolved
 `policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the
@@ -134,7 +132,7 @@ transports (live objects, not data) are resolved separately, on
 `ResolvedEntityConfig.realtimeTransports` from `KavoOptions.
 realtimeTransports`, and the result-cache store the same way, on
 `ResolvedEntityConfig.cacheStore` from `KavoOptions.cacheStore` (ADR-0031)
-— the same structural relationship `dto`/`computed`/
+— the same structural relationship `dto`/
 `relations` already have to `settings` (ADR-0023).
 
 ## 4. Bootstrap validation
@@ -146,28 +144,33 @@ expected a positive integer, got -1`). The same bar applies to unknown
 pagination strategies, missing infrastructure, non-`@Kavo` controllers in
 `forFeature`, and custom-operation id collisions.
 
-### `computed`
+### ORM-derived fields (`FieldMetadata.derivedExpression`)
 
-Every way a computed-field declaration can be structurally wrong fails at
-bootstrap rather than as a surprising response later
-([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)):
+A field an adapter reports as ORM-derived (a TypeORM `@VirtualColumn`, a
+MikroORM `@Formula`) has no writable storage, so `resolveAllowlists` fails
+fast at bootstrap rather than as a surprising response later
+([ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata)):
 
-- a name that collides with a real column or relation — the shadowed value
-  would silently vanish from every response;
-- a descriptor with no `resolve` function;
-- an `async` `resolve`, whose promise the serializer would emit unawaited;
-- the name `__proto__`, which is not an ordinary object key and would
-  disappear from the resolved map without a word — caught in both of its
-  spellings, by name for `{ ["__proto__"]: … }` and by inspecting the
-  declared record's prototype for the object-literal `{ __proto__: … }`,
-  which invokes the prototype setter and never reaches `Object.keys`;
-- a computed name in a configured `allowlists.filterable`/`sortable`/
-  `searchable` — there is no column to translate to `WHERE`/`ORDER BY`, and
-  in-memory post-fetch filtering is rejected rather than deferred;
-- a computed name declared by a registered `create`/`update`/`patch` DTO
-  class — the value could only ever be discarded, and the DTO's runtime
-  shape is what `@kavo/nest` builds `@ApiBody` from, so OpenAPI would
-  advertise a property the engine unconditionally drops.
+- it is excluded from every allowlist's unconfigured default — opt-in
+  only, the same rule a relation follows;
+- naming it in `allowlists.searchable`, opted in or not, is a
+  `ConfigurationException` — there is no ORM-independent way to translate
+  an arbitrary derived expression into a `WHERE ... ILIKE` fragment;
+- naming it in `allowlists.creatable`/`updatable` is a
+  `ConfigurationException` — it has no writable storage behind it;
+- naming it in a registered `create`/`update`/`patch` DTO class is a
+  `ConfigurationException` — the value could only ever be discarded, and
+  the DTO's runtime shape is what `@kavo/nest` builds `@ApiBody` from, so
+  OpenAPI would advertise a property the engine unconditionally drops.
+
+`filterable`/`sortable`/`selectable` are the three allowlists a derived
+field _can_ join, explicitly, and whether it actually works once it does
+is a per-adapter question, not a bootstrap one: `@kavo/typeorm` and
+`@kavo/mikroorm` can translate it into `WHERE`/`ORDER BY`; `@kavo/prisma`
+and `@kavo/mongoose` report no `derivedExpression` at all for their
+derived-field mechanisms, so such a field is invisible to the query
+engine (naming it in `allowlists` there fails the same way naming a
+nonexistent column would).
 
 ### `policy`
 
@@ -232,6 +235,5 @@ route concerns via the `OperationMetadata` augmentation (ADR-0007).
 ## 6. Debug dump
 
 `kavo.describe(entityName)` (backed by `describeResolvedConfig`) returns
-the frozen result for one entity — settings, allowlists, the declared
-computed-field names, relations, and every per-operation view — as a plain
-printable object.
+the frozen result for one entity — settings, allowlists, relations, and
+every per-operation view — as a plain printable object.

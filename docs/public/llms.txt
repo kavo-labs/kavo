@@ -36,7 +36,7 @@ Source: https://github.com/kavo-labs/kavo
 - [Realtime Events](https://kavo.js.org/features/realtime-events): Publishing CRUD events over SSE and other transports
 - [Caching & ETags](https://kavo.js.org/features/caching-and-etags): Content-hash ETags and conditional requests
 - [Allowlists](https://kavo.js.org/features/allowlists): Restricting filter/sort/select/include/search per entity
-- [Computed Fields](https://kavo.js.org/features/computed-fields): Serializer-evaluated response fields with no backing column
+- [Virtual Fields](https://kavo.js.org/features/virtual-fields): ORM-derived response fields with no ordinary storage column
 
 ## Integrations
 

@@ -156,7 +156,7 @@ const config = defineConfig({
           { text: "Caching & ETags", link: "/features/caching-and-etags" },
           { text: "Result Cache", link: "/features/result-cache" },
           { text: "Allowlists", link: "/features/allowlists" },
-          { text: "Computed Fields", link: "/features/computed-fields" },
+          { text: "Virtual Fields", link: "/features/virtual-fields" },
           { text: "Policy", link: "/features/policy" },
           { text: "Composite Primary Keys", link: "/features/composite-primary-keys" },
         ],
@@ -413,6 +413,10 @@ const config = defineConfig({
               {
                 text: "0045 — allowlists.selectable takes root paths only; the relation-dotted ceiling is removed",
                 link: "/internals/adr/0045-relation-projection-ceiling-removed",
+              },
+              {
+                text: "0046 — Derived fields come from ORM metadata; core stays expression-agnostic",
+                link: "/internals/adr/0046-derived-fields-come-from-orm-metadata",
               },
             ],
           },

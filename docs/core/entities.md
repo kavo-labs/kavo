@@ -38,7 +38,7 @@ Outside Nest, the same thing happens through `createCrud(Entity, config?)`. `@Ka
 With no config, Kavo derives everything it needs from the entity's own metadata:
 
 - **Writable columns** (`create`/`update`/`patch` bodies): every scalar column that isn't database-generated. An auto-increment id or a `@CreateDateColumn` is excluded automatically. Sending one in a request body is silently stripped, not an error.
-- **Readable columns** (responses): every scalar column, plus any [computed fields](/features/computed-fields) you've declared.
+- **Readable columns** (responses): every own scalar column, plus any opted-in [virtual field](/features/virtual-fields) your ORM declares.
 - **Filterable, sortable, and selectable fields**: every scalar column, unless you narrow one of the [allowlists](/features/allowlists) explicitly.
 - **Includable relations**: none, until you name one in `allowlists.includable`. This is the one allowlist that defaults closed rather than open ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 

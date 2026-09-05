@@ -99,7 +99,7 @@ entity, not a fallback that silently does nothing. A malformed filter
 (bad operator, depth over `query.maxFilterDepth`, too many `in` values, …)
 gets the same `400` REST would give it, via the same
 `QueryValidationException`. A filter field that is not one of the entity's
-own columns — a relation path, a computed field — is also rejected with
+own columns — a relation path, an un-opted-in ORM-derived field — is also rejected with
 `400`: the in-memory evaluator (§4.2) has no join to walk and no
 before-image to reach a relation's current value with, and a subscription
 that silently never matches is worse than one that never opens.
