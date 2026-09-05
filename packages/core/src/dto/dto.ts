@@ -2,6 +2,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationId } from "../operations/operation.js";
 import type { FieldPath } from "../types/field-path.js";
+import type { ApplyArgs } from "../policy/kavo-apply.js";
 
 /**
  * Marker for anything usable as a DTO: any non-primitive object shape.
@@ -32,11 +33,25 @@ export interface FieldsShorthand<Entity> {
 }
 
 /**
+ * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side sibling):
+ * forces field values into a `createOne`/`updateOne` body, overwriting
+ * whatever the client sent for that key — the opposite composition rule
+ * from `default`'s. Reuses `ApplyArgs`, the same argument shape
+ * `filter.apply`/`sort.apply`/`select.apply`/`include.apply` already take,
+ * rather than inventing a second callback shape. A key the returned object
+ * omits (or a call returning `undefined`) is left alone — untouched by
+ * `apply`, not reset to anything.
+ */
+export type WriteApply<Entity = unknown> = (
+  args: ApplyArgs<Entity>,
+) => Partial<EntityInput<Entity>> | undefined | Promise<Partial<EntityInput<Entity>> | undefined>;
+
+/**
  * `EntityConfig.create`/`.update`'s own config shape (issue #388, extended
- * with `default`). Unlike {@link FieldsShorthand}, `fields` is optional here
- * — a caller may configure only `default` and leave the writable-field list
- * at its entity-derived default, which a bare `{ fields: [...] }` shorthand
- * can't express.
+ * with `default` and, per issue #391, `apply`). Unlike {@link FieldsShorthand},
+ * `fields` is optional here — a caller may configure only `default`/`apply`
+ * and leave the writable-field list at its entity-derived default, which a
+ * bare `{ fields: [...] }` shorthand can't express.
  *
  * `default` fills in a value for any writable field the request body omits
  * — `createOne` only for `create.default`, `updateOne` only (never
@@ -46,11 +61,24 @@ export interface FieldsShorthand<Entity> {
  * the field always wins outright — `default` never overrides an explicit
  * value, the same one-way relationship `sort.default`/`select.default`/
  * `include.default` already have with their own client-supplied values.
+ *
+ * `apply` is `default`'s opposite: an unconditional, per-request constraint
+ * that overwrites whatever the client sent, the same relationship
+ * `filter.apply` already has with the client's own filter (ADR-0048). Scoped
+ * the same way `default` is — `create.apply` on `createOne`, `update.apply`
+ * on `updateOne` only, never `patchOne`. When a field is named by both,
+ * `apply` wins: it is the unconditional constraint, `default` only a
+ * fallback for an absent value. Unlike `default`, `apply`'s return value is
+ * not validated at bootstrap against the entity's writable columns — it is
+ * evaluated per request with an arbitrary runtime value, the same non-goal
+ * ADR-0048 already states for `filter.apply`/`select.apply`/`sort.apply`.
  */
 export interface WriteFieldsConfig<Entity> {
   readonly fields?: readonly FieldPath<Entity, 1>[];
   /** Values for fields the request body doesn't set. Validated at bootstrap against the entity's own writable columns. */
   readonly default?: Partial<EntityInput<Entity>>;
+  /** Values forced into the request body, overwriting whatever the client sent (issue #391). Not bootstrap-validated — see class doc. */
+  readonly apply?: WriteApply<Entity>;
 }
 
 /** The six DTO positions, one per REST verb/context. */

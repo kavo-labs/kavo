@@ -255,6 +255,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "UnresolvedRelationException",
   "WhenParams",
   "WireQuery",
+  "WriteApply",
   "assertNever",
   "builtInHandlers",
   "builtInPaginationStrategies",
