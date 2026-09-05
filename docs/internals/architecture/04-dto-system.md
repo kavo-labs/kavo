@@ -76,8 +76,8 @@ the defaults derive from:
   soft-delete state that way.
 
   This default projection can be narrowed further, without registering a
-  DTO at all, by `allowed.creatable` (for `createOne`) and
-  `allowed.updatable` (for `updateOne`/`patchOne` — the two share one
+  DTO at all, by `create.fields` (for `createOne`) and
+  `update.fields` (for `updateOne`/`patchOne` — the two share one
   list, since both mutate an existing row) — the write-side counterpart to
   `allowed.selectable` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the

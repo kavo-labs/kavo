@@ -125,8 +125,17 @@ Not part of `KavoSettings`. Declared on `EntityConfig` directly, so there's no g
 | `allowed.selectable` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` (plus computed-field names) | every own column + computed fields; depth 1 — a relation-dotted entry neither type-checks nor boots ([ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed)) |
 | `allowed.includable` | `IncludePath[] \| { exclude: IncludePath[] }`                                             | `[]`, no relation includable                                                                                                                                              |
 | `allowed.searchable` | `FieldPath[] \| { exclude: FieldPath[] }`                                                 | every own string-kind column                                                                                                                                              |
-| `allowed.creatable`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }`                             | every non-generated own column except the id, plus every relation                                                                                                         |
-| `allowed.updatable`  | same shape                                                                                | same default as `creatable`                                                                                                                                               |
+
+See [Allowed](/features/allowed).
+
+## create / update (entity scope only)
+
+Not part of `KavoSettings` either, and not nested under `allowed` — the write-side allowlists get their own top-level config objects, since they gate what `createOne`/`updateOne`/`patchOne` may write rather than what a request may filter/sort/select/include.
+
+| Key             | Type                                                          | Default                                                           |
+| --------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `create.fields` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
+| `update.fields` | same shape                                                    | same default as `create.fields`                                   |
 
 See [Allowed](/features/allowed).
 
