@@ -20,6 +20,12 @@ export type DtoClass<Shape extends Dto = Dto> = new () => Shape;
  * `DtoClass` from it at bootstrap (`resolveDtoSlot`), tagged so downstream
  * consumers (`@kavo/nest`'s Swagger generation) can tell it apart from a
  * hand-registered class.
+ *
+ * `create`/`update` no longer accept this shorthand directly (issue #388)
+ * — their writable-field list is the top-level `EntityConfig.create.fields`
+ * / `EntityConfig.update.fields` (`config/entity-config.ts`) instead, so
+ * `dto.create`/`dto.update` stay `DtoClass`-only. `patch`/`item`/`list`
+ * still accept it here.
  */
 export interface FieldsShorthand<Entity> {
   readonly fields: readonly FieldPath<Entity, 1>[];
@@ -54,8 +60,8 @@ export interface OperationDtoMap<
   ItemDto = Entity,
   ListDto = ItemDto,
 > {
-  readonly create?: DtoClass<CreateDto & Dto> | FieldsShorthand<Entity>;
-  readonly update?: DtoClass<UpdateDto & Dto> | FieldsShorthand<Entity>;
+  readonly create?: DtoClass<CreateDto & Dto>;
+  readonly update?: DtoClass<UpdateDto & Dto>;
   readonly patch?: DtoClass<PatchDto & Dto> | FieldsShorthand<Entity>;
   readonly query?: DtoClass<QueryDto & Dto>;
   readonly item?: DtoClass<ItemDto & Dto> | FieldsShorthand<Entity>;

@@ -626,7 +626,10 @@ function defineRoute(
     writable: true,
     configurable: true,
   });
-  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined);
+  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined, {
+    create: config?.create,
+    update: config?.update,
+  });
   applyRouteDecorators(prototype, methodName, descriptor, route, dtoResolver, entity);
 }
 

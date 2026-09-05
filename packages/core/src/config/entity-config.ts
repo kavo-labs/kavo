@@ -3,7 +3,7 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
+import type { FieldsShorthand, OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
@@ -498,14 +498,36 @@ export interface EntityConfig<
   >,
 > extends Omit<DeepPartial<KavoSettings>, "operations"> {
   /**
-   * `create`/`update`/`patch`/`item`/`list` each accept either a registered
-   * DTO class (today's behavior) or an inline `{ fields: [...] }` shorthand
-   * (issue #386) that derives a projection/writable-field list without a
-   * hand-written class — `dto.create`/`dto.update`'s shorthand is also how
-   * `creatable`/`updatable` are reached now, in place of a separate
-   * `allowed.creatable`/`allowed.updatable` key.
+   * `create`/`update`/`patch`/`item`/`list` each accept a registered DTO
+   * class; `patch`/`item`/`list` additionally accept an inline
+   * `{ fields: [...] }` shorthand (issue #386) that derives a
+   * projection/writable-field list without a hand-written class.
+   * `create`/`update` do not accept that shorthand here — their writable-
+   * field list is the top-level `create`/`update` keys below (issue #388),
+   * keeping this map DTO-class-only for the two write slots.
    */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  /**
+   * What `createOne` (and `createMany`, once #137 lands) may write, via the
+   * same `{ fields: [...] }` shorthand `dto.patch`/`dto.item`/`dto.list`
+   * accept (issue #386) — moved to its own top-level key (issue #388) so
+   * `dto.create` stays reserved for a registered DTO class. Omitted, every
+   * own writable field is open: every non-generated scalar column except
+   * the primary key, plus every relation, by association (ADR-0014). A
+   * registered `dto.create` class with a runtime shape **replaces** this
+   * projection rather than intersecting with it, and wins over this key —
+   * where you register one, it, not this key, is the narrowing statement.
+   */
+  readonly create?: FieldsShorthand<Entity>;
+  /**
+   * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
+   * may write. `update` (PUT) and `patch` (PATCH) share this one list
+   * rather than each getting its own — both mutate an existing row, so the
+   * set of fields open to being overwritten is the same question either
+   * way. Same default posture, narrowing behaviour, and DTO precedence as
+   * {@link EntityConfig.create} — see its note.
+   */
+  readonly update?: FieldsShorthand<Entity>;
   /**
    * Default authorization for every operation on this entity (ADR-0037): a
    * single function, not a per-operation map — a map invited "which of the

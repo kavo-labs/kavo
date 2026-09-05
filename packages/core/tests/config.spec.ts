@@ -270,7 +270,7 @@ describe("resolveEntityConfig — bootstrap", () => {
 
   it("defaults create/update's writable projection to every non-generated own column except the id, plus every relation", () => {
     const config = resolveEntityConfig(postMetadata, undefined, undefined);
-    // No `dto.create`/`dto.update` shorthand configured, so the engine falls
+    // No top-level `create`/`update` shorthand configured, so the engine falls
     // back to `DefaultDeserializer`'s own derived writable projection: `id`
     // (generated, and the primary key regardless) and `deletedAt`
     // (generated) are excluded; `title`/`authorId` and both relations join
@@ -279,10 +279,10 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.dto.resolve("update", "updateOne")).toBeNull();
   });
 
-  it("reaches creatable/updatable through dto.create/dto.update's { fields } shorthand", () => {
+  it("reaches creatable/updatable through the top-level create/update { fields } shorthand", () => {
     const config = resolveEntityConfig(
       userMetadata,
-      { dto: { create: { fields: ["name"] }, update: { fields: ["name", "email"] } } },
+      { create: { fields: ["name"] }, update: { fields: ["name", "email"] } },
       undefined,
     );
     const createDto = config.dto.resolve("create", "createOne");
@@ -295,13 +295,13 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.filter.fields).toContain("age");
   });
 
-  it("rejects a computed field named in dto.create's or dto.update's { fields } shorthand", () => {
+  it("rejects a computed field named in the top-level create's or update's { fields } shorthand", () => {
     try {
       resolveEntityConfig(
         userMetadata,
         {
           computed: { fullName: { resolve: () => "" } },
-          dto: { create: { fields: ["fullName" as never] } },
+          create: { fields: ["fullName" as never] },
         },
         undefined,
       );

@@ -35,8 +35,9 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
+import type { DtoClass } from "../dto/dto.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
-import { resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
+import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
@@ -174,7 +175,10 @@ export function resolveEntityConfig<Entity extends object>(
     include,
     projection,
     softDelete: resolveSoftDelete(metadata, entitySettings),
-    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto),
+    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
+      create: entityConfig?.create,
+      update: entityConfig?.update,
+    }),
     computed,
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
@@ -253,9 +257,6 @@ const NO_COMPUTED_FIELDS: Readonly<Record<string, never>> = Object.freeze({});
 const PROTO_NOT_A_NAME =
   `'__proto__' cannot name a computed field — it is not an ordinary object key, ` +
   `so the declaration would silently disappear instead of producing a response field`;
-
-/** The DTO slots whose classes describe a **write** payload (ADR-0019 §4). */
-const WRITE_DTO_SLOTS = ["create", "update", "patch"] as const;
 
 /**
  * Computed-field resolution (ADR-0019). `computed` carries functions, so
@@ -357,8 +358,12 @@ function resolveComputedFields<Entity extends object>(
  * Only classes with a runtime shape are checkable; a purely declarative
  * DTO yields `null` from `dtoShapeKeys` and falls back to the derived
  * writable projection, which never contains a computed name. A `{ fields }`
- * shorthand (issue #386) is resolved to its synthesized class first
- * (`resolveDtoSlot`), so its declared fields are checked the same way.
+ * shorthand — `dto.patch`'s own (issue #386), or the top-level
+ * `create`/`update` shorthand that replaced `dto.create`/`dto.update`'s
+ * (issue #388) — is resolved to its synthesized class first, so its
+ * declared fields are checked the same way. `create`/`update` check the
+ * registered `dto.<slot>` class first, matching `DefaultDtoResolver`'s own
+ * precedence: a registered class wins over the top-level shorthand.
  */
 function rejectComputedWriteDtoKeys<Entity extends object>(
   entityName: string,
@@ -369,18 +374,30 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
   if (names.size === 0) {
     return;
   }
-  const dto = entityConfig?.dto as Readonly<Record<string, Parameters<typeof resolveDtoSlot>[0]>> | undefined;
-  if (dto === undefined) {
-    return;
-  }
-  for (const slot of WRITE_DTO_SLOTS) {
-    const declared = dtoShapeKeys(resolveDtoSlot(dto[slot]))?.find((key) => names.has(key));
+  const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
+  const checks: readonly [slot: string, scope: string, dtoClass: DtoClass | null][] = [
+    [
+      "create",
+      "dto.create",
+      dto?.create ??
+        (entityConfig?.create ? dtoClassFromFields(entityConfig.create.fields as readonly string[]) : null),
+    ],
+    [
+      "update",
+      "dto.update",
+      dto?.update ??
+        (entityConfig?.update ? dtoClassFromFields(entityConfig.update.fields as readonly string[]) : null),
+    ],
+    ["patch", "dto.patch", resolveDtoSlot(dto?.patch as Parameters<typeof resolveDtoSlot>[0])],
+  ];
+  for (const [slot, scope, dtoClass] of checks) {
+    const declared = dtoShapeKeys(dtoClass)?.find((key) => names.has(key));
     if (declared === undefined) {
       continue;
     }
     throw new ConfigurationException(
       entityName,
-      `dto.${slot}`,
+      scope,
       `the '${slot}' DTO declares '${declared}', which is a computed field on '${entityName}' — ` +
         `a computed field has no column behind it, so the value is stripped from every write ` +
         `payload while the generated OpenAPI body still advertises the property; drop it from the ` +

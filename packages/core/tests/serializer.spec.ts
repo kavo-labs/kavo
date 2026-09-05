@@ -393,8 +393,8 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("narrows createOne's derived projection via dto.create's { fields } shorthand", () => {
-    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
+  it("narrows createOne's derived projection via the top-level create.fields shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const dto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize(
@@ -406,7 +406,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("leaves updateOne/patchOne unaffected by a create-only shorthand", () => {
-    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const updateDto = config.dto.resolve("update", "updateOne");
     const updatePayload = deserializer.deserialize(
@@ -417,8 +417,8 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(updatePayload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("narrows both updateOne and patchOne via the same dto.update { fields } shorthand", () => {
-    const config = resolveEntityConfig(userMetadata, { dto: { update: { fields: ["name"] } } }, undefined);
+  it("narrows both updateOne and patchOne via the same top-level update.fields shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const body = { name: "Ada", email: "ada@example.com" };
     const updateDto = config.dto.resolve("update", "updateOne");
@@ -428,7 +428,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("leaves createOne unaffected by an update-only shorthand", () => {
-    const config = resolveEntityConfig(userMetadata, { dto: { update: { fields: ["name"] } } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const createDto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize(
@@ -444,11 +444,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     // same as a hand-written DTO naming `id` (ADR-0026's `dto.item`
     // precedent), unlike the *derived* default, which excludes the primary
     // key unconditionally (commit 8aa8d65).
-    const config = resolveEntityConfig(
-      userMetadata,
-      { dto: { create: { fields: ["id" as never, "name"] } } },
-      undefined,
-    );
+    const config = resolveEntityConfig(userMetadata, { create: { fields: ["id" as never, "name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const dto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));
@@ -488,7 +484,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   });
 
   it("does not narrow a custom write operation, which resolves no DTO", () => {
-    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
+    const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, null, {
       operation: "archiveUser",
