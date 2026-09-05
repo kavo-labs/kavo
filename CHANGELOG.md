@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.18.0](https://github.com/kavo-labs/kavo/compare/v0.17.3...v0.18.0) (2026-09-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** give cache one spelling for "off" — ttl presence is the switch ([#383](https://github.com/kavo-labs/kavo/issues/383))
+* **core:** flatten KavoSettings — limits block and top-level search ([#381](https://github.com/kavo-labs/kavo/issues/381))
+* **core:** add unified defaults block for sort, select, and include ([#379](https://github.com/kavo-labs/kavo/issues/379))
+* missing-relation FK violations return 422, not 409 ([#369](https://github.com/kavo-labs/kavo/issues/369))
+* **core:** a config that carried a relation-dotted allowlists.selectable entry now throws at bootstrap. Drop the entry, or restrict the relation on the target entity's own allowlists.selectable.
+
+### Features
+
+* add relation load strategy "key" — include a to-one relation as its FK id without a join ([#366](https://github.com/kavo-labs/kavo/issues/366)) ([8c85d1c](https://github.com/kavo-labs/kavo/commit/8c85d1c9b7309a733b23f124e447183262e8ae05))
+* **core:** add unified defaults block for sort, select, and include ([#379](https://github.com/kavo-labs/kavo/issues/379)) ([8cf913b](https://github.com/kavo-labs/kavo/commit/8cf913bde1e515e7ebda72f06ed99eb933ec6510))
+* **core:** flatten KavoSettings — limits block and top-level search ([#381](https://github.com/kavo-labs/kavo/issues/381)) ([b169f9d](https://github.com/kavo-labs/kavo/commit/b169f9d320b78722f81b41e3224ea67d6b7e74fa))
+* **core:** remove the relation-dotted allowlists.selectable projection ceiling ([#362](https://github.com/kavo-labs/kavo/issues/362)) ([83c63cc](https://github.com/kavo-labs/kavo/commit/83c63cc8c812fd9035584e01557c23208b557114))
+* missing-relation FK violations return 422, not 409 ([#369](https://github.com/kavo-labs/kavo/issues/369)) ([0aa766c](https://github.com/kavo-labs/kavo/commit/0aa766c693938f578d49d08fbe8b46aa20185121))
+
+
+### Bug Fixes
+
+* **ci:** lint commits with this repo's own commitlint, not a bundled one ([b45c7d4](https://github.com/kavo-labs/kavo/commit/b45c7d49640167106d98fcac7f4b918d6f571250)), closes [#384](https://github.com/kavo-labs/kavo/issues/384)
+* **ci:** scope commitlint type-enum and pin breaking-change support ([#380](https://github.com/kavo-labs/kavo/issues/380)) ([ae15353](https://github.com/kavo-labs/kavo/commit/ae15353a9dcd477458ee5668bb49bc3150418e11))
+* **core,typeorm:** close filter-security gaps from the [#367](https://github.com/kavo-labs/kavo/issues/367) review ([#370](https://github.com/kavo-labs/kavo/issues/370)) ([dabfd51](https://github.com/kavo-labs/kavo/commit/dabfd51d7cbb892c8f1c7c14d1e7049cfec689a0))
+
+
+### Refactoring
+
+* **core/nest:** rename allowlists config key to allowed ([#378](https://github.com/kavo-labs/kavo/issues/378)) ([ffed22a](https://github.com/kavo-labs/kavo/commit/ffed22a873e894e807e896251ee4b794d0a55199))
+* **core:** give cache one spelling for "off" — ttl presence is the switch ([#383](https://github.com/kavo-labs/kavo/issues/383)) ([e3a46ef](https://github.com/kavo-labs/kavo/commit/e3a46efa6dac93bba0ee92adae6109e8ea49b0d4))
+
+
+### Documentation
+
+* **commit-lint:** document multiple comma-separated scopes ([#382](https://github.com/kavo-labs/kavo/issues/382)) ([a094441](https://github.com/kavo-labs/kavo/commit/a09444159e94668b3c43343a4be1d1377d9a488f))
+
+
+### CI
+
+* add commitlint GitHub Action for PR commit validation ([99d7a5e](https://github.com/kavo-labs/kavo/commit/99d7a5e85ec230f2e6d1e0d7ff035e9e155579cc))
+
 ## [0.17.3](https://github.com/kavo-labs/kavo/compare/v0.17.2...v0.17.3) (2026-08-31)
 
 
