@@ -132,6 +132,51 @@ describe("DefaultSerializer — response projection", () => {
   });
 });
 
+describe("DefaultSerializer — ORM-derived fields (issue #373)", () => {
+  const derivedMetadata: EntityMetadata<User> = {
+    ...userMetadata,
+    fields: [
+      ...userMetadata.fields,
+      { name: "fullName", kind: "string", nullable: false, generated: false, derivedExpression: "concat" },
+    ],
+  };
+
+  it("excludes an un-opted-in derived field from the unconfigured default projection", () => {
+    const serializer = new DefaultSerializer<User>(derivedMetadata);
+    const row = { ...ada(), fullName: "Ada Lovelace" } as User;
+    expect(Object.keys(serializer.serializeItem(row, null, contextStub()))).toEqual(COLUMNS);
+  });
+
+  it("reads an opted-in derived field straight off the row, like any other column", () => {
+    // Opt-in happens through `allowlists.selectable`, resolved at bootstrap
+    // into `ResolvedEntityConfig.projection` — the serializer never inspects
+    // `derivedExpression` itself, only the resolved key list it is handed.
+    const serializer = new DefaultSerializer<User>(derivedMetadata, undefined, [...COLUMNS, "fullName"]);
+    const row = { ...ada(), fullName: "Ada Lovelace" } as User;
+    expect(serializer.serializeItem(row, null, contextStub())).toEqual({ ...ada(), fullName: "Ada Lovelace" });
+  });
+});
+
+describe("DefaultDeserializer — ORM-derived fields (issue #373)", () => {
+  it("never writes a derived field, even if the raw body carries one", () => {
+    const derivedMetadata: EntityMetadata<User> = {
+      ...userMetadata,
+      fields: [
+        ...userMetadata.fields,
+        { name: "fullName", kind: "string", nullable: false, generated: false, derivedExpression: "concat" },
+      ],
+    };
+    const deserializer = new DefaultDeserializer<User>(derivedMetadata);
+    const context = createKavoContext<User>({
+      operation: "createOne",
+      config: resolveEntityConfig(derivedMetadata, undefined, undefined),
+      repository: unusedRepository<User>(),
+    });
+    const result = deserializer.deserialize({ name: "Ada", fullName: "Ada Lovelace" }, null, context);
+    expect(result).toEqual({ name: "Ada" });
+  });
+});
+
 describe("DefaultSerializer — relation keys (doc 04 §6)", () => {
   const serializer = new DefaultSerializer<Post>(postMetadata);
 

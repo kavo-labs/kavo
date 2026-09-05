@@ -287,7 +287,6 @@ export function Kavo<
   QueryDto = QueryContext<Entity>,
   ItemDto = Entity,
   ListDto = ItemDto,
-  Computed extends string = never,
   Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
     Entity,
     CreateDto,
@@ -299,7 +298,7 @@ export function Kavo<
   >,
 >(
   entity: ClassRef<Entity>,
-  config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Computed, Ops>,
+  config?: EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto, Ops>,
 ): ClassDecorator {
   return (target) => {
     const controller = target as unknown as {

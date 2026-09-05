@@ -37,8 +37,6 @@ const PUBLIC_SURFACE: readonly string[] = [
   "EtagSettings",
   "CatalogedErrorCode",
   "ClassRef",
-  "ComputedFieldDescriptor",
-  "ComputedFieldMap",
   "ConfigurationException",
   "ConflictException",
   "CustomOperationBody",

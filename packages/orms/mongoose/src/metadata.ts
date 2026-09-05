@@ -165,6 +165,13 @@ export function buildEntityMetadata<Entity extends object>(
   const relations: RelationDescriptor[] = [];
   const emitted = new Set<string>();
 
+  // A Mongoose virtual (`schema.virtual("fullName").get(...)`, issue #373)
+  // is a plain JavaScript getter Mongoose keeps in `schema.virtuals`, never
+  // `schema.paths` — this loop reads `schema.paths` only, so a virtual
+  // produces no `FieldMetadata` entry and carries no `derivedExpression`.
+  // It is response-only at best, and naming it in a filter or sort is an
+  // ordinary unknown-field 400, the documented behavior for an ORM whose
+  // derived field is JS-only.
   for (const [path, schemaType] of Object.entries(schema.paths)) {
     // Mongoose's own document-version bookkeeping. It is storage detail the
     // caller never declared, so it stays out of the entity description

@@ -84,6 +84,14 @@ export function buildEntityMetadata<Entity extends object>(
       ...(column.enum !== undefined && {
         enumValues: column.enum.map((value) => String(value)),
       }),
+      // `@VirtualColumn({ query })` (issue #373): the column's own `query`
+      // function is real SQL — an alias-parameterized fragment TypeORM
+      // itself uses to populate the property when the entity is loaded —
+      // so it round-trips through core's opaque `derivedExpression` marker
+      // and this adapter inlines it into `WHERE`/`ORDER BY`/`SELECT` when a
+      // filter, sort, or `select=` names the field (`filter-translator.ts`,
+      // `typeorm-repository-adapter.ts`).
+      ...(column.query !== undefined && { derivedExpression: column.query }),
     }));
 
   const relations: RelationDescriptor[] = metadata.relations.map((relation) => ({

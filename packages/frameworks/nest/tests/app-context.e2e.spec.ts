@@ -72,68 +72,13 @@ function server(): SupertestTarget {
 /** `context.app`'s id, or the marker for "nobody is signed in". */
 const viewerOf = (context: KavoContext<Todo>): string => (context.app as { id?: string }).id ?? "anonymous";
 
-describe("KavoContext.app over HTTP — computed fields (issue #142)", () => {
-  // The exact shape docs/features/computed-fields.md documents: a
-  // computed field whose value varies by caller.
-  @Kavo(Todo, { computed: { viewer: { resolve: (_todo: Todo, context) => viewerOf(context) } } })
-  @Controller("todos")
-  @UseGuards(new HeaderUserGuard())
-  class ViewerController {}
-
-  it("resolves a computed field from the caller the guard authenticated", async () => {
-    await bootstrap(ViewerController, fromRequestUser);
-    await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
-
-    const item = await request(server()).get("/todos/1").set("x-user", "u-7").expect(200);
-    expect(item.body).toMatchObject({ id: 1, title: "x", viewer: "u-7" });
-  });
-
-  it("gives every caller their own value and none of them the last one's", async () => {
-    // The regression this file exists for is silent, so "per request, never
-    // cached" has to be asserted rather than assumed: three requests, three
-    // answers, one of them anonymous, all against one bound controller.
-    await bootstrap(ViewerController, fromRequestUser);
-    await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
-
-    const first = await request(server()).get("/todos/1").set("x-user", "u-7").expect(200);
-    const second = await request(server()).get("/todos/1").set("x-user", "u-9").expect(200);
-    const anonymous = await request(server()).get("/todos/1").expect(200);
-
-    expect([first.body.viewer, second.body.viewer, anonymous.body.viewer]).toEqual(["u-7", "u-9", "anonymous"]);
-  });
-
-  it("carries the app context into a list response too, per served row", async () => {
-    await bootstrap(ViewerController, fromRequestUser);
-    await request(server()).post("/todos").send({ title: "a" }).set("x-user", "u-7").expect(201);
-    await request(server()).post("/todos").send({ title: "b" }).set("x-user", "u-7").expect(201);
-
-    const list = await request(server()).get("/todos").set("x-user", "u-9").expect(200);
-    expect(list.body.items.map((item: { viewer: string }) => item.viewer)).toEqual(["u-9", "u-9"]);
-  });
-
-  it("leaves the app context empty when the module configures no extractor", async () => {
-    // The upgrade path: an app that never sets the option keeps exactly the
-    // behavior it had, rather than starting to see `request.user`.
-    await bootstrap(ViewerController);
-    await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
-
-    const item = await request(server()).get("/todos/1").set("x-user", "u-7").expect(200);
-    expect(item.body.viewer).toBe("anonymous");
-  });
-
-  it("reads a custom property when the extractor names one", async () => {
-    // `request.user` is a convention, not a rule — an app whose guard leaves
-    // the caller elsewhere configures the lookup instead of renaming it.
-    await bootstrap(ViewerController, (incoming: KavoAppContextRequest) => {
-      const session = incoming["session"] as { account: string } | undefined;
-      return (session === undefined ? {} : { id: session.account }) as KavoAppContext;
-    });
-    await request(server()).post("/todos").send({ title: "x" }).set("x-user", "u-7").expect(201);
-
-    const item = await request(server()).get("/todos/1").set("x-user", "u-7").expect(200);
-    expect(item.body.viewer).toBe("session-u-7");
-  });
-});
+// `KavoContext.app` over HTTP for a per-caller-varying **computed** field
+// (issue #142) was covered here until issue #373 removed `computed`
+// entirely: a derived field is now an ORM expression, evaluated by the
+// database, so nothing about it can vary by caller the way a
+// `resolve(entity, context)` function could. That capability has no
+// replacement (issue #373's documented regression) — `context.app` is still
+// available to custom operation handlers and policies, covered below.
 
 describe("KavoContext.app over HTTP — operation handlers (issue #142)", () => {
   /**

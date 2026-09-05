@@ -51,7 +51,7 @@ A response embedding an included relation shapes that relation's node from the *
 
 ## Computed fields
 
-A field with no backing column, computed at serialization time from the row that was already fetched, is declared on the entity's `computed` config, not faked through a DTO class. See [Computed fields](/features/computed-fields#computed) for the full descriptor.
+A field with no ordinary storage column is declared on the ORM entity itself — a TypeORM `@VirtualColumn`, a MikroORM `@Formula` — not faked through a DTO class. See [Virtual fields](/features/virtual-fields) for the full picture, including the per-ORM support matrix.
 
 ## Per-operation overrides
 

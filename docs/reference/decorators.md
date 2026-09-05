@@ -26,7 +26,7 @@ Applied to a Nest controller class, alongside `@Controller(...)`:
 export class BookController {}
 ```
 
-Every generic parameter defaults from `Entity`, so a zero-config call needs no manual type arguments. `@Kavo(Book)` alone yields a fully typed, fully wired controller. Registering a value in `config`, like a DTO class, an allowlist, or a computed field, narrows the corresponding parameter, and everything downstream follows it: the generated routes' Swagger schemas, the bound service's method signatures, the response shape. See [Entities](/core/entities) for what this decorator does and when, [core contracts](/internals/architecture/03-core-contracts-and-type-system) for the full generic-parameter table, and [Guides/Configuration](/guides/configuration/) for every field `config` accepts.
+Every generic parameter defaults from `Entity`, so a zero-config call needs no manual type arguments. `@Kavo(Book)` alone yields a fully typed, fully wired controller. Registering a value in `config`, like a DTO class or an allowlist, narrows the corresponding parameter, and everything downstream follows it: the generated routes' Swagger schemas, the bound service's method signatures, the response shape. See [Entities](/core/entities) for what this decorator does and when, [core contracts](/internals/architecture/03-core-contracts-and-type-system) for the full generic-parameter table, and [Guides/Configuration](/guides/configuration/) for every field `config` accepts.
 
 `entity` must be resolvable to a stable class reference at decoration time: the entity class itself for TypeORM/MikroORM, the model for Mongoose, a marker class for Prisma. See your ORM's [integration page](/integrations/orms/typeorm) for the exact form.
 

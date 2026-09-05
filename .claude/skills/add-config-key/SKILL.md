@@ -111,10 +111,10 @@ strictly the query-side allowlists. Issue #259's original addition of
    resolve the configured selector against that base with
    `resolveFieldSelector` (generic over the path type, so it serves both
    depth-3 and depth-1 selectors already). If the key can never legally name
-   a computed field (as `creatable`/`updatable` can't — a computed field has
-   no column to write, ADR-0019), reject one at bootstrap with a
-   `ConfigurationException`, the same way `filterable`/`sortable`/`searchable`
-   already reject one.
+   an ORM-derived field (as `creatable`/`updatable` can't — a derived field
+   has no writable storage, ADR-0050), reject one at bootstrap with a
+   `ConfigurationException`, the same way `searchable`
+   already rejects one unconditionally.
 4. **Where the resolved list actually gates something** — an allowlist key is
    inert until some consumer reads it. `create.fields`/`update.fields`
    resolve to the same `creatable`/`updatable` names on `ResolvedEntityConfig`
@@ -133,7 +133,7 @@ strictly the query-side allowlists. Issue #259's original addition of
 Tests follow the same shape as `write-tests` describes for a `KavoSettings`
 key, minus the per-call/operation-override cases that don't apply here: the
 default derivation, an explicit array used verbatim, the `{ exclude }` form
-resolved against the base (not "every column"), the computed-field rejection
+resolved against the base (not "every column"), the ORM-derived-field rejection
 if applicable, and — for a key with a consumer — that the consumer actually
 narrows behavior and that any unconditional exclusion it must respect (an id,
 a soft-delete marker) survives even when the list names it explicitly.

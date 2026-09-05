@@ -334,3 +334,27 @@ describe("buildEntityMetadata — rejected inputs", () => {
     expect((thrown as Error).message).toContain("_id");
   });
 });
+
+describe("buildEntityMetadata — Mongoose virtuals are invisible (issue #373)", () => {
+  it("never surfaces a schema virtual as a FieldMetadata entry", () => {
+    // A Mongoose virtual (`schema.virtual("fullName").get(...)`) is a plain
+    // JavaScript getter, not backed by a stored path — Mongoose keeps it in
+    // `schema.virtuals`, never `schema.paths`, and metadata derivation reads
+    // `schema.paths` only. So it carries no `derivedExpression` and no
+    // `FieldMetadata` entry at all: it is response-only at best (through a
+    // registered DTO or a custom operation reading `schema.virtuals`
+    // directly), and naming it in a filter or sort is an ordinary
+    // unknown-field 400, the same as any other name the entity does not
+    // declare — the documented behavior for an ORM whose virtual is
+    // JS-only.
+    const registry = newRegistry();
+    const UserSchema = new Schema({ firstName: String, lastName: String });
+    UserSchema.virtual("fullName").get(function (this: { firstName: string; lastName: string }) {
+      return `${this.firstName} ${this.lastName}`;
+    });
+    const User = registry.model("User", UserSchema);
+
+    const metadata = buildEntityMetadata(User as unknown as ClassRef, registry);
+    expect(metadata.fields.map((field) => field.name)).not.toContain("fullName");
+  });
+});

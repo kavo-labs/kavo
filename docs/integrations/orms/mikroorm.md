@@ -90,6 +90,41 @@ export class AppModule {}
 
 It takes the `MikroORM` instance rather than an `EntityManager` on purpose. MikroORM is a Unit-of-Work ORM whose `EntityManager` holds an identity map, so every Kavo operation calls `orm.em.fork()` to get its own. That gives it the same isolation a request-scoped `RequestContext` gives a hand-written MikroORM app, and you do not need to set up `RequestContext` middleware for Kavo's routes.
 
+## Virtual fields
+
+`@Property({ formula })` is a real MikroORM property with no backing column. Kavo reads the callback off the entity's metadata; no adapter-side query translation is needed at all, because MikroORM already resolves a formula property natively by name in `where` and `orderBy`:
+
+```ts
+// book.entity.ts
+import { Entity, PrimaryKey, Property } from "@mikro-orm/core";
+
+@Entity()
+export class Book {
+  @PrimaryKey({ type: "number" })
+  id!: number;
+
+  @Property({ type: "string" })
+  title!: string;
+
+  @Property({ formula: (cols) => `LOWER(${cols.title})` })
+  titleLower!: string;
+}
+```
+
+```ts
+@Kavo(Book, {
+  allowlists: { filterable: ["titleLower"], sortable: ["titleLower"], selectable: ["id", "title", "titleLower"] },
+})
+```
+
+```
+GET /books?filter[titleLower][eq]=dune&sort=titleLower
+```
+
+A derived field is **opt-in** to `filterable`/`sortable`/`selectable`, the same rule a relation follows — leave it off `allowlists` and it never appears, is never filterable, and is never sortable.
+
+Unlike `@kavo/typeorm`, a plain JavaScript getter is **not** a second way to get a response-only field here: every row this adapter hands to core has already gone through `wrap(entity).toObject()` (see [MikroORM adapter](/internals/architecture/17-mikroorm-adapter)), which serializes MikroORM's own declared properties, not arbitrary class getters — a getter that isn't a `@Property` is simply absent from the plain object core receives. `@Formula` is the one mechanism. See [Virtual fields](/features/virtual-fields) for the full picture and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
+
 ## Case-insensitive filtering is opt-in
 
 `filter[name][ilike]=ada%` maps to MikroORM's `$ilike`, which only PostgreSQL supports. Every other driver receives the token verbatim and fails with a syntax error. MikroORM exposes no way to detect this, so it is a declared setting, defaulting to off:

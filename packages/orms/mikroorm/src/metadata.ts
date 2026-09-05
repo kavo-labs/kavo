@@ -202,6 +202,14 @@ export function buildEntityMetadata<Entity extends object>(
       ...(property.items !== undefined && {
         enumValues: property.items.map((value) => String(value)),
       }),
+      // `@Formula`/`@Property({ formula })` (issue #373): MikroORM resolves
+      // a formula property by its *property name* natively in `where` and
+      // `orderBy` (`FilterTranslator` and the adapter's sort already do
+      // nothing but reference the name), so the callback itself is carried
+      // through core's opaque `derivedExpression` marker only as a presence
+      // signal and for debug output — no separate inlining step is needed
+      // the way `@kavo/typeorm`'s `@VirtualColumn` requires.
+      ...(property.formula !== undefined && { derivedExpression: property.formula }),
     }));
 
   const relations: RelationDescriptor[] = properties

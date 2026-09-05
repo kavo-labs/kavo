@@ -22,6 +22,25 @@ export interface FieldMetadata {
   readonly generated: boolean;
   /** Allowed values when `kind` is `enum` — the coercion allowlist. */
   readonly enumValues?: readonly string[];
+  /**
+   * Marks the field as ORM-derived (virtual/generated, no backing storage
+   * column) and carries whatever the adapter needs to inline it into a
+   * query — a `@VirtualColumn` query builder, a `@Formula` string, or
+   * similar. Core never inspects this value; it exists only to be
+   * round-tripped back to the adapter that produced it (ADR-0005).
+   *
+   * Absent for an ordinary column. Present but opaque for a derived field
+   * whose adapter can translate it into `WHERE`/`ORDER BY`/`SELECT`
+   * (`@kavo/typeorm`, `@kavo/mikroorm`) — that field is eligible to join
+   * `filterable`/`sortable`/`selectable` via `allowlists`, same as any
+   * other field (ADR-0026: metadata supplies shape, never permission). An
+   * adapter with no way to express a derived field in a query (Prisma
+   * client-extension fields, Mongoose virtuals) reports no
+   * `derivedExpression` and no `FieldMetadata` entry for it at all — such
+   * a field is invisible to the query engine, so naming it in a filter or
+   * sort is an ordinary unknown-field 4xx.
+   */
+  readonly derivedExpression?: unknown;
 }
 
 /**
