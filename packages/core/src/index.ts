@@ -57,6 +57,7 @@ export type {
   Dto,
   DtoResolver,
   FieldsShorthand,
+  WriteFieldsConfig,
   OperationDtoMap,
   OperationDtoOverride,
   DtoInputOf,

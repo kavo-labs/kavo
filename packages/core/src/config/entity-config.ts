@@ -3,7 +3,7 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { FieldsShorthand, OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
+import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
@@ -560,8 +560,14 @@ export interface EntityConfig<
    * registered `dto.create` class with a runtime shape **replaces** this
    * projection rather than intersecting with it, and wins over this key —
    * where you register one, it, not this key, is the narrowing statement.
+   *
+   * `default` fills in a value for a writable field the request body
+   * doesn't set (`createOne` only) — a body that *does* send the field
+   * always wins outright, the same one-way relationship a client value has
+   * with `sort.default`/`select.default`/`include.default`. Validated at
+   * bootstrap against the entity's own writable columns.
    */
-  readonly create?: FieldsShorthand<Entity>;
+  readonly create?: WriteFieldsConfig<Entity>;
   /**
    * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
    * may write. `update` (PUT) and `patch` (PATCH) share this one list
@@ -569,8 +575,14 @@ export interface EntityConfig<
    * set of fields open to being overwritten is the same question either
    * way. Same default posture, narrowing behaviour, and DTO precedence as
    * {@link EntityConfig.create} — see its note.
+   *
+   * `default` is `updateOne`-only, never `patchOne`: a `PATCH` omitting a
+   * field means "leave it unchanged", so filling it in there would
+   * silently overwrite a value the caller never touched. `updateOne` (PUT)
+   * is a full replacement, so a value it omits filling in from `default`
+   * matches PUT's own replace-the-whole-resource semantics.
    */
-  readonly update?: FieldsShorthand<Entity>;
+  readonly update?: WriteFieldsConfig<Entity>;
   /**
    * Default authorization for every operation on this entity (ADR-0037): a
    * single function, not a per-operation map — a map invited "which of the

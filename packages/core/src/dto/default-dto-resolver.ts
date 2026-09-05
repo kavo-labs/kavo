@@ -1,16 +1,16 @@
-import type { DtoClass, DtoResolver, DtoSlot, FieldsShorthand, OperationDtoMap } from "./dto.js";
+import type { DtoClass, DtoResolver, DtoSlot, OperationDtoMap, WriteFieldsConfig } from "./dto.js";
 import type { OperationId } from "../operations/operation.js";
 import { dtoClassFromFields, resolveDtoSlot } from "./dto-fields-shorthand.js";
 
 /**
- * The top-level `create`/`update` writable-field shorthand (issue #388,
- * `config/entity-config.ts`'s `EntityConfig.create`/`.update`) — passed in
- * alongside `dto` since `dto.create`/`dto.update` no longer carry it
- * themselves.
+ * The top-level `create`/`update` writable-field config (issue #388,
+ * extended with `default`) — `config/entity-config.ts`'s
+ * `EntityConfig.create`/`.update` — passed in alongside `dto` since
+ * `dto.create`/`dto.update` no longer carry it themselves.
  */
 export interface WritableFieldsConfig<Entity> {
-  readonly create?: FieldsShorthand<Entity>;
-  readonly update?: FieldsShorthand<Entity>;
+  readonly create?: WriteFieldsConfig<Entity>;
+  readonly update?: WriteFieldsConfig<Entity>;
 }
 
 /**
@@ -45,9 +45,9 @@ export class DefaultDtoResolver<Entity = unknown> implements DtoResolver<Entity>
       Record<"create" | "update", DtoClass | undefined> &
       Record<"query", DtoClass | undefined>;
     const create =
-      map.create ?? (writable.create ? dtoClassFromFields(writable.create.fields as readonly string[]) : null);
+      map.create ?? (writable.create?.fields ? dtoClassFromFields(writable.create.fields as readonly string[]) : null);
     const update =
-      map.update ?? (writable.update ? dtoClassFromFields(writable.update.fields as readonly string[]) : null);
+      map.update ?? (writable.update?.fields ? dtoClassFromFields(writable.update.fields as readonly string[]) : null);
     const item = resolveDtoSlot(map.item);
     this.slots = Object.freeze({
       create,

@@ -128,6 +128,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "FilterScalar",
   "FilterValue",
   "FieldsShorthand",
+  "WriteFieldsConfig",
   "FindManyResult",
   "ForbiddenException",
   "GlobalConfig",

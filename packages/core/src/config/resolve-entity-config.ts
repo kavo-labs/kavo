@@ -35,7 +35,7 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
-import type { DtoClass } from "../dto/dto.js";
+import type { DtoClass, WriteFieldsConfig } from "../dto/dto.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
@@ -117,6 +117,12 @@ export function resolveEntityConfig<Entity extends object>(
   const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig, computed);
   const projection = resolveProjection(metadata, entityConfig, computed, select);
 
+  const ownColumnNames = new Set(
+    metadata.fields.filter((field) => !field.generated).map((field) => field.name) as readonly string[],
+  );
+  const createDefault = resolveWriteDefault(entityName, "create.default", entityConfig?.create, ownColumnNames);
+  const updateDefault = resolveWriteDefault(entityName, "update.default", entityConfig?.update, ownColumnNames);
+
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
     globalDefaults,
@@ -186,9 +192,49 @@ export function resolveEntityConfig<Entity extends object>(
     realtimeTransports: Object.freeze([...realtimeTransports]),
     cacheStore,
     policy,
+    createDefault,
+    updateDefault,
   };
   return Object.freeze(resolved);
 }
+
+/**
+ * Resolve `create.default`/`update.default`: a plain object of field values,
+ * validated against the entity's own non-generated columns (the only
+ * fields either slot's writable projection ever includes). `undefined`
+ * resolves to a frozen empty object, so callers never have to guard against
+ * a missing key.
+ */
+function resolveWriteDefault<Entity extends object>(
+  entityName: string,
+  scope: string,
+  writeConfig: WriteFieldsConfig<Entity> | undefined,
+  ownColumnNames: ReadonlySet<string>,
+): Readonly<Partial<Entity>> {
+  const value = writeConfig?.default;
+  if (value === undefined) {
+    return EMPTY_WRITE_DEFAULT as Readonly<Partial<Entity>>;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ConfigurationException(
+      entityName,
+      scope,
+      `'${scope}' must be a plain object of field values, got '${typeof value}'.`,
+    );
+  }
+  for (const key of Object.keys(value)) {
+    if (!ownColumnNames.has(key)) {
+      throw new ConfigurationException(
+        entityName,
+        scope,
+        `unknown field '${key}' in '${scope}' — expected one of ${[...ownColumnNames].join(", ")}`,
+      );
+    }
+  }
+  return Object.freeze({ ...value }) as Readonly<Partial<Entity>>;
+}
+
+const EMPTY_WRITE_DEFAULT: Readonly<Record<string, never>> = Object.freeze({});
 
 /**
  * Reject a `policy` value that isn't a function — TypeScript callers get a

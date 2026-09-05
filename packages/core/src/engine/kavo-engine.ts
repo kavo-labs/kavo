@@ -986,6 +986,10 @@ export class KavoEngine<Entity extends object> {
       // once at bootstrap, outside the settings precedence chain, so a
       // per-call override cannot loosen what an entity's `policy` demands.
       policy: config.policy,
+      // Structural, like `create`/`update`'s own field-group config above —
+      // a per-call override cannot widen what a write is defaulted from.
+      createDefault: config.createDefault,
+      updateDefault: config.updateDefault,
     };
   }
 

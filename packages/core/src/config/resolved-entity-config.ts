@@ -152,4 +152,15 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * handler when it finds nothing.
    */
   readonly policy: Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>>;
+  /**
+   * `create.default`: values filled in for a writable field `createOne`'s
+   * body doesn't set. An explicit value in the body always wins outright —
+   * this only fills a gap, never overrides one. Empty when unconfigured.
+   */
+  readonly createDefault: Readonly<Partial<Entity>>;
+  /**
+   * `update.default` — same idea, `updateOne` only (never `patchOne`, whose
+   * omission means "leave unchanged" rather than "reset").
+   */
+  readonly updateDefault: Readonly<Partial<Entity>>;
 }

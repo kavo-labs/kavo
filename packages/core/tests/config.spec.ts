@@ -355,6 +355,36 @@ describe("resolveEntityConfig — bootstrap", () => {
   });
 });
 
+/** `filter.fields`'s map form (issue #386): per-field operator restriction. */
+describe("resolveEntityConfig — filter.fields map form", () => {
+  it("restricts each named field to its own operator set", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      { filter: { fields: { name: ["eq"], age: ["gte", "lte"] } } },
+      undefined,
+    );
+    expect(config.filter.fields).toEqual(expect.arrayContaining(["name", "age"]));
+    expect(config.filter.operators?.get("name")).toEqual(new Set(["EQ"]));
+    expect(config.filter.operators?.get("age")).toEqual(new Set(["GTE", "LTE"]));
+  });
+
+  it("a field named in the map is implicitly on the allowlist, with no separate fields list needed", () => {
+    const config = resolveEntityConfig(userMetadata, { filter: { fields: { status: ["eq"] } } }, undefined);
+    expect(config.filter.fields).toEqual(["status"]);
+  });
+
+  it("rejects an unknown operator token", () => {
+    try {
+      resolveEntityConfig(userMetadata, { filter: { fields: { name: ["bogus" as never] } } }, undefined);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "filter.fields.name" });
+      expect((error as ConfigurationException).detail).toContain("bogus");
+    }
+  });
+});
+
 /** ADR-0028: `include.default` vs. permission is cross-checked against `include.fields`. */
 describe("resolveEntityConfig — include.fields", () => {
   it("rejects include.default on a relation absent from include.fields", () => {
