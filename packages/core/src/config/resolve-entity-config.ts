@@ -1,6 +1,5 @@
 import type { KavoSettings } from "./settings.js";
 import type { DeepPartial } from "../types/utility.js";
-import type { ComputedFieldDescriptor, ComputedFieldMap } from "./computed-field.js";
 import type {
   EntityConfig,
   FilterFieldSelector,
@@ -74,9 +73,8 @@ const SETTINGS_KEYS = [
 
 /**
  * An `EntityConfig`/`OperationConfig` mixes settings keys with structural
- * keys (`dto`, `filter`/`sort`/`select`/`search`/`include`, `computed`,
- * `handler`, …); only the settings subset participates in the merge
- * algebra.
+ * keys (`dto`, `filter`/`sort`/`select`/`search`/`include`, `handler`, …);
+ * only the settings subset participates in the merge algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {
   if (config === undefined) {
@@ -110,12 +108,11 @@ export function resolveEntityConfig<Entity extends object>(
   globalPolicy?: Policy,
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
-  const computed = resolveComputedFields(metadata, entityConfig);
-  rejectComputedWriteDtoKeys(entityName, entityConfig, computed);
+  rejectDerivedWriteDtoKeys(entityName, metadata, entityConfig);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
 
-  const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig, computed);
-  const projection = resolveProjection(metadata, entityConfig, computed, select);
+  const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig);
+  const projection = resolveProjection(metadata, entityConfig, select);
 
   const ownColumnNames = new Set(
     metadata.fields.filter((field) => !field.generated).map((field) => field.name) as readonly string[],
@@ -187,7 +184,6 @@ export function resolveEntityConfig<Entity extends object>(
       create: entityConfig?.create,
       update: entityConfig?.update,
     }),
-    computed,
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
@@ -340,101 +336,9 @@ function resolvePolicy<Entity extends object>(
   return Object.freeze(resolved);
 }
 
-/** Assignable to `ComputedFieldMap<Entity>` for every `Entity`. */
-const NO_COMPUTED_FIELDS: Readonly<Record<string, never>> = Object.freeze({});
-
-const PROTO_NOT_A_NAME =
-  `'__proto__' cannot name a computed field — it is not an ordinary object key, ` +
-  `so the declaration would silently disappear instead of producing a response field`;
-
 /**
- * Computed-field resolution (ADR-0019). `computed` carries functions, so
- * like `dto` it sits outside `SETTINGS_KEYS` and never merges through the
- * precedence chain — an entity's declaration is the whole story, resolved
- * once here.
- *
- * The ways a declaration can be structurally wrong all fail at bootstrap
- * rather than as a surprising response later: a name that shadows a real
- * column or relation (the shadowed value would silently disappear from
- * every response), a descriptor with no `resolve` function, and the one
- * name that is not a key at all — `__proto__`, which would set this
- * accumulator's prototype instead of adding an entry and so vanish
- * without a word (the same class of hazard as the bracket-segment fix in
- * the filter parser).
- */
-function resolveComputedFields<Entity extends object>(
-  metadata: EntityMetadata<Entity>,
-  entityConfig: EntityConfig<Entity> | undefined,
-): ComputedFieldMap<Entity> {
-  const entityName = metadata.name;
-  // `EntityConfig<Entity>` fixes the `Computed` parameter to `never`, so
-  // the declared record erases to `{}` at this internal call site; the
-  // key/value types are recovered here, once.
-  const declared = (entityConfig as { readonly computed?: ComputedFieldMap<Entity> } | undefined)?.computed;
-  if (declared === undefined) {
-    return NO_COMPUTED_FIELDS;
-  }
-
-  // `__proto__` has two spellings and only one of them is a key. The
-  // computed form (`{ ["__proto__"]: … }`) creates an own key and is caught
-  // in the loop below; the literal form (`{ __proto__: … }`) invokes the
-  // prototype *setter* instead, so it never reaches `Object.keys` — the
-  // declaration would register nothing and throw nothing, which is exactly
-  // the outcome the message promises to prevent. A non-standard prototype
-  // on the declared record is that spelling's only observable trace.
-  const prototype = Object.getPrototypeOf(declared) as object | null;
-  if (prototype !== null && prototype !== Object.prototype) {
-    throw new ConfigurationException(entityName, "computed.__proto__", PROTO_NOT_A_NAME);
-  }
-
-  const columns = new Set(metadata.fields.map((field) => field.name));
-  const relations = new Set(metadata.relations.map((relation) => relation.name));
-  const resolved: Record<string, ComputedFieldDescriptor<Entity>> = {};
-  for (const name of Object.keys(declared)) {
-    const descriptor = declared[name];
-    if (name === "__proto__") {
-      throw new ConfigurationException(entityName, `computed.${name}`, PROTO_NOT_A_NAME);
-    }
-    if (typeof descriptor?.resolve !== "function") {
-      throw new ConfigurationException(
-        entityName,
-        `computed.${name}`,
-        `computed field '${name}' has no 'resolve' function — a computed field is defined by ` +
-          `how it is derived, e.g. { resolve: (entity) => … }`,
-      );
-    }
-    if (columns.has(name) || relations.has(name)) {
-      const kind = columns.has(name) ? "column" : "relation";
-      throw new ConfigurationException(
-        entityName,
-        `computed.${name}`,
-        `computed field '${name}' collides with an existing ${kind} on '${entityName}' — ` +
-          `a computed field must have a name of its own, or the ${kind} would never reach a response`,
-      );
-    }
-    // The serializer emits `resolve`'s return value as-is and never awaits
-    // it (ADR-0019), so an `async` resolver would put a pending promise in
-    // the response — `{}` once serialized to JSON. Catching the shape
-    // people actually write turns a silently wrong body into a bootstrap
-    // failure; a plain function that happens to return a promise still
-    // gets through, which is the limit of what is detectable here.
-    if (descriptor.resolve.constructor?.name === "AsyncFunction") {
-      throw new ConfigurationException(
-        entityName,
-        `computed.${name}`,
-        `computed field '${name}' has an async 'resolve' — computed fields are resolved ` +
-          `synchronously per served item and the promise would be emitted unawaited; ` +
-          `fetch what it needs before serialization (a custom handler, or an eager relation)`,
-      );
-    }
-    resolved[name] = descriptor;
-  }
-  return Object.freeze(resolved);
-}
-
-/**
- * A registered `create`/`update`/`patch` DTO naming a computed field is a
- * bootstrap error, like every other computed misconfiguration (ADR-0019).
+ * A registered `create`/`update`/`patch` DTO naming an ORM-derived field
+ * (`FieldMetadata.derivedExpression`) is a bootstrap error.
  *
  * `DefaultDeserializer` would strip the key anyway — that strip stays, as
  * the defence for anyone constructing a deserializer directly — but a
@@ -446,20 +350,23 @@ function resolveComputedFields<Entity extends object>(
  *
  * Only classes with a runtime shape are checkable; a purely declarative
  * DTO yields `null` from `dtoShapeKeys` and falls back to the derived
- * writable projection, which never contains a computed name. A `{ fields }`
- * shorthand — `dto.patch`'s own (issue #386), or the top-level
- * `create`/`update` shorthand that replaced `dto.create`/`dto.update`'s
- * (issue #388) — is resolved to its synthesized class first, so its
- * declared fields are checked the same way. `create`/`update` check the
- * registered `dto.<slot>` class first, matching `DefaultDtoResolver`'s own
- * precedence: a registered class wins over the top-level shorthand.
+ * writable projection, which never contains a derived-field name. A
+ * `{ fields }` shorthand — `dto.patch`'s own (issue #386), or the
+ * top-level `create`/`update` shorthand that replaced `dto.create`/
+ * `dto.update`'s (issue #388) — is resolved to its synthesized class
+ * first, so its declared fields are checked the same way. `create`/
+ * `update` check the registered `dto.<slot>` class first, matching
+ * `DefaultDtoResolver`'s own precedence: a registered class wins over the
+ * top-level shorthand.
  */
-function rejectComputedWriteDtoKeys<Entity extends object>(
+function rejectDerivedWriteDtoKeys<Entity extends object>(
   entityName: string,
+  metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
-  computed: ComputedFieldMap<Entity>,
 ): void {
-  const names = new Set(Object.keys(computed));
+  const names = new Set(
+    metadata.fields.filter((field) => field.derivedExpression !== undefined).map((field) => field.name),
+  );
   if (names.size === 0) {
     return;
   }
@@ -487,10 +394,9 @@ function rejectComputedWriteDtoKeys<Entity extends object>(
     throw new ConfigurationException(
       entityName,
       scope,
-      `the '${slot}' DTO declares '${declared}', which is a computed field on '${entityName}' — ` +
-        `a computed field has no column behind it, so the value is stripped from every write ` +
-        `payload while the generated OpenAPI body still advertises the property; drop it from the ` +
-        `DTO, or make it a real column if it is meant to be written`,
+      `the '${slot}' DTO declares '${declared}', which is an ORM-derived field on '${entityName}' — ` +
+        `a derived field has no writable storage behind it, so the value is stripped from every write ` +
+        `payload while the generated OpenAPI body still advertises the property; drop it from the DTO`,
     );
   }
 }
@@ -778,22 +684,21 @@ function resolveSearchConfig<Entity extends object>(
 /**
  * Resolves every field-group block in one pass: `filter`, `sort`, `select`,
  * `search`, `include` (issue #386, replacing `resolveAllowed`). Each block's
- * `fields` derives from the entity's **own scalar columns** when not
- * configured explicitly — relation paths are never filterable/sortable/
- * selectable unless opted in explicitly, and `include.fields` defaults the
- * other way (opt-in, ADR-0028). Anything outside a block's `fields` is a
- * 400 at query time, never a silent drop.
+ * `fields` derives from the entity's **own (non-derived) scalar columns**
+ * when not configured explicitly — relation paths are never filterable/
+ * sortable/selectable unless opted in explicitly, and `include.fields`
+ * defaults the other way (opt-in, ADR-0028). Anything outside a block's
+ * `fields` is a 400 at query time, never a silent drop.
  *
- * Computed fields join the `select.fields` base set (so `select=fullName`
- * works with no further configuration) unless the descriptor opts out with
- * `selectable: false`, and are barred from `filter.fields`/`sort.fields`
- * outright — there is no column to translate to `WHERE`/`ORDER BY`
- * (ADR-0019).
+ * An ORM-derived field (`FieldMetadata.derivedExpression`) follows the same
+ * opt-in rule a relation does: excluded from every block's unconfigured
+ * default, reachable only through an explicit `fields` array
+ * (ADR-0050) — never `search.fields`, which rejects one unconditionally,
+ * opted in or not.
  */
 function resolveFieldGroups<Entity extends object>(
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
-  computed: ComputedFieldMap<Entity>,
 ): {
   readonly filter: ResolvedFilterConfig<Entity>;
   readonly sort: ResolvedSortConfig<Entity>;
@@ -803,24 +708,21 @@ function resolveFieldGroups<Entity extends object>(
   readonly include: ResolvedIncludeConfig<Entity> & { readonly default?: readonly string[] };
 } {
   const entityName = metadata.name;
-  const ownColumns = metadata.fields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
-  const stringColumns = metadata.fields
+  const derivedNames = new Set(
+    metadata.fields.filter((field) => field.derivedExpression !== undefined).map((field) => field.name),
+  );
+  const ownFields = metadata.fields.filter((field) => field.derivedExpression === undefined);
+  const ownColumns = ownFields.map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
+  const stringColumns = ownFields
     .filter((field) => field.kind === "string")
     .map((field) => field.name) as unknown as readonly FieldPath<Entity>[];
-  const selectableBase = [
-    ...(ownColumns as readonly string[]),
-    ...Object.keys(computed).filter((name) => computed[name]?.selectable !== false),
-  ] as unknown as readonly FieldPath<Entity>[];
+  const selectableBase = ownColumns;
   const relationNames = metadata.relations.map((relation) => relation.name) as unknown as readonly IncludePath<
     Entity,
     1
   >[];
 
-  const knownFieldNames = [
-    ...(ownColumns as readonly string[]),
-    ...(relationNames as readonly string[]),
-    ...Object.keys(computed),
-  ];
+  const knownFieldNames = [...metadata.fields.map((field) => field.name), ...(relationNames as readonly string[])];
 
   const filterConfig = entityConfig?.filter;
   validateFieldNames(entityName, "filter.fields", filterConfig?.fields, knownFieldNames);
@@ -831,45 +733,27 @@ function resolveFieldGroups<Entity extends object>(
   const sortFields = resolveFieldSelector(ownColumns, sortConfig?.fields);
 
   const selectConfig = entityConfig?.select;
-  rejectRelationDottedSelectable(entityName, selectableBase as readonly string[], selectConfig?.fields);
+  rejectRelationDottedSelectable(
+    entityName,
+    selectableBase as readonly string[],
+    selectConfig?.fields as unknown as SelectableFieldSelector<object> | undefined,
+  );
   const selectFields = resolveFieldSelector(
     selectableBase,
-    selectConfig?.fields as SelectableFieldSelector<Entity, string> | undefined,
+    selectConfig?.fields as SelectableFieldSelector<Entity> | undefined,
   ) as unknown as readonly FieldPath<Entity>[];
 
   const includeConfig = entityConfig?.include;
   const includeFields = resolveIncludableSelector(entityName, relationNames, includeConfig?.fields);
 
-  const COMPUTED_REJECTION = {
-    "filter.fields": { verb: "filtered on", clause: "WHERE" },
-    "sort.fields": { verb: "sorted on", clause: "ORDER BY" },
-  } as const;
-  for (const [key, fields] of [
-    ["filter.fields", filterFields],
-    ["sort.fields", sortFields],
-  ] as const) {
-    for (const field of fields as readonly string[]) {
-      if (!Object.prototype.hasOwnProperty.call(computed, field)) {
-        continue;
-      }
-      const { verb, clause } = COMPUTED_REJECTION[key];
-      throw new ConfigurationException(
-        entityName,
-        key,
-        `'${field}' is a computed field on '${entityName}', which can never be ${verb} — ` +
-          `it has no column to translate to ${clause}`,
-      );
-    }
-  }
-
   const search = resolveSearchConfig(entityName, stringColumns, entityConfig?.search);
   if (search !== false) {
     for (const field of search.fields as readonly string[]) {
-      if (Object.prototype.hasOwnProperty.call(computed, field)) {
+      if (derivedNames.has(field)) {
         throw new ConfigurationException(
           entityName,
           "search.fields",
-          `'${field}' is a computed field on '${entityName}', which can never be searched on — ` +
+          `'${field}' is an ORM-derived field on '${entityName}', which can never be searched on — ` +
             `it has no column to translate to WHERE`,
         );
       }
@@ -935,24 +819,16 @@ function resolveFieldGroups<Entity extends object>(
  * narrows nothing, which is what keeps this change confined to entities
  * that asked for it.
  *
- * The two spellings resolve against **different bases**, and that asymmetry
- * is the whole point rather than an oversight. A plain array is the author's
- * own list and is used verbatim. `{ exclude }` means "everything except
- * these", and *everything* here has to be the readable projection — every
- * column plus **every** declared computed field — not `selectableBase`,
- * which drops computed fields declaring `selectable: false`.
- *
- * Resolving `{ exclude }` against the narrower base retires a contract the
- * author never touched: `selectable: false` is documented as keeping a field
- * in the projection while making its name a 400 in `select=`, so
- * `{ exclude: ["email"] }` would silently delete an unrelated audit field
- * from every response. That is the same "narrowing by a list nobody wrote"
- * this function exists to prevent, one level down.
+ * The two spellings resolve against the **same base** — the entity's own
+ * (non-derived) columns. A plain array is the author's own list and is
+ * used verbatim, and can name an opted-in derived field explicitly.
+ * `{ exclude }` means "every own column except these" — a derived field is
+ * opt-in only (ADR-0050) and so is never reachable through `{ exclude }`,
+ * the same as a relation.
  */
 function resolveProjection<Entity extends object>(
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
-  computed: ComputedFieldMap<Entity>,
   select: ResolvedSelectConfig<Entity>,
 ): readonly FieldPath<Entity>[] | null {
   const selector = entityConfig?.select?.fields;
@@ -962,17 +838,18 @@ function resolveProjection<Entity extends object>(
   if (!("exclude" in selector)) {
     return select.fields;
   }
-  const readable = [...metadata.fields.map((field) => field.name), ...Object.keys(computed)];
+  const readable = metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name);
   const excluded = new Set(selector.exclude as readonly string[]);
   return readable.filter((name) => !excluded.has(name)) as unknown as readonly FieldPath<Entity>[];
 }
 
 /**
- * `select.fields` addresses this entity's own columns and its declared
- * computed-field names — nothing else (ADR-0045). A relation is selected
- * with `select[<relation>]=`, and an included relation's projection is
- * governed by the *target* entity's own `select.fields` (ADR-0026
- * decision 4), never the including entity's config.
+ * `select.fields` addresses this entity's own columns — and, opted in
+ * explicitly, its ORM-derived fields (ADR-0050) — nothing else (ADR-0045).
+ * A relation is selected with `select[<relation>]=`, and an included
+ * relation's projection is governed by the *target* entity's own
+ * `select.fields` (ADR-0026 decision 4), never the including entity's
+ * config.
  *
  * So a relation-dotted `select.fields` entry has no meaning here and is a
  * bootstrap `ConfigurationException`, in both the array and the
@@ -981,7 +858,7 @@ function resolveProjection<Entity extends object>(
 function rejectRelationDottedSelectable(
   entityName: string,
   known: readonly string[],
-  selector: SelectableFieldSelector<object, string> | undefined,
+  selector: SelectableFieldSelector<object> | undefined,
 ): void {
   if (selector === undefined) {
     return;
@@ -997,8 +874,8 @@ function rejectRelationDottedSelectable(
       entityName,
       keyPath,
       `'${entry}' is a relation-dotted path. select.fields takes ${entityName}'s own columns and ` +
-        `computed-field names only — an included relation's projection is governed by the target entity's own ` +
-        `select.fields (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
+        `opted-in derived-field names only — an included relation's projection is governed by the target entity's ` +
+        `own select.fields (ADR-0045). Drop this entry, or restrict the relation on the target entity's config.`,
     );
   }
 }
@@ -1174,7 +1051,6 @@ export function describeResolvedConfig<Entity>(
     select: config.select,
     search: config.search,
     include: config.include,
-    computed: Object.keys(config.computed),
     softDelete: config.softDelete,
     relations: config.relations.all().map((relation) => ({
       name: relation.name,

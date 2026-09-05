@@ -112,7 +112,6 @@ export type {
   IncludeConfig,
   IncludeLimits,
 } from "./config/entity-config.js";
-export type { ComputedFieldDescriptor, ComputedFieldMap } from "./config/computed-field.js";
 export type {
   ResolvedEntityConfig,
   ResolvedFilterConfig,

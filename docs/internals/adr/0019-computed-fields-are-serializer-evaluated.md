@@ -1,6 +1,14 @@
 # ADR-0019 — Computed fields are serializer-evaluated, and never filterable, sortable, or writable
 
-**Status:** accepted
+**Status:** superseded by [ADR-0050](0050-derived-fields-come-from-orm-metadata.md)
+
+> Issue #373 removed `computed` (`ComputedFieldDescriptor`/`ComputedFieldMap`,
+> `EntityConfig.computed`, and all serializer/deserializer wiring for it)
+> entirely from `@kavo/core`. This document is kept for history — the
+> problem it solved is now solved by reading a derived field's definition
+> from ORM metadata instead of a resolver function; see ADR-0050 for the
+> replacement design and its accepted capability regression (no more
+> context-varying resolved value).
 
 ## Context
 

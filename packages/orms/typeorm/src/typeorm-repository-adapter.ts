@@ -70,6 +70,14 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * currently-persisted relation state).
    */
   private readonly relationProperties: ReadonlySet<string>;
+  /**
+   * Root-entity `@VirtualColumn` fields, keyed by property name (issue
+   * #373) — the same `query` function TypeORM itself calls to populate the
+   * column on load, handed to every `FilterTranslator` this adapter builds
+   * so a filter or sort naming the field inlines it instead of referencing
+   * a non-existent `alias.field` column.
+   */
+  private readonly derivedExpressions: ReadonlyMap<string, (alias: string) => string>;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -84,6 +92,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     this.deleteDateColumn = metadata.deleteDateColumn?.propertyName ?? null;
     this.entity = entity;
     this.relationProperties = new Set(metadata.relations.map((relation) => relation.propertyName));
+    this.derivedExpressions = new Map(
+      metadata.columns
+        .filter((column) => column.query !== undefined)
+        .map((column) => [column.propertyName, column.query!]),
+    );
   }
 
   // ── Reads (QueryBuilder API) ────────────────────────────────────────
@@ -159,7 +172,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   ): SelectQueryBuilder<Entity> {
     const qb = this.repository.createQueryBuilder(this.alias);
     this.scopeToLive(qb, context, query.withDeleted, query.onlyDeleted);
-    const translator = new FilterTranslator(qb, this.alias);
+    const translator = new FilterTranslator(qb, this.alias, this.derivedExpressions);
     // Include joins first, then filters: both name joins the same way, so
     // a filter on `owner.name` reuses the selecting join instead of adding
     // a second one under a duplicate alias.

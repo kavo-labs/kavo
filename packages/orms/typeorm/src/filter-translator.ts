@@ -39,6 +39,13 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
   constructor(
     private readonly qb: SelectQueryBuilder<Entity>,
     private readonly rootAlias: string,
+    /**
+     * Root-entity `@VirtualColumn` fields, keyed by property name — the
+     * same `query` function TypeORM itself uses to populate the column on
+     * load (issue #373). `columnRef` inlines it, parenthesized, in place
+     * of `alias.field` for a root-level (non-dotted) field named here.
+     */
+    private readonly derivedExpressions: ReadonlyMap<string, (alias: string) => string> = new Map(),
   ) {}
 
   /**
@@ -59,7 +66,12 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
     this.qb.andWhere(this.toBrackets(root));
   }
 
-  /** Resolve `field` to a `alias.column` reference, adding joins as needed. */
+  /**
+   * Resolve `field` to a `alias.column` reference, adding joins as needed —
+   * or, for a root-level `@VirtualColumn` field, its inlined derived
+   * expression instead (issue #373), parenthesized so it composes safely
+   * with the operator it feeds into.
+   */
   columnRef(field: string): string {
     const segments = field.split(".");
     for (const segment of segments) {
@@ -73,6 +85,10 @@ export class FilterTranslator<Entity extends ObjectLiteral> implements FilterBui
       }
     }
     if (segments.length === 1) {
+      const derived = this.derivedExpressions.get(field);
+      if (derived !== undefined) {
+        return `(${derived(this.rootAlias)})`;
+      }
       return `${this.rootAlias}.${field}`;
     }
     let alias = this.rootAlias;

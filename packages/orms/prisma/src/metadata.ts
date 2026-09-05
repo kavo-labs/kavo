@@ -89,6 +89,15 @@ export function buildEntityMetadata<Entity extends object>(
     );
   }
 
+  // A Prisma client-extension `result` field (`$extends({ result: { user:
+  // { fullName: { compute: ... } } } })`, issue #373) is computed by the
+  // extension on the client's returned object, never described by the
+  // DMMF this function reads — so it produces no `FieldMetadata` entry and
+  // carries no `derivedExpression`. It is response-only at best (through
+  // an explicit item/list DTO or a custom operation using the extended
+  // client directly), and naming it in a filter or sort is an ordinary
+  // unknown-field 400, the documented behavior for an ORM whose derived
+  // field is JS-only.
   const fields: FieldMetadata[] = model.fields
     .filter((field) => field.kind !== "object")
     .map((field) => ({

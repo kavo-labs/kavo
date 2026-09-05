@@ -378,16 +378,20 @@ through `filter`, the same way it composes any other filter.
   confidentiality control rather than a validation list. Omit the key and
   the projection is unchanged
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
-- **Computed fields are selectable only:** a declared computed field
-  (doc 04 §7) joins the _selectable_ default and never the filterable or
-  sortable one — it has no column to translate to `WHERE`/`ORDER BY`, so
-  naming it in either is a bootstrap `ConfigurationException` rather than
-  an in-memory fallback
-  ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
+- **ORM-derived fields are opt-in, never a default:** a field the adapter
+  reports as ORM-derived (doc 04 §7) joins `filterable`/`sortable`/
+  `selectable` only when named explicitly — the same opt-in rule a
+  relation follows — and never `searchable` at all, opted in or not
+  ([ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata)).
+  Whether an opted-in filter/sort actually works is per-adapter: TypeORM
+  and MikroORM can translate the expression into `WHERE`/`ORDER BY`;
+  Prisma and Mongoose report no such field to Kavo at all, so naming one
+  fails the same way naming a nonexistent column would.
 - **Excluding instead of enumerating:** each allowlist key also accepts
   `{ exclude: [...] }` instead of an explicit array — resolved at
-  bootstrap to every own column (plus, for `selectable`, every selectable
-  computed field) except the ones named, so hiding one column (e.g. a
+  bootstrap to every own column except the ones named (an ORM-derived
+  field is never in that base set, so `{ exclude }` can never surface
+  one — only a plain array can), so hiding one column (e.g. a
   soft-delete marker) doesn't require re-listing every other one.
   Resolution starts from exactly the base set that key's plain default
   uses, so the result stays fail-closed like the plain array form.
