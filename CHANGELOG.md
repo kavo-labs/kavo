@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.19.0](https://github.com/kavo-labs/kavo/compare/v0.18.0...v0.19.0) (2026-09-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core,nest:** move create/update fields shorthand out of dto ([#389](https://github.com/kavo-labs/kavo/issues/389))
+
+### Features
+
+* **core:** add apply to create/update config, closing the write-side scoping gap ([#391](https://github.com/kavo-labs/kavo/issues/391), [#138](https://github.com/kavo-labs/kavo/issues/138)) ([#392](https://github.com/kavo-labs/kavo/issues/392)) ([f8bc54c](https://github.com/kavo-labs/kavo/commit/f8bc54c0f67ce424a1e5d8194a3ad845e263c011))
+* **core:** add filter.default for symmetry with sort/select/include ([#395](https://github.com/kavo-labs/kavo/issues/395)) ([62b8d97](https://github.com/kavo-labs/kavo/commit/62b8d97b77e94c7505a5712b447397cd11fbe2fb))
+
+
+### Refactoring
+
+* **core,nest:** move create/update fields shorthand out of dto ([#389](https://github.com/kavo-labs/kavo/issues/389)) ([67d205d](https://github.com/kavo-labs/kavo/commit/67d205d1a4c141d04417ceac2866d25ba24cb01a))
+
+
+### Documentation
+
+* update creatable/updatable references to create.fields/update.fields ([#393](https://github.com/kavo-labs/kavo/issues/393)) ([cbdeb54](https://github.com/kavo-labs/kavo/commit/cbdeb54c22d1ee4a410b38d1bb5103a0559a46c8))
+
 ## [0.18.0](https://github.com/kavo-labs/kavo/compare/v0.17.3...v0.18.0) (2026-09-05)
 
 
