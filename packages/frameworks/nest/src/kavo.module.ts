@@ -523,7 +523,6 @@ class KavoBinder implements OnModuleInit {
             route,
             service.engine.metadata,
             service.engine.config.select.fields as readonly string[],
-            Object.keys(service.engine.config.computed),
             service.engine.config.include.fields as readonly string[],
             relationTargetMetadata,
             dtoResolver,

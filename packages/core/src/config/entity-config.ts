@@ -7,7 +7,6 @@ import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from ".
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
-import type { ComputedFieldDescriptor } from "./computed-field.js";
 import type { Policy } from "../policy/kavo-policy.js";
 import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { FilterExpression, FilterOperatorToken } from "../query/filter.js";
@@ -20,13 +19,9 @@ import type { FilterExpression, FilterOperatorToken } from "../query/filter.js";
  * `@Kavo(...)` config object is built at class-decoration time, before any
  * ORM metadata exists (ADR-0012), so there is nothing to resolve `exclude`
  * against yet.
- *
- * `Extra` widens both forms with names that are not paths on the entity —
- * only ever the entity's declared computed-field names, and only on
- * `select.fields` (ADR-0019).
  */
-export type QueryFieldSelector<Entity, Extra extends string = never> =
-  readonly (FieldPath<Entity> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity> | Extra)[] };
+export type QueryFieldSelector<Entity> =
+  readonly FieldPath<Entity>[] | { readonly exclude: readonly FieldPath<Entity>[] };
 
 /**
  * `select.fields`'s raw configuration — the same array-or-
@@ -36,11 +31,10 @@ export type QueryFieldSelector<Entity, Extra extends string = never> =
  * `select[<relation>]=` against the target entity's own `select.fields`,
  * never `select=<relation>.<field>` (ADR-0045). A relation-dotted entry
  * does not type-check here and is a bootstrap error if it reaches
- * `resolveEntityConfig` through an erased or cast config. `Extra` widens
- * both forms with the entity's declared computed-field names (ADR-0019).
+ * `resolveEntityConfig` through an erased or cast config.
  */
-export type SelectableFieldSelector<Entity, Extra extends string = never> =
-  readonly (FieldPath<Entity, 1> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity, 1> | Extra)[] };
+export type SelectableFieldSelector<Entity> =
+  readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
 
 /**
  * One relation allowlist key's raw configuration — the same array-or-
@@ -234,20 +228,19 @@ export interface SortConfig<Entity> {
  * what a response projects by default, grouped in one block (issue #386,
  * replacing `allowed.selectable` and `KavoSettings.defaults.select`).
  *
- * `selectable` is the only field-group config computed-field names may
- * appear in — `filter.fields`/`sort.fields` stay typed to real paths,
- * because a computed field has no column to translate to `WHERE`/
- * `ORDER BY` (ADR-0019).
+ * An ORM-derived field (`FieldMetadata.derivedExpression`) is a real class
+ * property, so it already type-checks as a `FieldPath` and needs no
+ * separate widening here. It is opt-in to `fields` (ADR-0050): the
+ * unconfigured default excludes it, the same as a relation.
  */
-export interface SelectConfig<Entity, Computed extends string = never> {
+export interface SelectConfig<Entity> {
   /**
    * What a request may name in `select=`, **and** what a response carries
    * when it sends no `select=` at all (ADR-0026).
    *
    * The second half is what makes this a confidentiality control rather
    * than a validation list: a column left off is not served. Omit the key
-   * and the projection is unchanged — every column plus every declared
-   * computed field.
+   * and the projection is unchanged — every own column.
    *
    * **It closes the response body and nothing else.** `filter.fields` and
    * `sort.fields` default to every column independently, so
@@ -262,13 +255,13 @@ export interface SelectConfig<Entity, Computed extends string = never> {
    * it is *wider*. Where you register one, it — not this key — is the
    * narrowing statement.
    */
-  readonly fields?: SelectableFieldSelector<Entity, Computed>;
+  readonly fields?: SelectableFieldSelector<Entity>;
   /**
    * The default response projection: what a read serves when the request
    * sends no `select=` of its own. Fields are validated against `fields`
    * at bootstrap.
    */
-  readonly default?: readonly (FieldPath<Entity, 1> | Computed)[];
+  readonly default?: readonly FieldPath<Entity, 1>[];
   /**
    * Fields force-included in the projection, unioned into whatever the
    * request would otherwise project (its own `select=`, or `default`
@@ -518,10 +511,6 @@ export type CustomOperationsOf<Entity, Ops> = string extends keyof Ops
  * Raw entity-scope configuration — the second argument to `createCrud`.
  * Settings keys (inherited from `DeepPartial<KavoSettings>`) override
  * global scope for this entity.
- *
- * `Computed` is inferred from the keys of `computed` and exists so an
- * explicit `select.fields` list can name a computed field without
- * a cast; every other position stays typed to real entity paths.
  */
 export interface EntityConfig<
   Entity,
@@ -531,16 +520,14 @@ export interface EntityConfig<
   QueryDto = QueryContext<Entity>,
   ItemDto = Entity,
   ListDto = ItemDto,
-  Computed extends string = never,
   // The constraint fixes the shape `operations` accepts; the free
   // parameter is what lets inference capture the *literal* dto classes a
   // caller registers per operation, which `DtoInputOf`/`DtoOutputOf`/
   // `DtoQueryOf` (dto.ts) then read back off `KavoService`'s `Ops`
-  // parameter (issue #131) — the same "constrain, don't fix" shape
-  // `allowed.selectable`'s `NoInfer<Computed>` already relies on. The
-  // constraint is `OperationsConfig` rather than `StandardOperationsConfig`
-  // (issue #145) so that a key outside the standard eight is a permitted
-  // custom operation rather than an excess property.
+  // parameter (issue #131). The constraint is `OperationsConfig` rather
+  // than `StandardOperationsConfig` (issue #145) so that a key outside the
+  // standard eight is a permitted custom operation rather than an excess
+  // property.
   Ops extends OperationsConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto> = OperationsConfig<
     Entity,
     CreateDto,
@@ -606,24 +593,15 @@ export interface EntityConfig<
    * `operations.<id>.policy` overrides (or opts out of with `false`) does
    * not.
    *
-   * Structural entity-scope config like `dto`/`computed` — outside the
-   * settings precedence chain (a policy is itself a closure) — resolved by
-   * its own "nearest scope wins" walk, not `mergeSettings`. Falls back to
+   * Structural entity-scope config like `dto` — outside the settings
+   * precedence chain (a policy is itself a closure) — resolved by its own
+   * "nearest scope wins" walk, not `mergeSettings`. Falls back to
    * `GlobalConfig.policy` (`createKavo({ policy })`) when unset here;
    * overridden per operation by `operations.<id>.policy`, including
    * `operations.<id>.policy: false` to opt one operation out. There is
    * still no per-call override.
    */
   readonly policy?: Policy<Entity>;
-  /**
-   * Computed (virtual) response fields, keyed by the name each serializes
-   * as — structural entity-scope config like `dto`, deliberately outside
-   * the settings precedence chain because it carries functions (ADR-0019).
-   * Declared fields join the entity-derived `item`/`list` projection and
-   * the `selectable` allowlist automatically; they are never filterable,
-   * sortable, or writable.
-   */
-  readonly computed?: Readonly<Record<Computed, ComputedFieldDescriptor<Entity>>>;
   /**
    * What a request may filter on, and its per-field operator restrictions
    * and request-cost ceilings (issue #386, replacing `allowed.filterable`
@@ -639,7 +617,7 @@ export interface EntityConfig<
    * What a request may select, and the default response projection
    * (issue #386, replacing `allowed.selectable` and `defaults.select`).
    */
-  readonly select?: SelectConfig<Entity, NoInfer<Computed>>;
+  readonly select?: SelectConfig<Entity>;
   /**
    * Free-text search: which fields it reaches, its default term, and its
    * mode/driver (issue #386, replacing `allowed.searchable` and the old

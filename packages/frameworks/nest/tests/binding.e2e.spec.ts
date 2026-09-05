@@ -5,6 +5,7 @@ import { Controller, Get, Inject, NotFoundException, Param, type INestApplicatio
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
 import type {
+  ClassRef,
   DefaultKavoService,
   EntityMetadata,
   FindManyResult,
@@ -34,7 +35,14 @@ import {
   oneOfArray,
   registerKavoSchemas,
 } from "@kavo/nest";
-import { InMemoryTodoAdapter, Todo, TodoList, TodoTag, fakeInfrastructure } from "./support/fake-infrastructure.js";
+import {
+  InMemoryTodoAdapter,
+  Todo,
+  TodoList,
+  TodoTag,
+  fakeInfrastructure,
+  todoMetadata,
+} from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 let app: INestApplication;
@@ -1833,42 +1841,94 @@ describe("@Kavo Swagger conditional-request headers carry no per-route descripti
 });
 
 /**
- * ADR-0019 claims `@kavo/nest` needs no changes for computed fields:
- * generated routes go through the same engine, so the serializer produces
- * them and the allowlists gate them exactly as they do programmatically.
- * This is the wire-level evidence for that claim.
+ * ORM-derived fields over the wire (issue #373): `@kavo/nest` needs no
+ * changes for them either — generated routes go through the same engine,
+ * so the serializer reads a derived value straight off the row and the
+ * field-group config gates it exactly as it does programmatically. This is
+ * the wire-level evidence for that claim, using a fake `FieldMetadata`
+ * entry with a `derivedExpression` marker in place of a real ORM's virtual
+ * column (`@kavo/typeorm`'s own suite covers the actual SQL translation).
  */
-describe("@Kavo computed fields over the wire (ADR-0019)", () => {
-  @Kavo(Todo, {
-    // Defensive by construction: `resolve` must be *total* over anything the
-    // column can hold, because `serializeList` maps it over every row and one
-    // throw takes the whole collection response down (ADR-0019 §1).
-    computed: {
-      slug: { resolve: (todo: Todo) => todo.title?.toLowerCase().replaceAll(" ", "-") ?? null },
-    },
-  })
-  @Controller("todos")
-  class ComputedController {}
+describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
+  const derivedTodoMetadata: EntityMetadata<Todo> = {
+    ...todoMetadata,
+    fields: [
+      ...todoMetadata.fields,
+      { name: "slug", kind: "string", nullable: true, generated: false, derivedExpression: "lower(title)" },
+    ],
+  };
 
-  beforeEach(async () => {
-    await bootstrap(ComputedController);
-    await request(server()).post("/todos").send({ title: "Write Docs", priority: 2 }).expect(201);
+  function fakeDerivedInfrastructure(fakeAdapter: InMemoryTodoAdapter): KavoInfrastructure {
+    return {
+      metadataFor<Entity extends object>(entity: ClassRef<Entity>) {
+        if ((entity as ClassRef) === Todo) {
+          return derivedTodoMetadata as unknown as EntityMetadata<Entity>;
+        }
+        return fakeInfrastructure(fakeAdapter).metadataFor(entity);
+      },
+      adapterFor<Entity extends object>() {
+        return fakeAdapter as unknown as RepositoryAdapter<Entity>;
+      },
+    };
+  }
+
+  it("excludes an un-opted-in derived field from the generated read routes", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class TodoController {}
+
+    adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
+        KavoModule.forFeature([TodoController as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+    adapter.rows.push({ ...new Todo(), id: 1, title: "Write Docs", slug: "write-docs" } as never);
+
+    expect((await request(server()).get("/todos/1").expect(200)).body).not.toHaveProperty("slug");
   });
 
-  it("emits the computed field on generated read routes with no DTO registered", async () => {
-    expect((await request(server()).get("/todos/1").expect(200)).body).toMatchObject({
-      title: "Write Docs",
+  it("emits an opted-in derived field, read straight off the row", async () => {
+    @Kavo(Todo, { select: { fields: ["id", "title", "done", "priority", "slug" as never] } })
+    @Controller("todos")
+    class TodoController {}
+
+    adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
+        KavoModule.forFeature([TodoController as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+    adapter.rows.push({ ...new Todo(), id: 1, title: "Write Docs", slug: "write-docs" } as never);
+
+    expect((await request(server()).get("/todos/1").expect(200)).body).toMatchObject({ slug: "write-docs" });
+    expect((await request(server()).get("/todos/1?select=id,slug").expect(200)).body).toEqual({
+      id: 1,
       slug: "write-docs",
     });
-    expect((await request(server()).get("/todos").expect(200)).body.items[0]).toMatchObject({ slug: "write-docs" });
   });
 
-  it("is selectable through the wire fieldset", async () => {
-    const response = await request(server()).get("/todos/1?select=id,slug").expect(200);
-    expect(response.body).toEqual({ id: 1, slug: "write-docs" });
-  });
+  it("rejects it as a filter or sort field with problem details when not opted in", async () => {
+    @Kavo(Todo)
+    @Controller("todos")
+    class TodoController {}
 
-  it("is rejected as a filter or sort field with problem details", async () => {
+    adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
+        KavoModule.forFeature([TodoController as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
     for (const query of ["filter[slug][eq]=write-docs", "sort=slug"]) {
       const response = await request(server()).get(`/todos?${query}`).expect(400);
       expect(response.body).toMatchObject({
@@ -1879,13 +1939,27 @@ describe("@Kavo computed fields over the wire (ADR-0019)", () => {
   });
 
   it("never reaches the adapter from a request body", async () => {
+    @Kavo(Todo, { select: { fields: ["id", "title", "done", "priority", "slug" as never] } })
+    @Controller("todos")
+    class TodoController {}
+
+    adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
+        KavoModule.forFeature([TodoController as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    httpServer = await listen(app);
+
     await request(server()).post("/todos").send({ title: "Ship It", slug: "hijacked" }).expect(201);
-    expect(adapter.rows[1]).not.toHaveProperty("slug");
+    expect(adapter.rows[0]).not.toHaveProperty("slug");
   });
 
-  it("fails at bind time when a registered create DTO declares the computed field", async () => {
+  it("fails at bind time when a registered create DTO declares the derived field", async () => {
     // The wire consequence this closes: `@ApiBody` is built from the DTO's
-    // runtime shape, so a DTO naming a computed field made OpenAPI advertise
+    // runtime shape, so a DTO naming a derived field made OpenAPI advertise
     // a property the engine unconditionally discards. Rejected at
     // `createCrud` now, which in a Nest app is provider instantiation.
     class CreateTodoDto {
@@ -1893,18 +1967,15 @@ describe("@Kavo computed fields over the wire (ADR-0019)", () => {
       slug = "";
     }
 
-    @Kavo(Todo, {
-      computed: { slug: { resolve: (todo: Todo) => todo.title?.toLowerCase() ?? null } },
-      dto: { create: CreateTodoDto },
-    })
+    @Kavo(Todo, { dto: { create: CreateTodoDto } })
     @Controller("todos")
-    class ComputedDtoController {}
+    class DerivedDtoController {}
 
     const bind = async (): Promise<unknown> => {
       const moduleRef = await Test.createTestingModule({
         imports: [
-          KavoModule.forRoot({ infrastructure: fakeInfrastructure(new InMemoryTodoAdapter()) }),
-          KavoModule.forFeature([ComputedDtoController as never]),
+          KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(new InMemoryTodoAdapter()) }),
+          KavoModule.forFeature([DerivedDtoController as never]),
         ],
       }).compile();
       return moduleRef.createNestApplication().init();
@@ -1913,27 +1984,6 @@ describe("@Kavo computed fields over the wire (ADR-0019)", () => {
       code: "KAVO_CONFIG_INVALID",
       messageParams: { entity: "Todo", path: "dto.create" },
     });
-  });
-
-  it("turns a throwing resolver into problem details without leaking the message", async () => {
-    @Kavo(Todo, {
-      computed: {
-        note: {
-          resolve: () => {
-            throw new Error("secret internal detail");
-          },
-        },
-      },
-    })
-    @Controller("todos")
-    class ThrowingComputedController {}
-
-    await app.close();
-    await bootstrap(ThrowingComputedController);
-    // The write serializes its result too, so this is where it surfaces.
-    const response = await request(server()).post("/todos").send({ title: "x" }).expect(500);
-    expect(response.body).toMatchObject({ code: "KAVO_PERSISTENCE_FAILED", status: 500 });
-    expect(JSON.stringify(response.body)).not.toContain("secret internal detail");
   });
 });
 
@@ -2764,6 +2814,33 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
 
+  /** `todoMetadata` plus an ORM-derived `titleUpper` field (issue #373). */
+  const derivedTodoMetadata: EntityMetadata<Todo> = {
+    ...todoMetadata,
+    fields: [
+      ...todoMetadata.fields,
+      { name: "titleUpper", kind: "string", nullable: true, generated: false, derivedExpression: "upper(title)" },
+    ],
+  };
+
+  async function bootstrapDerived(controller: unknown): Promise<void> {
+    const derivedInfrastructure: KavoInfrastructure = {
+      metadataFor: (entity) =>
+        (entity as ClassRef) === Todo
+          ? (derivedTodoMetadata as never)
+          : fakeInfrastructure(adapter).metadataFor(entity),
+      adapterFor: () => adapter as never,
+    };
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        KavoModule.forRoot({ infrastructure: derivedInfrastructure }),
+        KavoModule.forFeature([controller as never]),
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    await app.init();
+  }
+
   it("narrows the item response to selectable when no item DTO is registered", async () => {
     @Kavo(Todo, { select: { fields: ["id", "title"] } })
     @Controller("todos")
@@ -2835,13 +2912,11 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(envelope?.properties?.items?.items?.required).toEqual(["id", "title", "done", "priority"]);
   });
 
-  it("keeps an untyped computed field out of the synthesized response `required` (issue #302)", async () => {
-    @Kavo(Todo, {
-      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
-    })
+  it("keeps a nullable, opted-in derived field out of the synthesized response `required` (issue #302, #373)", async () => {
+    @Kavo(Todo, { select: { fields: ["id", "title", "done", "priority", "titleUpper" as never] } })
     @Controller("todos")
-    class ComputedController {}
-    await bootstrap(ComputedController);
+    class DerivedController {}
+    await bootstrapDerived(DerivedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(itemBody("/todos/{id}", "get", "200")?.required).not.toContain("titleUpper");
@@ -2935,57 +3010,46 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title"]);
   });
 
-  it("adds a declared computed field to the synthesized item and list schemas, untyped (issue #302)", async () => {
-    @Kavo(Todo, {
-      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
-    })
+  it("adds an opted-in derived field to the synthesized item and list schemas, typed like any other field (issue #302, #373)", async () => {
+    @Kavo(Todo, { select: { fields: ["id", "title", "done", "priority", "titleUpper" as never] } })
     @Controller("todos")
-    class ComputedController {}
-    await bootstrap(ComputedController);
+    class DerivedController {}
+    await bootstrapDerived(DerivedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     const single = itemBody("/todos/{id}", "get", "200");
-    expect(Object.keys(single?.properties ?? {})).toEqual([
-      "id",
-      "title",
-      "done",
-      "priority",
-      "deletedAt",
-      "titleUpper",
-    ]);
-    // No assumed `type` — computed descriptors carry none.
-    expect(single?.properties?.titleUpper).toEqual({ nullable: true });
+    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "done", "priority", "titleUpper"]);
+    // Typed from its own `FieldMetadata` — `kind: "string"`, `nullable: true`
+    // — exactly like any other field, unlike the untyped `computed` fragment
+    // this replaced.
+    expect(single?.properties?.titleUpper).toMatchObject({ type: "string" });
 
     const listElement = itemBody("/todos", "get", "200")?.properties?.items?.items;
     expect(Object.keys(listElement?.properties ?? {})).toContain("titleUpper");
-    expect(listElement?.properties?.titleUpper).toEqual({ nullable: true });
   });
 
-  it("omits a computed field when an explicit selectable list excludes it (issue #302)", async () => {
-    @Kavo(Todo, {
-      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
-      select: { fields: ["id", "title"] },
-    })
+  it("omits an un-opted-in derived field, the same as any other field left off selectable (issue #373)", async () => {
+    @Kavo(Todo, { select: { fields: ["id", "title"] } })
     @Controller("todos")
-    class NarrowedComputedController {}
-    await bootstrap(NarrowedComputedController);
+    class NarrowedController {}
+    await bootstrapDerived(NarrowedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
 
-  it("leaves a registered item DTO's response untouched even when a computed field is declared (issue #302)", async () => {
+  it("leaves a registered item DTO's response untouched even when a derived field is opted in (issue #373)", async () => {
     class TodoItemDto {
       id = 0;
       title = "";
     }
     @Kavo(Todo, {
       dto: { item: TodoItemDto },
-      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+      select: { fields: ["id", "title", "titleUpper" as never] },
     })
     @Controller("todos")
-    class DtoComputedController {}
-    await bootstrap(DtoComputedController);
+    class DtoDerivedController {}
+    await bootstrapDerived(DtoDerivedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);

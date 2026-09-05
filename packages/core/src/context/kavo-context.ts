@@ -51,8 +51,8 @@ export interface KavoContextState {
  * `undefined` at run time on any request with no (or a partial) `app`
  * extractor — including every GraphQL/MCP call.
  *
- * **Put only plain, shallow data here** — the fields policies and computed
- * fields read, not a framework/ORM object passed straight through. With the
+ * **Put only plain, shallow data here** — the fields policies and custom
+ * handlers read, not a framework/ORM object passed straight through. With the
  * result cache on, `context.app` is walked by `canonicalize` into the cache
  * key on every cacheable read: a value with prototype getters (a Passport
  * user class, a TypeORM entity, a class-transformer instance) canonicalizes
@@ -103,8 +103,8 @@ export interface KavoContext<Entity = unknown> {
   readonly repository: RepositoryAdapter<Entity>;
   /**
    * The application's request-scoped context (`KavoAppContext`) — available
-   * to custom operation handlers, computed-field resolvers and policies.
-   * Core never inspects, populates or shapes it: it is whatever the caller
+   * to custom operation handlers and policies. Core never inspects,
+   * populates or shapes it: it is whatever the caller
    * put in `KavoCallOptions.app`, and an empty object when nothing did.
    *
    * A programmatic caller passes it per call
