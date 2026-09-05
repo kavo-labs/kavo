@@ -1,5 +1,6 @@
 import type { DtoClass, DtoResolver, DtoSlot, OperationDtoMap } from "./dto.js";
 import type { OperationId } from "../operations/operation.js";
+import { resolveDtoSlot } from "./dto-fields-shorthand.js";
 
 /**
  * Bootstrap-cached DTO resolution. Each slot resolves
@@ -25,14 +26,18 @@ export class DefaultDtoResolver<Entity = unknown> implements DtoResolver<Entity>
   private readonly slots: Readonly<Record<DtoSlot, DtoClass | null>>;
 
   constructor(dto: OperationDtoMap<Entity> = {}) {
-    const map = dto as Record<DtoSlot, DtoClass | undefined>;
+    const map = dto as Record<Exclude<DtoSlot, "query">, Parameters<typeof resolveDtoSlot>[0]> &
+      Record<"query", DtoClass | undefined>;
+    const create = resolveDtoSlot(map.create);
+    const update = resolveDtoSlot(map.update);
+    const item = resolveDtoSlot(map.item);
     this.slots = Object.freeze({
-      create: map.create ?? null,
-      update: map.update ?? null,
-      patch: map.patch ?? map.update ?? null,
+      create,
+      update,
+      patch: resolveDtoSlot(map.patch) ?? update,
       query: map.query ?? null,
-      item: map.item ?? null,
-      list: map.list ?? map.item ?? null,
+      item,
+      list: resolveDtoSlot(map.list) ?? item,
     });
   }
 

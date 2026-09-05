@@ -67,7 +67,7 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
         // exactly like working config until the first client asks.
         throw new ConfigurationException(
           entityName,
-          "allowed.includable",
+          "include.fields",
           `'${name}' is not a relation of ${entityName} (relations: ${[...byName.keys()].join(", ") || "none"})`,
         );
       }

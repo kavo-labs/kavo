@@ -33,15 +33,13 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     list: OwnerListDto,
   },
   softDelete: { field: "deletedAt" },
-  allowed: {
-    filterable: { exclude: ["deletedAt"] },
-    sortable: { exclude: ["deletedAt"] },
-    selectable: { exclude: ["deletedAt"] },
-    // `include=pets` — opt-in per relation, and a to-many. `address` is the
-    // to-one counterpart. Neither disturbs root pagination: MikroORM
-    // resolves `populate` with its own queries either way (doc 17 §3).
-    includable: ["pets", "address"],
-  },
+  filter: { fields: { exclude: ["deletedAt"] } },
+  sort: { fields: { exclude: ["deletedAt"] } },
+  select: { fields: { exclude: ["deletedAt"] } },
+  // `include=pets` — opt-in per relation, and a to-many. `address` is the
+  // to-one counterpart. Neither disturbs root pagination: MikroORM
+  // resolves `populate` with its own queries either way (doc 17 §3).
+  include: { fields: ["pets", "address"] },
   operations: {
     createOne: true,
     findOne: true,

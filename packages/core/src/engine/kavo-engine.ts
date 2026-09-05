@@ -43,7 +43,6 @@ import { WILDCARD, canonicalize, computeEtag, isEtagEnabled, strongMatch, weakMa
 import { createKavoContext, randomUuid } from "../context/default-kavo-context.js";
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
-import { validateDefaults } from "../config/resolve-entity-config.js";
 import { HARD_DELETE, resolveSoftDelete } from "../persistence/soft-delete.js";
 import type { FindManyResult } from "./built-in-handlers.js";
 
@@ -915,7 +914,6 @@ export class KavoEngine<Entity extends object> {
       // reject — `validateSettings` below never sees it.
       const scope = `${config.entityName} (per-call)`;
       validateSettings(scope, settings);
-      validateDefaults(scope, settings, config.allowed);
     }
     if (settings === config.settings) {
       return config;
@@ -924,9 +922,17 @@ export class KavoEngine<Entity extends object> {
       entityName: config.entityName,
       settings,
       settingsFor: () => settings,
-      allowed: config.allowed,
+      // Structural field-group config (issue #386), outside the settings
+      // precedence chain entirely — a per-call override cannot widen what
+      // a request may filter/sort/select/search/include.
+      filter: config.filter,
+      sort: config.sort,
+      sortDefault: config.sortDefault,
+      select: config.select,
+      search: config.search,
+      include: config.include,
       // Structural, like `computed` below: the projection is derived from
-      // `allowed.selectable` at bootstrap (ADR-0026), and the allowlist is
+      // `select.fields` at bootstrap (ADR-0026), and the allowlist is
       // outside the settings precedence chain, so a per-call override
       // cannot widen what a response serves.
       projection: config.projection,

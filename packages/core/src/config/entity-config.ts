@@ -3,49 +3,41 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
+import type { FieldsShorthand, OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { ComputedFieldDescriptor } from "./computed-field.js";
 import type { Policy } from "../policy/kavo-policy.js";
+import type { FilterOperatorToken } from "../query/filter.js";
+import type { Sort } from "../query/sort.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths
  * to allow, or `{ exclude }` — every own column except the ones named.
  * `exclude` is resolved against the entity's own columns at bootstrap
- * (`resolveAllowed`), never evaluated eagerly here — the `@Kavo(...)`
- * config object is built at class-decoration time, before any ORM metadata
- * exists (ADR-0012), so there is nothing to resolve `exclude` against yet.
+ * (`resolve-entity-config.ts`), never evaluated eagerly here — the
+ * `@Kavo(...)` config object is built at class-decoration time, before any
+ * ORM metadata exists (ADR-0012), so there is nothing to resolve `exclude`
+ * against yet.
  *
  * `Extra` widens both forms with names that are not paths on the entity —
  * only ever the entity's declared computed-field names, and only on
- * `selectable` (ADR-0019).
+ * `select.fields` (ADR-0019).
  */
 export type QueryFieldSelector<Entity, Extra extends string = never> =
   readonly (FieldPath<Entity> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity> | Extra)[] };
 
 /**
- * One writable-field allowlist key's raw configuration — the same array-or-
- * `{ exclude }` shape as {@link QueryFieldSelector}, but capped to depth 1
- * ({@link FieldPath} with `MaxDepth` 1): a write body addresses the
- * entity's own scalar columns and its relations by association (ADR-0014),
- * never a dotted path into a relation's own fields, so `creatable`/
- * `updatable` have nothing to grant past one segment.
- */
-export type WritableFieldSelector<Entity> =
-  readonly FieldPath<Entity, 1>[] | { readonly exclude: readonly FieldPath<Entity, 1>[] };
-
-/**
- * `allowed.selectable`'s raw configuration — the same array-or-
+ * `select.fields`'s raw configuration — the same array-or-
  * `{ exclude }` shape as {@link QueryFieldSelector}, but capped to depth 1
  * ({@link FieldPath} with `MaxDepth` 1): `select=` addresses the entity's
  * own columns, and an included relation is projected through
- * `select[<relation>]=` against the target entity's own `selectable`, never
- * `select=<relation>.<field>` (ADR-0045). A relation-dotted entry does not
- * type-check here and is a bootstrap error if it reaches `resolveAllowed`
- * through an erased or cast config. `Extra` widens both forms with the
- * entity's declared computed-field names (ADR-0019).
+ * `select[<relation>]=` against the target entity's own `select.fields`,
+ * never `select=<relation>.<field>` (ADR-0045). A relation-dotted entry
+ * does not type-check here and is a bootstrap error if it reaches
+ * `resolveEntityConfig` through an erased or cast config. `Extra` widens
+ * both forms with the entity's declared computed-field names (ADR-0019).
  */
 export type SelectableFieldSelector<Entity, Extra extends string = never> =
   readonly (FieldPath<Entity, 1> | Extra)[] | { readonly exclude: readonly (FieldPath<Entity, 1> | Extra)[] };
@@ -56,32 +48,155 @@ export type SelectableFieldSelector<Entity, Extra extends string = never> =
  * entity's own top-level relation names ({@link IncludePath} capped to
  * depth 1) rather than every field path. `include=` addresses one relation
  * segment at a time from the root, so permission is granted per relation,
- * not per dotted path — `blog.name` is a `filterable`/`sortable` path but
- * `blog` is the unit `includable` grants or withholds.
+ * not per dotted path — `blog.name` is a `filter.fields`/`sort.fields` path
+ * but `blog` is the unit `include.fields` grants or withholds.
  */
 export type RelationFieldSelector<Entity> =
   readonly IncludePath<Entity, 1>[] | { readonly exclude: readonly IncludePath<Entity, 1>[] };
 
+/** `search[mode]` values — substring (default) or per-word (doc 05 §4). */
+export type SearchMode = "substring" | "words";
+
 /**
- * Security allowlists: what a request may filter, sort, select, and
- * include — including relation paths. Anything outside an allowlist is
- * rejected with a 400 (`QueryValidationException`), never silently
- * dropped. When omitted, `filterable`/`sortable`/`selectable` derive from
- * the `query` DTO or entity metadata at bootstrap; `includable` does not
- * — see its own note.
- *
- * `filterable` and `sortable` govern the request only. `selectable`
- * governs the request **and the response** (ADR-0026) — see its own note.
- *
- * `selectable` is the only key computed-field names may appear in:
- * `filterable`/`sortable` stay typed to real paths, because a computed
- * field has no column to translate to `WHERE`/`ORDER BY` (ADR-0019). The
- * bootstrap check in `resolveAllowed` catches the same mistake from an
- * erased or cast config, where the type is not there to help.
+ * Reserved discriminator for a future pluggable search backend — `'orm'`
+ * is the only value this schema accepts today (issue #156). It exists so a
+ * later `'postgres'` (native full-text) or `'meilisearch'` driver can land
+ * additively, without a breaking config change now; it is config-only and
+ * has no wire counterpart — callers never choose the backend per-request.
  */
-export interface QueryAllowed<Entity = unknown, Computed extends string = never> {
-  readonly filterable?: QueryFieldSelector<Entity>;
-  readonly sortable?: QueryFieldSelector<Entity>;
+export type SearchDriver = "orm";
+
+/**
+ * `filter.fields`'s map form: which operators are permitted per field
+ * (issue #386's new capability). A field absent from the map, when the map
+ * form is used, permits every operator — the map only *restricts*, it does
+ * not grant a field permission the array/`{ exclude }` forms didn't already
+ * give it. Tokens are the same `FilterOperatorToken` wire spellings
+ * `filter[field][op]=` accepts (`"eq"`, `"in"`, …), not the AST's
+ * `SCREAMING_SNAKE` names, so this map reads the same as the wire grammar
+ * it restricts.
+ */
+export type FilterOperatorMap<Entity> = Readonly<
+  Partial<Record<FieldPath<Entity> | (string & {}), readonly FilterOperatorToken[]>>
+>;
+
+/**
+ * `filter.fields`'s raw configuration: the plain array-or-`{ exclude }`
+ * form (which fields may be filtered on at all, every operator permitted),
+ * or the map form (`{ field: [operators] }`, issue #386) restricting which
+ * operators are permitted per field. A field named in the map form is
+ * implicitly on the allowlist — there is no separate "which fields" list to
+ * keep in sync with it.
+ */
+export type FilterFieldSelector<Entity> = QueryFieldSelector<Entity> | FilterOperatorMap<Entity>;
+
+/**
+ * Per-axis request-cost ceilings for `filter.limits` (issue #386, formerly
+ * `KavoSettings.limits`). Grouped under `filter` because all three bound
+ * the same axis — how expensive one `filter=` may be — rather than living
+ * in a settings tree unrelated to the allowlist they ceiling.
+ */
+export interface FilterLimits {
+  /** Max nesting depth of the filter AST. Defaults to 3. */
+  readonly maxDepth?: number;
+  /** Max array length for `IN`/`NOT_IN`/`BETWEEN` values. Defaults to 100. */
+  readonly maxInValues?: number;
+  /**
+   * Max character length of a `like`/`ilike` pattern (issue #367 finding
+   * 4). Values are always parameter-bound, so this is not an injection
+   * guard — it caps the cost of a pathological pattern (heavy wildcard
+   * backtracking, e.g. `%a%b%c%…`) against an unindexed or relation-joined
+   * column, which is otherwise unbounded. Defaults to 200.
+   */
+  readonly maxLikePatternLength?: number;
+}
+
+/**
+ * `EntityConfig.filter` — everything about what a request may filter on,
+ * grouped in one block (issue #386, replacing `allowed.filterable` and
+ * `KavoSettings.limits.{filterDepth,inValues,likePattern}`).
+ */
+export interface FilterConfig<Entity> {
+  /**
+   * What a request may name in `filter[...]=`. The array/`{ exclude }` form
+   * behaves exactly as `allowed.filterable` did; the map form additionally
+   * restricts which operators are permitted per named field (issue #386's
+   * new capability) — unconfigured, every own column, every operator.
+   */
+  readonly fields?: FilterFieldSelector<Entity>;
+  readonly limits?: FilterLimits;
+}
+
+/**
+ * Per-axis request-cost ceilings for `include.limits` (issue #386, formerly
+ * `KavoSettings.limits.{includeDepth,includedNodes}`).
+ */
+export interface IncludeLimits {
+  /** Max relation-include nesting depth (ADR-0008). Overridable per-subtree by `relations.edges.<name>.maxDepth`. Defaults to 2. */
+  readonly maxDepth?: number;
+  /** Max total number of included relation nodes across the whole include tree. Defaults to 10. */
+  readonly maxNodes?: number;
+}
+
+/**
+ * `EntityConfig.include` — everything about which relations a request may
+ * embed, grouped in one block (issue #386, replacing `allowed.includable`,
+ * `KavoSettings.defaults.include`, and `KavoSettings.limits.
+ * {includeDepth,includedNodes}`).
+ */
+export interface IncludeConfig<Entity> {
+  /**
+   * What a request may name in `include=` — which relations, one path
+   * segment at a time from the root, a client may embed at all
+   * (ADR-0028). `relations.edges.<name>` (`KavoSettings`, settings.ts)
+   * still tunes `maxDepth`/`strategy` for a relation once it is includable,
+   * but does not grant permission itself: naming a relation there without
+   * also naming it here does not open it.
+   *
+   * **Opt-in, unlike every other field-group's `fields`.** An unconfigured
+   * `include.fields` means **no relation is includable** — the opt-in
+   * posture `relations.edges` had before ADR-0028. `{ exclude: [] }`,
+   * written explicitly, means the opposite — every relation includable.
+   */
+  readonly fields?: RelationFieldSelector<Entity>;
+  /**
+   * Relations included even when the client's `include=` doesn't name
+   * them. Each entry must also be on `fields` (ADR-0028's cross-check) —
+   * naming a relation here that clients cannot ask for is a bootstrap
+   * error.
+   */
+  readonly default?: readonly IncludePath<Entity, 1>[];
+  readonly limits?: IncludeLimits;
+}
+
+/**
+ * `EntityConfig.sort` — everything about what a request may sort by,
+ * grouped in one block (issue #386, replacing `allowed.sortable` and
+ * `KavoSettings.defaults.sort`).
+ */
+export interface SortConfig<Entity> {
+  readonly fields?: QueryFieldSelector<Entity>;
+  /**
+   * Order applied when a request supplies no `sort` — a client-supplied
+   * `sort` always wins outright, never merges with this. The same wire
+   * shorthand a `sort=` query parameter uses (`-field` for descending,
+   * `field` for ascending). Fields are validated against `fields` at
+   * bootstrap, the same as client-supplied sort fields are at request time.
+   */
+  readonly default?: readonly string[];
+}
+
+/**
+ * `EntityConfig.select` — everything about what a request may select and
+ * what a response projects by default, grouped in one block (issue #386,
+ * replacing `allowed.selectable` and `KavoSettings.defaults.select`).
+ *
+ * `selectable` is the only field-group config computed-field names may
+ * appear in — `filter.fields`/`sort.fields` stay typed to real paths,
+ * because a computed field has no column to translate to `WHERE`/
+ * `ORDER BY` (ADR-0019).
+ */
+export interface SelectConfig<Entity, Computed extends string = never> {
   /**
    * What a request may name in `select=`, **and** what a response carries
    * when it sends no `select=` at all (ADR-0026).
@@ -91,84 +206,53 @@ export interface QueryAllowed<Entity = unknown, Computed extends string = never>
    * and the projection is unchanged — every column plus every declared
    * computed field.
    *
-   * **It closes the response body and nothing else.** `filterable` and
-   * `sortable` default to every column independently, so
+   * **It closes the response body and nothing else.** `filter.fields` and
+   * `sort.fields` default to every column independently, so
    * `filter[apiKey][like]=a%` binary-searches the value and `sort=apiKey`
    * leaks its ordering; the writable projection is derived separately, so
    * the column is still writable — and this key makes that write
    * *invisible* by removing the echo. Hiding a credential means narrowing
-   * all three allowlists and registering a write DTO (ADR-0026 §6).
+   * every axis and registering a write DTO (ADR-0026 §6).
    *
    * A registered `dto.item`/`dto.list` with a runtime shape **replaces**
    * the projection rather than intersecting with it, so it wins even where
    * it is *wider*. Where you register one, it — not this key — is the
    * narrowing statement.
    */
-  readonly selectable?: SelectableFieldSelector<Entity, Computed>;
+  readonly fields?: SelectableFieldSelector<Entity, Computed>;
   /**
-   * What a request may name in `include=` — which relations, one path
-   * segment at a time from the root, a client may embed at all
-   * (ADR-0028). `relations.edges.<name>` (`KavoSettings`, settings.ts)
-   * still tunes `maxDepth`/`strategy` for a relation once it is includable,
-   * and `defaults.include` (issue #375) names which includable relations
-   * load by default, but neither grants permission itself: naming a
-   * relation there without also naming it here does not open it.
-   *
-   * **Opt-in, unlike every other key on this interface.**
-   * `filterable`/`sortable`/`selectable` default to "every own
-   * column/field" when unconfigured — `includable` defaults the other way:
-   * an unconfigured `includable` means **no relation is includable**,
-   * mirroring the opt-in posture `relations.edges` had before this key
-   * existed. `{ exclude: [] }`, written explicitly, means the opposite —
-   * every relation includable — the same asymmetry `{ exclude }` already
-   * carries on the other three keys, just crossing a fail-closed default
-   * instead of a fail-open one.
+   * The default response projection: what a read serves when the request
+   * sends no `select=` of its own. Fields are validated against `fields`
+   * at bootstrap.
    */
-  readonly includable?: RelationFieldSelector<Entity>;
+  readonly default?: readonly (FieldPath<Entity, 1> | Computed)[];
+}
+
+/**
+ * `EntityConfig.search` — everything about free-text search, grouped in
+ * one block (issue #386, replacing `allowed.searchable` and
+ * `KavoSettings.search`). `false` (the default) disables search —
+ * `search[query]` is rejected with a 400 until an entity or operation scope
+ * sets an object.
+ */
+export interface SearchConfig<Entity> {
   /**
    * What `search[fields]` may narrow to, and the full field set a
    * `search[query]` searches when it does not. Same shape and default
-   * posture as `filterable`/`sortable`: when unconfigured, every own
-   * **string**-kind column (relation paths are never included by default,
-   * same as the other three keys) — narrower than `filterable`'s "every own
+   * posture as `filter.fields`/`sort.fields`: when unconfigured, every own
+   * **string**-kind column — narrower than `filter.fields`'s "every own
    * column" default, since a non-string column has nothing an `ILIKE`
    * fragment can usefully match.
    *
-   * Unlike `filterable`/`sortable`, entries **may** be relation paths
+   * Unlike `filter.fields`/`sort.fields`, entries **may** be relation paths
    * (`'brand.name'`) — search is a single free-text term spread across
-   * whatever fields make sense for a "search box", and a relation path is
-   * exactly the shape `filterable` already resolves join/nesting for.
-   *
-   * `searchable` only grants *which fields* a search may touch; whether
-   * `search[query]` is accepted at all is `search` (`KavoSettings`),
-   * `false` by default — set it to an object to turn search on; see doc 05 §4.
+   * whatever fields make sense for a "search box".
    */
-  readonly searchable?: QueryFieldSelector<Entity>;
-  /**
-   * What `createOne` (and `createMany`, once #137 lands) may write. Same
-   * default posture as `filterable`/`sortable`: unconfigured, every own
-   * writable field — every non-generated scalar column except the primary
-   * key, plus every relation, by association (ADR-0014) — the same base
-   * `DefaultDeserializer`'s derived writable projection already uses.
-   *
-   * Narrows that derived projection; it never widens it; the primary key
-   * and the resolved soft-delete marker stay excluded even if named here
-   * (commit 8aa8d65's exclusion is unconditional). A registered `create`
-   * DTO with a runtime shape **replaces** the projection rather than
-   * intersecting with it, exactly as a registered `dto.item`/`dto.list`
-   * outranks `selectable` (ADR-0026) — where you register one, it, not
-   * this key, is the narrowing statement.
-   */
-  readonly creatable?: WritableFieldSelector<Entity>;
-  /**
-   * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
-   * may write. `update` (PUT) and `patch` (PATCH) share this one list
-   * rather than each getting its own — both mutate an existing row, so the
-   * set of fields open to being overwritten is the same question either
-   * way. Same default posture, narrowing behaviour, and DTO precedence as
-   * {@link QueryAllowed.creatable} — see its note.
-   */
-  readonly updatable?: WritableFieldSelector<Entity>;
+  readonly fields?: QueryFieldSelector<Entity>;
+  /** The default free-text term when a request sends no `search[query]` (issue #386's new capability). */
+  readonly default?: string;
+  readonly mode?: SearchMode;
+  readonly driver?: SearchDriver;
 }
 
 /**
@@ -383,7 +467,7 @@ export type CustomOperationsOf<Entity, Ops> = string extends keyof Ops
  * global scope for this entity.
  *
  * `Computed` is inferred from the keys of `computed` and exists so an
- * explicit `allowed.selectable` list can name a computed field without
+ * explicit `select.fields` list can name a computed field without
  * a cast; every other position stays typed to real entity paths.
  */
 export interface EntityConfig<
@@ -414,6 +498,14 @@ export interface EntityConfig<
     ListDto
   >,
 > extends Omit<DeepPartial<KavoSettings>, "operations"> {
+  /**
+   * `create`/`update`/`patch`/`item`/`list` each accept either a registered
+   * DTO class (today's behavior) or an inline `{ fields: [...] }` shorthand
+   * (issue #386) that derives a projection/writable-field list without a
+   * hand-written class — `dto.create`/`dto.update`'s shorthand is also how
+   * `creatable`/`updatable` are reached now, in place of a separate
+   * `allowed.creatable`/`allowed.updatable` key.
+   */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**
    * Default authorization for every operation on this entity (ADR-0037): a
@@ -440,7 +532,35 @@ export interface EntityConfig<
    * sortable, or writable.
    */
   readonly computed?: Readonly<Record<Computed, ComputedFieldDescriptor<Entity>>>;
-  readonly allowed?: QueryAllowed<Entity, NoInfer<Computed>>;
+  /**
+   * What a request may filter on, and its per-field operator restrictions
+   * and request-cost ceilings (issue #386, replacing `allowed.filterable`
+   * and the old top-level `limits`).
+   */
+  readonly filter?: FilterConfig<Entity>;
+  /**
+   * What a request may sort by, and the default sort a request with none
+   * gets (issue #386, replacing `allowed.sortable` and `defaults.sort`).
+   */
+  readonly sort?: SortConfig<Entity>;
+  /**
+   * What a request may select, and the default response projection
+   * (issue #386, replacing `allowed.selectable` and `defaults.select`).
+   */
+  readonly select?: SelectConfig<Entity, NoInfer<Computed>>;
+  /**
+   * Free-text search: which fields it reaches, its default term, and its
+   * mode/driver (issue #386, replacing `allowed.searchable` and the old
+   * top-level `search`). `false` disables search — the default.
+   */
+  readonly search?: SearchConfig<Entity> | false;
+  /**
+   * What a request may include, its defaults, and its request-cost
+   * ceilings (issue #386, replacing `allowed.includable`,
+   * `defaults.include`, and the old top-level `limits.{includeDepth,
+   * includedNodes}`).
+   */
+  readonly include?: IncludeConfig<Entity>;
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an

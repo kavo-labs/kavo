@@ -69,17 +69,15 @@ import { hasPermission } from "./owner.policy.js";
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves
   // to every own column except this one, without hand-enumerating the rest.
-  allowed: {
-    filterable: { exclude: ["deletedAt"] },
-    sortable: { exclude: ["deletedAt"] },
-    selectable: { exclude: ["deletedAt"] },
-    // `include=pets` — opt-in per relation. Pets are a to-many, so they
-    // batch-load: one extra query per page of owners, never a joined row
-    // explosion under pagination. `address` is the to-one counterpart — it
-    // joins instead. Both are `auto`'s default, so no `relations.edges`
-    // tuning is needed.
-    includable: ["pets", "address"],
-  },
+  filter: { fields: { exclude: ["deletedAt"] } },
+  sort: { fields: { exclude: ["deletedAt"] } },
+  select: { fields: { exclude: ["deletedAt"] } },
+  // `include=pets` — opt-in per relation. Pets are a to-many, so they
+  // batch-load: one extra query per page of owners, never a joined row
+  // explosion under pagination. `address` is the to-one counterpart — it
+  // joins instead. Both are `auto`'s default, so no `relations.edges`
+  // tuning is needed.
+  include: { fields: ["pets", "address"] },
   operations: {
     createOne: true,
     findOne: true,

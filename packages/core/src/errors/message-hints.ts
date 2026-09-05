@@ -71,12 +71,12 @@ export function nameList(candidates: readonly string[], cap: number = DEFAULT_LI
   return `${sorted.slice(0, cap).join(", ")}, … (${sorted.length} total)`;
 }
 
-/** Which allowlist a rejected field belongs to, keyed by how it was used. */
+/** Which field-group config key a rejected field belongs to, keyed by how it was used. */
 const ALLOWLIST_KEYS = Object.freeze({
-  filtering: "filterable",
-  sorting: "sortable",
-  selection: "selectable",
-  searching: "searchable",
+  filtering: "filter.fields",
+  sorting: "sort.fields",
+  selection: "select.fields",
+  searching: "search.fields",
 } as const);
 
 /** How each usage reads as an adjective in front of "fields". */
@@ -112,7 +112,7 @@ export function allowlistHint(
   return (
     (suggestion === undefined ? "" : ` Did you mean '${suggestion}'?`) +
     ` ${ALLOWLIST_ADJECTIVES[usage]} fields on ${entityName}: ${nameList(allowed)}.` +
-    ` If ${entityName} has a '${field}' column, add it to allowed.${ALLOWLIST_KEYS[usage]}` +
+    ` If ${entityName} has a '${field}' column, add it to ${ALLOWLIST_KEYS[usage]}` +
     ` on the ${entityName} config to permit it.`
   );
 }
