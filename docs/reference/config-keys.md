@@ -132,10 +132,10 @@ See [Allowed](/features/allowed).
 
 Not part of `KavoSettings` either, and not nested under `allowed` — the write-side allowlists get their own top-level config objects, since they gate what `createOne`/`updateOne`/`patchOne` may write rather than what a request may filter/sort/select/include.
 
-| Key             | Type                                                           | Default                                                            |
-| --------------- | --------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `create.fields` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation  |
-| `update.fields` | same shape                                                       | same default as `create.fields`                                   |
+| Key             | Type                                                          | Default                                                           |
+| --------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `create.fields` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
+| `update.fields` | same shape                                                    | same default as `create.fields`                                   |
 
 See [Allowed](/features/allowed).
 
