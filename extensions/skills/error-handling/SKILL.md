@@ -43,7 +43,7 @@ Codes are API surface — renaming one is a breaking (semver) change.
 | `KAVO_QUERY_INVALID_FIELD`      | 400  | Field not on the filter/sort/select allowlist                                   | issue-level                       |
 | `KAVO_QUERY_INVALID_OPERATOR`   | 400  | Unknown or misspelled wire operator                                             | issue-level                       |
 | `KAVO_QUERY_INVALID_VALUE`      | 400  | Coercion failure, malformed bounds, bad pagination value                        | issue-level                       |
-| `KAVO_QUERY_LIMIT_EXCEEDED`     | 400  | `maxFilterDepth` / `maxInValues` exceeded                                       | issue-level                       |
+| `KAVO_QUERY_LIMIT_EXCEEDED`     | 400  | `limits.filterDepth` / `limits.inValues` exceeded                               | issue-level                       |
 | `KAVO_QUERY_UNSUPPORTED_PARAM`  | 400  | `withDeleted` on a hard-delete entity; `include` with no include resolver wired | issue-level                       |
 | `KAVO_NOT_FOUND`                | 404  | Target row missing on `findOne`/`updateOne`/`patchOne`/`deleteOne`              | —                                 |
 | `KAVO_CONFLICT`                 | 409  | Unique/FK violation mapped by the adapter                                       | —                                 |

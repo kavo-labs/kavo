@@ -13,8 +13,11 @@ import type { DeepPartial } from "../types/utility.js";
  * The base is always a *complete* `KavoSettings`, so the result is too.
  * `cache` merges with exactly this generic algebra — nothing special-case
  * about it (ADR-0031 as amended): the result cache's on/off is carried by
- * `ttl` itself, so `cache: { ttl: 60 }` against the `ttl: 0` default is on
- * and `cache: { etag: false }` is off, with no presence rule to track.
+ * `ttl`'s presence, so `cache: { ttl: 60 }` against a base with no `ttl` is
+ * on, `cache: { etag: false }` leaves it off, and `cache: { ttl: false }`
+ * overrides an *inherited* `ttl` back off without touching `etag` — `false`
+ * is an explicit value like any other, so a nearer scope's own `ttl: 30`
+ * still overrides it in turn.
  */
 export function mergeSettings(
   base: KavoSettings,

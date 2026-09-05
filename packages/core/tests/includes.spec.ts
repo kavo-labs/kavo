@@ -106,7 +106,7 @@ describe("include resolution", () => {
   });
 
   it("rejects an unknown relation with the same 400", async () => {
-    const fixture = blog({ author: { allowlists: { includable: ["posts"] } } });
+    const fixture = blog({ author: { include: { fields: ["posts"] } } });
     const { authors } = fixture;
     // `IncludePath` rejects 'ghosts' at compile time now, which is the point
     // of the type — but the *runtime* rejection is a separate guarantee and
@@ -116,8 +116,8 @@ describe("include resolution", () => {
     await expect(authors.findMany({ include: unknownPath })).rejects.toBeInstanceOf(QueryValidationException);
   });
 
-  it("fails at bootstrap when allowlists.includable names a relation the entity does not have", () => {
-    expect(() => blog({ author: { allowlists: { includable: ["ghosts" as never] } } })).toThrow(ConfigurationException);
+  it("fails at bootstrap when allowed.includable names a relation the entity does not have", () => {
+    expect(() => blog({ author: { include: { fields: ["ghosts" as never] } } })).toThrow(ConfigurationException);
   });
 
   it("fails at bootstrap when relations.edges names a relation the entity does not have", () => {
@@ -126,7 +126,7 @@ describe("include resolution", () => {
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
-      // A distinct path from the sibling allowlists.includable typo check
+      // A distinct path from the sibling allowed.includable typo check
       // above — edges (tuning) and includable (permission) are two
       // different config keys that both fail fast on the same kind of
       // typo, and the path is what tells them apart.
@@ -139,8 +139,8 @@ describe("include resolution", () => {
 
   it("merges overlapping paths into one tree", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { includable: ["comments"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { include: { fields: ["comments"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -155,7 +155,7 @@ describe("include resolution", () => {
 
   it("resolves auto strategies from cardinality: to-one joins, to-many batches", async () => {
     const fixture = blog({
-      post: { allowlists: { includable: ["author", "comments"] } },
+      post: { include: { fields: ["author", "comments"] } },
     });
     const { posts, postRows } = fixture;
     postRows.push(Object.assign(new Post(), { id: 10, title: "First" }));
@@ -169,7 +169,7 @@ describe("include resolution", () => {
   it("honors an explicit strategy over the heuristic", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["comments"] },
+        include: { fields: ["comments"] },
         relations: { edges: { comments: { strategy: "join" } } },
       },
     });
@@ -180,7 +180,7 @@ describe("include resolution", () => {
   });
 
   it("carries the target's delete strategy, not the root's", async () => {
-    const fixture = blog({ author: { allowlists: { includable: ["posts"] } } });
+    const fixture = blog({ author: { include: { fields: ["posts"] } } });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
     await authors.findMany({ include: ["posts"] });
@@ -188,14 +188,11 @@ describe("include resolution", () => {
     expect(includeTree(fixture.authorAdapter)["posts"]!.softDelete).toEqual({ strategy: "soft", field: "deletedAt" });
   });
 
-  it("enforces maxIncludeDepth", async () => {
-    const fixture = blog(
-      {
-        author: { allowlists: { includable: ["posts"] } },
-        post: { allowlists: { includable: ["comments"] } },
-      },
-      { defaults: { relations: { maxIncludeDepth: 1 } } },
-    );
+  it("enforces include.limits.maxDepth", async () => {
+    const fixture = blog({
+      author: { include: { fields: ["posts"], limits: { maxDepth: 1 } } },
+      post: { include: { fields: ["comments"] } },
+    });
     const { authors } = fixture;
     await expect(authors.findMany({ include: ["posts.comments"] })).rejects.toMatchObject({
       issues: [{ field: "posts.comments", code: "KAVO_QUERY_LIMIT_EXCEEDED" }],
@@ -203,16 +200,13 @@ describe("include resolution", () => {
   });
 
   it("lets a per-relation maxDepth override the budget below it", async () => {
-    const fixture = blog(
-      {
-        author: {
-          allowlists: { includable: ["posts"] },
-          relations: { edges: { posts: { maxDepth: 3 } } },
-        },
-        post: { allowlists: { includable: ["comments"] } },
+    const fixture = blog({
+      author: {
+        include: { fields: ["posts"], limits: { maxDepth: 1 } },
+        relations: { edges: { posts: { maxDepth: 3 } } },
       },
-      { defaults: { relations: { maxIncludeDepth: 1 } } },
-    );
+      post: { include: { fields: ["comments"] } },
+    });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
     const list = await authors.findMany({ include: ["posts.comments"] });
@@ -220,11 +214,10 @@ describe("include resolution", () => {
     expect(list.items[0]).toMatchObject({ posts: [{ comments: [{ body: "nice" }] }] });
   });
 
-  it("enforces maxIncludedNodes across the whole tree", async () => {
-    const fixture = blog(
-      { post: { allowlists: { includable: ["author", "comments"] } } },
-      { defaults: { relations: { maxIncludedNodes: 1 } } },
-    );
+  it("enforces include.limits.maxNodes across the whole tree", async () => {
+    const fixture = blog({
+      post: { include: { fields: ["author", "comments"], limits: { maxNodes: 1 } } },
+    });
     const { posts, postRows } = fixture;
     postRows.push(Object.assign(new Post(), { id: 10 }));
     await expect(posts.findMany({ include: ["author", "comments"] })).rejects.toMatchObject({
@@ -234,8 +227,8 @@ describe("include resolution", () => {
 
   it("bounds a self-revisiting path by depth, not by visited types", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { includable: ["author"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { include: { fields: ["author"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -249,8 +242,7 @@ describe("include resolution", () => {
   it("adds defaultInclude relations with no include param at all", async () => {
     const fixture = blog({
       author: {
-        allowlists: { includable: ["posts"] },
-        relations: { edges: { posts: { defaultInclude: true } } },
+        include: { fields: ["posts"], default: ["posts"] },
       },
     });
     const { authors, authorRows } = fixture;
@@ -267,7 +259,7 @@ describe("strategy: 'key' (issue #364)", () => {
   it("resolves a to-one edge to a key node carrying only the target pk", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
     });
@@ -296,7 +288,7 @@ describe("strategy: 'key' (issue #364)", () => {
   it("serializes a populated FK as { pk } and a null FK as null", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
     });
@@ -312,7 +304,7 @@ describe("strategy: 'key' (issue #364)", () => {
   it("accepts select[author]=id but rejects any other field with a 400", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
     });
@@ -329,10 +321,10 @@ describe("strategy: 'key' (issue #364)", () => {
   it("rejects a nested path through a key edge", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
     await expect(fixture.posts.findMany({ include: ["author", "author.posts"] })).rejects.toMatchObject({
@@ -340,7 +332,7 @@ describe("strategy: 'key' (issue #364)", () => {
     });
   });
 
-  it("still enforces allowlists.includable — key grants no permission of its own", async () => {
+  it("still enforces allowed.includable — key grants no permission of its own", async () => {
     const fixture = blog({
       post: { relations: { edges: { author: { strategy: "key" } } } },
     });
@@ -353,7 +345,7 @@ describe("strategy: 'key' (issue #364)", () => {
   it("reports a non-array select value for a key edge rather than throwing", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
     });
@@ -368,10 +360,10 @@ describe("strategy: 'key' (issue #364)", () => {
   it("serializes the id through the target's projection — a target withholding id yields {}", async () => {
     const fixture = blog({
       post: {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
         relations: { edges: { author: { strategy: "key" } } },
       },
-      author: { allowlists: { selectable: ["name"] } },
+      author: { select: { fields: ["name"] } },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
     const list = await fixture.posts.findMany({ include: ["author"] });
@@ -382,8 +374,8 @@ describe("strategy: 'key' (issue #364)", () => {
 describe("include serialization", () => {
   it("projects an included node through the target's own shape", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { selectable: ["id", "title"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { select: { fields: ["id", "title"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -397,7 +389,7 @@ describe("include serialization", () => {
 
   it("narrows an included node with select[path], validated against the target", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -411,7 +403,7 @@ describe("include serialization", () => {
 
   it("accepts the relation-keyed select spelling identically", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -427,8 +419,8 @@ describe("include serialization", () => {
 
   it("rejects a fieldset the target does not allow", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { selectable: ["id"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { select: { fields: ["id"] } },
     });
     const { authors } = fixture;
     await expect(
@@ -444,7 +436,7 @@ describe("include serialization", () => {
     // to carry. This must fail the same way a malformed top-level `select`
     // value does: one issue, never an uncaught error that surfaces as 500.
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     const { authors } = fixture;
     await expect(
@@ -455,7 +447,7 @@ describe("include serialization", () => {
   });
 
   it("omits relation keys that were not included", async () => {
-    const fixture = blog({ author: { allowlists: { includable: ["posts"] } } });
+    const fixture = blog({ author: { include: { fields: ["posts"] } } });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
     const list = await authors.findMany();
@@ -464,7 +456,7 @@ describe("include serialization", () => {
 
   it("emits an empty list / null for a relation with nothing loaded", async () => {
     const fixture = blog({
-      post: { allowlists: { includable: ["author", "comments"] } },
+      post: { include: { fields: ["author", "comments"] } },
     });
     const { posts, postRows } = fixture;
     postRows.push(Object.assign(new Post(), { id: 10, title: "Lonely", author: null, comments: [] }));
@@ -477,7 +469,7 @@ describe("include serialization", () => {
     // `[]` or `null`; the envelope must not leak that difference, or a
     // client would have to null-check a field the schema types as a list.
     const fixture = blog({
-      post: { allowlists: { includable: ["comments"] } },
+      post: { include: { fields: ["comments"] } },
     });
     const { posts, postRows } = fixture;
     postRows.push(Object.assign(new Post(), { id: 11, title: "Null comments", comments: null as never }));
@@ -557,7 +549,7 @@ describe("include rejection messages", () => {
   it("names the config key that opts a real relation in", async () => {
     const { authors } = blog();
     const detail = await detailOf(() => authors.findMany({ include: ["posts"] }));
-    expect(detail).toContain("allowlists.includable");
+    expect(detail).toContain("include.fields");
     expect(detail).toContain("on the Author config");
   });
 
@@ -570,7 +562,7 @@ describe("include rejection messages", () => {
   });
 
   it("suggests the near miss, drawn only from relations already opted in", async () => {
-    const { authors } = blog({ author: { allowlists: { includable: ["posts"] } } });
+    const { authors } = blog({ author: { include: { fields: ["posts"] } } });
     const detail = await detailOf(() =>
       authors.findMany({ include: ["postz"] as unknown as readonly IncludePath<Author>[] }),
     );
@@ -582,7 +574,7 @@ describe("include rejection messages", () => {
     // already permitted to ask for. `Post.author` exists in metadata but no
     // edge names it, so it must not appear.
     const { authors } = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     const detail = await detailOf(() =>
       authors.findMany({ include: ["posts.authr"] as unknown as readonly IncludePath<Author>[] }),
@@ -593,7 +585,7 @@ describe("include rejection messages", () => {
 
   it("blames the entity that owns the failing segment, not the root", async () => {
     const { authors } = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
     const detail = await detailOf(() =>
       authors.findMany({ include: ["posts.comments"] as unknown as readonly IncludePath<Author>[] }),
@@ -606,23 +598,27 @@ describe("include rejection messages", () => {
 
   it("names the target entity's allowlist when a relation fieldset is rejected", async () => {
     const { authors } = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { selectable: ["id", "title"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { select: { fields: ["id", "title"] } },
     });
     const detail = await detailOf(() =>
       authors.findMany({ include: ["posts"], select: { relations: { posts: ["titel"] } } }),
     );
     expect(detail).toContain("Did you mean 'title'?");
     expect(detail).toContain("Selectable fields on Post: id, title.");
-    expect(detail).toContain("allowlists.selectable on the Post config");
+    expect(detail).toContain("select.fields on the Post config");
   });
 });
 
-describe("allowlists.selectable takes root paths only (ADR-0045)", () => {
+describe("select.fields takes root paths only (ADR-0045)", () => {
   const bootstrap =
     (selectable: unknown, includable: readonly string[] = ["posts"]): (() => unknown) =>
     () =>
-      resolveEntityConfig(authorMetadata, { allowlists: { includable, selectable } } as never, undefined);
+      resolveEntityConfig(
+        authorMetadata,
+        { include: { fields: includable }, select: { fields: selectable } } as never,
+        undefined,
+      );
 
   it("rejects a relation-dotted entry in the array form as a ConfigurationException", () => {
     expect(bootstrap(["id", "name", "posts.title"])).toThrow(ConfigurationException);
@@ -651,17 +647,17 @@ describe("allowlists.selectable takes root paths only (ADR-0045)", () => {
   it("still accepts a plain root list", () => {
     const config = resolveEntityConfig(
       authorMetadata,
-      { allowlists: { includable: ["posts"], selectable: ["id", "name"] } } as never,
+      { include: { fields: ["posts"] }, select: { fields: ["id", "name"] } } as never,
       undefined,
     );
-    expect(config.allowlists.selectable).toEqual(["id", "name"]);
+    expect(config.select.fields).toEqual(["id", "name"]);
     expect(config.projection).toEqual(["id", "name"]);
   });
 
   it("projects an included relation by the target entity's own selectable, not the includer's", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"], selectable: ["id", "name"] } },
-      post: { allowlists: { selectable: ["title"] } },
+      author: { include: { fields: ["posts"] }, select: { fields: ["id", "name"] } },
+      post: { select: { fields: ["title"] } },
     });
     const { authors, authorRows } = fixture;
     authorRows.push(authorWithPosts());
@@ -679,10 +675,9 @@ describe("defaultInclude", () => {
     // would silently drop `posts.comments` from the response.
     const fixture = blog({
       author: {
-        allowlists: { includable: ["posts"] },
-        relations: { edges: { posts: { defaultInclude: true } } },
+        include: { fields: ["posts"], default: ["posts"] },
       },
-      post: { allowlists: { includable: ["comments"] } },
+      post: { include: { fields: ["comments"] } },
     } as never);
 
     return fixture.authors.findMany({ include: ["posts.comments"] } as never).then(() => {
@@ -696,10 +691,9 @@ describe("defaultInclude", () => {
     // `path` is what `select[...]` and every issue message key off, so a
     // nested default that reported a bare name would be unaddressable.
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
       post: {
-        allowlists: { includable: ["comments"] },
-        relations: { edges: { comments: { defaultInclude: true } } },
+        include: { fields: ["comments"], default: ["comments"] },
       },
     } as never);
 
@@ -712,12 +706,13 @@ describe("defaultInclude", () => {
 
 /**
  * ADR-0028: permission moved out of `relations.edges` into
- * `allowlists.includable`. `relations.edges` naming a relation used to be
+ * `allowed.includable`. `relations.edges` naming a relation used to be
  * the opt-in itself (`includable: edge.includable ?? true`); it no longer
- * grants anything — it only tunes `defaultInclude`/`maxDepth`/`strategy`
- * for a relation `allowlists.includable` has already opened.
+ * grants anything — it only tunes `maxDepth`/`strategy` for a relation
+ * `allowed.includable` has already opened. Which of those includable
+ * relations load by default is `defaults.include`'s question (issue #375).
  */
-describe("allowlists.includable — where inclusion permission now lives", () => {
+describe("allowed.includable — where inclusion permission now lives", () => {
   it("does not open a relation that relations.edges only tunes", async () => {
     const fixture = blog({
       author: { relations: { edges: { posts: { strategy: "join" } } } },
@@ -726,9 +721,9 @@ describe("allowlists.includable — where inclusion permission now lives", () =>
     await expect(fixture.authors.findMany({ include: ["posts"] })).rejects.toBeInstanceOf(QueryValidationException);
   });
 
-  it("opens a relation named in allowlists.includable alone, with no relations.edges entry", async () => {
+  it("opens a relation named in allowed.includable alone, with no relations.edges entry", async () => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
+      author: { include: { fields: ["posts"] } },
     });
 
     await fixture.authors.findMany({ include: ["posts"] });
@@ -736,10 +731,10 @@ describe("allowlists.includable — where inclusion permission now lives", () =>
     expect(Object.keys(includeTree(fixture.authorAdapter))).toEqual(["posts"]);
   });
 
-  it("still applies relations.edges tuning to a relation also opened by allowlists.includable", async () => {
+  it("still applies relations.edges tuning to a relation also opened by allowed.includable", async () => {
     const fixture = blog({
       author: {
-        allowlists: { includable: ["posts"] },
+        include: { fields: ["posts"] },
         relations: { edges: { posts: { strategy: "join" } } },
       },
     });
@@ -751,7 +746,7 @@ describe("allowlists.includable — where inclusion permission now lives", () =>
 
   it("opts every own relation in via an explicit { exclude: [] }", async () => {
     const fixture = blog({
-      post: { allowlists: { includable: { exclude: [] } } },
+      post: { include: { fields: { exclude: [] } } },
     });
 
     await fixture.posts.findMany({ include: ["author", "comments"] });
@@ -761,7 +756,7 @@ describe("allowlists.includable — where inclusion permission now lives", () =>
 
   it("excludes a named relation via { exclude }, leaving the rest includable", async () => {
     const fixture = blog({
-      post: { allowlists: { includable: { exclude: ["comments"] } } },
+      post: { include: { fields: { exclude: ["comments"] } } },
     });
 
     await expect(fixture.posts.findMany({ include: ["comments"] })).rejects.toBeInstanceOf(QueryValidationException);
@@ -772,7 +767,7 @@ describe("allowlists.includable — where inclusion permission now lives", () =>
   it("says 'none' rather than trailing a bare colon when the entity has no relations at all", () => {
     // `Comment` declares no relations, so the message has an empty list to
     // render — the one case where the join would produce nothing.
-    expect(() => blog({ comment: { allowlists: { includable: ["ghosts" as never] } } })).toThrow(/relations: none/);
+    expect(() => blog({ comment: { include: { fields: ["ghosts" as never] } } })).toThrow(/relations: none/);
   });
 });
 
@@ -784,8 +779,8 @@ describe("malformed include paths", () => {
     ["an empty string", ""],
   ])("rejects %s as a query issue rather than building an empty-named node", async (_label, path) => {
     const fixture = blog({
-      author: { allowlists: { includable: ["posts"] } },
-      post: { allowlists: { includable: ["comments"] } },
+      author: { include: { fields: ["posts"] } },
+      post: { include: { fields: ["comments"] } },
     } as never);
 
     const issues = await fixture.authors
@@ -823,9 +818,9 @@ describe("an includable relation whose target is unknown to this instance", () =
       },
     });
     const authors = kavo.createCrud(Author, {
-      allowlists: { includable: ["posts"] },
+      include: { fields: ["posts"] },
     } as never) as DefaultKavoService<Author>;
-    kavo.createCrud(Post, { allowlists: { includable: ["comments"] } } as never);
+    kavo.createCrud(Post, { include: { fields: ["comments"] } } as never);
 
     const issues = await authors.findMany({ include: ["posts.comments"] } as never).then(
       () => {

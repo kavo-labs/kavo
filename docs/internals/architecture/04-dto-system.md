@@ -41,16 +41,16 @@ type level and the runtime never disagree about which slot follows which.
 The metadata seam (`EntityMetadata`, doc 09 §1) supplies the field list
 the defaults derive from:
 
-- **Readable projection** (`item`/`list` default): every own scalar
-  column — an ORM-derived field is opt-in only through an explicit
-  `allowlists.selectable` (§7, [ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata))
-  — **intersected with `allowlists.selectable` when that key is configured
-  explicitly** ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
+- **Readable projection** (`item`/`list` default): every scalar column,
+  plus every computed field the entity declares (§7), **intersected with
+  `allowed.selectable` when that key is configured explicitly**
+  ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
   which is how a column is kept out of every response without registering a
   DTO at all. Relation properties
   are excluded unless the request includes them deliberately; a class
-  getter or method never appears on its own unless it is a real
-  `FieldMetadata` entry the adapter reports.
+  getter or method never appears on its own — it is not a column, and an
+  entity-class getter that seems to work is an accident of the ORM handing
+  the engine class instances ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
   A registered DTO wins outright over the allowlist rather than
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
@@ -76,10 +76,10 @@ the defaults derive from:
   soft-delete state that way.
 
   This default projection can be narrowed further, without registering a
-  DTO at all, by `allowlists.creatable` (for `createOne`) and
-  `allowlists.updatable` (for `updateOne`/`patchOne` — the two share one
+  DTO at all, by `create.fields` (for `createOne`) and
+  `update.fields` (for `updateOne`/`patchOne` — the two share one
   list, since both mutate an existing row) — the write-side counterpart to
-  `allowlists.selectable` above, and subject to the same rules: it can only
+  `allowed.selectable` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the
   soft-delete marker there has no effect; and a registered write DTO with a
   runtime shape wins outright, exactly as a registered `item`/`list` DTO
@@ -126,42 +126,56 @@ from the **target entity's own registered `item`/`list` DTOs** when that
 entity has a Kavo config, else its entity-derived default. There is no
 per-include DTO slot — the related resource owns its own contract.
 
-## 7. ORM-derived fields (virtual columns, issue #373)
+## 7. Computed fields
 
-A field with no ordinary storage column is declared on the **ORM**, not on
-Kavo — a TypeORM `@VirtualColumn`, a MikroORM `@Formula` — and reported to
-core through `FieldMetadata.derivedExpression`, an opaque marker core
-never inspects ([ADR-0005](/internals/adr/0005-core-zero-runtime-dependencies)). It is then
-an **ordinary `FieldMetadata` entry**, read straight off the row like any
-column, subject to the same "selection narrows, never widens" rule of §5
-— no separate evaluation step, no serializer-side resolver
-([ADR-0046](/internals/adr/0046-derived-fields-come-from-orm-metadata),
-which supersedes the `computed`/`resolve` design formerly documented
-here).
+A field with no backing column is declared on the entity config, not
+faked through a DTO class:
 
-| Aspect                  | Behavior                                                                                                                                                          |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Default projection      | **Excluded** unless opted in via an explicit `allowlists.selectable` — the same opt-in rule a relation follows                                                    |
-| Explicit DTO            | Narrows it like any other field                                                                                                                                   |
-| `selectable`            | Opt-in only; `{ exclude }` never surfaces it, only a plain array can                                                                                              |
-| `filterable`/`sortable` | Opt-in only; whether it actually works depends on the adapter (TypeORM/MikroORM: yes; Prisma/Mongoose: field invisible entirely)                                  |
-| `searchable`            | **Never** — naming it, opted in or not, is a bootstrap `ConfigurationException`                                                                                   |
-| Write payloads          | Never writable — a `create`/`update`/`patch` DTO naming it is a bootstrap error, and the deserializer excludes it from the derived writable projection regardless |
-| Precedence chain        | N/A — it is ORM metadata, not `EntityConfig`; only its allowlist membership is configured                                                                         |
+```ts
+createCrud(User, {
+  computed: {
+    fullName: { resolve: (user) => [user.firstName, user.lastName].filter(Boolean).join(" ") },
+  },
+});
+```
 
-A derived field on a **relation target** resolves when that relation is
-included — the serializer reads the included node's projection from the
-target's own resolved config through the `EntityCatalog` (§6), the same
-composition an ordinary column already gets, with no extra machinery and
-no context-propagation hazard (there is no resolver left to hand a
-context to).
+`DefaultSerializer` **evaluates** a computed key by calling `resolve`,
+never by reading it off the row — which is what makes it behave the same
+over a TypeORM class instance and a Prisma/Mongoose plain object, and why
+no ORM adapter is involved at all. It evaluates it even when the row
+_does_ carry that key (a class getter, or a column outside the metadata
+seam): resolving beats reading, or the feature would collapse back into
+the accident it replaced. `resolve` also receives the request's
+`KavoContext`, so a field may vary by `context.app`; it is synchronous by
+design, because it runs once per served item — and must be **total**, not
+just pure, because one throwing row fails the entire list response
+([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
+
+The rules, all governed by
+[ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated):
+
+| Aspect                  | Behavior                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowed.selectable` omits it (ADR-0026)                            |
+| Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
+| `selectable`            | Joined by default, so `select=fullName` works; `selectable: false` opts out                                                      |
+| `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |
+| Write payloads          | Never writable — a `create`/`update`/`patch` DTO naming one is a bootstrap error, and the deserializer strips the key regardless |
+| Precedence chain        | Outside it: structural entity config like `dto`, resolved once at `createCrud`                                                   |
+
+The serialization order of §5 is unchanged: a computed field is subject to
+"selection narrows, never widens" exactly like a column.
+
+A computed field declared on a **relation target** resolves when that
+relation is included — the serializer reads the included node's projection
+from the target's own resolved config through the `EntityCatalog` (§6), so
+this composes with no extra machinery.
 
 Static typing of the response is unaffected: the entity-derived `ItemDto`
-does not grow the key unless the ORM entity class itself declares the
-property (a `@VirtualColumn`/`@Formula` field is a real class property, so
-it typically does). The generated OpenAPI response schema includes it
-under the same rule as any other field: typed from its own
-`FieldMetadata`, gated by the resolved `selectable` allowlist.
+does not grow the key, and neither does the generated OpenAPI response
+schema, which falls back to the entity class when no `item`/`list` slot is
+registered. Registering an `item`/`list` DTO that names it is how a caller
+gets it statically typed — and documented — as for any other narrowing.
 
 ## 8. Per-operation override (issue #131)
 
@@ -210,7 +224,7 @@ the type level: `EntityConfig`'s `operations` field is typed through
 `StandardOperationsConfig`, which `Pick`s only the applicable
 `OperationDtoOverride` fields per operation id, so e.g. `deleteOne` has no
 `dto` key to set at all. The runtime check exists for the same reason
-`resolveAllowlists` and `rejectComputedWriteDtoKeys` keep one: a config
+`resolveAllowed` and `rejectComputedWriteDtoKeys` keep one: a config
 built from an erased or cast type has no compiler to catch it.
 
 A custom operation (issue #145) is the one place the rule is runtime-only.

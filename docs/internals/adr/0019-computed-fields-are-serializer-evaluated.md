@@ -34,7 +34,7 @@ evaluating the predicate in memory — which silently breaks pagination
 (`limit`/`offset` are applied by the database, before the predicate),
 `total`, and every performance property the query grammar is built on.
 The alternative, "just add the field to `selectable` and hope nobody
-filters", is exactly the fail-open posture `resolveAllowlists` exists to
+filters", is exactly the fail-open posture `resolveAllowed` exists to
 prevent.
 
 Where the field is evaluated is the other half. Nothing in the pipeline
@@ -99,8 +99,8 @@ unchanged: an explicit `item`/`list` DTO that omits it hides it, and
 first, then field selection; selection never widens.
 
 **3. Never filterable, never sortable.** Not deferred — rejected. A
-computed field never joins the derived `filterable`/`sortable` allowlists,
-and naming one in a configured `allowlists.filterable`/`sortable` is a
+computed field never joins the derived `filterable`/`sortable` allowlist
+configurations, and naming one in a configured `allowed.filterable` or `allowed.sortable` is a
 bootstrap `ConfigurationException`. In-memory post-fetch filtering is not
 a future option here; a caller who needs to filter or sort on a derived
 value wants a real generated column, which every supported ORM already
@@ -144,7 +144,7 @@ operation, and unreachable from a per-call `KavoCallOptions.settings`
 override.
 
 At the type level, `EntityConfig` takes an eighth parameter, `Computed`,
-inferred from the keys of `computed`. It widens `allowlists.selectable`
+inferred from the keys of `computed`. It widens `allowed.selectable`
 to `FieldPath<Entity> | Computed` so an explicit selectable list can name
 a computed field without a cast — and, deliberately, widens nothing else,
 so rule 3 is a compile error before it is a bootstrap error.

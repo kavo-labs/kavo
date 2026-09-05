@@ -30,7 +30,7 @@ import { hasPermission } from "./owner.policy.js";
  * these events over `text/event-stream`.
  *
  * Search: `GET /owners?search[query]=ada` free-text searches every own
- * string column — `name` and `email` — since `allowlists.searchable` is
+ * string column — `name` and `email` — since `allowed.searchable` is
  * left unconfigured here (contrast Cat's explicit array): the zero-config
  * default. `search[fields]=name` narrows a given request to just one.
  *
@@ -65,21 +65,19 @@ import { hasPermission } from "./owner.policy.js";
   cache: { etag: false },
   realtime: { events: {} },
   softDelete: { strategy: "soft" },
-  query: { search: {} },
+  search: {},
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves
   // to every own column except this one, without hand-enumerating the rest.
-  allowlists: {
-    filterable: { exclude: ["deletedAt"] },
-    sortable: { exclude: ["deletedAt"] },
-    selectable: { exclude: ["deletedAt"] },
-    // `include=pets` — opt-in per relation. Pets are a to-many, so they
-    // batch-load: one extra query per page of owners, never a joined row
-    // explosion under pagination. `address` is the to-one counterpart — it
-    // joins instead. Both are `auto`'s default, so no `relations.edges`
-    // tuning is needed.
-    includable: ["pets", "address"],
-  },
+  filter: { fields: { exclude: ["deletedAt"] } },
+  sort: { fields: { exclude: ["deletedAt"] } },
+  select: { fields: { exclude: ["deletedAt"] } },
+  // `include=pets` — opt-in per relation. Pets are a to-many, so they
+  // batch-load: one extra query per page of owners, never a joined row
+  // explosion under pagination. `address` is the to-one counterpart — it
+  // joins instead. Both are `auto`'s default, so no `relations.edges`
+  // tuning is needed.
+  include: { fields: ["pets", "address"] },
   operations: {
     createOne: true,
     findOne: true,

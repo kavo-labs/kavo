@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { KavoSettings, DeepPartial } from "@kavo/core";
-import { BUILT_IN_DEFAULTS, ConfigurationException, mergeSettings, validateSettings } from "@kavo/core";
+import {
+  BUILT_IN_DEFAULTS,
+  ConfigurationException,
+  mergeSettings,
+  resolveEntityConfig,
+  validateSettings,
+} from "@kavo/core";
+import { userMetadata } from "./support/user-fixture.js";
 
 /**
  * Validate one override merged onto the built-in defaults, returning the
@@ -70,80 +77,107 @@ describe("validateSettings — pagination", () => {
   });
 });
 
-describe("validateSettings — query limits", () => {
-  it("rejects a maxFilterDepth that is not a positive integer", () => {
+/**
+ * `filter.limits`/`sort.default`/`select.default`/`include.default`/`search`
+ * (issue #386) are entity-scope field-group config, not `KavoSettings` —
+ * validated by `resolveEntityConfig` (`resolve-entity-config.ts`), not
+ * `validateSettings`. These blocks exercise that resolver directly instead.
+ */
+function rejectedEntityConfig(config: unknown): ConfigurationException {
+  try {
+    resolveEntityConfig(userMetadata, config as never, undefined);
+  } catch (error) {
+    if (error instanceof ConfigurationException) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error("expected ConfigurationException");
+}
+
+describe("resolveEntityConfig — filter.limits", () => {
+  it("rejects a maxDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ query: { maxFilterDepth: value } }, "query.maxFilterDepth", value);
+      const error = rejectedEntityConfig({ filter: { limits: { maxDepth: value } } });
+      expect(error.code).toBe("KAVO_CONFIG_INVALID");
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxDepth" });
     }
   });
 
   it("rejects a maxInValues that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ query: { maxInValues: value } }, "query.maxInValues", value);
+      const error = rejectedEntityConfig({ filter: { limits: { maxInValues: value } } });
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxInValues" });
     }
   });
 
-  it("accepts a depth and a value cap of 1", () => {
-    expect(() => accept({ query: { maxFilterDepth: 1, maxInValues: 1 } })).not.toThrow();
-  });
-
-  it("rejects a defaultSort that is not an array", () => {
-    for (const value of ["name", null, { field: "name", direction: "asc" }]) {
-      expectRejected({ query: { defaultSort: value } }, "query.defaultSort", value);
+  it("rejects a maxLikePatternLength that is not a positive integer", () => {
+    for (const value of NOT_POSITIVE_INTEGERS) {
+      const error = rejectedEntityConfig({ filter: { limits: { maxLikePatternLength: value } } });
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxLikePatternLength" });
     }
   });
 
-  it("rejects a defaultSort entry missing a field or with a non-string field", () => {
-    for (const entry of [{}, { field: 1, direction: "asc" }, { direction: "asc" }]) {
-      expectRejected({ query: { defaultSort: [entry] } }, "query.defaultSort[0]", entry);
-    }
-  });
-
-  it("rejects a defaultSort entry with an invalid direction", () => {
-    expectRejected(
-      { query: { defaultSort: [{ field: "name", direction: "up" }] } },
-      "query.defaultSort[0].direction",
-      "up",
-    );
-  });
-
-  it("accepts a well-formed defaultSort", () => {
+  it("accepts a depth, value cap, and like-pattern cap of 1", () => {
     expect(() =>
-      accept({
-        query: {
-          defaultSort: [
-            { field: "createdAt", direction: "desc" },
-            { field: "id", direction: "asc" },
-          ],
-        },
-      }),
+      resolveEntityConfig(
+        userMetadata,
+        { filter: { limits: { maxDepth: 1, maxInValues: 1, maxLikePatternLength: 1 } } },
+        undefined,
+      ),
     ).not.toThrow();
   });
 });
 
-describe("validateSettings — query.search", () => {
+describe("resolveEntityConfig — sort/select/include defaults", () => {
+  it("rejects a sort.default that is not an array", () => {
+    const error = rejectedEntityConfig({ sort: { default: "name" } });
+    expect(error.messageParams).toMatchObject({ path: "sort.default" });
+  });
+
+  it("rejects a sort.default entry outside sort.fields", () => {
+    const error = rejectedEntityConfig({ sort: { fields: ["name"], default: ["email"] } });
+    expect(error.messageParams).toMatchObject({ path: "sort.default" });
+  });
+
+  it("rejects a select.default entry outside select.fields", () => {
+    const error = rejectedEntityConfig({ select: { fields: ["name"], default: ["email"] } });
+    expect(error.messageParams).toMatchObject({ path: "select.default" });
+  });
+
+  it("accepts a well-formed sort.default/select.default", () => {
+    expect(() =>
+      resolveEntityConfig(
+        userMetadata,
+        {
+          sort: { default: ["-createdAt", "id"] },
+          select: { default: ["id", "name"] },
+        },
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("resolveEntityConfig — search", () => {
   it("defaults to disabled (false)", () => {
-    expect(BUILT_IN_DEFAULTS.query.search).toBe(false);
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    expect(config.search).toBe(false);
   });
 
   it("accepts search: false (disabled)", () => {
-    expect(() => accept({ query: { search: false } })).not.toThrow();
+    expect(() => resolveEntityConfig(userMetadata, { search: false }, undefined)).not.toThrow();
   });
 
   it("rejects a search.mode outside substring/words", () => {
     for (const value of ["Substring", "word", 1, null]) {
-      expectRejected({ query: { search: { mode: value } } }, "query.search.mode", value);
-    }
-  });
-
-  it("rejects any search.driver other than 'orm'", () => {
-    for (const value of ["postgres", "meilisearch", "", null]) {
-      expectRejected({ query: { search: { mode: "substring", driver: value } } }, "query.search.driver", value);
+      expect(() => resolveEntityConfig(userMetadata, { search: { mode: value } } as never, undefined)).toThrow();
     }
   });
 
   it("accepts an explicit, well-formed search setting", () => {
-    expect(() => accept({ query: { search: { mode: "words", driver: "orm" } } })).not.toThrow();
+    const config = resolveEntityConfig(userMetadata, { search: { mode: "words", driver: "orm" } }, undefined);
+    expect(config.search).toMatchObject({ mode: "words", driver: "orm" });
   });
 });
 
@@ -173,14 +207,21 @@ describe("validateSettings — cache", () => {
     expect(() => accept({ cache: false })).not.toThrow();
   });
 
-  it("rejects a cache.ttl that is not a non-negative integer", () => {
-    for (const value of [-1, 1.5, "60", null]) {
+  it("rejects a cache.ttl that is not a positive integer, false, or omitted", () => {
+    for (const value of [0, -1, 1.5, "60", null]) {
       const error = rejectionOf({ cache: { ttl: value } });
       expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.ttl" });
     }
-    for (const value of [0, 60]) {
+    for (const value of [60, false]) {
       expect(() => accept({ cache: { ttl: value } })).not.toThrow();
     }
+    expect(() => accept({ cache: { etag: true } })).not.toThrow();
+  });
+
+  it("bootstrap rejects 'cache: { ttl: 0 }' — omit 'ttl' or use 'ttl: false' instead", () => {
+    const error = rejectionOf({ cache: { ttl: 0 } });
+    expect(error).toBeInstanceOf(ConfigurationException);
+    expect(error.messageParams).toMatchObject({ entity: "User", path: "cache.ttl" });
   });
 
   it("rejects a cache that is neither the object nor false", () => {
@@ -191,21 +232,25 @@ describe("validateSettings — cache", () => {
   });
 });
 
-describe("validateSettings — relation limits", () => {
-  it("rejects a maxIncludeDepth that is not a positive integer", () => {
+describe("resolveEntityConfig — include.limits", () => {
+  it("rejects a maxDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ relations: { maxIncludeDepth: value } }, "relations.maxIncludeDepth", value);
+      const error = rejectedEntityConfig({ include: { limits: { maxDepth: value } } });
+      expect(error.messageParams).toMatchObject({ path: "include.limits.maxDepth" });
     }
   });
 
-  it("rejects a maxIncludedNodes that is not a positive integer", () => {
+  it("rejects a maxNodes that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ relations: { maxIncludedNodes: value } }, "relations.maxIncludedNodes", value);
+      const error = rejectedEntityConfig({ include: { limits: { maxNodes: value } } });
+      expect(error.messageParams).toMatchObject({ path: "include.limits.maxNodes" });
     }
   });
 
   it("accepts a budget of one node at depth one", () => {
-    expect(() => accept({ relations: { maxIncludeDepth: 1, maxIncludedNodes: 1 } })).not.toThrow();
+    expect(() =>
+      resolveEntityConfig(userMetadata, { include: { limits: { maxDepth: 1, maxNodes: 1 } } }, undefined),
+    ).not.toThrow();
   });
 });
 
@@ -214,14 +259,6 @@ describe("validateSettings — relation edges", () => {
     for (const value of [true, 5, "posts", null]) {
       expectRejected({ relations: { edges: { posts: value } } }, "relations.edges.posts", value);
     }
-  });
-
-  it("rejects a non-boolean defaultInclude", () => {
-    expectRejected(
-      { relations: { edges: { posts: { defaultInclude: 1 } } } },
-      "relations.edges.posts.defaultInclude",
-      1,
-    );
   });
 
   it("rejects a maxDepth that is not a positive integer", () => {
@@ -236,12 +273,12 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  // `defaultInclude` vs. permission (`allowlists.includable`) is no longer
+  // `defaults.include` vs. permission (`allowed.includable`) is no longer
   // checkable by `validateSettings` alone — permission moved to entity-typed
-  // `EntityConfig.allowlists` (ADR-0028), outside the `KavoSettings` shape
+  // `EntityConfig.allowed` (ADR-0028), outside the `KavoSettings` shape
   // this file exercises. See `config.spec.ts`'s
-  // "resolveEntityConfig — allowlists.includable" describe block for that
-  // cross-check, now performed by `validateIncludableRelations`.
+  // "resolveEntityConfig — allowed.includable" describe block for that
+  // cross-check, now performed by `validateDefaults`.
 
   it("accepts an edge that configures nothing — every sub-key is optional", () => {
     expect(() => accept({ relations: { edges: { posts: {} } } })).not.toThrow();
@@ -253,10 +290,10 @@ describe("validateSettings — relation edges", () => {
     }
   });
 
-  it("accepts defaultInclude/maxDepth shape regardless of includable permission", () => {
+  it("accepts maxDepth shape regardless of includable permission", () => {
     // `validateSettings` only checks shape now — whether `posts` is actually
-    // includable is `resolveEntityConfig`'s `allowlists`-aware cross-check.
-    expect(() => accept({ relations: { edges: { posts: { defaultInclude: true, maxDepth: 1 } } } })).not.toThrow();
+    // includable is `resolveEntityConfig`'s `allowed`-aware cross-check.
+    expect(() => accept({ relations: { edges: { posts: { maxDepth: 1 } } } })).not.toThrow();
   });
 });
 
@@ -417,12 +454,12 @@ describe("validateSettings — the base of the precedence chain", () => {
     // The engine validates per-call overrides under a derived label, so
     // the entity name is a parameter, not a lookup.
     try {
-      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { query: { maxInValues: 0 } }));
+      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { pagination: { maxLimit: -1 } }));
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "User (per-call)",
-        path: "query.maxInValues",
+        path: "pagination.maxLimit",
       });
     }
   });

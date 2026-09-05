@@ -109,7 +109,11 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   `@kavo/prisma` has no raw pattern operator, so an interior `%` and any
   `_` are **rejected with a 400** rather than mistranslated (doc 14 §6),
   and `@kavo/mikroorm` cannot attach an `ESCAPE` clause, so the backslash
-  escape there is driver-dependent (doc 17 §7).
+  escape there is driver-dependent (doc 17 §7). The pattern's length is
+  capped by `limits.likePattern` (default 200) — values are always
+  parameter-bound, so this is not an injection guard, but an unbounded
+  pattern (heavy wildcard backtracking, e.g. `%a%b%c%…`) can otherwise force
+  an expensive scan.
 - **Relation-path filtering:** dot notation
   (`filter[profile.city][eq]=Helsinki`), permitted only for paths on the
   filterable allowlist. Relation-path filters **restrict root rows** (a
@@ -147,7 +151,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
 - **Sort:** `sort=-createdAt,name` — comma-separated, `-` prefix =
   descending, list order is priority order. Sortable-allowlist enforced.
   A request that supplies no `sort` falls back to the resolved
-  `query.defaultSort` setting (doc 08) if one is configured; a client- or
+  `defaults.sort` setting (doc 08) if one is configured; a client- or
   caller-supplied `sort` always wins outright over the default rather than
   merging with it. With neither, there is no `ORDER BY` at all — row order
   is DB-dependent.
@@ -282,7 +286,7 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
   whenever any other `search[...]` key is present; `search[mode]` or
   `search[fields]` without it is `KAVO_QUERY_CONFLICTING_PARAMS`.
 - **`search[mode]=substring|words`** — optional per-call override of the
-  resolved `query.search.mode` setting (`substring` default). Exact-case
+  resolved `search.mode` setting (`substring` default). Exact-case
   matched, like every wire token in this grammar — an unknown value is
   `KAVO_QUERY_INVALID_VALUE`.
   - **`substring`:** one `OR` group, one `ILIKE '%term%'` condition per
@@ -290,19 +294,19 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
   - **`words`:** the term splits on whitespace; one `OR` group per word,
     `AND`-ed together — every word must match somewhere, in any searched
     field, independently. The synthesized width — word count × searched-field
-    count, one `ILIKE` condition per pair — is capped at `query.maxInValues`
+    count, one `ILIKE` condition per pair — is capped at `limits.inValues`
     (the same limit `in`/`notIn`/`between` reuse, §3); past it,
     `KAVO_QUERY_LIMIT_EXCEEDED`. Unlike those operators this is not an array
     value, and both factors matter: `searchable`'s own default is _every_ own
     string column, so a wide allowlist alone — with no unusually long query —
     can still exceed the cap.
 - **`search[fields]=<comma-list>`** — optional. Narrows which fields this
-  call searches to a subset of the entity's resolved `allowlists.searchable`
+  call searches to a subset of the entity's resolved `allowed.searchable`
   set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
   allowlist-rejection family `filter[...]`/`sort=`/`select=` use). Omitted,
   every field in `searchable` is searched.
 
-**Allowlist.** `EntityConfig.allowlists.searchable` — same
+**Allowlist.** `EntityConfig.allowed.searchable` — same
 `QueryFieldSelector` shape as `filterable`/`sortable`/`selectable`, and
 relation paths are permitted (`'brand.name'`), reusing the per-path join
 machinery `filter[...]` already has for relation filters. Unlike
@@ -321,7 +325,7 @@ or equivalent, same as any other leading-wildcard `LIKE`/`ILIKE` query
 would.
 
 **Gate.** `search[query]` is rejected outright
-(`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `query.search` resolves to an
+(`KAVO_QUERY_UNSUPPORTED_PARAM`) unless `search` resolves to an
 object (`{ mode, driver }`) rather than `false` — `false` by default,
 resolved through the standard global → entity → operation → per-call
 precedence chain (doc 08). A nearer scope re-enabling search from `false`
@@ -331,7 +335,7 @@ endpoint support search at all" an explicit decision even though
 `searchable`'s own default is permissive. The same rejection covers a
 `searchable` that resolves empty.
 
-`query.search.driver` is a **reserved discriminator**, not a pluggable
+`search.driver` is a **reserved discriminator**, not a pluggable
 backend seam: `'orm'` is the only value this schema accepts today, kept so
 a future `'postgres'` (native full-text) or `'meilisearch'` driver can land
 additively without a breaking config change. It is config-only — there is
@@ -360,7 +364,7 @@ through `filter`, the same way it composes any other filter.
 
 ## 5. Security & robustness
 
-- **Allowlists:** every entity resolves filterable/sortable/selectable
+- **Allowed:** every entity resolves filterable/sortable/selectable
   lists at bootstrap — explicitly configured, or defaulting to the
   entity's **own scalar columns** (relation paths are never allowlisted
   implicitly). Anything outside a list → 400
@@ -391,9 +395,26 @@ through `filter`, the same way it composes any other filter.
   soft-delete marker) doesn't require re-listing every other one.
   Resolution starts from exactly the base set that key's plain default
   uses, so the result stays fail-closed like the plain array form.
-- **Limits** (configurable per scope, doc 8): `query.maxFilterDepth`
-  (default 3) on the built AST, `query.maxInValues` (default 100) on
-  `in`/`notIn` arrays, `pagination.maxLimit` (default 100) on page size.
+- **Limits** (configurable per scope, doc 8): `limits.filterDepth`
+  (default 3) on the built AST — enforced _while_ the wire grammar is being
+  converted into the AST, not after, so a pathologically nested
+  `filter[and][0][and][0]…` (or the `filter={…}` JSON escape hatch, which
+  lets `JSON.parse` build far deeper trees than the bracket grammar's own
+  key-splitting could) is rejected before the recursion that builds it goes
+  any deeper than the limit allows; `limits.inValues` (default 100) on
+  `in`/`notIn`/`between` arrays; `limits.likePattern` (default 200)
+  on `like`/`ilike` pattern length; `pagination.maxLimit` (default 100) on
+  page size.
+- **Allowlist identifier safety** (`@kavo/typeorm`, issue #367): `filterable`/
+  `sortable` are the only two allowlists whose fields are interpolated raw
+  into SQL (a join property path, and a `where`/`addOrderBy` column
+  reference — identifiers can't be parameter-bound). An explicit array
+  override is used verbatim, so it is validated at bootstrap: a bare entry
+  must name a real column, relation, or computed field, and a relation-path
+  entry's segments must each look like a plain identifier (checked against
+  a strict charset — cross-entity metadata to validate the path's target
+  isn't available at bootstrap). `@kavo/typeorm`'s `columnRef` re-checks the
+  same charset at request time as defense in depth.
 - **Type coercion:** raw wire strings coerce against column metadata
   before becoming AST values — number, boolean (`true`/`false`/`1`/`0`),
   date (ISO 8601), enum (member match), `null` for nullable columns.
@@ -422,7 +443,7 @@ through `filter`, the same way it composes any other filter.
 ```
 raw query string (flat bracket keys)
   → DefaultFilterParser   (allowlist + coercion + limits → Filter AST)
-  → sort / select parsing (allowlists)
+  → sort / select parsing (allowed)
   → PaginationStrategy    (defaultLimit / maxLimit / 400s)
   → NormalizedQueryContext  { filter, sort, pagination, select,
                               include: {}, withDeleted: false,

@@ -545,19 +545,19 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(4);
   });
 
-  it("applies the configured defaultSort when the caller supplies no sort", async () => {
+  it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((author) => (author as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
   });
 
-  it("keeps defaultSort-ordered pages disjoint and stable across offsets", async () => {
+  it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const page1 = await withDefault.findMany({ limit: 2, offset: 0 });
     const page2 = await withDefault.findMany({ limit: 2, offset: 2 });
@@ -580,7 +580,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
   it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
     await seed();
     // The parser can never emit this, but a programmatic caller hand-builds
-    // the AST and `validateExpression` checks allowlists, not operators.
+    // the AST and `validateExpression` checks allowed, not operators.
     // Falling through the translator's switch would add no predicate at all —
     // the caller asked to narrow to one row and would silently get all four
     // back. The guard surfaces as PersistenceException: a forged AST is an
@@ -612,7 +612,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);
@@ -637,7 +637,7 @@ describe("MikroOrmRepositoryAdapter — query translation", () => {
 
   it("sorts on an allowlisted relation path", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { sortable: ["title", "author.name" as never] },
+      sort: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((author) => author as Author);

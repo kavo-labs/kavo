@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity: `dto`, `allowlists` (see [Allowlists](/features/allowlists) and [Virtual fields](/features/virtual-fields) for opting a derived field into one), `policy` (below, an entity-wide default), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` may be overridden per operation.
+`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity: `dto`, `allowed` (see [Allowed](/features/allowed)), `computed` (see [Computed fields](/features/computed-fields)), `policy` (below, an entity-wide default), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` may be overridden per operation.
 
 ## dto
 
@@ -28,9 +28,9 @@ Registers DTO classes per slot. Every slot is independently optional and falls b
 
 There's no `patch` DTO class to write on its own; it derives from `update`. See [DTO system](/internals/architecture/04-dto-system) for full derivation rules.
 
-## allowlists
+## allowed and computed
 
-Moved to [Allowlists](/features/allowlists) and [Virtual fields](/features/virtual-fields).
+Moved to [Allowed](/features/allowed) and [Computed fields](/features/computed-fields).
 
 ## policy
 

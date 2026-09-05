@@ -33,6 +33,16 @@ export type FilterOperator =
   | "IS_NULL"
   | "IS_NOT_NULL";
 
+/**
+ * The camelCase wire spelling of each {@link FilterOperator} —
+ * `filter[field][op]=` and `filter.fields`'s map form (`EntityConfig`,
+ * entity-config.ts) both spell operators this way. Kept honest by
+ * `OPERATOR_TOKENS satisfies Record<FilterOperator, FilterOperatorToken>`
+ * in `default-filter-parser.ts`.
+ */
+export type FilterOperatorToken =
+  "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "in" | "notIn" | "like" | "ilike" | "between" | "isNull" | "isNotNull";
+
 /** Logical connectives for filter groups. */
 export type LogicalOperator = "AND" | "OR" | "NOT";
 

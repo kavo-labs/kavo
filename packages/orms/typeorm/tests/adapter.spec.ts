@@ -455,32 +455,27 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(0);
   });
 
-  it("applies the configured defaultSort when the caller supplies no sort", async () => {
+  it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
   });
 
-  it("lets a caller-supplied sort override the configured defaultSort", async () => {
+  it("lets a caller-supplied sort override the configured defaults.sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany({ sort: [{ field: "age", direction: "desc" }] });
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Grace", "Alan", "Ada", "Joan"]);
   });
 
-  it("breaks ties on the second field of a multi-field defaultSort", async () => {
+  it("breaks ties on the second field of a multi-field defaults.sort", async () => {
     const withDefault = kavo.createCrud(Author, {
-      query: {
-        defaultSort: [
-          { field: "status", direction: "asc" },
-          { field: "name", direction: "asc" },
-        ],
-      },
+      sort: { default: ["status", "name"] },
     }) as DefaultKavoService<Author>;
     await withDefault.createOne({ email: "b@x.io", name: "Bea", age: 30, status: "active" } as never);
     await withDefault.createOne({ email: "c@x.io", name: "Cy", age: 31, status: "active" } as never);
@@ -489,10 +484,10 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Amy", "Bea", "Cy"]);
   });
 
-  it("keeps defaultSort-ordered pages disjoint and stable across offsets", async () => {
+  it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const page1 = await withDefault.findMany({ limit: 2, offset: 0 });
     const page2 = await withDefault.findMany({ limit: 2, offset: 2 });
@@ -515,7 +510,8 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
     await seed();
     // The parser can never emit this, but a programmatic caller hand-builds
-    // the AST and `validateExpression` checks allowlists, not operators.
+    // the AST: its type restricts operators, while `validateExpression`
+    // enforces the field allowlist.
     // Falling through the translator's switch would add no predicate at
     // all — the caller asked to narrow to one row and would silently get
     // all four back. The guard surfaces as PersistenceException: a forged
@@ -547,7 +543,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -565,6 +561,107 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
       },
     });
     expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
+  });
+
+  it("filters a to-one relation path with an operator other than EQ", async () => {
+    const scoped = kavo.createCrud(Book, {
+      filter: { fields: ["title", "author.name" as never] },
+    }) as DefaultKavoService<Book>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    const grace = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Grace")!;
+    await dataSource.getRepository(Book).save([
+      { title: "Notes", author: { id: ada.id } },
+      { title: "Other", author: { id: grace.id } },
+    ] as never);
+
+    const list = await scoped.findMany({
+      filter: {
+        kind: "condition",
+        field: "author.name" as never,
+        operator: "LIKE",
+        value: "A%",
+      },
+    });
+    expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
+  });
+
+  it("filters through the reverse one-to-many relation path", async () => {
+    // Author -> books is the OneToMany side; a filter on `books.title`
+    // still joins and restricts, it just doesn't select the relation
+    // (that's what `include=` is for).
+    const scoped = kavo.createCrud(Author, {
+      filter: { fields: ["name", "books.title" as never] },
+    }) as DefaultKavoService<Author>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    await dataSource.getRepository(Book).save([{ title: "Dune", author: { id: ada.id } }] as never);
+
+    const list = await scoped.findMany({
+      filter: { kind: "condition", field: "books.title" as never, operator: "EQ", value: "Dune" },
+    });
+    expect(list.items.map((a) => (a as Author).name)).toEqual(["Ada"]);
+  });
+
+  it("combines a relation-path condition with an own-field condition under AND", async () => {
+    const scoped = kavo.createCrud(Book, {
+      filter: { fields: ["title", "author.name" as never] },
+    }) as DefaultKavoService<Book>;
+    await seed();
+    const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
+    await dataSource.getRepository(Book).save([
+      { title: "Notes", author: { id: ada.id } },
+      { title: "Other Notes", author: { id: ada.id } },
+    ] as never);
+
+    const list = await scoped.findMany({
+      filter: {
+        kind: "group",
+        operator: "AND",
+        children: [
+          { kind: "condition", field: "author.name" as never, operator: "EQ", value: "Ada" },
+          { kind: "condition", field: "title", operator: "EQ", value: "Notes" },
+        ],
+      },
+    });
+    expect(list.items.map((b) => (b as Book).title)).toEqual(["Notes"]);
+  });
+
+  it("rejects a relation-path filter that isn't on the filterable allowlist", async () => {
+    const scoped = kavo.createCrud(Book, {
+      filter: { fields: ["title"] },
+    }) as DefaultKavoService<Book>;
+
+    await expect(
+      scoped.findMany({
+        filter: { kind: "condition", field: "author.name" as never, operator: "EQ", value: "Ada" },
+      }),
+    ).rejects.toBeInstanceOf(QueryValidationException);
+  });
+
+  // Issue #371: a user reported that `allowlists.filterable: { exclude }`
+  // silently does nothing end-to-end and only the plain array form works.
+  // `resolveEntityConfig` already covers `{ exclude }` in isolation
+  // (packages/core/tests/config.spec.ts) — this exercises the same shape
+  // through a real `createCrud` + TypeORM adapter + `findMany`, the path the
+  // report actually hit.
+  it("still rejects a filter on a field named in allowlists.filterable's { exclude } form (issue #371)", async () => {
+    const excluded = kavo.createCrud(Author, {
+      filter: { fields: { exclude: ["status"] } },
+    }) as DefaultKavoService<Author>;
+    await seed();
+
+    await expect(
+      excluded.findMany({
+        filter: { kind: "condition", field: "status", operator: "EQ", value: "active" },
+      }),
+    ).rejects.toBeInstanceOf(QueryValidationException);
+
+    // A field not named in `exclude` still filters normally.
+    const list = await excluded.findMany({
+      filter: { kind: "condition", field: "name", operator: "EQ", value: "Ada" },
+    });
+    expect(list.items.map((a) => (a as Author).name)).toEqual(["Ada"]);
   });
 });
 

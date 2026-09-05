@@ -381,11 +381,7 @@ describe("DefaultFilterParser — malformed bracket keys", () => {
  * which cannot show that the parser wires them together this way.
  */
 describe("DefaultFilterParser — relation paths", () => {
-  const relationConfig = resolveEntityConfig(
-    postMetadata,
-    { allowlists: { filterable: ["title", "author.name"] } },
-    undefined,
-  );
+  const relationConfig = resolveEntityConfig(postMetadata, { filter: { fields: ["title", "author.name"] } }, undefined);
   const relationParser = new DefaultFilterParser(postMetadata);
   const parseRelation = (params: Record<string, unknown>) => relationParser.parse(params, relationConfig);
 
@@ -402,12 +398,12 @@ describe("DefaultFilterParser — relation paths", () => {
     // `Post.id` is a number column, but `author.id` is not in this entity's
     // column map — so the string reaches the adapter and the database
     // compares it.
-    const relaxed = resolveEntityConfig(postMetadata, { allowlists: { filterable: ["author.id"] } }, undefined);
+    const relaxed = resolveEntityConfig(postMetadata, { filter: { fields: ["author.id"] } }, undefined);
     expect(relationParser.parse({ "filter[author.id][eq]": "7" }, relaxed).root).toMatchObject({ value: "7" });
   });
 
   it("rejects a relation path nobody allowlisted, exactly like a scalar column", () => {
-    // Allowlists default to the entity's own scalar columns, so a relation
+    // Allowed default to the entity's own scalar columns, so a relation
     // path is never filterable implicitly.
     const issues = issuesOf(() => parseRelation({ "filter[comments.body][eq]": "x" }));
     expect(issues[0]).toMatchObject({ field: "comments.body", code: "KAVO_QUERY_INVALID_FIELD" });
@@ -486,13 +482,13 @@ describe("DefaultFilterParser — security posture", () => {
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_VALUE");
   });
 
-  it("enforces maxInValues", () => {
+  it("enforces limits.inValues", () => {
     const many = Array.from({ length: 101 }, (_, i) => String(i)).join(",");
     const issues = issuesOf(() => parse({ "filter[age][in]": many }));
     expect(issues[0]?.code).toBe("KAVO_QUERY_LIMIT_EXCEEDED");
   });
 
-  it("enforces maxFilterDepth", () => {
+  it("enforces limits.filterDepth", () => {
     const issues = issuesOf(() =>
       parse({
         filter: JSON.stringify({
@@ -500,6 +496,25 @@ describe("DefaultFilterParser — security posture", () => {
         }),
       }),
     );
+    expect(issues.some((i) => i.code === "KAVO_QUERY_LIMIT_EXCEEDED")).toBe(true);
+  });
+
+  it("enforces limits.filterDepth before recursing deep enough to blow the stack (issue #367 finding 3)", () => {
+    // `JSON.parse` builds nesting far past anything the bracket grammar's
+    // own key-splitting could reach, and (unlike the bracket form) does it
+    // in one call, not one recursive `convertNode` per level — so this is
+    // the shape that used to reach `expressionDepth`'s second unbounded
+    // recursion before the depth check ever fired. 50,000 levels comfortably
+    // exceeds any JS call-stack budget if `convertNode`/`convertLogical`
+    // recursed that deep; the fix aborts at `limits.filterDepth` on the way
+    // down instead.
+    // Built as a string, not a nested object: constructing (or
+    // `JSON.stringify`-ing) a 50,000-deep object graph with ordinary
+    // recursive helpers would itself blow the stack before the parser ever
+    // saw the input — exactly what this test must not depend on.
+    const depth = 50_000;
+    const raw = '{"and":['.repeat(depth) + '{"name":{"eq":"x"}}' + "]}".repeat(depth);
+    const issues = issuesOf(() => parse({ filter: raw }));
     expect(issues.some((i) => i.code === "KAVO_QUERY_LIMIT_EXCEEDED")).toBe(true);
   });
 
@@ -516,6 +531,18 @@ describe("DefaultFilterParser — security posture", () => {
   it.each(["like", "ilike"])("restricts '%s' to string columns", (token) => {
     const issues = issuesOf(() => parse({ [`filter[age][${token}]`]: "%1%" }));
     expect(issues[0]).toMatchObject({ field: "age", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it.each(["like", "ilike"])("enforces limits.likePattern on '%s' (issue #367 finding 4)", (token) => {
+    const pattern = `%${"a".repeat(201)}%`;
+    const issues = issuesOf(() => parse({ [`filter[name][${token}]`]: pattern }));
+    expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+  });
+
+  it.each(["like", "ilike"])("accepts a '%s' pattern at exactly limits.likePattern", (token) => {
+    const pattern = "a".repeat(200);
+    const result = parse({ [`filter[name][${token}]`]: pattern });
+    expect(result.root).toMatchObject({ value: pattern });
   });
 });
 

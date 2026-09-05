@@ -80,15 +80,18 @@ see the `add-adr` skill.
 
 ## Allowlist-style keys are a different mechanism — don't force them in here
 
-`EntityConfig.allowlists` (`filterable`/`sortable`/`selectable`/`includable`/
-`searchable`/`creatable`/`updatable`) is declared on `EntityConfig` directly,
-**not** on `KavoSettings` — there is no global default, no per-operation
-override, and none of the merge machinery above applies. A key belongs here
-instead of in `KavoSettings` when its job is to name a **subset of the
-entity's own fields or relations that a request may touch**, rather than to
-tune a behavior. Issue #259 (`creatable`/`updatable`, narrowing the writable
-projection for `createOne`/`updateOne`/`patchOne`) is a worked example of
-adding one:
+`EntityConfig.allowed` (`filterable`/`sortable`/`selectable`/`includable`/
+`searchable`) is declared on `EntityConfig` directly, **not** on
+`KavoSettings` — there is no global default, no per-operation override, and
+none of the merge machinery above applies. A key belongs here instead of in
+`KavoSettings` when its job is to name a **subset of the entity's own fields
+or relations that a request may touch**, rather than to tune a behavior.
+The write-side allowlists (`create.fields`/`update.fields`, narrowing the
+writable projection for `createOne`/`updateOne`/`patchOne`) follow the same
+mechanism but live in their own top-level `create`/`update` config objects
+rather than under `allowed` (issue #388) — `EntityConfig.allowed` is
+strictly the query-side allowlists. Issue #259's original addition of
+`creatable`/`updatable` is still a worked example of the mechanism below:
 
 1. **The raw selector type** (`packages/core/src/config/entity-config.ts`) —
    an array-or-`{ exclude }` shape typed against the right path depth.
@@ -96,12 +99,14 @@ adding one:
    can name a dotted relation path; a depth-1 `FieldPath<Entity, 1>` selector
    (see `WritableFieldSelector`) for a key that only ever grants one field or
    relation segment, the way a write body does. Add the key to
-   `QueryAllowlists`, documented with its default posture (does it default to
+   `QueryAllowed` for a query-side allowlist, or to its own top-level
+   `<Verb>FieldsConfig`-shaped object (as `create`/`update` do) for a
+   write-side one, documented with its default posture (does it default to
    "every own column", like `filterable`, or opt-in like `includable`?) and
    its narrowing/precedence relationship to any nearby DTO-based override.
 2. **The resolved type** (`resolved-entity-config.ts`) — add the frozen,
-   always-array field to `ResolvedQueryAllowlists`.
-3. **`resolveAllowlists`** (`resolve-entity-config.ts`) — compute the key's
+   always-array field to `ResolvedQueryAllowed`.
+3. **`resolveAllowed`** (`resolve-entity-config.ts`) — compute the key's
    **base set** (what it means unconfigured) from `EntityMetadata`, and
    resolve the configured selector against that base with
    `resolveFieldSelector` (generic over the path type, so it serves both
@@ -111,17 +116,18 @@ adding one:
    `ConfigurationException`, the same way `searchable`
    already rejects one unconditionally.
 4. **Where the resolved list actually gates something** — an allowlist key is
-   inert until some consumer reads it. `creatable`/`updatable` are read in
-   `DefaultDeserializer.deserialize` (per call, off `context.config.allowlists`,
-   keyed by `context.operation`) — find or add the analogous read site for a
-   new key, and decide its **DTO precedence**: does a registered DTO with a
+   inert until some consumer reads it. `create.fields`/`update.fields`
+   resolve to the same `creatable`/`updatable` names on `ResolvedEntityConfig`
+   they always have, and are read in `DefaultDeserializer.deserialize` (per
+   call, off `context.config`, keyed by `context.operation`) — find or add
+   the analogous read site for a new key, and decide its **DTO precedence**: does a registered DTO with a
    runtime shape still win outright (the `selectable`-vs-`dto.item` precedent,
    ADR-0026), or does the new key gate something no DTO already governs?
 5. **The core barrel** (`index.ts`) — a new selector type is a new public
    type; add it to the explicit list (ADR-0010), and to
    `tests/barrel.spec.ts`'s manifest.
-6. **Docs** — `docs/features/allowlists.md` (the adopter-facing guide) and
-   `docs/reference/config-keys.md`'s `## allowlists` table, not
+6. **Docs** — `docs/features/allowed.md` (the adopter-facing guide) and
+   `docs/reference/config-keys.md`'s `## allowed` table, not
    `08-configuration.md` — that document is `KavoSettings` only.
 
 Tests follow the same shape as `write-tests` describes for a `KavoSettings`

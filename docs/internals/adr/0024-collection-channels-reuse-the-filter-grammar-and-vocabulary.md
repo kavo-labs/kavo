@@ -46,7 +46,7 @@ verbatim, evaluated in memory.** A subscribe request may carry ordinary
 the same `DefaultFilterParser` REST uses (a `FilterableEntity` — an
 entity's `EntityMetadata` + `ResolvedEntityConfig`, supplied by the host app
 the same way `subscribableFields` already is) and validates them against the
-same `filterable` allowlist and `query.maxFilterDepth`/`maxInValues` limits.
+same `filterable` allowlist and `limits.filterDepth`/`limits.inValues` limits.
 The resulting `FilterExpression` is evaluated per candidate subscriber, per
 publish, by a new core function — `evaluateFilter` (`packages/core/src/
 query/filter-evaluator.ts`) — rather than by building a query and asking an

@@ -407,11 +407,13 @@ describe("withListMeta under cursor pagination — the strategy's key is the bas
     const crud = createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: [{ field: "id", direction: "asc" }] },
       },
     } as never).createCrud(
       User,
-      findManyHandler(withListMeta<User>(builtInHandlers<User>(adapter)("findMany"), compute)),
+      {
+        sort: { default: ["id"] },
+        ...(findManyHandler(withListMeta<User>(builtInHandlers<User>(adapter)("findMany"), compute)) as object),
+      } as never,
       { adapter, metadata: userMetadata },
     );
     return { crud, adapter };

@@ -10,6 +10,7 @@ import type { QueryIssueDto } from "../errors/problem-details.js";
 import type { IncludeResolver } from "../relations/include-resolver.js";
 import type { IncludeTree } from "../relations/include-tree.js";
 import type { AllowlistUsage } from "../errors/message-hints.js";
+import type { ResolvedApply } from "../policy/kavo-apply.js";
 import { ConfigurationException, QueryValidationException } from "../errors/exceptions.js";
 import { pushAllowlistIssue } from "../errors/message-hints.js";
 import { DefaultFilterParser } from "./default-filter-parser.js";
@@ -59,6 +60,7 @@ export class QueryNormalizer<Entity = unknown> {
   normalizeWire(
     rawParams: Readonly<Record<string, unknown>>,
     config: ResolvedEntityConfig<Entity>,
+    serverApply?: ResolvedApply<Entity>,
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
 
@@ -74,12 +76,25 @@ export class QueryNormalizer<Entity = unknown> {
     } catch (error) {
       collectIssues(error, issues);
     }
+    if (filter.root === null && config.filter.default !== null) {
+      filter = { root: config.filter.default };
+    }
     filter = parseSearch(rawParams, filter, config, issues);
+    filter = applyServerFilter(filter, serverApply?.filter);
 
     const clientSort = parseSort(rawParams["sort"], config, issues);
-    let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
-    const select = parseSelect(rawParams, config, issues);
-    const include = this.resolveIncludes(parseIncludePaths(rawParams["include"], issues), select, config, issues);
+    let sort = clientSort.length > 0 ? clientSort : config.sortDefault;
+    sort = prependServerSort(sort, serverApply?.sort);
+    const select: FieldSelection<Entity> = unionServerSelect(
+      parseSelect(rawParams, config, issues),
+      serverApply?.select,
+    );
+    const include = this.resolveIncludes(
+      [...parseIncludePaths(rawParams["include"], issues), ...(serverApply?.include ?? [])],
+      select,
+      config,
+      issues,
+    );
 
     let pagination: Pagination<Entity> = { limit: 0, offset: 0 };
     try {
@@ -145,6 +160,7 @@ export class QueryNormalizer<Entity = unknown> {
   normalizeInput(
     query: QueryContext<Entity> | undefined,
     config: ResolvedEntityConfig<Entity>,
+    serverApply?: ResolvedApply<Entity>,
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
     const input = query ?? {};
@@ -154,16 +170,19 @@ export class QueryNormalizer<Entity = unknown> {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
 
-    const root = input.filter ?? null;
-    if (root !== null) {
-      validateExpression(root, config, issues);
+    const clientFilterRoot = input.filter ?? null;
+    if (clientFilterRoot !== null) {
+      validateExpression(clientFilterRoot, config, issues);
     }
+    const root = clientFilterRoot ?? config.filter.default;
+    const filter = applyServerFilter({ root }, serverApply?.filter);
 
     const clientSort = input.sort ?? [];
     for (const entry of clientSort) {
       requireAllowlisted(entry.field as string, config, "sorting", issues);
     }
-    let sort = clientSort.length > 0 ? clientSort : defaultSortOf(config);
+    let sort = clientSort.length > 0 ? clientSort : config.sortDefault;
+    sort = prependServerSort(sort, serverApply?.sort);
 
     const { root: rootFields, relations: relationFields } = collapseFieldSelection<Entity>(input.select, issues);
     if (rootFields != null) {
@@ -171,11 +190,16 @@ export class QueryNormalizer<Entity = unknown> {
         requireAllowlisted(field as string, config, "selection", issues);
       }
     }
-    const select: FieldSelection<Entity> = {
-      root: rootFields,
-      relations: relationFields,
-    };
-    const include = this.resolveIncludes(input.include ?? [], select, config, issues);
+    const select: FieldSelection<Entity> = unionServerSelect(
+      { root: rootFields, relations: relationFields },
+      serverApply?.select,
+    );
+    const include = this.resolveIncludes(
+      [...(input.include ?? []), ...(serverApply?.include ?? [])],
+      select,
+      config,
+      issues,
+    );
 
     const { defaultLimit, maxLimit, strategy } = config.settings.pagination;
     // `NonePaginationStrategy` (`pagination-strategies.ts`) is never invoked
@@ -239,7 +263,7 @@ export class QueryNormalizer<Entity = unknown> {
       });
     }
     return {
-      filter: { root },
+      filter,
       sort,
       pagination,
       select,
@@ -332,7 +356,7 @@ export class QueryNormalizer<Entity = unknown> {
           `${tiebreaker.length === 1 ? "field" : "fields, in this order,"} '${tiebreakerText}' — ` +
           `e.g. 'sort=-createdAt,${tiebreakerText}'. ` +
           (sort.length === 0
-            ? `This request has no sort and ${config.entityName} declares no 'query.defaultSort'.`
+            ? `This request has no sort and ${config.entityName} declares no 'sort.default'.`
             : `This request sorts by '${sort.map((entry) => entry.field as string).join(", ")}'.`),
       });
     }
@@ -361,7 +385,7 @@ export class QueryNormalizer<Entity = unknown> {
    * same treatment a stray `cursor=`/`since=` under the wrong strategy
    * gets, and for the same reason: silently overriding it would leave a
    * client believing its `sort` took effect when it didn't. A configured
-   * `query.defaultSort`, by contrast, is silently overridden — being
+   * `defaults.sort`, by contrast, is silently overridden — being
    * overridden by a more specific setting is what a default is for.
    *
    * The token carries an id precisely because a single-column
@@ -573,6 +597,58 @@ export class QueryNormalizer<Entity = unknown> {
   }
 }
 
+/**
+ * `filter.apply` composition (ADR-0048): `AND`ed into the client's own
+ * filter, the same node shape `parseSearch`'s free-text-AND already builds
+ * below — never a bypassable shallow merge. `undefined` (nothing configured,
+ * or `apply` returned nothing this time) leaves `filter` untouched.
+ */
+function applyServerFilter<Entity>(
+  filter: Filter<Entity>,
+  serverFilter: FilterExpression<Entity> | undefined,
+): Filter<Entity> {
+  if (serverFilter === undefined) {
+    return filter;
+  }
+  if (filter.root === null) {
+    return { root: serverFilter };
+  }
+  return { root: { kind: "group", operator: "AND", children: [filter.root, serverFilter] } };
+}
+
+/**
+ * `sort.apply` composition (ADR-0048): forced fields are prepended ahead of
+ * the effective sort (client `sort=`, or `sort.default`), deduplicated out
+ * of their own later position rather than sorted on twice.
+ */
+function prependServerSort<Entity>(
+  sort: readonly Sort<Entity>[],
+  serverSort: readonly Sort<Entity>[] | undefined,
+): readonly Sort<Entity>[] {
+  if (serverSort === undefined || serverSort.length === 0) {
+    return sort;
+  }
+  const forced = new Set(serverSort.map((entry) => entry.field as string));
+  return [...serverSort, ...sort.filter((entry) => !forced.has(entry.field as string))];
+}
+
+/**
+ * `select.apply` composition (ADR-0048): forced fields are unioned into the
+ * root projection — additive only, never a mask. A `null` root already
+ * means "everything the resolved DTO allows", a superset of any forced
+ * field, so it is left untouched.
+ */
+function unionServerSelect<Entity>(
+  select: FieldSelection<Entity>,
+  serverSelect: readonly FieldPath<Entity, 1>[] | undefined,
+): FieldSelection<Entity> {
+  if (serverSelect === undefined || serverSelect.length === 0 || select.root === null) {
+    return select;
+  }
+  const merged = new Set([...(select.root as readonly string[]), ...(serverSelect as readonly string[])]);
+  return { root: [...merged] as unknown as readonly FieldPath<Entity, 1>[], relations: select.relations };
+}
+
 /** Whether a raw `cursor`/`since` wire param was actually supplied (empty means "first page"). */
 function hasValue(raw: unknown): boolean {
   return raw !== undefined && raw !== null && raw !== "";
@@ -723,14 +799,11 @@ function conflictingSoftDeleteFlagsIssue(): QueryIssueDto {
   };
 }
 
-/**
- * `config.settings.query.defaultSort` — validated against the sortable
- * allowlist wherever it's set (`resolveEntityConfig` at bootstrap for
- * entity/operation scope, `KavoEngine.configViewFor` for per-call scope),
- * so it's applied here as-is rather than re-checked per request.
- */
-function defaultSortOf<Entity>(config: ResolvedEntityConfig<Entity>): readonly Sort<Entity>[] {
-  return config.settings.query.defaultSort as unknown as readonly Sort<Entity>[];
+/** `-field` → `{ field, direction: "desc" }`; `field` → `{ field, direction: "asc" }`. */
+function parseSortToken<Entity>(token: string): Sort<Entity> {
+  const descending = token.startsWith("-");
+  const field = descending ? token.slice(1) : token;
+  return { field: field as FieldPath<Entity>, direction: descending ? "desc" : "asc" };
 }
 
 function parseSort<Entity>(
@@ -754,13 +827,9 @@ function parseSort<Entity>(
     if (token === "") {
       continue;
     }
-    const descending = token.startsWith("-");
-    const field = descending ? token.slice(1) : token;
-    if (requireAllowlisted(field, config, "sorting", issues)) {
-      result.push({
-        field: field as FieldPath<Entity>,
-        direction: descending ? "desc" : "asc",
-      });
+    const entry = parseSortToken<Entity>(token);
+    if (requireAllowlisted(entry.field as string, config, "sorting", issues)) {
+      result.push(entry);
     }
   }
   return result;
@@ -878,7 +947,7 @@ function parseSelect<Entity>(
 /**
  * `search[query]`/`search[mode]`/`search[fields]` (doc 05 §4): validated and
  * synthesized here, in the normalizer, rather than the filter parser —
- * `searchable` is an allowlist and `query.search` (`false` or `{ mode }`) is a per-operation
+ * `searchable` is an allowlist and `search` (`false` or `{ mode }`) is a per-operation
  * settings, both already in the normalizer's scope, and synthesis needs the
  * already-parsed `filter` to `AND` the fragment into.
  *
@@ -892,9 +961,12 @@ function parseSearch<Entity>(
   config: ResolvedEntityConfig<Entity>,
   issues: QueryIssueDto[],
 ): Filter<Entity> {
-  const query = rawParams["search[query]"];
+  const explicitQuery = rawParams["search[query]"];
   const modeRaw = rawParams["search[mode]"];
   const fieldsRaw = rawParams["search[fields]"];
+  // `search.default` (issue #386): the free-text term a request gets when
+  // it sends no `search[query]` of its own.
+  const query = hasValue(explicitQuery) ? explicitQuery : config.search !== false ? config.search.default : null;
 
   if (!hasValue(query)) {
     if (hasValue(modeRaw) || hasValue(fieldsRaw)) {
@@ -915,25 +987,25 @@ function parseSearch<Entity>(
     return filter;
   }
 
-  const searchable = config.allowlists.searchable as readonly string[];
-  const search = config.settings.query.search;
+  const search = config.search;
   if (search === false) {
     issues.push({
       field: "search[query]",
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",
       detail:
         `Query parameter 'search[query]' is not supported: search is not enabled for ${config.entityName}. ` +
-        `Set 'query.search' to an object to turn it on.`,
+        `Set 'search' to an object to turn it on.`,
     });
     return filter;
   }
+  const searchable = search.fields as readonly string[];
   if (searchable.length === 0) {
     issues.push({
       field: "search[query]",
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",
       detail:
         `Query parameter 'search[query]' is not supported: ${config.entityName} has no searchable fields ` +
-        `('allowlists.searchable' resolves to an empty set).`,
+        `('search.fields' resolves to an empty set).`,
     });
     return filter;
   }
@@ -985,14 +1057,14 @@ function parseSearch<Entity>(
   // Synthesized width is `terms.length * fields.length` — one ILIKE
   // condition per searched field, per term — unlike `filter[...]`'s
   // `IN`/`NOT_IN`/`BETWEEN`, which has no analogous width multiplier
-  // (`maxFilterDepth` caps nesting depth, not a group's child count).
+  // (`limits.filterDepth` caps nesting depth, not a group's child count).
   // Capping `terms.length` alone leaves the product unbounded whenever
   // `searchable` (or a wide `search[fields]`) carries many entries — its
   // own default is *every* own string column, so this is not a contrived
-  // case. `maxInValues` is already "how many operands may one param
+  // case. `limits.inValues` is already "how many operands may one param
   // carry"; reused on the product, rather than adding a second limit key,
   // so neither factor alone can still synthesize an unbounded predicate.
-  const max = config.settings.query.maxInValues;
+  const max = config.filter.limits.maxInValues;
   const width = terms.length * fields.length;
   if (width > max) {
     issues.push({
@@ -1046,22 +1118,33 @@ function validateExpression<Entity>(
   issues: QueryIssueDto[],
   depth = 1,
 ): void {
-  if (depth > config.settings.query.maxFilterDepth) {
+  if (depth > config.filter.limits.maxDepth) {
     issues.push({
       field: "filter",
       code: "KAVO_QUERY_LIMIT_EXCEEDED",
-      detail: `Filter depth exceeds the configured maximum of ${config.settings.query.maxFilterDepth}.`,
+      detail: `Filter depth exceeds the configured maximum of ${config.filter.limits.maxDepth}.`,
     });
     return;
   }
   if (expression.kind === "condition") {
     requireAllowlisted(expression.field as string, config, "filtering", issues);
     const value = expression.value;
-    if (Array.isArray(value) && value.length > config.settings.query.maxInValues) {
+    if (Array.isArray(value) && value.length > config.filter.limits.maxInValues) {
       issues.push({
         field: expression.field as string,
         code: "KAVO_QUERY_LIMIT_EXCEEDED",
-        detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.settings.query.maxInValues}.`,
+        detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.filter.limits.maxInValues}.`,
+      });
+    }
+    if (
+      (expression.operator === "LIKE" || expression.operator === "ILIKE") &&
+      typeof value === "string" &&
+      value.length > config.filter.limits.maxLikePatternLength
+    ) {
+      issues.push({
+        field: expression.field as string,
+        code: "KAVO_QUERY_LIMIT_EXCEEDED",
+        detail: `'${expression.operator}' pattern is ${value.length} characters; the maximum is ${config.filter.limits.maxLikePatternLength}.`,
       });
     }
     return;
@@ -1071,18 +1154,23 @@ function validateExpression<Entity>(
   }
 }
 
-/** Which allowlist each usage reads, so the caller names only the usage. */
-const ALLOWLIST_FOR: Readonly<Record<AllowlistUsage, "filterable" | "sortable" | "selectable" | "searchable">> =
-  Object.freeze({
-    filtering: "filterable",
-    sorting: "sortable",
-    selection: "selectable",
-    // `requireAllowlisted` is never called with "searching" — `parseSearch`
-    // calls `pushAllowlistIssue` directly, since `search[fields]` narrows a
-    // different base set (`searchable`, not the standard three usages this
-    // helper serves). Present for type completeness against `AllowlistUsage`.
-    searching: "searchable",
-  });
+/** Which field-group's `fields` each usage reads, so the caller names only the usage. */
+function fieldsFor<Entity>(config: ResolvedEntityConfig<Entity>, usage: AllowlistUsage): readonly string[] {
+  switch (usage) {
+    case "filtering":
+      return config.filter.fields as readonly string[];
+    case "sorting":
+      return config.sort.fields as readonly string[];
+    case "selection":
+      return config.select.fields as readonly string[];
+    case "searching":
+      // `requireAllowlisted` is never called with "searching" — `parseSearch`
+      // calls `pushAllowlistIssue` directly, since `search[fields]` narrows a
+      // different base set, only reachable once `config.search !== false`.
+      // Present for type completeness against `AllowlistUsage`.
+      return config.search === false ? [] : (config.search.fields as readonly string[]);
+  }
+}
 
 /**
  * The single allowlist gate for the programmatic entry point and the wire
@@ -1096,7 +1184,7 @@ function requireAllowlisted<Entity>(
   usage: AllowlistUsage,
   issues: QueryIssueDto[],
 ): boolean {
-  const allowed = config.allowlists[ALLOWLIST_FOR[usage]] as readonly string[];
+  const allowed = fieldsFor(config, usage);
   if (allowed.includes(field)) {
     return true;
   }

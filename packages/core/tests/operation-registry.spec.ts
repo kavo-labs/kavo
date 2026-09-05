@@ -406,7 +406,7 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
   it("rejects any dto override on deleteOne — void result, no query", () => {
     // `never` makes the mismatch a type error too (see the type-level
     // suite), so this reaches only through an erased/cast config — the
-    // same defence `resolveAllowlists` and `rejectComputedWriteDtoKeys`
+    // same defence `resolveAllowed` and `rejectComputedWriteDtoKeys`
     // apply to their own structural invariants.
     expect(() =>
       createOperationRegistry<User>(

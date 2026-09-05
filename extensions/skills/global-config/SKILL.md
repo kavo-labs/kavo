@@ -56,18 +56,18 @@ the same object is `createKavo(options).createCrud(Entity, config?)`.
 
 ## Built-in defaults (`BUILT_IN_DEFAULTS`, `core/src/config/defaults.ts`)
 
-| Key                                              | Default                  | Notes                                                                  |
-| ------------------------------------------------ | ------------------------ | ---------------------------------------------------------------------- |
-| `pagination.defaultLimit` / `maxLimit`           | 20 / 100                 | `defaultLimit ≤ maxLimit` enforced                                     |
-| `pagination.strategy`                            | `"offset"`               | `"page"` built in; custom via `paginationStrategies`                   |
-| `pagination.count`                               | `true`                   | `false` skips the count query; envelope reports `total: null`          |
-| `query.maxFilterDepth` / `maxInValues`           | 3 / 100                  |                                                                        |
-| `errors.exposeInternals`                         | `false`                  | leak driver detail into responses                                      |
-| `relations.maxIncludeDepth` / `maxIncludedNodes` | 2 / 10                   | include depth budget and total node cap                                |
-| `relations.edges.<name>`                         | `{}`                     | per-relation `includable` / `defaultInclude` / `maxDepth` / `strategy` |
-| `softDelete.field` / `strategy`                  | `"deletedAt"` / `"auto"` | `auto` = soft when the entity has the marker field; `false` disables   |
-| `operations.<id>`                                | `{}` (unset)             | global operation-enablement default (issue #38); see caveat below      |
-| `bulk.mode` / `maxBatchSize`                     | `"atomic"` / 500         | reserved (bulk is not built)                                           |
+| Key                                               | Default                  | Notes                                                                  |
+| ------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------- |
+| `pagination.defaultLimit` / `maxLimit`            | 20 / 100                 | `defaultLimit ≤ maxLimit` enforced                                     |
+| `pagination.strategy`                             | `"offset"`               | `"page"` built in; custom via `paginationStrategies`                   |
+| `pagination.count`                                | `true`                   | `false` skips the count query; envelope reports `total: null`          |
+| `limits.filterDepth` / `inValues` / `likePattern` | 3 / 100 / 200            |                                                                        |
+| `limits.includeDepth` / `includedNodes`           | 2 / 10                   | include depth budget and total node cap                                |
+| `errors.exposeInternals`                          | `false`                  | leak driver detail into responses                                      |
+| `relations.edges.<name>`                          | `{}`                     | per-relation `includable` / `defaultInclude` / `maxDepth` / `strategy` |
+| `softDelete.field` / `strategy`                   | `"deletedAt"` / `"auto"` | `auto` = soft when the entity has the marker field; `false` disables   |
+| `operations.<id>`                                 | `{}` (unset)             | global operation-enablement default (issue #38); see caveat below      |
+| `bulk.mode` / `maxBatchSize`                      | `"atomic"` / 500         | reserved (bulk is not built)                                           |
 
 Setting any of these under `defaults` in `createKavo`/`KavoModule.forRoot`
 applies it app-wide; an entity's own `@Kavo(Entity, config)` (or
@@ -98,7 +98,7 @@ layer in between.
 ## Debugging a resolved config
 
 `kavo.describe(entityName)` returns the frozen, fully-merged config for one
-entity — settings, allowlists, relations, and every per-operation view — as a
+entity — settings, allowed, relations, and every per-operation view — as a
 plain printable object. Useful for confirming what actually won the
 precedence chain without re-deriving it by hand.
 

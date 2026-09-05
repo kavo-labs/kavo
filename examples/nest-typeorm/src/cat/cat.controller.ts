@@ -31,7 +31,7 @@ import {
  * different write strategies, live on the same entity.
  *
  * `GET /cats?search[query]=whiskers` free-text searches `name` (the one
- * field named in `allowlists.searchable`) — `search[mode]=words` and
+ * field named in `search.fields`) — `search[mode]=words` and
  * `search[fields]` are also available, narrowed to that same allowlist.
  *
  * Validation: `createOne`/`updateOne` are `@Override()`'d purely to give
@@ -58,23 +58,19 @@ import {
   // strategy instead, overriding it (issue #223).
   arrayMutation: { strategy: "replace" },
   pagination: { defaultLimit: 10, maxLimit: 50 },
-  query: { search: {} },
   // Explicit include-lists (the plain form, contrast Owner's `{ exclude }`
   // in owner.controller.ts): `indoor`, `livesLeft`, and `createdAt` are
   // still returned in every response (`CatItemDto` includes them), just
   // not queryable — narrower than "every own column" without excluding
   // anything by name.
-  allowlists: {
-    filterable: ["id", "name", "age", "size"],
-    sortable: ["id", "name", "age"],
-    selectable: ["id", "name", "age", "size"],
-    includable: ["owner", "tags", "photos"],
-    // Search is opt-in per entity (`query.search` set to an object above).
-    // `name` is Cat's only own string-kind column, so this is the same set
-    // the zero-config default would resolve to — named explicitly here for
-    // the reference app to point at.
-    searchable: ["name"],
-  },
+  filter: { fields: ["id", "name", "age", "size"] },
+  sort: { fields: ["id", "name", "age"] },
+  select: { fields: ["id", "name", "age", "size"] },
+  include: { fields: ["owner", "tags", "photos"] },
+  // `name` is Cat's only own string-kind column, so this is the same set
+  // the zero-config default would resolve to — named explicitly here for
+  // the reference app to point at.
+  search: { fields: ["name"] },
   // The to-one side of the owner edge joins; `tags`/`photos` are to-many
   // (many-to-many) and batch, both `auto`'s default — no loading tuning
   // needed. `select[owner]=id,name` / `select[tags]=id,name` /

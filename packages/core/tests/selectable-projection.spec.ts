@@ -13,7 +13,7 @@ import {
 } from "./support/blog-fixture.js";
 
 /**
- * `allowlists.selectable` narrows the response projection (ADR-0026).
+ * `allowed.selectable` narrows the response projection (ADR-0026).
  *
  * Before that decision it gated only what `select=` could *name*, which
  * made it vacuous as a confidentiality control: a client that could not ask
@@ -44,14 +44,14 @@ async function seeded(config: EntityConfig<User>) {
 
 /** `email` stands in for #149's `apiKey`: present on the entity, off the list. */
 const HIDES_EMAIL: EntityConfig<User> = {
-  allowlists: { selectable: ["id", "name", "age", "status", "createdAt"] },
+  select: { fields: ["id", "name", "age", "status", "createdAt"] },
 } as EntityConfig<User>;
 
 const EXCLUDES_EMAIL: EntityConfig<User> = {
-  allowlists: { selectable: { exclude: ["email"] } },
+  select: { fields: { exclude: ["email"] } },
 } as EntityConfig<User>;
 
-describe("allowlists.selectable narrows the response projection", () => {
+describe("allowed.selectable narrows the response projection", () => {
   describe("every operation that serves a representation", () => {
     // A read-only fix would have been worthless: `createOne` echoes the row
     // it just wrote, so a credential omitted from every GET still leaves on
@@ -92,7 +92,7 @@ describe("allowlists.selectable narrows the response projection", () => {
       );
     });
 
-    it("echoes the full allowed key set from createOne, not merely one absence", async () => {
+    it("echoes the full allowlist key set from createOne, not merely one absence", async () => {
       // The five tests above assert `not.toHaveProperty("email")`, which
       // would also pass if the projection collapsed entirely. The create
       // echo is the case worth pinning positively: it is the argument for
@@ -165,7 +165,7 @@ describe("allowlists.selectable narrows the response projection", () => {
       kavo.createCrud(Author, authorConfig as never);
       kavo.createCrud(Comment);
       return kavo.createCrud(Post, {
-        allowlists: { includable: ["author"] },
+        include: { fields: ["author"] },
       } as never) as DefaultKavoService<Post>;
     }
 
@@ -177,9 +177,7 @@ describe("allowlists.selectable narrows the response projection", () => {
     }
 
     it("applies the target's own selectable to the included rows", async () => {
-      expect(Object.keys(await includedAuthor({ allowlists: { selectable: ["id"] } } as EntityConfig<Author>))).toEqual(
-        ["id"],
-      );
+      expect(Object.keys(await includedAuthor({ select: { fields: ["id"] } } as EntityConfig<Author>))).toEqual(["id"]);
     });
 
     it("leaves the target alone when the target configured nothing", async () => {
@@ -198,7 +196,7 @@ describe("allowlists.selectable narrows the response projection", () => {
       email = "";
     }
     const { crud, id } = await seeded({
-      allowlists: { selectable: ["id", "name"] },
+      select: { fields: ["id", "name"] },
       dto: { item: UserItemDto },
     } as never);
     expect(await crud.findOne(id)).toEqual({ id, email: "ada@example.com" });

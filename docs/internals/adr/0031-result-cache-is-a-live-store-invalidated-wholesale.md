@@ -46,10 +46,10 @@ for. The only correct granularity is the entity: drop them all.
 ## Decision
 
 **1. `cache` is a new `KavoSettings` key; the store is not.**
-`cache: { ttl, etag }` (TTL in seconds; `etag` defaults `true`) merges
+`cache: { ttl?, etag }` (TTL in seconds; `etag` defaults `true`) merges
 through the normal precedence chain
 and is `false`-disables-the-subtree like `softDelete` (`settings.ts`,
-`defaults.ts` — built-in default `{ ttl: 0, etag: true }`). The backing
+`defaults.ts` — built-in default `{ etag: true }`, no `ttl`). The backing
 store is a `CacheStore` interface (`get(entityName,
 key)`, `set(entityName, key, value, ttlSeconds)`, `invalidate(entityName)`),
 registered on `KavoOptions.cacheStore` with `createMemoryCacheStore()` as the
@@ -88,14 +88,31 @@ key: a per-call override that reshapes a response without changing the query
 contract, stated as a documented limitation rather than silently answered
 wrong.
 
-**3. `ttl` is the switch; there is no `enabled` key.** The result cache is
-on exactly when the resolved `ttl` is positive, so `@Kavo(Entity,
-{ cache: { ttl: 60 } })` and a global `defaults: { cache: { ttl: 60 } }`
-enable against the `ttl: 0` built-in default with one key, and `ttl: 0`
-means off — no presence rule to remember. An etag-only override
-(`cache: { etag: false }`) therefore leaves the result cache off too,
-rather than accidentally flipping it on. `cache: false` remains the
-wholesale disable for the whole subtree (result cache and etags).
+**3. `ttl`'s presence is the switch; there is no `enabled` key, and `0` is
+retired (amended, issue #377).** The result cache is on exactly when the
+resolved `ttl` is a positive number, so `@Kavo(Entity, { cache: { ttl: 60 } })`
+and a global `defaults: { cache: { ttl: 60 } }` enable against a base with no
+`ttl` with one key, and an _omitted_ `ttl` means off. `ttl: 0` used to double
+as "off" but gave "off" two spellings with two different meanings —
+`cache: false` disabled the whole subtree (result cache **and** ETags) while
+`cache: { ttl: 0 }` disabled only the result cache and silently left
+`etag: true` — and read as a boundary number rather than the sentinel it
+was. `ttl: 0` is now a bootstrap `ConfigurationException`
+(`validate-settings.ts`): any non-positive or non-integer `ttl` other than
+`false` fails validation. An etag-only override (`cache: { etag: false }`)
+still leaves the result cache off too, rather than accidentally flipping it
+on. `cache: false` remains the wholesale disable for the whole subtree
+(result cache and etags).
+
+`ttl: false` is the one addition: it overrides an _inherited_ `ttl` back off
+at a narrower scope without touching that scope's `etag`, which `cache: false`
+would also disable. `mergeSettings` never treats an explicit value as "clear
+the key" (`merge-settings.ts`), so plain omission cannot express "turn off
+what a broader scope turned on" — `ttl: false` is the typed sentinel for
+that one case, distinguishable from a duration by type rather than by value.
+Writing `cache: { ttl: false }` where nothing was inherited is equivalent to
+omitting `ttl`; the presence form exists for the override case, not as a
+default spelling.
 
 **4. Only the two standard reads are cached; every successful write
 invalidates the entity wholesale.** `isCacheableRead` accepts `findOne` and

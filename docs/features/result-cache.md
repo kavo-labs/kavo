@@ -2,7 +2,7 @@
 
 `cache` is a TTL cache of `findOne` and `findMany` responses: a repeated read with the same query is served from a store without touching the adapter, the serializer, or a DTO. The pipeline short-circuits after preconditions. Reads only: write responses are never cached.
 
-Enable it by setting a TTL. A **positive** `ttl` turns it on — `ttl` _is_ the switch, with no separate `enabled` key to spell, so one key is enough:
+Enable it by setting a TTL. `ttl`'s **presence** is the switch, with no separate `enabled` key to spell, so one key is enough:
 
 ```ts
 @Kavo(User, {
@@ -10,7 +10,16 @@ Enable it by setting a TTL. A **positive** `ttl` turns it on — `ttl` _is_ the 
 })
 ```
 
-`ttl` is in seconds (default `0`, which is off). `cache: false` disables the whole subtree, the same convention `softDelete` uses. Setting `defaults: { cache: { ttl: 60 } }` on `KavoModule` opts every entity in, and `operations: { findMany: { cache: { ttl: 5 } } }` tunes one operation. The key resolves through the same global → entity → operation → per-call precedence chain as everything else (per-call via `KavoCallOptions.settings`).
+`ttl` is in seconds and optional; omitting it (the default) means the result cache is off. `ttl: 0` does not validate — it fails bootstrap with a `ConfigurationException` pointing at `cache: false` (turn the whole subtree off) or omitting `ttl` (turn off just the result cache, leaving `etag` alone). `cache: false` disables the whole subtree, the same convention `softDelete` uses. Setting `defaults: { cache: { ttl: 60 } }` on `KavoModule` opts every entity in, and `operations: { findMany: { cache: { ttl: 5 } } }` tunes one operation. The key resolves through the same global → entity → operation → per-call precedence chain as everything else (per-call via `KavoCallOptions.settings`).
+
+To turn an _inherited_ `ttl` back off at a narrower scope without also disabling that scope's `etag`, set `ttl: false` — the one case an omitted `ttl` cannot express, since a nearer scope's override always replaces the farther one key by key rather than clearing it:
+
+```ts
+// global: cache: { ttl: 60 }
+@Kavo(User, {
+  cache: { ttl: false }, // this entity: no result cache, etag still on
+})
+```
 
 ## What a hit skips, what it doesn't
 

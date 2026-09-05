@@ -1,6 +1,5 @@
 import type { RelationLoadStrategy } from "../relations/relation-descriptor.js";
 import type { StandardOperationId } from "../operations/operation.js";
-import type { Sort } from "../query/sort.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 
@@ -12,6 +11,13 @@ import type { RealtimeTransport } from "../realtime/realtime-transport.js";
  * all accept `DeepPartial<KavoSettings>` of this same shape; there is
  * never a second config mechanism (schema-extensibility rule).
  * Later features add keys here, reserved in the schema now.
+ *
+ * Field-level configuration — what a request may filter/sort/select/
+ * search/include, its per-axis defaults, and its per-axis ceilings — lives
+ * on `EntityConfig`'s `dto`/`select`/`search`/`filter`/`sort`/`include`
+ * blocks instead (issue #386), grouped by concern rather than split across
+ * this schema and a separate allowlist tree. This schema carries only the
+ * settings that are not field-shaped.
  */
 
 /** Built-in pagination strategy names; open for custom strategies. */
@@ -35,53 +41,13 @@ export interface PaginationSettings {
    * Only consulted under `strategy: "since"` (ADR-0022). The column
    * `?since=` seeks against and the effective sort's leading key —
    * `[since.field, idField]` ascending, forced regardless of client `sort`.
-   * Must be a `date`- or `string`-kind column on the entity, and on the
-   * `filterable`/`selectable` allowlists; a bootstrap error otherwise
+   * Must be a `date`- or `string`-kind column on the entity, and on
+   * `filter.fields`/`select.fields`; a bootstrap error otherwise
    * (`resolveEntityConfig`), the same treatment `softDelete.field` gets.
    */
   readonly since: {
     readonly field: string;
   };
-}
-
-/** `search[mode]` values — substring (default) or per-word (doc 05 §4). */
-export type SearchMode = "substring" | "words";
-
-/**
- * Reserved discriminator for a future pluggable search backend — `'orm'`
- * is the only value this schema accepts today (issue #156). It exists so a
- * later `'postgres'` (native full-text) or `'meilisearch'` driver can land
- * additively, without a breaking config change now; it is config-only and
- * has no wire counterpart — callers never choose the backend per-request.
- */
-export type SearchDriver = "orm";
-
-export interface SearchSettings {
-  /** `substring`: one `ILIKE '%term%'` per field. `words`: one per word, AND-ed. */
-  readonly mode: SearchMode;
-  readonly driver: SearchDriver;
-}
-
-export interface QuerySettings {
-  /** Max nesting depth of the filter AST. */
-  readonly maxFilterDepth: number;
-  /** Max array length for `IN`/`NOT_IN`/`BETWEEN` values. */
-  readonly maxInValues: number;
-  /**
-   * Order applied when a request supplies no `sort` — a client-supplied
-   * `sort` always wins outright, never merges with this. Fields are
-   * validated against the sortable allowlist at bootstrap, the same as
-   * client-supplied sort fields are at request time.
-   */
-  readonly defaultSort: readonly Sort[];
-  /**
-   * `search[query]` free-text search (doc 05 §4). `false` (the default)
-   * disables it — `search[query]` is rejected with a 400 until an entity or
-   * operation scope sets an object. The same `false` sentinel `softDelete`/
-   * `realtime` use; any object turns search on, with `mode`/`driver`
-   * backfilled from their defaults (`resolveEntityConfig`).
-   */
-  readonly search: SearchSettings | false;
 }
 
 export interface ErrorSettings {
@@ -93,14 +59,12 @@ export interface ErrorSettings {
  * Per-relation *tuning* — the config half of a `RelationDescriptor` other
  * than permission. ORM metadata supplies shape (name, target,
  * cardinality); this supplies loading behavior once a relation is already
- * includable. Permission itself lives on `allowlists.includable`
+ * includable. Permission itself lives on `include.fields`
  * (`EntityConfig`, entity-config.ts) instead, not here (ADR-0028) — naming
  * a relation in `edges` no longer opts it in.
  */
 export interface RelationEdgeSettings {
-  /** Included even when the client doesn't ask. */
-  readonly defaultInclude?: boolean;
-  /** Overrides `maxIncludeDepth` for the subtree below this node. */
+  /** Overrides `include.limits.maxDepth` for the subtree below this node. */
   readonly maxDepth?: number;
   readonly strategy?: RelationLoadStrategy;
   /**
@@ -110,9 +74,8 @@ export interface RelationEdgeSettings {
    * `write: true`/`write: {...}` on a to-one relation is a bootstrap
    * `ConfigurationException` (`DefaultRelationRegistry`), since association
    * by id already covers to-one writes and there is no array to mutate.
-   * Like `defaultInclude`, this is a permission a relation must be granted
-   * explicitly — it is independent of `allowlists.includable` (a relation
-   * can be write-opted-in without being read-includable, or vice versa).
+   * Independent of `include.fields` (a relation can be write-opted-in
+   * without being read-includable, or vice versa).
    *
    * Two spellings (issue #223, ADR-0029's per-relation amendment):
    * - `true` — opt in, strategy inherited from this entity's own resolved
@@ -131,17 +94,19 @@ export interface RelationEdgeSettings {
   readonly write?: boolean | { readonly strategy: ArrayMutationStrategy };
 }
 
-/** Relation inclusion limits and per-relation loading tuning. */
+/**
+ * Per-relation loading tuning. Inclusion *limits* live in
+ * `EntityConfig.include.limits` instead (issue #386) — this block is
+ * `edges` only.
+ */
 export interface RelationSettings {
-  readonly maxIncludeDepth: number;
-  readonly maxIncludedNodes: number;
   /**
    * Per-relation loading overrides, keyed by relation property name —
-   * `defaultInclude`/`maxDepth`/`strategy` only. Whether a relation is
-   * includable at all is `allowlists.includable`'s question, not this
-   * one (ADR-0028); an entry here for a relation `allowlists.includable`
-   * never named still validates and applies its tuning, but grants no
-   * permission.
+   * `maxDepth`/`strategy`/`write` only. Whether a relation is includable at
+   * all is `include.fields`'s question, and whether it defaults into an
+   * empty request is `include.default`'s — neither lives here any more; an
+   * entry here for a relation `include.fields` never named still validates
+   * and applies its loading tuning, but grants no permission.
    */
   readonly edges: Readonly<Record<string, RelationEdgeSettings>>;
 }
@@ -170,12 +135,28 @@ export type EtagSettings = boolean;
  *
  * `false` disables the subtree wholesale (result cache **and** etags), the
  * same convention `softDelete` uses. Otherwise the result cache is on
- * exactly when `ttl` is positive: `ttl` **is** the switch — there is no
- * separate `enabled` key, and no presence rule to remember. `ttl: 0` (the
- * default) and an omitted `ttl` both mean "off"; `@Kavo(Entity,
- * { cache: { ttl: 60 } })` means "on, 60 seconds". Touching only `etag` on
- * an otherwise-off entity is then the natural spelling —
- * `cache: { etag: false }` — and never flips the result cache on.
+ * exactly when `ttl` is a positive number: `ttl`'s presence **is** the
+ * switch — there is no separate `enabled` key, and no magic number to
+ * remember. An omitted `ttl` (the default) means the result cache is off;
+ * `@Kavo(Entity, { cache: { ttl: 60 } })` means "on, 60 seconds". `ttl: 0`
+ * and any other non-positive or non-integer `ttl` fail bootstrap validation
+ * (ADR-0031) — `false` disables the whole subtree, omitting `ttl` disables
+ * just the result cache, and there is no third spelling for "off".
+ *
+ * `ttl: false` is the one exception, reserved for overriding an
+ * **inherited** `ttl` back off at a narrower scope without touching that
+ * scope's `etag` — `cache: false` would also disable ETags, which
+ * `{ ttl: false }` deliberately leaves alone. It merges like any other
+ * explicit value (`mergeSettings` never treats it as "clear the key"), so a
+ * later, still-narrower scope's own `ttl: 30` overrides it in turn. Writing
+ * `cache: { ttl: false }` at a scope with no inherited `ttl` is equivalent
+ * to omitting `ttl` — both mean "off" — but the presence form is meant for
+ * turning an inherited "on" back off, not as a spelling to reach for by
+ * default.
+ *
+ * Touching only `etag` on an otherwise-off entity is then the natural
+ * spelling — `cache: { etag: false }` — and never flips the result cache
+ * on.
  *
  * `etag` defaults **on** (`true`) independent of `ttl`: an entity with
  * result caching off still serves ETags and honors the conditional
@@ -194,7 +175,7 @@ export type EtagSettings = boolean;
  * caching (ADR-0031).
  */
 export interface CacheSettings {
-  readonly ttl: number;
+  readonly ttl?: number | false;
   readonly etag: EtagSettings;
 }
 
@@ -216,9 +197,9 @@ export interface SoftDeleteSettings {
 
 /**
  * Which fields a transport may expose an individual subscription to — the
- * same array-or-`exclude` shape `allowlists.selectable` uses
- * (`QueryFieldSelector`, entity-config.ts), but plain strings: unlike
- * `QueryAllowlists`, `KavoSettings` carries no `Entity` type parameter
+ * same array-or-`exclude` shape `select.fields` uses
+ * (`SelectableFieldSelector`, entity-config.ts), but plain strings: unlike
+ * `EntityConfig`, `KavoSettings` carries no `Entity` type parameter
  * (`relations.edges`'s keys are plain strings for the same reason), so
  * there is no layer here to check a field name against real entity paths.
  */
@@ -333,7 +314,6 @@ export interface AuthorizationSettings {
 /** The full settings tree. */
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
-  readonly query: QuerySettings;
   readonly errors: ErrorSettings;
   readonly relations: RelationSettings;
   /** Result caching + the conditional-request subtree (ADRs 0020/0031). */

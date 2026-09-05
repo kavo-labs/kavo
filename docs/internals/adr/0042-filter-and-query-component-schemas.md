@@ -108,7 +108,7 @@ The sparse-fieldset query parameter was renamed from `fields` to `select`
 (wire `select=` / `select[<relation>]=`, `QueryContext.select`,
 `NormalizedQueryContext.select`). This ADR's text and the `<Entity>Query`
 aggregate's property were updated in place to match. `search[fields]` (a
-sub-key of `search`, unrelated to projection) and the `allowlists.selectable`
+sub-key of `search`, unrelated to projection) and the `allowed.selectable`
 config key are unchanged. No backward-compatible `fields` alias was kept —
 a request still sending `fields=` is now an unrecognized query parameter and
 is ignored, so the response falls back to the default representation.

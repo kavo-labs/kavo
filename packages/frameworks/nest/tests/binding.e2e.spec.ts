@@ -5,7 +5,6 @@ import { Controller, Get, Inject, NotFoundException, Param, type INestApplicatio
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Test } from "@nestjs/testing";
 import type {
-  ClassRef,
   DefaultKavoService,
   EntityMetadata,
   FindManyResult,
@@ -35,14 +34,7 @@ import {
   oneOfArray,
   registerKavoSchemas,
 } from "@kavo/nest";
-import {
-  InMemoryTodoAdapter,
-  Todo,
-  TodoList,
-  TodoTag,
-  fakeInfrastructure,
-  todoMetadata,
-} from "./support/fake-infrastructure.js";
+import { InMemoryTodoAdapter, Todo, TodoList, TodoTag, fakeInfrastructure } from "./support/fake-infrastructure.js";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 let app: INestApplication;
@@ -212,7 +204,7 @@ describe("@Kavo route generation", () => {
  * allowlist (every own string column) with no explicit configuration.
  */
 describe("@Kavo search[...] (issue #156)", () => {
-  @Kavo(Todo, { query: { search: {} } })
+  @Kavo(Todo, { search: {} })
   @Controller("todos")
   class SearchController {}
 
@@ -1485,7 +1477,7 @@ describe("@Kavo soft-delete routes", () => {
 });
 
 describe("@Kavo relation includes", () => {
-  @Kavo(Todo, { allowlists: { includable: ["list"] } })
+  @Kavo(Todo, { include: { fields: ["list"] } })
   @Controller("todos")
   class IncludingController {}
 
@@ -1515,11 +1507,11 @@ describe("@Kavo relation includes", () => {
     expect(response.body.list).toEqual({ id: 7 });
   });
 
-  it("rejects a relation-dotted allowlists.selectable entry at bootstrap (ADR-0045)", async () => {
+  it("rejects a relation-dotted allowed.selectable entry at bootstrap (ADR-0045)", async () => {
     // `"list.id"` no longer type-checks (`SelectableFieldSelector` is capped
     // to depth 1); the cast stands in for an erased or `as`-cast config, and
     // the bootstrap check is the backstop.
-    const config = { allowlists: { includable: ["list"], selectable: ["id", "title", "list.id"] } } as never;
+    const config = { include: { fields: ["list"] }, select: { fields: ["id", "title", "list.id"] } } as never;
     @Kavo(Todo, config)
     @Controller("todos")
     class CeilingController {}
@@ -1620,7 +1612,7 @@ describe("@Kavo relation includes", () => {
     // exists yet (ADR-0012) — so `include` is still emitted (the set may be
     // non-empty) but undescribed, the same treatment `filterable`/`sortable`/
     // `selectable` already get for their own `{ exclude }` form.
-    @Kavo(Todo, { allowlists: { includable: { exclude: [] } } })
+    @Kavo(Todo, { include: { fields: { exclude: [] } } })
     @Controller("todos")
     class ExcludingIncludableController {}
 
@@ -1636,7 +1628,7 @@ describe("@Kavo relation includes", () => {
 });
 
 describe("@Kavo Swagger allowlist-aware query docs", () => {
-  @Kavo(Todo, { allowlists: { filterable: ["title", "priority"], sortable: ["priority"] } })
+  @Kavo(Todo, { filter: { fields: ["title", "priority"] }, sort: { fields: ["priority"] } })
   @Controller("todos")
   class RestrictedController {}
 
@@ -1669,7 +1661,7 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
   });
 
   it("carries no description for an exclude-shaped allowlist", async () => {
-    @Kavo(Todo, { allowlists: { filterable: { exclude: ["id"] } } })
+    @Kavo(Todo, { filter: { fields: { exclude: ["id"] } } })
     @Controller("todos")
     class ExcludingController {}
 
@@ -1682,7 +1674,7 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
   });
 
   it("documents an explicit empty allowlist as a closed door, not a blank description", async () => {
-    @Kavo(Todo, { allowlists: { sortable: [] } })
+    @Kavo(Todo, { sort: { fields: [] } })
     @Controller("todos")
     class NoSortController {}
 
@@ -1748,13 +1740,13 @@ describe("@Kavo Swagger allowlist-aware query docs", () => {
  * `search[query]`/`search[mode]`/`search[fields]` docs (issue #156) are
  * applied later than the rest — deferred to `KavoModule`'s discovery binder
  * (`applySearchQueryDocs`), because whether they belong on the route
- * depends on whether `query.search` resolved to an object through the full precedence
- * chain, and `allowlists.searchable`'s default/`{ exclude }` cases need ORM
+ * depends on whether `search` resolved to an object through the full precedence
+ * chain, and `allowed.searchable`'s default/`{ exclude }` cases need ORM
  * metadata that doesn't exist at `@Kavo` decoration time.
  */
 describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   it("documents search[query]/search[mode]/search[fields] with the resolved searchable allowlist when enabled", async () => {
-    @Kavo(Todo, { query: { search: {} } })
+    @Kavo(Todo, { search: {} })
     @Controller("todos")
     class SearchDocsController {}
 
@@ -1787,7 +1779,7 @@ describe("@Kavo Swagger search[...] query docs (issue #156)", () => {
   });
 
   it("documents an explicit empty searchable allowlist as a closed door", async () => {
-    @Kavo(Todo, { query: { search: {} }, allowlists: { searchable: [] } })
+    @Kavo(Todo, { search: { fields: [] } })
     @Controller("todos")
     class EmptySearchableController {}
 
@@ -1841,94 +1833,42 @@ describe("@Kavo Swagger conditional-request headers carry no per-route descripti
 });
 
 /**
- * ORM-derived fields over the wire (issue #373): `@kavo/nest` needs no
- * changes for them either — generated routes go through the same engine,
- * so the serializer reads a derived value straight off the row and the
- * allowlists gate it exactly as they do programmatically. This is the
- * wire-level evidence for that claim, using a fake `FieldMetadata` entry
- * with a `derivedExpression` marker in place of a real ORM's virtual
- * column (`@kavo/typeorm`'s own suite covers the actual SQL translation).
+ * ADR-0019 claims `@kavo/nest` needs no changes for computed fields:
+ * generated routes go through the same engine, so the serializer produces
+ * them and the allowlists gate them exactly as they do programmatically.
+ * This is the wire-level evidence for that claim.
  */
-describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
-  const derivedTodoMetadata: EntityMetadata<Todo> = {
-    ...todoMetadata,
-    fields: [
-      ...todoMetadata.fields,
-      { name: "slug", kind: "string", nullable: true, generated: false, derivedExpression: "lower(title)" },
-    ],
-  };
+describe("@Kavo computed fields over the wire (ADR-0019)", () => {
+  @Kavo(Todo, {
+    // Defensive by construction: `resolve` must be *total* over anything the
+    // column can hold, because `serializeList` maps it over every row and one
+    // throw takes the whole collection response down (ADR-0019 §1).
+    computed: {
+      slug: { resolve: (todo: Todo) => todo.title?.toLowerCase().replaceAll(" ", "-") ?? null },
+    },
+  })
+  @Controller("todos")
+  class ComputedController {}
 
-  function fakeDerivedInfrastructure(fakeAdapter: InMemoryTodoAdapter): KavoInfrastructure {
-    return {
-      metadataFor<Entity extends object>(entity: ClassRef<Entity>) {
-        if ((entity as ClassRef) === Todo) {
-          return derivedTodoMetadata as unknown as EntityMetadata<Entity>;
-        }
-        return fakeInfrastructure(fakeAdapter).metadataFor(entity);
-      },
-      adapterFor<Entity extends object>() {
-        return fakeAdapter as unknown as RepositoryAdapter<Entity>;
-      },
-    };
-  }
-
-  it("excludes an un-opted-in derived field from the generated read routes", async () => {
-    @Kavo(Todo)
-    @Controller("todos")
-    class TodoController {}
-
-    adapter = new InMemoryTodoAdapter();
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
-        KavoModule.forFeature([TodoController as never]),
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    httpServer = await listen(app);
-    adapter.rows.push({ ...new Todo(), id: 1, title: "Write Docs", slug: "write-docs" } as never);
-
-    expect((await request(server()).get("/todos/1").expect(200)).body).not.toHaveProperty("slug");
+  beforeEach(async () => {
+    await bootstrap(ComputedController);
+    await request(server()).post("/todos").send({ title: "Write Docs", priority: 2 }).expect(201);
   });
 
-  it("emits an opted-in derived field, read straight off the row", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title", "done", "priority", "slug" as never] } })
-    @Controller("todos")
-    class TodoController {}
-
-    adapter = new InMemoryTodoAdapter();
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
-        KavoModule.forFeature([TodoController as never]),
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    httpServer = await listen(app);
-    adapter.rows.push({ ...new Todo(), id: 1, title: "Write Docs", slug: "write-docs" } as never);
-
-    expect((await request(server()).get("/todos/1").expect(200)).body).toMatchObject({ slug: "write-docs" });
-    expect((await request(server()).get("/todos/1?select=id,slug").expect(200)).body).toEqual({
-      id: 1,
+  it("emits the computed field on generated read routes with no DTO registered", async () => {
+    expect((await request(server()).get("/todos/1").expect(200)).body).toMatchObject({
+      title: "Write Docs",
       slug: "write-docs",
     });
+    expect((await request(server()).get("/todos").expect(200)).body.items[0]).toMatchObject({ slug: "write-docs" });
   });
 
-  it("rejects it as a filter or sort field with problem details when not opted in", async () => {
-    @Kavo(Todo)
-    @Controller("todos")
-    class TodoController {}
+  it("is selectable through the wire fieldset", async () => {
+    const response = await request(server()).get("/todos/1?select=id,slug").expect(200);
+    expect(response.body).toEqual({ id: 1, slug: "write-docs" });
+  });
 
-    adapter = new InMemoryTodoAdapter();
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
-        KavoModule.forFeature([TodoController as never]),
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    httpServer = await listen(app);
-
+  it("is rejected as a filter or sort field with problem details", async () => {
     for (const query of ["filter[slug][eq]=write-docs", "sort=slug"]) {
       const response = await request(server()).get(`/todos?${query}`).expect(400);
       expect(response.body).toMatchObject({
@@ -1939,27 +1879,13 @@ describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
   });
 
   it("never reaches the adapter from a request body", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title", "done", "priority", "slug" as never] } })
-    @Controller("todos")
-    class TodoController {}
-
-    adapter = new InMemoryTodoAdapter();
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(adapter) }),
-        KavoModule.forFeature([TodoController as never]),
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    httpServer = await listen(app);
-
     await request(server()).post("/todos").send({ title: "Ship It", slug: "hijacked" }).expect(201);
-    expect(adapter.rows[0]).not.toHaveProperty("slug");
+    expect(adapter.rows[1]).not.toHaveProperty("slug");
   });
 
-  it("fails at bind time when a registered create DTO declares the derived field", async () => {
+  it("fails at bind time when a registered create DTO declares the computed field", async () => {
     // The wire consequence this closes: `@ApiBody` is built from the DTO's
-    // runtime shape, so a DTO naming a derived field made OpenAPI advertise
+    // runtime shape, so a DTO naming a computed field made OpenAPI advertise
     // a property the engine unconditionally discards. Rejected at
     // `createCrud` now, which in a Nest app is provider instantiation.
     class CreateTodoDto {
@@ -1967,15 +1893,18 @@ describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
       slug = "";
     }
 
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, {
+      computed: { slug: { resolve: (todo: Todo) => todo.title?.toLowerCase() ?? null } },
+      dto: { create: CreateTodoDto },
+    })
     @Controller("todos")
-    class DerivedDtoController {}
+    class ComputedDtoController {}
 
     const bind = async (): Promise<unknown> => {
       const moduleRef = await Test.createTestingModule({
         imports: [
-          KavoModule.forRoot({ infrastructure: fakeDerivedInfrastructure(new InMemoryTodoAdapter()) }),
-          KavoModule.forFeature([DerivedDtoController as never]),
+          KavoModule.forRoot({ infrastructure: fakeInfrastructure(new InMemoryTodoAdapter()) }),
+          KavoModule.forFeature([ComputedDtoController as never]),
         ],
       }).compile();
       return moduleRef.createNestApplication().init();
@@ -1984,6 +1913,27 @@ describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
       code: "KAVO_CONFIG_INVALID",
       messageParams: { entity: "Todo", path: "dto.create" },
     });
+  });
+
+  it("turns a throwing resolver into problem details without leaking the message", async () => {
+    @Kavo(Todo, {
+      computed: {
+        note: {
+          resolve: () => {
+            throw new Error("secret internal detail");
+          },
+        },
+      },
+    })
+    @Controller("todos")
+    class ThrowingComputedController {}
+
+    await app.close();
+    await bootstrap(ThrowingComputedController);
+    // The write serializes its result too, so this is where it surfaces.
+    const response = await request(server()).post("/todos").send({ title: "x" }).expect(500);
+    expect(response.body).toMatchObject({ code: "KAVO_PERSISTENCE_FAILED", status: 500 });
+    expect(JSON.stringify(response.body)).not.toContain("secret internal detail");
   });
 });
 
@@ -2505,7 +2455,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
   });
 
   it("documents an explicit empty creatable/updatable allowlist as closed via description, not silence", async () => {
-    @Kavo(Todo, { allowlists: { creatable: [], updatable: [] } })
+    @Kavo(Todo, { create: { fields: [] }, update: { fields: [] } })
     @Controller("todos")
     class ClosedController {}
     await bootstrap(ClosedController);
@@ -2564,7 +2514,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // so it produces zero properties. The "no body" description must still
     // appear: it is gated on the property count, not the allowlist length.
     await withMetadata([{ name: "id", kind: "string", nullable: false, generated: true }], [], {
-      allowlists: { creatable: ["id"], updatable: ["id"] },
+      create: { fields: ["id"] },
+      update: { fields: ["id"] },
     });
 
     const schema = (
@@ -2578,7 +2529,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
   });
 
   it("narrows the documented body to an explicit creatable/updatable allowlist", async () => {
-    @Kavo(Todo, { allowlists: { creatable: ["title"], updatable: ["done"] } })
+    @Kavo(Todo, { create: { fields: ["title"] }, update: { fields: ["done"] } })
     @Controller("todos")
     class NarrowedController {}
     await bootstrap(NarrowedController);
@@ -2689,7 +2640,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      allowlists: { creatable: ["word"], updatable: ["word"] },
+      create: { fields: ["word"] },
+      update: { fields: ["word"] },
     });
 
     expect(bodySchema("/notes", "post")?.properties?.word).toEqual({
@@ -2707,7 +2659,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       () => {
         throw new Error("no metadata for this relation target from this root");
       },
-      { allowlists: { creatable: ["word"], updatable: ["word"] } },
+      { create: { fields: ["word"] }, update: { fields: ["word"] } },
     );
 
     // Bootstrap survived the throw, and the field falls back to the
@@ -2735,7 +2687,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      allowlists: { creatable: ["word"], updatable: ["word"] },
+      create: { fields: ["word"] },
+      update: { fields: ["word"] },
     });
 
     // A single scalar `id` would be a wrong assertion for a two-column key,
@@ -2764,7 +2717,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      allowlists: { creatable: ["word"], updatable: ["word"] },
+      create: { fields: ["word"] },
+      update: { fields: ["word"] },
     });
     expect(bodySchema("/notes", "post")?.properties?.word?.properties?.id).toEqual(expected);
   });
@@ -2791,35 +2745,8 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
 
   let document: ReturnType<typeof SwaggerModule.createDocument>;
 
-  /** `todoMetadata` plus an ORM-derived `titleUpper` field (issue #373). */
-  const derivedTodoMetadata: EntityMetadata<Todo> = {
-    ...todoMetadata,
-    fields: [
-      ...todoMetadata.fields,
-      { name: "titleUpper", kind: "string", nullable: true, generated: false, derivedExpression: "upper(title)" },
-    ],
-  };
-
-  async function bootstrapDerived(controller: unknown): Promise<void> {
-    const derivedInfrastructure: KavoInfrastructure = {
-      metadataFor: (entity) =>
-        (entity as ClassRef) === Todo
-          ? (derivedTodoMetadata as never)
-          : fakeInfrastructure(adapter).metadataFor(entity),
-      adapterFor: () => adapter as never,
-    };
-    const moduleRef = await Test.createTestingModule({
-      imports: [
-        KavoModule.forRoot({ infrastructure: derivedInfrastructure }),
-        KavoModule.forFeature([controller as never]),
-      ],
-    }).compile();
-    app = moduleRef.createNestApplication();
-    await app.init();
-  }
-
   it("narrows the item response to selectable when no item DTO is registered", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Kavo(Todo, { select: { fields: ["id", "title"] } })
     @Controller("todos")
     class NarrowedController {}
     await bootstrap(NarrowedController);
@@ -2840,7 +2767,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
   });
 
   it("narrows the list envelope's element to selectable when no list/item DTO is registered", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Kavo(Todo, { select: { fields: ["id", "title"] } })
     @Controller("todos")
     class NarrowedController {}
     await bootstrap(NarrowedController);
@@ -2861,7 +2788,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     // `selectable`'s own unconfigured default is every own column
     // (`resolve-entity-config.ts`), and `list` (the to-one relation) isn't
     // one of `EntityMetadata.fields`. A relation only appears here when it
-    // is on `allowlists.includable` (issue #349), which it is not here, so
+    // is on `allowed.includable` (issue #349), which it is not here, so
     // the synthesized item schema stays scalar-only.
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual([
       "id",
@@ -2889,11 +2816,13 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(envelope?.properties?.items?.items?.required).toEqual(["id", "title", "done", "priority"]);
   });
 
-  it("keeps a nullable, opted-in derived field out of the synthesized response `required` (issue #302, #373)", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title", "done", "priority", "titleUpper" as never] } })
+  it("keeps an untyped computed field out of the synthesized response `required` (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+    })
     @Controller("todos")
-    class DerivedController {}
-    await bootstrapDerived(DerivedController);
+    class ComputedController {}
+    await bootstrap(ComputedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(itemBody("/todos/{id}", "get", "200")?.required).not.toContain("titleUpper");
@@ -2904,7 +2833,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       id = 0;
       title = "";
     }
-    @Kavo(Todo, { dto: { item: TodoItemDto }, allowlists: { selectable: ["id"] } })
+    @Kavo(Todo, { dto: { item: TodoItemDto }, select: { fields: ["id"] } })
     @Controller("todos")
     class DtoController {}
     await bootstrap(DtoController);
@@ -2959,7 +2888,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       adapterFor: () => declaredAdapter as never,
     };
 
-    @Kavo(DeclaredOnlyEntity, { allowlists: { selectable: ["id", "title"] } })
+    @Kavo(DeclaredOnlyEntity, { select: { fields: ["id", "title"] } })
     @Controller("declared")
     class DeclaredOnlyController {}
 
@@ -2987,53 +2916,64 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
     expect(Object.keys(schema?.properties ?? {})).toEqual(["id", "title"]);
   });
 
-  it("adds an opted-in derived field to the synthesized item and list schemas, typed like any other field (issue #302, #373)", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title", "done", "priority", "titleUpper" as never] } })
+  it("adds a declared computed field to the synthesized item and list schemas, untyped (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+    })
     @Controller("todos")
-    class DerivedController {}
-    await bootstrapDerived(DerivedController);
+    class ComputedController {}
+    await bootstrap(ComputedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     const single = itemBody("/todos/{id}", "get", "200");
-    expect(Object.keys(single?.properties ?? {})).toEqual(["id", "title", "done", "priority", "titleUpper"]);
-    // Typed from its own `FieldMetadata` — `kind: "string"`, `nullable: true`
-    // — exactly like any other field, unlike the untyped `computed` fragment
-    // this replaced.
-    expect(single?.properties?.titleUpper).toMatchObject({ type: "string" });
+    expect(Object.keys(single?.properties ?? {})).toEqual([
+      "id",
+      "title",
+      "done",
+      "priority",
+      "deletedAt",
+      "titleUpper",
+    ]);
+    // No assumed `type` — computed descriptors carry none.
+    expect(single?.properties?.titleUpper).toEqual({ nullable: true });
 
     const listElement = itemBody("/todos", "get", "200")?.properties?.items?.items;
     expect(Object.keys(listElement?.properties ?? {})).toContain("titleUpper");
+    expect(listElement?.properties?.titleUpper).toEqual({ nullable: true });
   });
 
-  it("omits an un-opted-in derived field, the same as any other field left off selectable (issue #373)", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+  it("omits a computed field when an explicit selectable list excludes it (issue #302)", async () => {
+    @Kavo(Todo, {
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
+      select: { fields: ["id", "title"] },
+    })
     @Controller("todos")
-    class NarrowedController {}
-    await bootstrapDerived(NarrowedController);
+    class NarrowedComputedController {}
+    await bootstrap(NarrowedComputedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
 
-  it("leaves a registered item DTO's response untouched even when a derived field is opted in (issue #373)", async () => {
+  it("leaves a registered item DTO's response untouched even when a computed field is declared (issue #302)", async () => {
     class TodoItemDto {
       id = 0;
       title = "";
     }
     @Kavo(Todo, {
       dto: { item: TodoItemDto },
-      allowlists: { selectable: ["id", "title", "titleUpper" as never] },
+      computed: { titleUpper: { resolve: (todo) => todo.title?.toUpperCase() ?? null } },
     })
     @Controller("todos")
-    class DtoDerivedController {}
-    await bootstrapDerived(DtoDerivedController);
+    class DtoComputedController {}
+    await bootstrap(DtoComputedController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
 
   it("emits an optional property for an includable relation, deferring to the target's own config (issue #349)", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class IncludableController {}
     await bootstrap(IncludableController);
@@ -3058,13 +2998,13 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
   });
 
   it("adds no relation property when nothing is includable (issue #349)", async () => {
-    @Kavo(Todo, { allowlists: { selectable: ["id", "title"] } })
+    @Kavo(Todo, { select: { fields: ["id", "title"] } })
     @Controller("todos")
     class NoIncludeController {}
     await bootstrap(NoIncludeController);
     document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
 
-    // `list` is a relation on `Todo` but not on `allowlists.includable`, so
+    // `list` is a relation on `Todo` but not on `allowed.includable`, so
     // the synthesized schema stays exactly the scalar `selectable` set.
     expect(Object.keys(itemBody("/todos/{id}", "get", "200")?.properties ?? {})).toEqual(["id", "title"]);
   });
@@ -3164,10 +3104,10 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     // `Todo`'s own `<Entity>ListItem` envelope element, so `registerKavoSchemas`
     // legitimately lands `TodoList`'s item on `TodoListItem_2` — the marker
     // resolution records whichever name it actually got.
-    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class TodoC {}
-    @Kavo(TodoList, { allowlists: { includable: ["list"] } })
+    @Kavo(TodoList, { include: { fields: ["list"] } })
     @Controller("lists")
     class ListC {}
     @Kavo(TodoTag, {})
@@ -3192,7 +3132,7 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
 
   it("degrades to a plain object when the relation target has no synthesized item component", async () => {
     // `TodoList` is not routed, so no `TodoListItem` is ever registered.
-    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class TodoOnlyC {}
 
@@ -3234,7 +3174,7 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
 
     @Controller("posts")
     class PostController {}
-    const postConfig: unknown = { allowlists: { includable: ["author"] } };
+    const postConfig: unknown = { include: { fields: ["author"] } };
     Kavo(Post, postConfig as Parameters<typeof Kavo>[1])(PostController);
     // `metadataFor` throwing for the target must not abort bootstrap.
     const doc = await buildDoc(infrastructure, [PostController]);
@@ -3285,8 +3225,8 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     // `Author`/`Book` have no declared fields, so the config's relation-name
     // types infer to `never`; apply the decorator as a plain cast call, the
     // same escape hatch the fallback-schema blocks above use.
-    const authorConfig: unknown = { allowlists: { includable: ["books"] } };
-    const bookConfig: unknown = { allowlists: { includable: ["author"] } };
+    const authorConfig: unknown = { include: { fields: ["books"] } };
+    const bookConfig: unknown = { include: { fields: ["author"] } };
     Kavo(Author, authorConfig as Parameters<typeof Kavo>[1])(AuthorC);
     Kavo(Book, bookConfig as Parameters<typeof Kavo>[1])(BookC);
 
@@ -3304,10 +3244,9 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     expectEveryRefResolves(doc);
   });
 
-  it("keeps a defaultInclude relation optional, still $ref'd (write responses carry no relations, ADR-0020)", async () => {
+  it("keeps a defaults.include relation optional, still $ref'd (write responses carry no relations, ADR-0020)", async () => {
     @Kavo(Todo, {
-      allowlists: { includable: ["list"] },
-      relations: { edges: { list: { defaultInclude: true } } },
+      include: { fields: ["list"], default: ["list"] },
     })
     @Controller("todos")
     class DefaultIncludeC {}
@@ -3337,7 +3276,7 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
       id = 0;
       name = "";
     }
-    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class TodoC {}
     @Kavo(TodoList, { dto: { item: TodoListItemDto } })
@@ -3358,7 +3297,7 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
   });
 
   it("leaves the marker inline (and valid) when registerKavoSchemas is not run", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"] } })
+    @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class TodoC {}
     @Kavo(TodoList, {})
@@ -3736,7 +3675,7 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
   const schemas = (doc: Doc): Record<string, Schema> => doc.components?.schemas ?? {};
 
   it("produces <Entity>Pagination/Include/Sort from the resolved config at bind time", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title", "priority"] } })
+    @Kavo(Todo, { include: { fields: ["list"] }, sort: { fields: ["title", "priority"] } })
     @Controller("todos")
     class C {}
 
@@ -3802,7 +3741,7 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
     // survives.
     @Kavo(Todo, {
       operations: { createOne: true, findOne: true, updateOne: true, patchOne: true, deleteOne: true },
-      allowlists: { includable: ["list"] },
+      include: { fields: ["list"] },
     })
     @Controller("todos")
     class C {}
@@ -3921,7 +3860,7 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
   });
 
   it("documents an explicit empty sortable allowlist as a closed door", async () => {
-    @Kavo(Todo, { allowlists: { sortable: [] } })
+    @Kavo(Todo, { sort: { fields: [] } })
     @Controller("todos")
     class C {}
 
@@ -3933,10 +3872,10 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
   });
 
   it("namespaces the three components per entity across a multi-entity document", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title"] } })
+    @Kavo(Todo, { include: { fields: ["list"] }, sort: { fields: ["title"] } })
     @Controller("todos")
     class TodoC {}
-    @Kavo(TodoList, { allowlists: { sortable: ["name"] } })
+    @Kavo(TodoList, { sort: { fields: ["name"] } })
     @Controller("lists")
     class ListC {}
 
@@ -3958,7 +3897,7 @@ describe("@Kavo Swagger query-shape component schemas (issue #313)", () => {
   });
 
   it("leaves the raw blob on the route when registerKavoSchemas is not run, split by route cardinality", async () => {
-    @Kavo(Todo, { allowlists: { sortable: ["title"], includable: ["list"] } })
+    @Kavo(Todo, { sort: { fields: ["title"] }, include: { fields: ["list"] } })
     @Controller("todos")
     class C {}
 
@@ -4006,7 +3945,7 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
   const schemas = (doc: Doc): Record<string, Schema> => doc.components?.schemas ?? {};
 
   it("produces <Entity>Filter with one operator map per filterable own column, and <Entity>Query referencing its siblings", async () => {
-    @Kavo(Todo, { allowlists: { includable: ["list"], sortable: ["title"] } })
+    @Kavo(Todo, { include: { fields: ["list"] }, sort: { fields: ["title"] } })
     @Controller("todos")
     class C {}
 
@@ -4057,12 +3996,12 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
     // `search` isn't a component of its own — inlined only.
     const select = query?.properties?.select as { items?: { enum?: string[] } };
     expect(select.items?.enum).toEqual(["id", "title", "done", "priority", "deletedAt"]);
-    // `query.search` resolves `false` by default — no `search` property.
+    // `search` resolves `false` by default — no `search` property.
     expect(query?.properties?.search).toBeUndefined();
   });
 
   it("documents an explicit empty filterable allowlist as a closed door", async () => {
-    @Kavo(Todo, { allowlists: { filterable: [] } })
+    @Kavo(Todo, { filter: { fields: [] } })
     @Controller("todos")
     class C {}
 
@@ -4077,8 +4016,8 @@ describe("@Kavo Swagger <Entity>Filter/<Entity>Query component schemas (issue #3
     expect(schemas(doc).TodoFilter?.description).toBe("No field is filterable.");
   });
 
-  it("inlines a search property on <Entity>Query only when query.search resolves to an object", async () => {
-    @Kavo(Todo, { query: { search: { mode: "words" } }, allowlists: { searchable: ["title"] } })
+  it("inlines a search property on <Entity>Query only when search resolves to an object", async () => {
+    @Kavo(Todo, { search: { mode: "words", fields: ["title"] } })
     @Controller("todos")
     class C {}
 

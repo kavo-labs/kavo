@@ -14,23 +14,27 @@ import { compositeMetadata, CompositeEntity } from "./support/composite-fixture.
  * end-to-end against a real database.
  */
 
-const DEFAULT_ALLOWLISTS = {
-  filterable: ["userId", "topic", "key"],
-  sortable: ["userId", "topic", "key"],
-  selectable: ["userId", "topic", "key"],
+const DEFAULT_FIELD_GROUPS = {
+  filter: {
+    fields: ["userId", "topic", "key"],
+    operators: null,
+    limits: { maxDepth: 5, maxInValues: 100, maxLikePatternLength: 200 },
+  },
+  sort: { fields: ["userId", "topic", "key"] },
+  select: { fields: ["userId", "topic", "key"] },
+  include: { fields: [], limits: { maxDepth: 3, maxNodes: 20 } },
 };
 
 function configWith(
   defaultSort: readonly Sort<CompositeEntity>[],
   strategy = "cursor",
   sinceField = "key",
-  allowlists: Partial<typeof DEFAULT_ALLOWLISTS> = {},
+  fieldGroups: Partial<typeof DEFAULT_FIELD_GROUPS> = {},
 ): ResolvedEntityConfig<CompositeEntity> {
   const settings = {
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
-    query: { maxFilterDepth: 5, maxInValues: 100, defaultSort },
     errors: { exposeInternals: false },
-    relations: { maxIncludeDepth: 3, maxIncludedNodes: 20, edges: {} },
+    relations: { edges: {} },
     softDelete: false,
     operations: {},
   } as unknown as KavoSettings;
@@ -38,7 +42,10 @@ function configWith(
     entityName: "CompositeEntity",
     settings,
     settingsFor: () => settings,
-    allowlists: { ...DEFAULT_ALLOWLISTS, ...allowlists },
+    ...DEFAULT_FIELD_GROUPS,
+    ...fieldGroups,
+    sortDefault: defaultSort,
+    search: false,
     softDelete: { strategy: "hard", field: "deletedAt" },
     dto: { resolve: () => null },
     relations: { all: () => [], get: () => undefined },

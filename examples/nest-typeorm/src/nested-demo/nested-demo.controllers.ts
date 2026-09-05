@@ -9,14 +9,14 @@ import { Landmark, Region, Zone } from "./nested-demo.entities.js";
  * (issue #356).
  */
 
-@Kavo(Region, { allowlists: { includable: ["zones"] } })
+@Kavo(Region, { include: { fields: ["zones"] } })
 @Controller("regions")
 export class RegionController {}
 
-@Kavo(Zone, { allowlists: { includable: ["region", "landmarks"] } })
+@Kavo(Zone, { include: { fields: ["region", "landmarks"] } })
 @Controller("zones")
 export class ZoneController {}
 
-@Kavo(Landmark, { allowlists: { includable: ["zone"] } })
+@Kavo(Landmark, { include: { fields: ["zone"] } })
 @Controller("landmarks")
 export class LandmarkController {}

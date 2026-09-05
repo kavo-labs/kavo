@@ -1,29 +1,75 @@
 import type { KavoSettings } from "./settings.js";
+import type { SearchDriver, SearchMode } from "./entity-config.js";
+import type { ComputedFieldMap } from "./computed-field.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
-import type { DtoResolver } from "../dto/dto.js";
+import type { DtoResolver, WriteApply } from "../dto/dto.js";
+import type { FilterExpression, FilterOperator } from "../query/filter.js";
+import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";
 import type { Policy } from "../policy/kavo-policy.js";
+import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
 
+/** `EntityConfig.filter` after bootstrap resolution — complete, never optional (issue #386). */
+export interface ResolvedFilterConfig<Entity = unknown> {
+  readonly fields: readonly FieldPath<Entity>[];
+  /** Per-field allowed operators (the map form), or `null` when every allowed field permits every operator. */
+  readonly operators: ReadonlyMap<string, ReadonlySet<FilterOperator>> | null;
+  /** `filter.default` (issue #394), bootstrap-validated against `fields`. `null` when unconfigured. */
+  readonly default: FilterExpression<Entity> | null;
+  /** `filter.apply` (ADR-0048), passed through unresolved — see that ADR for composition. `undefined` when unconfigured. */
+  readonly apply?: FilterApply<Entity>;
+  readonly limits: {
+    readonly maxDepth: number;
+    readonly maxInValues: number;
+    readonly maxLikePatternLength: number;
+  };
+}
+
+/** `EntityConfig.sort` after bootstrap resolution — complete, never optional (issue #386). */
+export interface ResolvedSortConfig<Entity = unknown> {
+  readonly fields: readonly FieldPath<Entity>[];
+  /** `sort.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: SortApply<Entity>;
+}
+
+/** `EntityConfig.select` after bootstrap resolution — complete, never optional (issue #386). */
+export interface ResolvedSelectConfig<Entity = unknown> {
+  readonly fields: readonly FieldPath<Entity>[];
+  /** `select.default`, bootstrap-validated against `fields`. `undefined` when unconfigured. */
+  readonly default?: readonly FieldPath<Entity, 1>[];
+  /** `select.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: SelectApply<Entity>;
+}
+
+/** `EntityConfig.search` after bootstrap resolution, or `false` when search is disabled (issue #386). */
+export interface ResolvedSearchConfig<Entity = unknown> {
+  readonly fields: readonly FieldPath<Entity>[];
+  readonly default: string | null;
+  readonly mode: SearchMode;
+  readonly driver: SearchDriver;
+}
+
 /**
- * Allowlists after bootstrap resolution — complete, never optional.
+ * `EntityConfig.include` after bootstrap resolution — complete, never
+ * optional (issue #386).
  *
- * `includable` resolves the opposite direction from the other three keys:
+ * `fields` resolves the opposite direction from every other field-group:
  * unconfigured, it is `[]` rather than "every relation" (ADR-0028) — see
- * `QueryAllowlists.includable`'s doc comment for why.
+ * `IncludeConfig.fields`'s doc comment for why.
  */
-export interface ResolvedQueryAllowlists<Entity = unknown> {
-  readonly filterable: readonly FieldPath<Entity>[];
-  readonly sortable: readonly FieldPath<Entity>[];
-  readonly selectable: readonly FieldPath<Entity>[];
-  readonly includable: readonly IncludePath<Entity, 1>[];
-  readonly searchable: readonly FieldPath<Entity>[];
-  readonly creatable: readonly FieldPath<Entity, 1>[];
-  readonly updatable: readonly FieldPath<Entity, 1>[];
+export interface ResolvedIncludeConfig<Entity = unknown> {
+  readonly fields: readonly IncludePath<Entity, 1>[];
+  /** `include.apply` (ADR-0048), passed through unresolved. `undefined` when unconfigured. */
+  readonly apply?: IncludeApply<Entity>;
+  readonly limits: {
+    readonly maxDepth: number;
+    readonly maxNodes: number;
+  };
 }
 
 /**
@@ -41,17 +87,28 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly settings: KavoSettings;
   /** Per-operation settings view: entity settings + operation overrides. */
   settingsFor(operation: OperationId): KavoSettings;
-  readonly allowlists: ResolvedQueryAllowlists<Entity>;
+  readonly filter: ResolvedFilterConfig<Entity>;
+  readonly sort: ResolvedSortConfig<Entity>;
+  /** `sort.default`, already parsed into the internal `Sort` shape (bootstrap-validated against `sort.fields`). */
+  readonly sortDefault: readonly Sort<Entity>[];
+  readonly select: ResolvedSelectConfig<Entity>;
+  readonly search: ResolvedSearchConfig<Entity> | false;
+  readonly include: ResolvedIncludeConfig<Entity>;
   /**
    * The default response projection: what a read serves when the request
    * sends no `select=` and no `item`/`list` DTO is registered.
    *
-   * `null` means "the entity-derived default" — every scalar column, own
-   * derived fields excluded (ADR-0026, ADR-0046: a derived field is opt-in
-   * to the projection via `allowlists.selectable`, the same as a relation).
-   * A non-null value is {@link ResolvedQueryAllowlists.selectable}, and it
-   * is non-null exactly when `allowlists.selectable` was configured
-   * explicitly.
+   * `null` means "the entity-derived default" — every scalar column plus
+   * every declared computed field. A non-null value is
+   * {@link ResolvedSelectConfig.fields}, and it is non-null exactly
+   * when `select.fields` was configured explicitly (ADR-0026).
+   *
+   * The provenance is the whole point, and is why this is not simply read
+   * off `select.fields`. Unconfigured, that list resolves to a base
+   * set that is *almost* the derived projection but drops computed fields
+   * declaring `selectable: false` — fields whose documented contract is to
+   * stay in the projection while being unnameable in `select=`. Narrowing
+   * by a list nobody wrote would silently retire that contract.
    */
   readonly projection: readonly FieldPath<Entity>[] | null;
   /**
@@ -62,6 +119,13 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly softDelete: ResolvedSoftDelete;
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
+  /**
+   * Declared computed fields, validated at bootstrap — an empty record when
+   * the entity declares none. Read by the serializer (to evaluate them) and
+   * by the deserializer (to keep them out of writes), for this entity and,
+   * through the catalog, for any relation target (ADR-0019).
+   */
+  readonly computed: ComputedFieldMap<Entity>;
   /** Relation edges of this entity. */
   readonly relations: RelationRegistry<Entity>;
   /**
@@ -77,7 +141,8 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * per entity and not through the settings precedence chain, for the same
    * ADR-0023 reason `realtimeTransports` documents: a store is a live
    * object (a Redis client, say) that must not be deep-frozen. The engine
-   * reads and writes it when `settings.cache.ttl` is positive (ADR-0031).
+   * reads and writes it when `settings.cache.ttl` is a positive number
+   * (ADR-0031 as amended).
    */
   readonly cacheStore: CacheStore;
   /**
@@ -89,4 +154,27 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * handler when it finds nothing.
    */
   readonly policy: Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>>;
+  /**
+   * `create.default`: values filled in for a writable field `createOne`'s
+   * body doesn't set. An explicit value in the body always wins outright —
+   * this only fills a gap, never overrides one. Empty when unconfigured.
+   */
+  readonly createDefault: Readonly<Partial<Entity>>;
+  /**
+   * `update.default` — same idea, `updateOne` only (never `patchOne`, whose
+   * omission means "leave unchanged" rather than "reset").
+   */
+  readonly updateDefault: Readonly<Partial<Entity>>;
+  /**
+   * `create.apply` (issue #391), passed through unresolved — the write-side
+   * sibling of `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+   * (ADR-0048): forces field values into `createOne`'s body, overwriting
+   * whatever the client sent. `undefined` when unconfigured.
+   */
+  readonly createApply?: WriteApply<Entity>;
+  /**
+   * `update.apply` — same idea, `updateOne` only (never `patchOne`, matching
+   * {@link ResolvedEntityConfig.updateDefault}'s own scope).
+   */
+  readonly updateApply?: WriteApply<Entity>;
 }

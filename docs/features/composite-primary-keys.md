@@ -27,7 +27,7 @@ Kavo reports the two columns as `compositeIdFields`, in declaration order. Every
 
 A composite entity's route id is one path segment, its key columns joined by `~`: `GET /user-sentences/u1~billing` addresses `{ userId: "u1", topic: "billing" }`. A literal `~` inside a value is escaped by doubling it (`~~`), since the id has already been through URL decoding by the time Kavo sees it, and percent-escaping the separator would be silently invisible at that point.
 
-The key columns are creatable but not updatable by default: `createOne` accepts them (a natural key the client supplies), while `updateOne`/`patchOne` silently drop them from the body, the same way an unknown key is dropped. The row's identity doesn't change after creation. Narrow `creatable`/`updatable` explicitly if that default is wrong for an entity (see [Allowlists](/features/allowlists)).
+The key columns are creatable but not updatable by default: `createOne` accepts them (a natural key the client supplies), while `updateOne`/`patchOne` silently drop them from the body, the same way an unknown key is dropped. The row's identity doesn't change after creation. Narrow `create.fields`/`update.fields` explicitly if that default is wrong for an entity (see [Allowed](/features/allowed)).
 
 Offset, page, cursor, and since pagination all work. Association by id ([ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes)) works in both directions: a composite entity can be a relation's source (`include=` from its owner) or its target. A write body names it as either an object keyed by each column (`{ owner: { userId: "u1", topic: "billing" } }`) or the same `~`-delimited scalar a route id uses.
 

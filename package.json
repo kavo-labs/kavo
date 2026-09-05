@@ -28,6 +28,8 @@
   },
   "devDependencies": {
     "@braintree/sanitize-url": "^7.1.2",
+    "@commitlint/cli": "^21.2.2",
+    "@commitlint/config-conventional": "^21.2.2",
     "@swc/core": "^1.16.0",
     "@types/node": "^22.20.1",
     "@vitest/coverage-v8": "^4.1.10",
@@ -46,5 +48,5 @@
     "vitepress-plugin-mermaid": "^2.0.17",
     "vitest": "^4.1.10"
   },
-  "version": "0.17.3"
+  "version": "0.19.0"
 }

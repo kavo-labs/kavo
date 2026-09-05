@@ -1,6 +1,6 @@
 ---
 name: kavo-decorator
-description: Reference for what @Kavo(Entity, config?) generates and how to configure/override it — routes table, EntityConfig shape (dto/allowlists/operations), manual-method-wins, @Override, and fully custom routes. Use when writing or reviewing a @Kavo-decorated controller, or answering "how do I configure/override this route" questions.
+description: Reference for what @Kavo(Entity, config?) generates and how to configure/override it — routes table, EntityConfig shape (dto/allowed/operations), manual-method-wins, @Override, and fully custom routes. Use when writing or reviewing a @Kavo-decorated controller, or answering "how do I configure/override this route" questions.
 ---
 
 # `@Kavo()` reference
@@ -45,27 +45,27 @@ enables purge) — decoration time has no ORM metadata to auto-detect them from.
 interface EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>
   extends Omit<DeepPartial<KavoSettings>, "operations"> {
   dto?: OperationDtoMap<...>;          // per-slot DTO overrides: create/update/patch/query/item/list
-  allowlists?: QueryAllowlists<Entity>; // filterable/sortable/selectable field allowlists
+  allowed?: QueryAllowed<Entity>; // filterable/sortable/selectable field allowlists
   operations?: Partial<Record<StandardOperationId, OperationConfig<Entity> | boolean>>;
 }
 ```
 
 - **`dto`** — override any of the bare-verb DTO slots (`create`, `update`,
   `patch`, `query`, `item`, `list`). Omitted slots derive from the entity.
-- **`allowlists`** — see below.
+- **`allowed`** — see below.
 - **`operations.<id>`** — `false` disables the operation (no route, no
   service method reachable); `true` enables one that is off by default
   (`purgeOne`, `restoreOne`). The long form,
   `{ enabled?, handler?, meta? }`, additionally lets you swap the
   `OperationHandler` or supply route `meta` (`method`, `path`, `successStatus`,
   or `enabled: false` to keep it service-only).
-- **Settings keys** (`pagination`, `query`, `errors`, `relations`, `softDelete`,
+- **Settings keys** (`pagination`, `limits`, `search`, `errors`, `relations`, `softDelete`,
   `bulk`) inherited from `DeepPartial<KavoSettings>` override the global
   default for this entity only — see the `global-config` skill for the
   precedence chain these merge through, and the sections below for what
   `relations` configures.
 
-## `allowlists` — `filterable` / `sortable` / `selectable`
+## `allowed` — `filterable` / `sortable` / `selectable`
 
 Security allowlists: what a request may filter, sort, and select on,
 **including relation paths**. Anything outside the allowlist is a 400
@@ -75,7 +75,7 @@ skips coercion, not security.
 
 ```ts
 @Kavo(User, {
-  allowlists: {
+  allowed: {
     filterable: ["email", "status", "profile.city"],
     sortable: ["createdAt", "email"],
     selectable: { exclude: ["passwordHash"] },
@@ -92,7 +92,7 @@ skips coercion, not security.
 - Omitted allowlists default to the entity's own scalar columns (derived
   from the `query` DTO or entity metadata at bootstrap) — relation paths
   need an explicit `filterable`/`sortable` entry naming the dot-path
-  (`profile.city`), or `include`'s own `allowlists.selectable` on the
+  (`profile.city`), or `include`'s own `allowed.selectable` on the
   _target_ entity for `fields[<path>]`.
 - Relation-path **filters** restrict root rows via a non-selecting join —
   they never load or filter the included collection itself.
@@ -111,8 +111,10 @@ Inclusion is its own allowlist, resolved per-edge under `relations.edges`:
       pets: { includable: true },
       address: { includable: true, strategy: "join" },
     },
-    maxIncludeDepth: 3,   // default 2 — budget spent per level
-    maxIncludedNodes: 20, // default 10 — cap across the whole include tree
+  },
+  limits: {
+    includeDepth: 3,   // default 2 — budget spent per level
+    includedNodes: 20, // default 10 — cap across the whole include tree
   },
 })
 ```
@@ -120,12 +122,12 @@ Inclusion is its own allowlist, resolved per-edge under `relations.edges`:
 Per-edge options (`relations.edges.<name>`), each defaulting from the table
 below if omitted:
 
-| Key              | Default                              | Meaning                                                                                                                                    |
-| ---------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `includable`     | `false`                              | naming the edge at all is what opts it in; omitted = not includable                                                                        |
-| `defaultInclude` | `false`                              | `true` includes it even without an explicit `include=` param                                                                               |
-| `maxDepth`       | inherits `relations.maxIncludeDepth` | replaces the depth budget for this edge's own subtree                                                                                      |
-| `strategy`       | `"auto"`                             | `"join"` (`leftJoinAndSelect`) or `"batch"` (one query per level, stitched in memory); `auto` picks `join` for to-one, `batch` for to-many |
+| Key              | Default                        | Meaning                                                                                                                                    |
+| ---------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `includable`     | `false`                        | naming the edge at all is what opts it in; omitted = not includable                                                                        |
+| `defaultInclude` | `false`                        | `true` includes it even without an explicit `include=` param                                                                               |
+| `maxDepth`       | inherits `limits.includeDepth` | replaces the depth budget for this edge's own subtree                                                                                      |
+| `strategy`       | `"auto"`                       | `"join"` (`leftJoinAndSelect`) or `"batch"` (one query per level, stitched in memory); `auto` picks `join` for to-one, `batch` for to-many |
 
 - An edge name that doesn't exist on the entity is a bootstrap
   `ConfigurationException` — a typo can't silently permit nothing.

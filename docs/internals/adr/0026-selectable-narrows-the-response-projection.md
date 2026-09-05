@@ -1,10 +1,10 @@
-# ADR-0026 — `allowlists.selectable` narrows the response, not only the request
+# ADR-0026 — `allowed.selectable` narrows the response, not only the request
 
 **Status:** accepted
 
 ## Context
 
-`allowlists.selectable` gated what a request could **name** in `select=` and
+`allowed.selectable` gated what a request could **name** in `select=` and
 nothing else. What a response actually carried came from somewhere else
 entirely: a registered `item`/`list` DTO if there was one, otherwise every
 scalar column plus every declared computed field.
@@ -30,9 +30,9 @@ received it by not asking for anything.
 Three things made this worse than an ordinary gap.
 
 **The documentation asserted the opposite**, in three places, and only one
-table cell in the allowlists reference page had it right:
+table cell in the allowed reference page had it right:
 
-- `QueryAllowlists`' own doc comment: "what a request may filter, sort, and
+- `QueryAllowed`'s own doc comment: "what a request may filter, sort, and
   **select** on".
 - ADR-0019 §1: "a computed field can surface a column that a narrowed `item`
   DTO **or `selectable` list hides**".
@@ -67,7 +67,7 @@ nothing complains, the response is wide.
 
 ## Decision
 
-**1. An explicitly configured `allowlists.selectable` narrows the default
+**1. An explicitly configured `allowed.selectable` narrows the default
 response projection.** Both spellings, the plain list and `{ exclude }`. The
 entity-derived key set is intersected with it, so a column off the list is
 not serialized by `findOne`, `findMany`, `createOne`, `updateOne` or
@@ -81,8 +81,8 @@ every adopter with a credential column has.
 
 **2. Explicit configuration is the trigger, and the provenance is
 load-bearing.** `ResolvedEntityConfig` carries a `projection` that is `null`
-unless `allowlists.selectable` was written. It is not read back off
-`allowlists.selectable`, because unconfigured that list resolves to a base
+unless `allowed.selectable` was written. It is not read back off
+`allowed.selectable`, because unconfigured that list resolves to a base
 set which is _almost_ the derived projection and not quite: it drops computed
 fields declaring `selectable: false`, whose documented contract is to stay in
 the projection while being unnameable in `select=`. Narrowing by a list

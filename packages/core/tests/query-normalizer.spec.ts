@@ -36,7 +36,7 @@ const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
   }
   return undefined;
 });
-const postConfig = resolveEntityConfig(postMetadata, { allowlists: { includable: ["comments"] } }, undefined);
+const postConfig = resolveEntityConfig(postMetadata, { include: { fields: ["comments"] } }, undefined);
 const postNormalizer = new QueryNormalizer<Post>(postMetadata, [], new DefaultIncludeResolver<Post>(postCatalog));
 
 describe("QueryNormalizer — wire params", () => {
@@ -152,25 +152,16 @@ describe("QueryNormalizer — wire params", () => {
     ]);
   });
 
-  it("falls back to the configured defaultSort when the client supplies no sort", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("falls back to the configured defaults.sort when the client supplies no sort", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
-  it("applies a multi-field defaultSort in priority order", () => {
+  it("applies a multi-field defaults.sort in priority order", () => {
     const defaulted = resolveEntityConfig(
       userMetadata,
       {
-        query: {
-          defaultSort: [
-            { field: "createdAt", direction: "desc" },
-            { field: "id", direction: "asc" },
-          ],
-        },
+        sort: { default: ["-createdAt", "id"] },
       },
       undefined,
     );
@@ -180,30 +171,22 @@ describe("QueryNormalizer — wire params", () => {
     ]);
   });
 
-  it("lets a client-supplied sort override the configured defaultSort outright", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("lets a client-supplied sort override the configured defaults.sort outright", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({ sort: "name" }, defaulted).sort).toEqual([{ field: "name", direction: "asc" }]);
   });
 });
 
 describe("QueryNormalizer — search[...]", () => {
-  const searchEnabled = resolveEntityConfig(userMetadata, { query: { search: {} } }, undefined);
+  const searchEnabled = resolveEntityConfig(userMetadata, { search: {} }, undefined);
 
-  it("rejects search[query] when query.search is false (the default)", () => {
+  it("rejects search[query] when search is false (the default)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
 
   it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
-    const emptySearchable = resolveEntityConfig(
-      userMetadata,
-      { query: { search: {} }, allowlists: { searchable: [] } },
-      undefined,
-    );
+    const emptySearchable = resolveEntityConfig(userMetadata, { search: { fields: [] } }, undefined);
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
@@ -280,8 +263,12 @@ describe("QueryNormalizer — search[...]", () => {
     expect(query.filter.root).toMatchObject({ operator: "ILIKE", value: "%50\\%\\_off%" });
   });
 
-  it("caps the number of words in words mode at query.maxInValues", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 2 } }, undefined);
+  it("caps the number of words in words mode at filter.limits.maxInValues", () => {
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { search: {}, filter: { limits: { maxInValues: 2 } } },
+      undefined,
+    );
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
     );
@@ -293,7 +280,11 @@ describe("QueryNormalizer — search[...]", () => {
     // Two words × two fields = 4 synthesized conditions — over a cap of 3 —
     // even though the word count alone (2) is under it. A cap that only
     // checked `terms.length` would let this through.
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { search: {}, filter: { limits: { maxInValues: 3 } } },
+      undefined,
+    );
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, tightCap),
     );
@@ -301,7 +292,11 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("lets the same product through once search[fields] narrows it under the cap", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { query: { search: {}, maxInValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(
+      userMetadata,
+      { search: {}, filter: { limits: { maxInValues: 3 } } },
+      undefined,
+    );
     // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
     const query = normalizer.normalizeWire(
       { "search[query]": "blue iphone", "search[mode]": "words", "search[fields]": "name" },
@@ -352,7 +347,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
     const relationSearchable = resolveEntityConfig(
       authorMetadata,
-      { query: { search: {} }, allowlists: { searchable: ["name", "posts.title" as never] } },
+      { search: { fields: ["name", "posts.title" as never] } },
       undefined,
     );
     const authorNormalizer = new QueryNormalizer(authorMetadata);
@@ -370,48 +365,20 @@ describe("QueryNormalizer — search[...]", () => {
   it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
     const independent = resolveEntityConfig(
       userMetadata,
-      { query: { search: {} }, allowlists: { filterable: [], searchable: ["name"] } },
+      { filter: { fields: [] }, search: { fields: ["name"] } },
       undefined,
     );
     const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
     expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
   });
 
-  it("applies the precedence chain global → entity → operation to query.search", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      {
-        query: { search: { mode: "words" } },
-        operations: { findMany: { query: { search: { mode: "substring" } } } },
-      },
-      { query: { search: { mode: "substring" } } },
-    );
-    // Entity scope overrides global mode; `driver` (never named at any
-    // scope) is backfilled from the built-in default — a partial per-scope
-    // override must not leave sibling keys undefined.
-    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
-    // The operation scope's narrower override wins for that operation only.
-    expect(config.settingsFor("findMany").query.search).toEqual({ mode: "substring", driver: "orm" });
-    const findOneSearch = config.settingsFor("findOne").query.search;
-    expect(findOneSearch !== false && findOneSearch.mode).toBe("words");
-  });
-
-  it("lets an operation scope disable an entity-enabled search with search: false", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      {
-        query: { search: {} },
-        operations: { findMany: { query: { search: false } } },
-      },
-      undefined,
-    );
-    expect(config.settings.query.search).toEqual({ mode: "substring", driver: "orm" });
-    expect(config.settingsFor("findMany").query.search).toBe(false);
-  });
-
-  it("backfills mode/driver when a scope re-enables search from the false default with a partial object", () => {
-    const config = resolveEntityConfig(userMetadata, { query: { search: { mode: "words" } } }, undefined);
-    expect(config.settings.query.search).toEqual({ mode: "words", driver: "orm" });
+  // `search` (issue #386) is entity-scope-only — a structural field-group
+  // block, resolved directly from `EntityConfig`, not part of `KavoSettings`
+  // — so there is no global default and no per-operation override to test
+  // here, unlike the old top-level `KavoSettings.search`.
+  it("backfills mode/driver when only one is named", () => {
+    const config = resolveEntityConfig(userMetadata, { search: { mode: "words" } }, undefined);
+    expect(config.search).toEqual({ fields: ["name", "email"], default: null, mode: "words", driver: "orm" });
   });
 });
 
@@ -603,21 +570,13 @@ describe("QueryNormalizer — programmatic input", () => {
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_FIELD");
   });
 
-  it("falls back to the configured defaultSort when no sort is given", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("falls back to the configured defaults.sort when no sort is given", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeInput({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
-  it("lets a caller-supplied sort override the configured defaultSort outright", () => {
-    const defaulted = resolveEntityConfig(
-      userMetadata,
-      { query: { defaultSort: [{ field: "createdAt", direction: "desc" }] } },
-      undefined,
-    );
+  it("lets a caller-supplied sort override the configured defaults.sort outright", () => {
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     const query = normalizer.normalizeInput({ sort: [{ field: "name", direction: "asc" }] }, defaulted);
     expect(query.sort).toEqual([{ field: "name", direction: "asc" }]);
   });
@@ -729,7 +688,7 @@ describe("allowlist rejection messages", () => {
     expect(detail).toContain("Field 'emial' cannot be used for filtering.");
     expect(detail).toContain("Did you mean 'email'?");
     expect(detail).toContain("Filterable fields on User:");
-    expect(detail).toContain("add it to allowlists.filterable on the User config to permit it.");
+    expect(detail).toContain("add it to filter.fields on the User config to permit it.");
   });
 
   it("stops appending the hint once a request is past a handful of problems", () => {
@@ -742,20 +701,20 @@ describe("allowlist rejection messages", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ select: many }, config));
     expect(issues).toHaveLength(200);
     expect(issues.every((issue) => issue.detail.includes("cannot be used for selection"))).toBe(true);
-    expect(issues.filter((issue) => issue.detail.includes("allowlists.selectable"))).toHaveLength(5);
+    expect(issues.filter((issue) => issue.detail.includes("select.fields"))).toHaveLength(5);
     expect(issues[199]!.detail).toBe("Field 'bad199' cannot be used for selection.");
   });
 
-  it("names allowlists.sortable for a sort field", () => {
+  it("names sort.fields for a sort field", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ sort: "-emial" }, config))[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.sortable on the User config");
+    expect(detail).toContain("sort.fields on the User config");
   });
 
-  it("names allowlists.selectable for a selected field", () => {
+  it("names select.fields for a selected field", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ select: "emial" }, config))[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.selectable on the User config");
+    expect(detail).toContain("select.fields on the User config");
   });
 
   it("names the same key for a programmatic filter expression", () => {
@@ -766,7 +725,7 @@ describe("allowlist rejection messages", () => {
       ),
     )[0]!.detail;
     expect(detail).toContain("Did you mean 'email'?");
-    expect(detail).toContain("allowlists.filterable on the User config");
+    expect(detail).toContain("filter.fields on the User config");
   });
 
   it("says the same thing through the programmatic entry point", () => {
@@ -782,7 +741,7 @@ describe("allowlist rejection messages", () => {
   it("offers no suggestion when nothing is close, and still names the fix", () => {
     const detail = issuesOf(() => normalizer.normalizeWire({ sort: "passwordHash" }, config))[0]!.detail;
     expect(detail).not.toContain("Did you mean");
-    expect(detail).toContain("allowlists.sortable");
+    expect(detail).toContain("sort.fields");
   });
 
   it("collects every rejection into one round trip", () => {
@@ -816,7 +775,7 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     expect(normalizer.normalizeInput({ limit: 1, offset: 0 }, config).pagination).toEqual({ limit: 1, offset: 0 });
   });
 
-  it("enforces maxFilterDepth on a hand-built AST", () => {
+  it("enforces limits.filterDepth on a hand-built AST", () => {
     // Four levels of nesting against the default budget of three. Without
     // this gate a programmatic caller could hand the adapter an
     // arbitrarily deep tree that the wire path would have refused.
@@ -827,7 +786,7 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     expect(issues[0]).toMatchObject({ field: "filter", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
   });
 
-  it("enforces maxInValues on a hand-built IN condition, naming the field and operator", () => {
+  it("enforces limits.inValues on a hand-built IN condition, naming the field and operator", () => {
     const issues = issuesOf(() =>
       normalizer.normalizeInput(
         {
@@ -843,6 +802,41 @@ describe("QueryNormalizer — programmatic input is bounded, not trusted", () =>
     );
     expect(issues[0]).toMatchObject({ field: "age", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
     expect(issues[0]?.detail).toContain("IN");
+  });
+
+  it.each(["LIKE", "ILIKE"])(
+    "enforces limits.likePattern on a hand-built %s condition (issue #367 finding 4)",
+    (operator) => {
+      // The wire path's own `limits.likePattern` cap only runs inside
+      // `DefaultFilterParser`, which a programmatic `QueryContext` caller
+      // never goes through — without this gate here too, that caller could
+      // hand the adapter a pattern long enough to force an expensive scan
+      // that the wire path would have refused.
+      const issues = issuesOf(() =>
+        normalizer.normalizeInput(
+          {
+            filter: {
+              kind: "condition",
+              field: "name",
+              operator,
+              value: `%${"a".repeat(201)}%`,
+            },
+          } as never,
+          config,
+        ),
+      );
+      expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_LIMIT_EXCEEDED" });
+    },
+  );
+
+  it("accepts a hand-built LIKE condition at exactly limits.likePattern", () => {
+    const pattern = "a".repeat(200);
+    expect(() =>
+      normalizer.normalizeInput(
+        { filter: { kind: "condition", field: "name", operator: "LIKE", value: pattern } } as never,
+        config,
+      ),
+    ).not.toThrow();
   });
 
   it("accepts an IN list exactly at the budget", () => {

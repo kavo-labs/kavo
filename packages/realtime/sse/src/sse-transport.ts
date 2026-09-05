@@ -26,7 +26,7 @@ const DEFAULT_BUFFER_LIMIT_BYTES = 64 * 1024;
  * string for one entity — the same two pieces `DefaultFilterParser` and
  * `Filter.parse` already need for REST: `metadata` for column-kind-aware
  * value coercion, `config` for the `filterable` allowlist and the
- * `query.maxFilterDepth`/`maxInValues` limits. `@kavo/sse` has no config
+ * `limits.filterDepth`/`limits.inValues` limits. `@kavo/sse` has no config
  * resolution of its own (same reason `subscribableFields` is a callback,
  * not a lookup this package performs itself), so the host app supplies
  * both — typically `service.engine.metadata`/`service.engine.config` off
@@ -58,14 +58,14 @@ export interface SseTransportOptions {
    * app already configured via `createCrud` — this package has no config
    * resolution of its own, so the caller supplies the lookup. A request
    * naming a `fields` query param outside the allowlist is rejected with
-   * `400` before the stream opens, the same way `allowlists.selectable`
+   * `400` before the stream opens, the same way `allowed.selectable`
    * rejects an unlisted field over REST. Returning `undefined` (including
    * when the callback itself is omitted) means no allowlist is configured
    * for that entity, so any requested field is accepted.
    *
    * Once configured, this allowlist is also enforced **unconditionally** on
    * every outgoing `item` for that entity — not only when a subscriber
-   * names `fields` — the same way `allowlists.selectable` bounds a REST
+   * names `fields` — the same way `allowed.selectable` bounds a REST
    * response whether or not the caller asked for a subset. A `fields`
    * query param narrows further *within* that bound; it can never widen
    * past it.

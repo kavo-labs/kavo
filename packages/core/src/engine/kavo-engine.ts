@@ -30,6 +30,8 @@ import {
   QueryValidationException,
 } from "../errors/exceptions.js";
 import type { Policy, WhenParams } from "../policy/kavo-policy.js";
+import type { ApplyArgs, ResolvedApply } from "../policy/kavo-apply.js";
+import type { FilterExpression } from "../query/filter.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
@@ -43,7 +45,6 @@ import { WILDCARD, canonicalize, computeEtag, isEtagEnabled, strongMatch, weakMa
 import { createKavoContext, randomUuid } from "../context/default-kavo-context.js";
 import { mergeSettings } from "../config/merge-settings.js";
 import { validateSettings } from "../config/validate-settings.js";
-import { validateDefaultSort } from "../config/resolve-entity-config.js";
 import { HARD_DELETE, resolveSoftDelete } from "../persistence/soft-delete.js";
 import type { FindManyResult } from "./built-in-handlers.js";
 
@@ -257,7 +258,14 @@ export class KavoEngine<Entity extends object> {
     // resolved config.
     const configView = this.configViewFor(request);
 
-    const query = descriptor.kind === "read" ? this.normalizeQuery(request, configView) : null;
+    // `filter`/`sort`/`select`/`include`'s `apply` (ADR-0048) is resolved
+    // ahead of query normalization on a read, so it can compose into the
+    // very `NormalizedQueryContext` the client's own query is turned into —
+    // not applied afterward, which is too late to widen a `WHERE` or an
+    // include tree that has already been built.
+    const serverApply =
+      descriptor.kind === "read" ? await this.resolveReadApply(descriptor, request, configView, correlationId) : null;
+    const query = descriptor.kind === "read" ? this.normalizeQuery(request, configView, serverApply) : null;
     const context = createKavoContext<Entity>({
       operation: descriptor.id,
       config: configView,
@@ -302,6 +310,7 @@ export class KavoEngine<Entity extends object> {
     }
 
     const input = this.resolveInput(request, descriptor, context);
+    await this.applyWriteApply(request, descriptor, configView, context, input);
 
     const result = await descriptor.handler.execute(input, context);
     if (descriptor.id === "findOne") {
@@ -374,7 +383,17 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const standard = isStandardOperationId(descriptor.id);
     const policy = standard ? configView.policy[descriptor.id] : undefined;
-    if (policy === undefined) {
+    // `filter.apply` (ADR-0048) gates single-row writes the same way
+    // `policy` gates them, and for the same reason a plain function can't
+    // be inspected up front: `updateOne`/`patchOne`/`deleteOne`/
+    // `restoreOne`/`purgeOne` never run `QueryNormalizer` (they mutate by
+    // id alone), so this is the only place their id lookup can be widened
+    // by a mandatory server-side filter. Reads don't reach this branch at
+    // all — `filter.apply` already composed into their `NormalizedQueryContext`
+    // before `context` was built (`KavoEngine.resolveReadApply`).
+    const applyFilter =
+      standard && descriptor.kind === "write" && request.id !== null ? configView.filter.apply : undefined;
+    if (policy === undefined && applyFilter === undefined) {
       // `authorization.required` also gates the array-mutation operations
       // Kavo itself synthesizes (`replace<Relation>` etc., ADR-0014/0029) —
       // never a `policy.<id>` entry, since `resolvePolicy` only recognizes
@@ -401,7 +420,11 @@ export class KavoEngine<Entity extends object> {
 
     let entity: Entity | undefined;
     if (id !== null) {
-      const found = await context.repository.findOneById(id, this.policyPrefetchQuery(), context);
+      const filterRoot =
+        applyFilter !== undefined
+          ? ((await applyFilter({ context, resource: context.entityName, operation: descriptor.id, params })) ?? null)
+          : null;
+      const found = await context.repository.findOneById(id, this.policyPrefetchQuery(filterRoot), context);
       if (found === null) {
         throw new NotFoundException({
           messageParams: { entity: configView.entityName, id: String(request.id) },
@@ -415,7 +438,9 @@ export class KavoEngine<Entity extends object> {
       entity = found;
     }
 
-    await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+    if (policy !== undefined) {
+      await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+    }
   }
 
   /** `findOne`'s deferred half of the policy stage — see `checkPolicy`'s doc comment. */
@@ -466,10 +491,16 @@ export class KavoEngine<Entity extends object> {
    * row that is soft-deleted by definition. No `include` is loaded either —
    * a policy that needs a relation can load it itself through
    * `context.repository` (ADR-0037).
+   *
+   * `filterRoot` (ADR-0048) widens the fetch's own filter beyond `id` alone
+   * — `filter.apply`'s result, when the entity configures one. A row
+   * outside it is exactly as invisible to this pre-fetch as a row that
+   * doesn't exist, so `checkPolicy` answers `404` either way, before a
+   * policy or handler ever sees it.
    */
-  private policyPrefetchQuery(): NormalizedQueryContext<Entity> {
+  private policyPrefetchQuery(filterRoot: FilterExpression<Entity> | null = null): NormalizedQueryContext<Entity> {
     return {
-      filter: { root: null },
+      filter: { root: filterRoot },
       sort: [],
       pagination: { limit: 1, offset: 0 },
       select: { root: null, relations: {} },
@@ -579,10 +610,19 @@ export class KavoEngine<Entity extends object> {
     return this.cacheSettings(config) !== null;
   }
 
-  /** The `cache` settings in force for a config view, or `null` when off. */
-  private cacheSettings(config: ResolvedEntityConfig<Entity>): CacheSettings | null {
+  /**
+   * The `cache` settings in force for a config view, or `null` when the
+   * result cache is off — the whole subtree disabled (`cache: false`), or
+   * `ttl` absent/`false` (ADR-0031 as amended). `ttl` is narrowed to
+   * `number` here since a caller only reaches for `.ttl` once this returns
+   * non-null.
+   */
+  private cacheSettings(config: ResolvedEntityConfig<Entity>): (CacheSettings & { ttl: number }) | null {
     const cache = config.settings.cache;
-    return cache === false || cache.ttl <= 0 ? null : cache;
+    if (cache === false || cache.ttl === undefined || cache.ttl === false) {
+      return null;
+    }
+    return { ...cache, ttl: cache.ttl };
   }
 
   /**
@@ -686,8 +726,8 @@ export class KavoEngine<Entity extends object> {
    * id half names the row a `findOne` targets — `request.id` lives outside
    * the normalized query, so it has to be in the key or `findOne(1)` and
    * `findOne(2)` would share one entry (ADR-0031). The app half keeps
-   * one caller's values from leaking to another: custom handlers may
-   * legitimately vary by `context.app`, so a response
+   * one caller's values from leaking to another: computed fields and custom
+   * handlers may legitimately vary by `context.app`, so a response
    * baked for one caller must never be served to a different one —
    * an empty app context canonicalizes to `"{}"`, so calls that carry no
    * app context share one bucket (ADR-0031). `KavoAppContext` must be plain,
@@ -906,7 +946,6 @@ export class KavoEngine<Entity extends object> {
       // reject — `validateSettings` below never sees it.
       const scope = `${config.entityName} (per-call)`;
       validateSettings(scope, settings);
-      validateDefaultSort(scope, settings, config.allowlists);
     }
     if (settings === config.settings) {
       return config;
@@ -915,17 +954,28 @@ export class KavoEngine<Entity extends object> {
       entityName: config.entityName,
       settings,
       settingsFor: () => settings,
-      allowlists: config.allowlists,
-      // Structural: the projection is derived from `allowlists.selectable`
-      // at bootstrap (ADR-0026), and allowlists are outside the settings
-      // precedence chain, so a per-call override cannot widen what a
-      // response serves.
+      // Structural field-group config (issue #386), outside the settings
+      // precedence chain entirely — a per-call override cannot widen what
+      // a request may filter/sort/select/search/include.
+      filter: config.filter,
+      sort: config.sort,
+      sortDefault: config.sortDefault,
+      select: config.select,
+      search: config.search,
+      include: config.include,
+      // Structural, like `computed` below: the projection is derived from
+      // `select.fields` at bootstrap (ADR-0026), and the allowlist is
+      // outside the settings precedence chain, so a per-call override
+      // cannot widen what a response serves.
       projection: config.projection,
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
       softDelete: resolveSoftDelete(this.deps.metadata, settings, `${config.entityName} (${request.operation})`),
       dto: config.dto,
+      // Structural entity config, outside the settings precedence chain
+      // entirely (ADR-0019) — a per-call settings override cannot reach it.
+      computed: config.computed,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.
@@ -933,23 +983,128 @@ export class KavoEngine<Entity extends object> {
       // Same reasoning, applied to the cache store (ADR-0031): a store is a
       // live object registered once per root, never per call.
       cacheStore: config.cacheStore,
-      // Structural, like `relations` above (ADR-0037): resolved once at
-      // bootstrap, outside the settings precedence chain, so a per-call
-      // override cannot loosen what an entity's `policy` demands.
+      // Structural, like `computed`/`relations` above (ADR-0037): resolved
+      // once at bootstrap, outside the settings precedence chain, so a
+      // per-call override cannot loosen what an entity's `policy` demands.
       policy: config.policy,
+      // Structural, like `create`/`update`'s own field-group config above —
+      // a per-call override cannot widen what a write is defaulted from.
+      createDefault: config.createDefault,
+      updateDefault: config.updateDefault,
+      // Same reasoning: a per-call override cannot loosen the unconditional
+      // constraint `create.apply`/`update.apply` forces (issue #391).
+      createApply: config.createApply,
+      updateApply: config.updateApply,
     };
   }
 
   private normalizeQuery(
     request: KavoRequest<Entity>,
     config: ResolvedEntityConfig<Entity>,
+    serverApply: ResolvedApply<Entity> | null,
   ): NormalizedQueryContext<Entity> {
     const { normalizer } = this.deps;
     const query = request.query;
     if (query instanceof WireQuery) {
-      return normalizer.normalizeWire(query.params, config);
+      return normalizer.normalizeWire(query.params, config, serverApply ?? undefined);
     }
-    return normalizer.normalizeInput((query as QueryContext<Entity> | null) ?? undefined, config);
+    return normalizer.normalizeInput(
+      (query as QueryContext<Entity> | null) ?? undefined,
+      config,
+      serverApply ?? undefined,
+    );
+  }
+
+  /**
+   * Evaluate `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+   * (ADR-0048) once per read, before `NormalizedQueryContext` exists — their
+   * whole purpose is to shape that query, so they cannot be handed it. The
+   * context built here carries `query: null` for exactly that reason; a
+   * second, complete context (with the real, composed query) is built
+   * afterward for the rest of the pipeline. `undefined` when the entity
+   * configures none of the four, so an unconfigured entity pays nothing
+   * beyond the one property-existence check.
+   */
+  private async resolveReadApply(
+    descriptor: OperationDescriptor<Entity>,
+    request: KavoRequest<Entity>,
+    configView: ResolvedEntityConfig<Entity>,
+    correlationId: string,
+  ): Promise<ResolvedApply<Entity> | null> {
+    const { filter, sort, select, include } = configView;
+    if (
+      filter.apply === undefined &&
+      sort.apply === undefined &&
+      select.apply === undefined &&
+      include.apply === undefined
+    ) {
+      return null;
+    }
+    const context = createKavoContext<Entity>({
+      operation: descriptor.id,
+      config: configView,
+      repository: this.deps.repository,
+      app: request.options?.app,
+      transaction: request.options?.transaction ?? null,
+      query: null,
+      correlationId,
+    });
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const args: ApplyArgs<Entity> = {
+      context,
+      resource: context.entityName,
+      operation: descriptor.id,
+      params: { id },
+    };
+    const [filterResult, sortResult, selectResult, includeResult] = await Promise.all([
+      filter.apply?.(args),
+      sort.apply?.(args),
+      select.apply?.(args),
+      include.apply?.(args),
+    ]);
+    return { filter: filterResult, sort: sortResult, select: selectResult, include: includeResult };
+  }
+
+  /**
+   * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side
+   * sibling): evaluated once per `createOne`/`updateOne`, after
+   * `resolveInput` has already produced the deserialized body, so its
+   * result can overwrite whatever the client sent for a forced field —
+   * `default` only fills a gap, `apply` always wins. `patchOne` never
+   * consults it, matching `update.default`'s own scope. Mutates `input` in
+   * place rather than returning a new object: `resolveInput`'s two write
+   * shapes differ (`createOne`'s input *is* the body; `updateOne`'s wraps it
+   * under `data`), and mutating the body object either shape already holds
+   * is simpler than reconstructing either wrapper.
+   */
+  private async applyWriteApply(
+    request: KavoRequest<Entity>,
+    descriptor: OperationDescriptor<Entity>,
+    configView: ResolvedEntityConfig<Entity>,
+    context: KavoContext<Entity>,
+    input: unknown,
+  ): Promise<void> {
+    const apply =
+      descriptor.id === "createOne"
+        ? configView.createApply
+        : descriptor.id === "updateOne"
+          ? configView.updateApply
+          : undefined;
+    if (apply === undefined) {
+      return;
+    }
+    const body = descriptor.id === "updateOne" ? (input as { data: object }).data : (input as object);
+    const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
+    const args: ApplyArgs<Entity> = {
+      context,
+      resource: context.entityName,
+      operation: descriptor.id,
+      params: { id },
+    };
+    const forced = await apply(args);
+    if (forced !== undefined) {
+      Object.assign(body, forced);
+    }
   }
 
   private resolveInput(
@@ -1232,7 +1387,7 @@ export class KavoEngine<Entity extends object> {
    * `replace`-strategy behavior is byte-for-byte unchanged by this method
    * existing at all.
    *
-   * Bypasses `allowlists.includable` deliberately: `write` and
+   * Bypasses `allowed.includable` deliberately: `write` and
    * `includable` are independent opt-ins (ADR-0029's own doc comment on
    * `RelationEdgeSettings.write`), so a relation opted into `write` but
    * never into `includable` must still appear on `list<Relation>`'s own
@@ -1618,9 +1773,9 @@ function cloneResponsePayload(response: KavoResponse): KavoResponse {
  * A custom operation is the one place a handler's result is not the entity
  * by contract, so it is the one place the projection can empty a value
  * entirely. `dto.output` is how a result with its own shape declares
- * itself; with none, the result is filtered to the entity's own columns,
- * and a result that shares none of them survives as an empty object.
- * Nothing said so — not a type error, not a log line — and
+ * itself; with none, the result is filtered to the entity's columns plus
+ * its computed fields, and a result that shares none of them survives as an
+ * empty object. Nothing said so — not a type error, not a log line — and
  * the static types actively disagreed: `CustomOperationResult` types
  * `run`'s return as the handler's own return type when no `dto.output` is
  * declared, so the signature promised the shape while the wire served `{}`.

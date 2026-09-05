@@ -7,6 +7,7 @@ import {
   DefaultDtoResolver,
   createKavo,
   isEtagEnabled,
+  shorthandFieldsOf,
   writeOptedInRelationNames,
 } from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
@@ -41,6 +42,24 @@ import {
 
 /** `graphql: true` mounts the default controller at `POST /graphql`; `{ path }` mounts it at `POST <path>` instead. */
 export type KavoGraphQLOption = boolean | { readonly path?: string };
+
+/**
+ * The entity-derived writable default `DefaultDeserializer` falls back to
+ * when neither `dto.create`/`dto.update` names a real class nor the
+ * top-level `create`/`update` `{ fields }` shorthand (issue #388, formerly
+ * `dto.create`/`dto.update`'s own shorthand, issue #386) is set: every
+ * non-generated column except the primary key (kept for a composite key,
+ * which has no single column to exclude), plus every relation, associable
+ * by id (ADR-0014). Used only as a Swagger fallback — `applyBodySchemaDocs`'s
+ * decoration-time schema when no real DTO exists.
+ */
+function writableBaseOf(metadata: EntityMetadata<object>): readonly string[] {
+  const compositeIdFields = metadata.compositeIdFields;
+  const columns = metadata.fields
+    .filter((field) => !field.generated && (compositeIdFields !== undefined || field.name !== metadata.idField))
+    .map((field) => field.name);
+  return [...columns, ...metadata.relations.map((relation) => relation.name)];
+}
 
 function graphqlPathFrom(option: KavoGraphQLOption | undefined): string | undefined {
   if (option === undefined || option === false) {
@@ -421,7 +440,10 @@ class KavoBinder implements OnModuleInit {
         readonly KavoConditionalDocEntry[] | undefined;
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
-        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined);
+        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined, {
+          create: metadata.config?.create,
+          update: metadata.config?.update,
+        });
         // The target entity's own metadata for each relation a synthesized
         // schema references — includable ones so `applyResponseSchemaDocs`
         // can name the `x-kavo-includable-ref` marker `registerKavoSchemas`
@@ -441,9 +463,8 @@ class KavoBinder implements OnModuleInit {
           EntityMetadata<object>
         >;
         const schemaRelationNames = new Set<string>([
-          ...(service.engine.config.allowlists.includable as readonly string[]),
-          ...(service.engine.config.allowlists.creatable as readonly string[]),
-          ...(service.engine.config.allowlists.updatable as readonly string[]),
+          ...(service.engine.config.include.fields as readonly string[]),
+          ...service.engine.metadata.relations.map((relation) => relation.name),
         ]);
         for (const relation of service.engine.metadata.relations) {
           if (!schemaRelationNames.has(relation.name)) {
@@ -473,8 +494,12 @@ class KavoBinder implements OnModuleInit {
               descriptor,
               service.engine.metadata,
               {
-                creatable: service.engine.config.allowlists.creatable as readonly string[],
-                updatable: service.engine.config.allowlists.updatable as readonly string[],
+                creatable:
+                  shorthandFieldsOf(dtoResolver.resolve("create", descriptor.id)) ??
+                  writableBaseOf(service.engine.metadata),
+                updatable:
+                  shorthandFieldsOf(dtoResolver.resolve("update", descriptor.id)) ??
+                  writableBaseOf(service.engine.metadata),
               },
               relationTargetMetadata,
             );
@@ -492,23 +517,24 @@ class KavoBinder implements OnModuleInit {
             descriptor,
             route,
             service.engine.metadata,
-            service.engine.config.allowlists.selectable as readonly string[],
-            service.engine.config.allowlists.includable as readonly string[],
+            service.engine.config.select.fields as readonly string[],
+            Object.keys(service.engine.config.computed),
+            service.engine.config.include.fields as readonly string[],
             relationTargetMetadata,
             dtoResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s
-          // doc comment in swagger.ts): whether `query.search` resolved to an
-          // object needs the full precedence chain, and `allowlists.searchable`
+          // doc comment in swagger.ts): whether `search` resolved to an
+          // object needs the full precedence chain, and `allowed.searchable`
           // is only fully resolved once ORM metadata exists, neither of which
           // `@Kavo` decoration time has.
           applySearchQueryDocs(
             prototype,
             methodName,
             descriptor,
-            settings.query.search !== false,
-            service.engine.config.allowlists.searchable as readonly string[],
+            service.engine.config.search !== false,
+            service.engine.config.search !== false ? (service.engine.config.search.fields as readonly string[]) : [],
           );
           // `limit`/`offset` docs (issue #225) — deferred for the same
           // reason as the two above (`applyPaginationDocs`'s doc comment):
@@ -517,19 +543,20 @@ class KavoBinder implements OnModuleInit {
           // `<Entity>Pagination`/`Include`/`Sort`/`Filter`/`Query` query-shape
           // components (issue #313, issue #314 / ADR-0042) — deferred for the
           // same reason as the passes above: the resolved
-          // `allowlists.sortable`/`includable`/`filterable`/`selectable`/
+          // `allowed.sortable`/`includable`/`filterable`/`selectable`/
           // `searchable` and the precedence-merged `pagination.strategy` /
-          // `query.search` only exist here. The extension
+          // `search` only exist here. The extension
           // `applyQuerySchemaDocs` stamps is hoisted into `components.schemas`
           // by `registerKavoSchemas`.
           applyQuerySchemaDocs(prototype, methodName, descriptor, metadata.entity.name, service.engine.metadata, {
             strategy: settings.pagination.strategy,
-            includable: service.engine.config.allowlists.includable as readonly string[],
-            sortable: service.engine.config.allowlists.sortable as readonly string[],
-            filterable: service.engine.config.allowlists.filterable as readonly string[],
-            selectable: service.engine.config.allowlists.selectable as readonly string[],
-            searchable: service.engine.config.allowlists.searchable as readonly string[],
-            searchEnabled: settings.query.search !== false,
+            includable: service.engine.config.include.fields as readonly string[],
+            sortable: service.engine.config.sort.fields as readonly string[],
+            filterable: service.engine.config.filter.fields as readonly string[],
+            selectable: service.engine.config.select.fields as readonly string[],
+            searchable:
+              service.engine.config.search !== false ? (service.engine.config.search.fields as readonly string[]) : [],
+            searchEnabled: service.engine.config.search !== false,
           });
           // Retag the always-present `400` as `<Entity>ValidationError`
           // (issue #310) so `registerKavoSchemas` gives each entity its own

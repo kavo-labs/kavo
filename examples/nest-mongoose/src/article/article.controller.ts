@@ -38,12 +38,10 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     purgeOne: true,
   },
   pagination: { defaultLimit: 10, maxLimit: 50 },
-  allowlists: {
-    filterable: ["_id", "title", "status", "tags", "author"],
-    sortable: ["_id", "title", "createdAt"],
-    selectable: ["_id", "title", "status", "tags", "body", "createdAt"],
-    includable: ["author"],
-  },
+  filter: { fields: ["_id", "title", "status", "tags", "author"] },
+  sort: { fields: ["_id", "title", "createdAt"] },
+  select: { fields: ["_id", "title", "status", "tags", "body", "createdAt"] },
+  include: { fields: ["author"] },
 })
 @Controller("articles")
 export class ArticleController {}

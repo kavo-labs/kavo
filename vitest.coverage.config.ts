@@ -34,7 +34,7 @@ export default mergeConfig(base, {
       exclude: ["**/dist/**", "**/node_modules/**", "**/*.d.ts"],
       reporter: ["text-summary", "json-summary", "html"],
       reportsDirectory: "./.coverage",
-      // Achieved at the time of writing: 98.92 / 97.67 / 99.68 / 99.07.
+      // Achieved at the time of writing: 98.19 / 96.04 / 99.27 / 98.23.
       //
       // The gaps below those numbers are budgets, not rounding. Each one
       // is worth roughly 40 branches or 10 functions, which is wide enough

@@ -29,15 +29,16 @@ function resolveArrayMutationStrategy(
 }
 
 /**
- * Map-backed relation registry, built once at bootstrap from three
+ * Map-backed relation registry, built once at bootstrap from four
  * sources: the adapter's ORM metadata supplies *shape* — name, target,
- * cardinality; `allowlists.includable` (`EntityConfig`, entity-config.ts)
- * supplies *permission*; `relations.edges` (`KavoSettings`, settings.ts)
- * supplies loading *tuning* (`defaultInclude`/`maxDepth`/`strategy`) for a
- * relation once it is includable (ADR-0028), and array-mutation write
- * policy (`write`) for one opted into it. Inclusion is opt-in, so a
- * relation absent from `includable` stays `includable: false` no matter
- * what `edges` says about it.
+ * cardinality; `allowed.includable` (`EntityConfig`, entity-config.ts)
+ * supplies *permission*; `defaults.include` (`KavoSettings`, settings.ts)
+ * supplies which includable relations load by default (issue #375,
+ * ADR-0028); `relations.edges` supplies loading *tuning*
+ * (`maxDepth`/`strategy`) for a relation once it is includable, and
+ * array-mutation write policy (`write`) for one opted into it. Inclusion is
+ * opt-in, so a relation absent from `includable` stays `includable: false`
+ * no matter what `edges` or `defaults.include` says about it.
  */
 export class DefaultRelationRegistry<Entity = unknown> implements RelationRegistry<Entity> {
   private readonly relations: ReadonlyMap<string, RelationDescriptor>;
@@ -53,6 +54,10 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
     // arrayMutation.strategy" error below on a write-opted relation, not the
     // misleading "arrayMutation is false" one.
     arrayMutationDefault: ArrayMutationSettings | false = {},
+    // `defaults.include` — validated against `includable` at bootstrap
+    // (`resolve-entity-config.ts`'s `validateDefaults`) before this
+    // constructor ever runs, so every name here is already known-includable.
+    defaultIncludes: readonly string[] = [],
   ) {
     const byName = new Map(descriptors.map((descriptor) => [descriptor.name, descriptor]));
     for (const name of includable) {
@@ -62,11 +67,17 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
         // exactly like working config until the first client asks.
         throw new ConfigurationException(
           entityName,
-          "allowlists.includable",
+          "include.fields",
           `'${name}' is not a relation of ${entityName} (relations: ${[...byName.keys()].join(", ") || "none"})`,
         );
       }
       byName.set(name, { ...descriptor, includable: true });
+    }
+    for (const name of defaultIncludes) {
+      const descriptor = byName.get(name);
+      if (descriptor !== undefined) {
+        byName.set(name, { ...descriptor, defaultInclude: true });
+      }
     }
     for (const [name, edge] of Object.entries(edges)) {
       const descriptor = byName.get(name);
@@ -129,12 +140,10 @@ export class DefaultRelationRegistry<Entity = unknown> implements RelationRegist
         }
       }
       // `edges` tunes loading only — it no longer touches `includable`
-      // (ADR-0028): a relation can be tuned here without being includable,
-      // and `defaultInclude: true` on one that isn't is rejected earlier,
-      // at bootstrap, by `validateIncludableRelations`.
+      // (ADR-0028) or `defaultInclude` (issue #375): a relation can be
+      // tuned here without being includable or defaulted in.
       byName.set(name, {
         ...descriptor,
-        ...(edge.defaultInclude !== undefined && { defaultInclude: edge.defaultInclude }),
         ...(edge.maxDepth !== undefined && { maxDepth: edge.maxDepth }),
         strategy: edge.strategy ?? descriptor.strategy,
         ...(writeRequested && { write: resolvedWrite }),

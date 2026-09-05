@@ -207,9 +207,11 @@ describe("cursor-paginated entities are refused at bootstrap", () => {
     return createKavo({
       defaults: {
         pagination: { strategy: "cursor" },
-        query: { defaultSort: [{ field: "id", direction: "asc" }] },
       },
-    } as never).createCrud(Todo, undefined, { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata });
+    } as never).createCrud(Todo, { sort: { default: ["id"] } } as never, {
+      adapter: new InMemoryTodoAdapter(),
+      metadata: todoMetadata,
+    });
   }
 
   it("throws rather than silently answering a paged findMany with page one", () => {

@@ -122,7 +122,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .expect(200);
       expect(combined.body.items.map((c: { name: string }) => c.name)).toEqual(["Shadow", "Whiskers"]);
 
-      // Off by default: TagController never set `query.search` to an object —
+      // Off by default: TagController never set `search` to an object —
       // this is CatController's own opt-in, not process-wide.
       const disabled = await request(server()).get("/tags").query("search[query]=x").expect(400);
       expect(disabled.body.errors).toEqual([
@@ -189,7 +189,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       ]);
     });
 
-    it("rejects a filter nested deeper than the default maxFilterDepth over a real query", async () => {
+    it("rejects a filter nested deeper than the default limits.filterDepth over a real query", async () => {
       // Built-in default is 3; four nested logical wrappers exceeds it
       // regardless of exactly where the count starts.
       const response = await request(server())
@@ -202,7 +202,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       ]);
     });
 
-    it("rejects an `in` value list past the default maxInValues over a real query", async () => {
+    it("rejects an `in` value list past the default limits.inValues over a real query", async () => {
       // Built-in default is 100; 101 values trips it.
       const query = Array.from({ length: 101 }, (_, i) => `filter[age][in][]=${i}`).join("&");
       const response = await request(server()).get("/cats").query(query).expect(400);
@@ -240,7 +240,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     });
 
     it("embeds a two-level include (cat -> owner -> pets) within the default relation budget", async () => {
-      // Built-in defaults (maxIncludeDepth: 2, maxIncludedNodes: 10) are
+      // Built-in defaults (limits.includeDepth: 2, limits.includedNodes: 10) are
       // exactly enough for this real, two-level joined-then-batched tree —
       // never exercised together elsewhere in this suite. `owner.pets`
       // itself cannot be the second level here: `Pet` is the abstract STI
@@ -344,7 +344,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     });
 
     it("free-text searches every own string column by default (issue #156)", async () => {
-      // Owner leaves `allowlists.searchable` unconfigured, so it defaults to
+      // Owner leaves `allowed.searchable` unconfigured, so it defaults to
       // every own string column: `name` and `email` both match.
       await request(server()).post("/owners").send({ name: "Ada Lovelace", email: "lovelace@x.io" }).expect(201);
       await request(server()).post("/owners").send({ name: "Hopper", email: "grace.h@x.io" }).expect(201);

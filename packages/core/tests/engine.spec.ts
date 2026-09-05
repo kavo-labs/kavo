@@ -117,25 +117,10 @@ describe("KavoEngine pipeline", () => {
     expect(counted.total).toBe(1);
   });
 
-  it("honors a per-call defaultSort override for one request only", async () => {
-    const { crud, adapter } = makeCrud();
-    await crud.findMany(undefined, {
-      settings: { query: { defaultSort: [{ field: "name", direction: "asc" }] } },
-    });
-    expect(adapter.lastQuery?.sort).toEqual([{ field: "name", direction: "asc" }]);
-
-    await crud.findMany();
-    expect(adapter.lastQuery?.sort).toEqual([]);
-  });
-
-  it("rejects a per-call defaultSort field outside the sortable allowlist", async () => {
-    const { crud } = makeCrud();
-    await expect(
-      crud.findMany(undefined, {
-        settings: { query: { defaultSort: [{ field: "notAColumn", direction: "asc" }] } },
-      }),
-    ).rejects.toBeInstanceOf(ConfigurationException);
-  });
+  // `sort.default` (issue #386) is structural entity-scope config, outside
+  // the settings precedence chain — a per-call override cannot reach it
+  // (`KavoEngine.configViewFor` copies it from the base config verbatim),
+  // unlike the old top-level `KavoSettings.defaults.sort`.
 
   it("raises OperationDisabledException for operations off by default", async () => {
     const { crud } = makeCrud();

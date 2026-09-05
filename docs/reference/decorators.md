@@ -21,7 +21,7 @@ function Kavo<
 Applied to a Nest controller class, alongside `@Controller(...)`:
 
 ```ts
-@Kavo(Book, { allowlists: { filterable: ["title", "author"] } })
+@Kavo(Book, { allowed: { filterable: ["title", "author"] } })
 @Controller("books")
 export class BookController {}
 ```

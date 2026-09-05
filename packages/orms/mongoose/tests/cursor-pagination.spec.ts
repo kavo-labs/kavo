@@ -64,12 +64,12 @@ beforeAll(async () => {
   kavo = createMongooseKavo(database.connection, {
     defaults: {
       pagination: { strategy: "cursor" },
-      query: { defaultSort: [{ field: "_id", direction: "asc" }] },
     },
   });
   posts = kavo.createCrud(models.Post, {
     softDelete: { field: "deletedAt" },
-    allowlists: { includable: ["comments"] },
+    sort: { default: ["_id"] },
+    include: { fields: ["comments"] },
   } as never) as unknown as DefaultKavoService<Post>;
 });
 

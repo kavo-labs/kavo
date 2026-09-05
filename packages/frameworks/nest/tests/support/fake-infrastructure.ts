@@ -28,7 +28,7 @@ export class Todo {
  * The other side of the relation — never routed, only included. Its own
  * `list` relation (deliberately reusing the name `Todo.list` uses) reaches
  * a third entity, so tests can exercise a two-level include tree — e.g.
- * `relations.maxIncludeDepth`/`maxIncludedNodes` budgets, which a
+ * `limits.includeDepth`/`limits.includedNodes` budgets, which a
  * single-level relation can never exceed once a positive integer is the
  * smallest legal setting.
  */

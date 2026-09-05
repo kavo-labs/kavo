@@ -319,19 +319,19 @@ describe("PrismaRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(0);
   });
 
-  it("applies the configured defaultSort when the caller supplies no sort", async () => {
+  it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
   });
 
-  it("lets a caller-supplied sort override the configured defaultSort", async () => {
+  it("lets a caller-supplied sort override the configured defaults.sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      query: { defaultSort: [{ field: "age", direction: "asc" }] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany({ sort: [{ field: "age", direction: "desc" }] });
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Grace", "Alan", "Ada", "Joan"]);
@@ -363,7 +363,7 @@ describe("PrismaRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowlists: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -382,7 +382,7 @@ describe("PrismaRepositoryAdapter — query translation", () => {
     // rejects the argument outright, so a sort the allowlist admits would
     // reach the client as a 500 instead of an ordering.
     const scoped = kavo.createCrud(Book, {
-      allowlists: { sortable: ["title", "author.name" as never] },
+      sort: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const all = (await authors.findMany()).items.map((a) => a as Author);
@@ -402,7 +402,7 @@ describe("PrismaRepositoryAdapter — query translation", () => {
     // restricting root rows — "an author with at least one book titled X" —
     // which is `some`.
     const scoped = kavo.createCrud(Author, {
-      allowlists: { filterable: ["name", "books.title" as never] },
+      filter: { fields: ["name", "books.title" as never] },
     }) as DefaultKavoService<Author>;
     await seed();
     const all = (await authors.findMany()).items.map((a) => a as Author);
@@ -419,7 +419,7 @@ describe("PrismaRepositoryAdapter — query translation", () => {
 
   it("associates a relation by writing its scalar foreign-key field (ADR-0014)", async () => {
     const books = kavo.createCrud(Book, {
-      allowlists: { includable: ["author"] },
+      include: { fields: ["author"] },
     } as never) as DefaultKavoService<Book>;
     const author = (await authors.createOne({ email: "assoc@x.io", name: "Assoc", age: 1 } as never)) as Author;
 

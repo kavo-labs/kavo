@@ -41,14 +41,18 @@ export interface RelationDescriptor {
   readonly ownsForeignKey?: boolean;
   /**
    * Whether clients may `include=` this relation. Defaults to `false` —
-   * inclusion is an opt-in allowlist, granted by `allowlists.includable`
+   * inclusion is an opt-in allowlist, granted by `allowed.includable`
    * (`EntityConfig`, entity-config.ts, ADR-0028), consistent with the
    * filter/sort/select posture.
    */
   readonly includable: boolean;
-  /** Included even when the client doesn't ask. */
+  /**
+   * Included even when the client doesn't ask — granted by
+   * `defaults.include` (`KavoSettings`, settings.ts, issue #375), not by
+   * `relations.edges` (which tunes loading only).
+   */
   readonly defaultInclude?: boolean;
-  /** Overrides the configured `maxIncludeDepth` below this node. */
+  /** Overrides the configured `limits.includeDepth` below this node. */
   readonly maxDepth?: number;
   readonly strategy: RelationLoadStrategy;
   /**

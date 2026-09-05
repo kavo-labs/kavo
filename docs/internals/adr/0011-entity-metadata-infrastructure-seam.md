@@ -6,7 +6,7 @@
 
 Core needs to know entity shape at runtime — which columns exist, their
 types, which are generated, which properties are relations — to derive
-DTO defaults, default the query allowlists, and coerce wire
+DTO defaults, derive the default `allowed` configuration, and coerce wire
 values against column types. That knowledge lives in ORM
 metadata, and core must not import an ORM (ADR-0001, ADR-0005).
 

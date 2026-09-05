@@ -1,10 +1,10 @@
-# ADR-0044 — A relation-dotted `allowlists.selectable` entry caps an included relation's projection
+# ADR-0044 — A relation-dotted `allowed.selectable` entry caps an included relation's projection
 
-**Status:** superseded by [ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed), which reverts this decision entirely — `allowlists.selectable` takes root paths only again, and a relation-dotted entry is now a bootstrap error rather than a ceiling. The rest of this document describes behaviour that no longer exists.
+**Status:** superseded by [ADR-0045](/internals/adr/0045-relation-projection-ceiling-removed), which reverts this decision entirely — `allowed.selectable` takes root paths only again, and a relation-dotted entry is now a bootstrap error rather than a ceiling. The rest of this document describes behaviour that no longer exists.
 
 ## Context
 
-`allowlists.selectable` narrows the root entity's response projection
+`allowed.selectable` narrows the root entity's response projection
 (ADR-0026). An **included** relation was projected by its own target's
 `selectable` or registered `item`/`list` DTO, and never by the config of
 the entity doing the including — ADR-0026 decision 4 states it outright:
@@ -29,14 +29,14 @@ Two facts made a config spelling natural rather than novel:
 
 So the config surface accepted a plausible-looking line and ignored it.
 The alternative considered — a dedicated per-relation selector, e.g. a
-per-relation object on `allowlists.includable` or a `selectable` key on
+per-relation object on `allowed.includable` or a `selectable` key on
 `relations.edges.<name>` — adds a second config mechanism for an outcome
 the first mechanism already half-expresses, and fights ADR-0028's split
 that keeps `relations.edges` loading-tuning-only.
 
 ## Decision
 
-**A relation-dotted entry in the _array_ form of `allowlists.selectable`
+**A relation-dotted entry in the _array_ form of `allowed.selectable`
 is a projection ceiling for that included relation.**
 `selectable: ["id", "title", "dictionary.id"]` resolves to a root
 projection of `["id", "title"]` and a `relationProjection` of
@@ -63,7 +63,7 @@ projection of `["id", "title"]` and a `relationProjection` of
   operations only; a write never resolves `include`, so there is no
   write-echo path to bound.
 - **Root residue is removed, not just tolerated.** The relation-dotted
-  entries are stripped from the resolved `allowlists.selectable` (which
+  entries are stripped from the resolved `allowed.selectable` (which
   documents exactly "what a request may name in `select=`") and from the
   derived `projection`, so `select=dictionary.id` no longer passes root
   field validation as a no-op.
@@ -71,16 +71,16 @@ projection of `["id", "title"]` and a `relationProjection` of
 **Rejected shapes fail at bootstrap with a `ConfigurationException`, not
 silently:**
 
-| Shape                                                       | Why it is rejected                                                                                                    |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| a relation path inside `selectable: { exclude: [...] }`     | the `{ exclude }` form cannot express a ceiling — its base set is the readable projection, which has no relation keys |
-| `"a.b.c"` where `a` is a relation                           | deeper than one relation segment; deep projection is out of scope (issue #343)                                        |
-| `"rel.field"` where `rel` is not on `allowlists.includable` | the ceiling could never take effect                                                                                   |
-| `"notARelation.field"`                                      | a dotted entry whose head is not a real relation — a typo, previously inert                                           |
+| Shape                                                    | Why it is rejected                                                                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| a relation path inside `selectable: { exclude: [...] }`  | the `{ exclude }` form cannot express a ceiling — its base set is the readable projection, which has no relation keys |
+| `"a.b.c"` where `a` is a relation                        | deeper than one relation segment; deep projection is out of scope (issue #343)                                        |
+| `"rel.field"` where `rel` is not on `allowed.includable` | the ceiling could never take effect                                                                                   |
+| `"notARelation.field"`                                   | a dotted entry whose head is not a real relation — a typo, previously inert                                           |
 
 The **field** half of a ceiling entry (`<field>` in `<relation>.<field>`)
 is not checked at bootstrap — the target's metadata is not in scope there,
-the same laxity `resolveAllowlists` already documents for relation paths
+the same laxity `resolveAllowed` already documents for relation paths
 on `searchable`. Its behaviour then splits by path:
 
 - a request that names the field in `select[<relation>]=` gets a 400 if
@@ -98,12 +98,12 @@ today (the path type-checks and is silently dropped) and now throws a
 `ConfigurationException` at bootstrap. The one most likely to bite:
 `selectable` built by copying a `filterable`/`sortable` list — which is
 how issue #343's reporter wrote it — where the copied list contains a
-relation path whose relation was never named on `allowlists.includable`.
-Migration: name the relation in `allowlists.includable` (if the ceiling
+relation path whose relation was never named on `allowed.includable`.
+Migration: name the relation in `allowed.includable` (if the ceiling
 is intended), or drop the entry (if it was noise). Pre-1.0, minor bump,
 changelog note.
 
-**The resolved `allowlists.selectable` and `projection` are now narrower**
+**The resolved `allowed.selectable` and `projection` are now narrower**
 for such a config: the relation-dotted entries are removed. Anything that
 reads the resolved list — `select=` request validation, the
 `<Entity>Query.select` component-schema enum, `@kavo/nest`'s
@@ -133,12 +133,12 @@ the same break ADR-0026 recorded for `projection` and ADR-0019 for
 **Swagger gains a description.** `select[<relation>]` carries
 `Restricted to: <fields>.` when the relation has a ceiling — resolvable at
 decoration time (ADR-0012), because the ceiling is literal strings on
-`allowlists.selectable`, unlike an `{ exclude }` selector.
+`allowed.selectable`, unlike an `{ exclude }` selector.
 
-**The synthesized response schema uses the ceiling too** (issues #349 and
-#356). `@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem` schema —
+**The synthesized response schema uses the ceiling too** (issues #349 and #356).
+`@kavo/nest`'s bind-time fallback `<Entity>Item`/`ListItem` schema —
 the path with no registered `item`/`list` DTO — emits an optional property
-for each `allowlists.includable` relation. When the parent sets a one-hop
+for each `allowed.includable` relation. When the parent sets a one-hop
 `selectable` ceiling for that relation, the parent wins: an inline object
 limited to the ceiling fields, from `ResolvedEntityConfig.relationProjection`.
 When it sets **no** ceiling, the property defers wholly to the target and is
@@ -146,21 +146,21 @@ composed by shared component — `registerKavoSchemas` resolves it to
 `{ $ref: "#/components/schemas/<Target>Item" }` (a degraded `{ type: "object" }`
 when the target publishes no synthesized item schema). Nested `include=a.b.c`
 therefore types transitively, bounded on the request side by the existing
-`relations.maxIncludeDepth` — there is no separate Swagger depth control.
+`limits.includeDepth` — there is no separate Swagger depth control.
 The property never enters `required` (present only under `include=`), and a
 `defaultInclude: true` relation is not promoted either: the shape is shared
 with write responses, which carry no relations (ADR-0020).
 
 ## References
 
-- ADR-0026 (`allowlists.selectable` narrows the response), whose decision
+- ADR-0026 (`allowed.selectable` narrows the response), whose decision
   4 this amends.
-- ADR-0028 (includable relations live on `allowlists`), for the
-  `relations.edges` vs `allowlists` split this decision stays on the right
+- ADR-0028 (includable relations live on `allowed`), for the
+  `relations.edges` vs `allowed` split this decision stays on the right
   side of.
 - ADR-0008 (field-path recursion cap), the reason the ceiling is limited
   to one relation segment.
 - ADR-0012 (decoration-time route generation), for why Swagger can
   document the ceiling but not an `{ exclude }` selector.
 - `docs/internals/architecture/12-relations-and-includes.md` §2 and §4;
-  `docs/features/allowlists.md`.
+  `docs/features/allowed.md`.

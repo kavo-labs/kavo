@@ -51,63 +51,12 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     );
   }
 
-  positiveInt("query.maxFilterDepth", settings.query.maxFilterDepth);
-  positiveInt("query.maxInValues", settings.query.maxInValues);
-
-  if (!Array.isArray(settings.query.defaultSort)) {
-    throw new ConfigurationException(
-      entityName,
-      "query.defaultSort",
-      `expected an array, got ${JSON.stringify(settings.query.defaultSort)}`,
-    );
-  }
-  for (const [index, entry] of settings.query.defaultSort.entries()) {
-    const path = `query.defaultSort[${index}]`;
-    if (typeof entry !== "object" || entry === null || typeof entry.field !== "string" || entry.field.length === 0) {
-      throw new ConfigurationException(
-        entityName,
-        path,
-        `expected { field: string, direction: "asc" | "desc" }, got ${JSON.stringify(entry)}`,
-      );
-    }
-    if (entry.direction !== "asc" && entry.direction !== "desc") {
-      throw new ConfigurationException(
-        entityName,
-        `${path}.direction`,
-        `expected "asc" or "desc", got ${JSON.stringify(entry.direction)}`,
-      );
-    }
-  }
-
-  const search = settings.query.search;
-  if (search !== false) {
-    if (search.mode !== "substring" && search.mode !== "words") {
-      throw new ConfigurationException(
-        entityName,
-        "query.search.mode",
-        `expected "substring" or "words", got ${JSON.stringify(search.mode)}`,
-      );
-    }
-    if (search.driver !== "orm") {
-      throw new ConfigurationException(
-        entityName,
-        "query.search.driver",
-        `expected "orm" (the only driver this schema accepts today), got ${JSON.stringify(search.driver)}`,
-      );
-    }
-  }
-
   bool("errors.exposeInternals", settings.errors.exposeInternals);
 
-  positiveInt("relations.maxIncludeDepth", settings.relations.maxIncludeDepth);
-  positiveInt("relations.maxIncludedNodes", settings.relations.maxIncludedNodes);
   for (const [name, edge] of Object.entries(settings.relations.edges)) {
     const path = `relations.edges.${name}`;
     if (typeof edge !== "object" || edge === null) {
       throw new ConfigurationException(entityName, path, `expected an object, got ${JSON.stringify(edge)}`);
-    }
-    if (edge.defaultInclude !== undefined) {
-      bool(`${path}.defaultInclude`, edge.defaultInclude);
     }
     if (edge.maxDepth !== undefined) {
       positiveInt(`${path}.maxDepth`, edge.maxDepth);
@@ -136,10 +85,6 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         );
       }
     }
-    // `defaultInclude` vs. `allowlists.includable` (permission) is cross-
-    // checked in `resolve-entity-config.ts`'s `validateIncludableRelations`,
-    // not here — this function only sees `KavoSettings`, and `allowlists`
-    // is entity-typed config outside that schema (ADR-0028).
   }
 
   if (settings.cache !== false) {
@@ -148,15 +93,17 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
       throw new ConfigurationException(
         entityName,
         "cache",
-        `expected { ttl: number, etag: boolean } or false, got ${JSON.stringify(cache)} — ` +
+        `expected { ttl?: number | false, etag: boolean } or false, got ${JSON.stringify(cache)} — ` +
           `to turn result caching and ETags off together, set 'cache' to false`,
       );
     }
-    if (!Number.isInteger(cache.ttl) || (cache.ttl as number) < 0) {
+    if (cache.ttl !== undefined && cache.ttl !== false && (!Number.isInteger(cache.ttl) || cache.ttl <= 0)) {
       throw new ConfigurationException(
         entityName,
         "cache.ttl",
-        `expected a non-negative integer (0 disables the result cache), got ${JSON.stringify(cache.ttl)}`,
+        `expected a positive integer, false, or omitted, got ${JSON.stringify(cache.ttl)} — ` +
+          `omit 'ttl' (or set it to false) to disable the result cache while keeping 'etag', ` +
+          `or set 'cache' to false to disable the whole subtree`,
       );
     }
     bool("cache.etag", cache.etag);
