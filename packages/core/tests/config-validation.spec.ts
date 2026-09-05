@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { KavoSettings, DeepPartial } from "@kavo/core";
-import { BUILT_IN_DEFAULTS, ConfigurationException, mergeSettings, validateSettings } from "@kavo/core";
+import { BUILT_IN_DEFAULTS, ConfigurationException, mergeSettings, resolveEntityConfig, validateSettings } from "@kavo/core";
+import { userMetadata } from "./support/user-fixture.js";
 
 /**
  * Validate one override merged onto the built-in defaults, returning the
@@ -70,85 +71,107 @@ describe("validateSettings — pagination", () => {
   });
 });
 
-describe("validateSettings — limits", () => {
-  it("rejects a filterDepth that is not a positive integer", () => {
+/**
+ * `filter.limits`/`sort.default`/`select.default`/`include.default`/`search`
+ * (issue #386) are entity-scope field-group config, not `KavoSettings` —
+ * validated by `resolveEntityConfig` (`resolve-entity-config.ts`), not
+ * `validateSettings`. These blocks exercise that resolver directly instead.
+ */
+function rejectedEntityConfig(config: unknown): ConfigurationException {
+  try {
+    resolveEntityConfig(userMetadata, config as never, undefined);
+  } catch (error) {
+    if (error instanceof ConfigurationException) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error("expected ConfigurationException");
+}
+
+describe("resolveEntityConfig — filter.limits", () => {
+  it("rejects a maxDepth that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ limits: { filterDepth: value } }, "limits.filterDepth", value);
+      const error = rejectedEntityConfig({ filter: { limits: { maxDepth: value } } });
+      expect(error.code).toBe("KAVO_CONFIG_INVALID");
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxDepth" });
     }
   });
 
-  it("rejects an inValues that is not a positive integer", () => {
+  it("rejects a maxInValues that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ limits: { inValues: value } }, "limits.inValues", value);
+      const error = rejectedEntityConfig({ filter: { limits: { maxInValues: value } } });
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxInValues" });
     }
   });
 
-  it("rejects a likePattern that is not a positive integer", () => {
+  it("rejects a maxLikePatternLength that is not a positive integer", () => {
     for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ limits: { likePattern: value } }, "limits.likePattern", value);
+      const error = rejectedEntityConfig({ filter: { limits: { maxLikePatternLength: value } } });
+      expect(error.messageParams).toMatchObject({ path: "filter.limits.maxLikePatternLength" });
     }
   });
 
   it("accepts a depth, value cap, and like-pattern cap of 1", () => {
-    expect(() => accept({ limits: { filterDepth: 1, inValues: 1, likePattern: 1 } })).not.toThrow();
-  });
-});
-
-describe("validateSettings — defaults", () => {
-  it("rejects a defaults.sort that is not an array of non-empty strings", () => {
-    for (const value of ["name", null, [1], [""], { field: "name", direction: "asc" }]) {
-      expectRejected({ defaults: { sort: value } }, "defaults.sort", value);
-    }
-  });
-
-  it("rejects a defaults.select that is not an array of non-empty strings", () => {
-    for (const value of ["name", null, [1], [""]]) {
-      expectRejected({ defaults: { select: value } }, "defaults.select", value);
-    }
-  });
-
-  it("rejects a defaults.include that is not an array of non-empty strings", () => {
-    for (const value of ["posts", null, [1], [""]]) {
-      expectRejected({ defaults: { include: value } }, "defaults.include", value);
-    }
-  });
-
-  it("accepts a well-formed defaults block", () => {
     expect(() =>
-      accept({
-        defaults: {
-          sort: ["-createdAt", "id"],
-          select: ["id", "name"],
-          include: ["posts"],
-        },
-      }),
+      resolveEntityConfig(
+        userMetadata,
+        { filter: { limits: { maxDepth: 1, maxInValues: 1, maxLikePatternLength: 1 } } },
+        undefined,
+      ),
     ).not.toThrow();
   });
 });
 
-describe("validateSettings — search", () => {
+describe("resolveEntityConfig — sort/select/include defaults", () => {
+  it("rejects a sort.default that is not an array", () => {
+    const error = rejectedEntityConfig({ sort: { default: "name" } });
+    expect(error.messageParams).toMatchObject({ path: "sort.default" });
+  });
+
+  it("rejects a sort.default entry outside sort.fields", () => {
+    const error = rejectedEntityConfig({ sort: { fields: ["name"], default: ["email"] } });
+    expect(error.messageParams).toMatchObject({ path: "sort.default" });
+  });
+
+  it("rejects a select.default entry outside select.fields", () => {
+    const error = rejectedEntityConfig({ select: { fields: ["name"], default: ["email"] } });
+    expect(error.messageParams).toMatchObject({ path: "select.default" });
+  });
+
+  it("accepts a well-formed sort.default/select.default", () => {
+    expect(() =>
+      resolveEntityConfig(
+        userMetadata,
+        {
+          sort: { default: ["-createdAt", "id"] },
+          select: { default: ["id", "name"] },
+        },
+        undefined,
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe("resolveEntityConfig — search", () => {
   it("defaults to disabled (false)", () => {
-    expect(BUILT_IN_DEFAULTS.search).toBe(false);
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    expect(config.search).toBe(false);
   });
 
   it("accepts search: false (disabled)", () => {
-    expect(() => accept({ search: false })).not.toThrow();
+    expect(() => resolveEntityConfig(userMetadata, { search: false }, undefined)).not.toThrow();
   });
 
   it("rejects a search.mode outside substring/words", () => {
     for (const value of ["Substring", "word", 1, null]) {
-      expectRejected({ search: { mode: value } }, "search.mode", value);
-    }
-  });
-
-  it("rejects any search.driver other than 'orm'", () => {
-    for (const value of ["postgres", "meilisearch", "", null]) {
-      expectRejected({ search: { mode: "substring", driver: value } }, "search.driver", value);
+      expect(() => resolveEntityConfig(userMetadata, { search: { mode: value } } as never, undefined)).toThrow();
     }
   });
 
   it("accepts an explicit, well-formed search setting", () => {
-    expect(() => accept({ search: { mode: "words", driver: "orm" } })).not.toThrow();
+    const config = resolveEntityConfig(userMetadata, { search: { mode: "words", driver: "orm" } }, undefined);
+    expect(config.search).toMatchObject({ mode: "words", driver: "orm" });
   });
 });
 
@@ -421,12 +444,12 @@ describe("validateSettings — the base of the precedence chain", () => {
     // The engine validates per-call overrides under a derived label, so
     // the entity name is a parameter, not a lookup.
     try {
-      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { limits: { inValues: 0 } }));
+      validateSettings("User (per-call)", mergeSettings(BUILT_IN_DEFAULTS, { pagination: { maxLimit: -1 } }));
       expect.unreachable();
     } catch (error) {
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "User (per-call)",
-        path: "limits.inValues",
+        path: "pagination.maxLimit",
       });
     }
   });

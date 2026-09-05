@@ -30,25 +30,12 @@ class ReplaceCapableCompositeAdapter extends SeededAdapter<CompositeEntity> {
   }
 }
 
-describe("resolveEntityConfig — composite-key allowlist defaults (issue #261)", () => {
-  it("keeps the composite key columns in creatable's default", () => {
-    const config = resolveEntityConfig(compositeMetadata, undefined, undefined);
-    expect(config.allowed.creatable).toEqual(expect.arrayContaining(["userId", "topic", "key"]));
-  });
-
-  it("excludes the composite key columns from updatable's default — a natural key is immutable after create", () => {
-    const config = resolveEntityConfig(compositeMetadata, undefined, undefined);
-    expect(config.allowed.updatable).not.toEqual(expect.arrayContaining(["userId"]));
-    expect(config.allowed.updatable).not.toEqual(expect.arrayContaining(["topic"]));
-    expect(config.allowed.updatable).toEqual(expect.arrayContaining(["key"]));
-  });
-
-  it("leaves a single-key entity's creatable/updatable defaults unchanged", () => {
-    const config = resolveEntityConfig(userMetadata, undefined, undefined);
-    expect(config.allowed.creatable).not.toEqual(expect.arrayContaining(["id"]));
-    expect(config.allowed.updatable).not.toEqual(expect.arrayContaining(["id"]));
-  });
-
+// Composite-key creatable/updatable derivation (issue #261) is exercised by
+// `DefaultDeserializer` directly (`serializer.spec.ts`) — it is no longer a
+// separately resolved config field (issue #386: `creatable`/`updatable` are
+// reached through `dto.create`/`dto.update`'s `{ fields }` shorthand now,
+// not a resolved allowlist).
+describe("resolveEntityConfig — composite-key field-group defaults (issue #261)", () => {
   it("allows cursor pagination on a composite-key entity (issue #263)", () => {
     expect(() =>
       resolveEntityConfig(compositeMetadata, { pagination: { strategy: "cursor" } } as never, undefined),
@@ -61,17 +48,17 @@ describe("resolveEntityConfig — composite-key allowlist defaults (issue #261)"
       { pagination: { strategy: "since", since: { field: "key" } } } as never,
       undefined,
     );
-    expect(config.allowed.filterable).toEqual(expect.arrayContaining(["userId", "topic"]));
-    expect(config.allowed.selectable).toEqual(expect.arrayContaining(["userId", "topic"]));
+    expect(config.filter.fields).toEqual(expect.arrayContaining(["userId", "topic"]));
+    expect(config.select.fields).toEqual(expect.arrayContaining(["userId", "topic"]));
   });
 
-  it("still rejects since pagination whose forced tiebreaker column is missing from filterable, on a composite-key entity", () => {
+  it("still rejects since pagination whose forced tiebreaker column is missing from filter.fields, on a composite-key entity", () => {
     expect(() =>
       resolveEntityConfig(
         compositeMetadata,
         {
           pagination: { strategy: "since", since: { field: "key" } },
-          allowed: { filterable: ["key", "topic"] }, // userId narrowed out
+          filter: { fields: ["key", "topic"] }, // userId narrowed out
         } as never,
         undefined,
       ),
@@ -134,7 +121,7 @@ describe("createCrud — composite-key bootstrap rejections (issue #261)", () =>
     const ownerAdapter = new SeededAdapter<OwnerOfComposite>([{ id: 1 } as OwnerOfComposite]);
     const owners = kavo.createCrud(
       OwnerOfComposite,
-      { allowed: { includable: ["item"] }, relations: { edges: { item: { strategy: "key" } } } } as never,
+      { include: { fields: ["item"] }, relations: { edges: { item: { strategy: "key" } } } } as never,
       { adapter: ownerAdapter, metadata: ownerOfCompositeMetadata },
     ) as unknown as { findMany: (q: unknown) => Promise<unknown> };
 

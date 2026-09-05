@@ -68,12 +68,12 @@ beforeAll(async () => {
   kavo = createMikroOrmKavo(orm, {
     defaults: {
       pagination: { strategy: "cursor" },
-      defaults: { sort: ["id"] },
     },
   });
   posts = kavo.createCrud(Post, {
     softDelete: { field: "deletedAt" },
-    allowed: { includable: ["comments"] },
+    sort: { default: ["id"] },
+    include: { fields: ["comments"] },
   } as never) as DefaultKavoService<Post>;
 });
 

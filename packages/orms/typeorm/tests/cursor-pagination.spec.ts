@@ -82,11 +82,11 @@ beforeAll(async () => {
   kavo = createTypeOrmKavo(dataSource, {
     defaults: {
       pagination: { strategy: "cursor" },
-      defaults: { sort: ["id"] },
     },
   });
   posts = kavo.createCrud(Post, {
-    allowed: { includable: ["comments"] },
+    sort: { default: ["id"] },
+    include: { fields: ["comments"] },
   } as never) as DefaultKavoService<Post>;
 });
 

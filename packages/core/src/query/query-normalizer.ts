@@ -332,7 +332,7 @@ export class QueryNormalizer<Entity = unknown> {
           `${tiebreaker.length === 1 ? "field" : "fields, in this order,"} '${tiebreakerText}' — ` +
           `e.g. 'sort=-createdAt,${tiebreakerText}'. ` +
           (sort.length === 0
-            ? `This request has no sort and ${config.entityName} declares no 'defaults.sort'.`
+            ? `This request has no sort and ${config.entityName} declares no 'sort.default'.`
             : `This request sorts by '${sort.map((entry) => entry.field as string).join(", ")}'.`),
       });
     }

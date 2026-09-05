@@ -40,13 +40,13 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   });
   blogs = kavo.createCrud(Blog, {
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    allowed: { includable: ["blog", "notes"], filterable: ["id", "title", "blog.name"] },
+    include: { fields: ["blog", "notes"] }, filter: { fields: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
-  kavo.createCrud(Note, { allowed: { includable: ["article"] } } as never);
+  kavo.createCrud(Note, { include: { fields: ["article"] } } as never);
   // A separate root instance so this Article config does not clobber the
   // one above in the shared catalog (issue #364).
   keyArticles = createPrismaKavo(client as never, {
@@ -55,7 +55,7 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   }).createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    allowed: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    include: { fields: ["blog"] }, filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   const nestedKavo = createPrismaKavo(client as never, {
@@ -65,11 +65,11 @@ beforeAll(() => {
   });
   nestedKavo.createCrud(Article, {
     softDelete: { field: "deletedAt" },
-    allowed: { includable: ["blog"] },
+    include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(Blog, {
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
 });
 

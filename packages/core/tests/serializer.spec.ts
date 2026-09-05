@@ -393,68 +393,65 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("narrows createOne's derived projection to the creatable allowlist", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
+  it("narrows createOne's derived projection via dto.create's { fields } shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const payload = deserializer.deserialize(
-      { name: "Ada", email: "ada@example.com" },
-      null,
-      writeContext("createOne", config),
-    );
+    const dto = config.dto.resolve("create", "createOne");
+    const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ name: "Ada" });
   });
 
-  it("leaves updateOne/patchOne unaffected by a creatable-only restriction", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
+  it("leaves updateOne/patchOne unaffected by a create-only shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const updateDto = config.dto.resolve("update", "updateOne");
     const updatePayload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
-      null,
+      updateDto,
       writeContext("updateOne", config),
     );
     expect(updatePayload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("narrows both updateOne and patchOne to the same updatable allowlist", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { updatable: ["name"] } }, undefined);
+  it("narrows both updateOne and patchOne via the same dto.update { fields } shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { dto: { update: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const body = { name: "Ada", email: "ada@example.com" };
-    expect(deserializer.deserialize(body, null, writeContext("updateOne", config))).toEqual({ name: "Ada" });
-    expect(deserializer.deserialize(body, null, writeContext("patchOne", config))).toEqual({ name: "Ada" });
+    const updateDto = config.dto.resolve("update", "updateOne");
+    const patchDto = config.dto.resolve("patch", "patchOne");
+    expect(deserializer.deserialize(body, updateDto, writeContext("updateOne", config))).toEqual({ name: "Ada" });
+    expect(deserializer.deserialize(body, patchDto, writeContext("patchOne", config))).toEqual({ name: "Ada" });
   });
 
-  it("leaves createOne unaffected by an updatable-only restriction", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { updatable: ["name"] } }, undefined);
+  it("leaves createOne unaffected by an update-only shorthand", () => {
+    const config = resolveEntityConfig(userMetadata, { dto: { update: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const createDto = config.dto.resolve("create", "createOne");
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
-      null,
+      createDto,
       writeContext("createOne", config),
     );
     expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
   });
 
-  it("keeps the primary key excluded even when explicitly named in creatable", () => {
-    // `creatable: ["id", "name"]` is used verbatim by `resolveEntityConfig`,
-    // but `id` was never in the derived writable projection this class
-    // intersects against — the exclusion holds because a list can only
-    // narrow that base, never add a name back to it (commit 8aa8d65).
-    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["id" as never, "name"] } }, undefined);
+  it("keeps the primary key excluded even when explicitly named in the create shorthand", () => {
+    // `{ fields: ["id", "name"] }` synthesizes a class carrying both keys,
+    // but `deserialize` still strips the primary key unconditionally
+    // (commit 8aa8d65) — a shorthand's key set is not exempt.
+    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["id" as never, "name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const payload = deserializer.deserialize({ id: 5, name: "Ada" }, null, writeContext("createOne", config));
+    const dto = config.dto.resolve("create", "createOne");
+    const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ name: "Ada" });
   });
 
-  it("keeps the soft-delete marker excluded even when explicitly named in updatable", () => {
+  it("keeps the soft-delete marker excluded only for the derived default, not for an explicit DTO/shorthand", () => {
     const withMarker = {
       ...userMetadata,
       fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
     };
-    const config = resolveEntityConfig(
-      withMarker,
-      { softDelete: { field: "deletedAt" }, allowed: { updatable: ["deletedAt" as never, "name"] } },
-      undefined,
-    );
+    const config = resolveEntityConfig(withMarker, { softDelete: { field: "deletedAt" } }, undefined);
     const deserializer = new DefaultDeserializer<User>(withMarker);
     const payload = deserializer.deserialize(
       { deletedAt: new Date(0), name: "Ada" },
@@ -464,14 +461,14 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(payload).toEqual({ name: "Ada" });
   });
 
-  it("leaves an explicitly registered write DTO's key set untouched by creatable/updatable", () => {
+  it("leaves an explicitly registered write DTO's key set untouched", () => {
     // ADR-0026's `selectable`-vs-`dto.item` precedent: a registered DTO
-    // replaces the projection outright, so it wins even where the
-    // allowlist would have narrowed it further.
+    // replaces the projection outright, so it wins even where a `{ fields }`
+    // shorthand elsewhere would have narrowed it further.
     class CreateUserDto {
       email = "";
     }
-    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
@@ -481,8 +478,8 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     expect(payload).toEqual({ email: "ada@example.com" });
   });
 
-  it("does not narrow a custom write operation, which neither list names", () => {
-    const config = resolveEntityConfig(userMetadata, { allowed: { creatable: ["name"] } }, undefined);
+  it("does not narrow a custom write operation, which resolves no DTO", () => {
+    const config = resolveEntityConfig(userMetadata, { dto: { create: { fields: ["name"] } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const payload = deserializer.deserialize({ name: "Ada", email: "ada@example.com" }, null, {
       operation: "archiveUser",

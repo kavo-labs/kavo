@@ -36,7 +36,7 @@ const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
   }
   return undefined;
 });
-const postConfig = resolveEntityConfig(postMetadata, { allowed: { includable: ["comments"] } }, undefined);
+const postConfig = resolveEntityConfig(postMetadata, { include: { fields: ["comments"] } }, undefined);
 const postNormalizer = new QueryNormalizer<Post>(postMetadata, [], new DefaultIncludeResolver<Post>(postCatalog));
 
 describe("QueryNormalizer — wire params", () => {
@@ -153,7 +153,7 @@ describe("QueryNormalizer — wire params", () => {
   });
 
   it("falls back to the configured defaults.sort when the client supplies no sort", () => {
-    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
@@ -161,7 +161,7 @@ describe("QueryNormalizer — wire params", () => {
     const defaulted = resolveEntityConfig(
       userMetadata,
       {
-        defaults: { sort: ["-createdAt", "id"] },
+        sort: { default: ["-createdAt", "id"] },
       },
       undefined,
     );
@@ -172,7 +172,7 @@ describe("QueryNormalizer — wire params", () => {
   });
 
   it("lets a client-supplied sort override the configured defaults.sort outright", () => {
-    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeWire({ sort: "name" }, defaulted).sort).toEqual([{ field: "name", direction: "asc" }]);
   });
 });
@@ -186,7 +186,7 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("rejects search[query] when searchable resolves empty (explicit searchable: [])", () => {
-    const emptySearchable = resolveEntityConfig(userMetadata, { search: {}, allowed: { searchable: [] } }, undefined);
+    const emptySearchable = resolveEntityConfig(userMetadata, { search: { fields: [] } }, undefined);
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, emptySearchable));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
   });
@@ -263,8 +263,8 @@ describe("QueryNormalizer — search[...]", () => {
     expect(query.filter.root).toMatchObject({ operator: "ILIKE", value: "%50\\%\\_off%" });
   });
 
-  it("caps the number of words in words mode at limits.inValues", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 2 } }, undefined);
+  it("caps the number of words in words mode at filter.limits.maxInValues", () => {
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, filter: { limits: { maxInValues: 2 } } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "a b c", "search[mode]": "words" }, tightCap),
     );
@@ -276,7 +276,7 @@ describe("QueryNormalizer — search[...]", () => {
     // Two words × two fields = 4 synthesized conditions — over a cap of 3 —
     // even though the word count alone (2) is under it. A cap that only
     // checked `terms.length` would let this through.
-    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, filter: { limits: { maxInValues: 3 } } }, undefined);
     const issues = issuesOf(() =>
       normalizer.normalizeWire({ "search[query]": "blue iphone", "search[mode]": "words" }, tightCap),
     );
@@ -284,7 +284,7 @@ describe("QueryNormalizer — search[...]", () => {
   });
 
   it("lets the same product through once search[fields] narrows it under the cap", () => {
-    const tightCap = resolveEntityConfig(userMetadata, { search: {}, limits: { inValues: 3 } }, undefined);
+    const tightCap = resolveEntityConfig(userMetadata, { search: {}, filter: { limits: { maxInValues: 3 } } }, undefined);
     // Same two words, narrowed to one field: 2 × 1 = 2, under the cap of 3.
     const query = normalizer.normalizeWire(
       { "search[query]": "blue iphone", "search[mode]": "words", "search[fields]": "name" },
@@ -335,7 +335,7 @@ describe("QueryNormalizer — search[...]", () => {
   it("synthesizes a relation-path ILIKE condition when searchable names one", () => {
     const relationSearchable = resolveEntityConfig(
       authorMetadata,
-      { search: {}, allowed: { searchable: ["name", "posts.title" as never] } },
+      { search: { fields: ["name", "posts.title" as never] } },
       undefined,
     );
     const authorNormalizer = new QueryNormalizer(authorMetadata);
@@ -353,48 +353,20 @@ describe("QueryNormalizer — search[...]", () => {
   it("searches a field excluded from filterable — searchable is an independent allowlist", () => {
     const independent = resolveEntityConfig(
       userMetadata,
-      { search: {}, allowed: { filterable: [], searchable: ["name"] } },
+      { filter: { fields: [] }, search: { fields: ["name"] } },
       undefined,
     );
     const query = normalizer.normalizeWire({ "search[query]": "ada" }, independent);
     expect(query.filter.root).toEqual({ kind: "condition", field: "name", operator: "ILIKE", value: "%ada%" });
   });
 
-  it("applies the precedence chain global → entity → operation to search", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      {
-        search: { mode: "words" },
-        operations: { findMany: { search: { mode: "substring" } } },
-      },
-      { search: { mode: "substring" } },
-    );
-    // Entity scope overrides global mode; `driver` (never named at any
-    // scope) is backfilled from the built-in default — a partial per-scope
-    // override must not leave sibling keys undefined.
-    expect(config.settings.search).toEqual({ mode: "words", driver: "orm" });
-    // The operation scope's narrower override wins for that operation only.
-    expect(config.settingsFor("findMany").search).toEqual({ mode: "substring", driver: "orm" });
-    const findOneSearch = config.settingsFor("findOne").search;
-    expect(findOneSearch !== false && findOneSearch.mode).toBe("words");
-  });
-
-  it("lets an operation scope disable an entity-enabled search with search: false", () => {
-    const config = resolveEntityConfig(
-      userMetadata,
-      {
-        search: {},
-        operations: { findMany: { search: false } },
-      },
-      undefined,
-    );
-    expect(config.settings.search).toEqual({ mode: "substring", driver: "orm" });
-    expect(config.settingsFor("findMany").search).toBe(false);
-  });
-
-  it("backfills mode/driver when a scope re-enables search from the false default with a partial object", () => {
+  // `search` (issue #386) is entity-scope-only — a structural field-group
+  // block, resolved directly from `EntityConfig`, not part of `KavoSettings`
+  // — so there is no global default and no per-operation override to test
+  // here, unlike the old top-level `KavoSettings.search`.
+  it("backfills mode/driver when only one is named", () => {
     const config = resolveEntityConfig(userMetadata, { search: { mode: "words" } }, undefined);
-    expect(config.settings.search).toEqual({ mode: "words", driver: "orm" });
+    expect(config.search).toEqual({ fields: ["name", "email"], default: null, mode: "words", driver: "orm" });
   });
 });
 
@@ -587,12 +559,12 @@ describe("QueryNormalizer — programmatic input", () => {
   });
 
   it("falls back to the configured defaults.sort when no sort is given", () => {
-    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     expect(normalizer.normalizeInput({}, defaulted).sort).toEqual([{ field: "createdAt", direction: "desc" }]);
   });
 
   it("lets a caller-supplied sort override the configured defaults.sort outright", () => {
-    const defaulted = resolveEntityConfig(userMetadata, { defaults: { sort: ["-createdAt"] } }, undefined);
+    const defaulted = resolveEntityConfig(userMetadata, { sort: { default: ["-createdAt"] } }, undefined);
     const query = normalizer.normalizeInput({ sort: [{ field: "name", direction: "asc" }] }, defaulted);
     expect(query.sort).toEqual([{ field: "name", direction: "asc" }]);
   });

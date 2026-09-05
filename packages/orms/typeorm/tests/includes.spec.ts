@@ -84,29 +84,27 @@ beforeAll(async () => {
   await dataSource.initialize();
   kavo = createTypeOrmKavo(dataSource);
   blogs = kavo.createCrud(Blog, {
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
     softDelete: { strategy: "soft" },
-    allowed: {
-      includable: ["blog", "notes"],
-      // Filtering across a relation path is its own allowlist decision,
+    include: { fields: ["blog", "notes"] },
+            // Filtering across a relation path is its own allowlist decision,
       // independent of whether the relation may be included.
-      filterable: ["id", "title", "blog.name"],
-    },
+filter: { fields: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
-  kavo.createCrud(Note, { allowed: { includable: ["article"] } });
+  kavo.createCrud(Note, { include: { fields: ["article"] } });
   // The same entity with the to-many forced to `join`: the case the
   // normative pagination rule exists for.
   joinedBlogs = createTypeOrmKavo(dataSource).createCrud(Blog, {
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
     relations: { edges: { articles: { strategy: "join" } } },
   }) as DefaultKavoService<Blog>;
   // A *to-one* forced to `batch`. Left on `auto` a to-one joins, so the
   // batched to-one path only exists when a config asks for it.
   batchedArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
     softDelete: { strategy: "soft" },
-    allowed: { includable: ["blog"] },
+    include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "batch" } } },
   } as never) as DefaultKavoService<Article>;
   // The same to-one loaded as its FK id alone (issue #364) — no join, no
@@ -114,7 +112,7 @@ beforeAll(async () => {
   // path still resolves through its own join.
   keyArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
     softDelete: { strategy: "soft" },
-    allowed: { includable: ["blog"], filterable: ["id", "title", "blog.name"] },
+    include: { fields: ["blog"] }, filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   // A key edge nested under a batched to-many parent: Blog → articles (batch)
@@ -122,11 +120,11 @@ beforeAll(async () => {
   const nestedKavo = createTypeOrmKavo(dataSource);
   nestedKavo.createCrud(Article, {
     softDelete: { strategy: "soft" },
-    allowed: { includable: ["blog"] },
+    include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(Blog, {
-    allowed: { includable: ["articles"] },
+    include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
 });
 

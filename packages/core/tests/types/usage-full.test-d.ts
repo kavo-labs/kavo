@@ -55,7 +55,10 @@ const authors = kavo.createCrud(Author, {
     item: AuthorItemDto,
     list: AuthorListDto,
   },
-  allowed: { filterable: ["name"], sortable: ["name"], selectable: ["id", "name"], includable: ["posts"] },
+  filter: { fields: ["name"] },
+  sort: { fields: ["name"] },
+  select: { fields: ["id", "name"] },
+  include: { fields: ["posts"] },
   operations: {
     findMany: { handler: promote },
   },
@@ -86,29 +89,29 @@ void authors.createOne({});
 void authors.createOne({ name: "Ada", bio: "x" });
 
 // @ts-expect-error — an allowlist entry has to name a real field.
-void kavo.createCrud(Author, { allowed: { filterable: ["nmae"] } });
+void kavo.createCrud(Author, { filter: { fields: ["nmae"] } });
 
 // `{ exclude }` is accepted wherever an explicit array is, and still
 // type-checks each excluded path against the entity.
-void kavo.createCrud(Author, { allowed: { filterable: { exclude: ["name"] } } });
+void kavo.createCrud(Author, { filter: { fields: { exclude: ["name"] } } });
 
 // @ts-expect-error — `{ exclude }` names have to be real fields too.
-void kavo.createCrud(Author, { allowed: { sortable: { exclude: ["nmae"] } } });
+void kavo.createCrud(Author, { sort: { fields: { exclude: ["nmae"] } } });
 
-// `{ exclude }` on `selectable` type-checks the same way.
-void kavo.createCrud(Author, { allowed: { selectable: { exclude: ["name"] } } });
+// `{ exclude }` on `select.fields` type-checks the same way.
+void kavo.createCrud(Author, { select: { fields: { exclude: ["name"] } } });
 
-// @ts-expect-error — including `selectable`.
-void kavo.createCrud(Author, { allowed: { selectable: { exclude: ["nmae"] } } });
+// @ts-expect-error — including `select.fields`.
+void kavo.createCrud(Author, { select: { fields: { exclude: ["nmae"] } } });
 
-// `selectable` is capped to depth 1 (ADR-0045): a relation-dotted path does
-// not type-check, unlike `filterable`/`sortable`, which take one.
+// `select.fields` is capped to depth 1 (ADR-0045): a relation-dotted path
+// does not type-check, unlike `filter.fields`/`sort.fields`, which take one.
 // @ts-expect-error — `posts.title` is a relation-dotted path.
-void kavo.createCrud(Author, { allowed: { selectable: ["id", "posts.title"] } });
+void kavo.createCrud(Author, { select: { fields: ["id", "posts.title"] } });
 // @ts-expect-error — and the same in the `{ exclude }` form.
-void kavo.createCrud(Author, { allowed: { selectable: { exclude: ["posts.title"] } } });
-// `filterable` still accepts the dotted path it always did.
-void kavo.createCrud(Author, { allowed: { filterable: ["posts.title"] } });
+void kavo.createCrud(Author, { select: { fields: { exclude: ["posts.title"] } } });
+// `filter.fields` still accepts the dotted path it always did.
+void kavo.createCrud(Author, { filter: { fields: ["posts.title"] } });
 
 // Overridden and default operations dispatch through the engine, one pipeline either way.
 void authors.engine.execute({ operation: "findMany", id: null, body: null, query: null, options: null });

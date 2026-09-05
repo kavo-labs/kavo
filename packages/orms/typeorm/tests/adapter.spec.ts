@@ -353,7 +353,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   it("applies the configured defaults.sort when the caller supplies no sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["age"] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany();
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Joan", "Ada", "Alan", "Grace"]);
@@ -362,7 +362,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   it("lets a caller-supplied sort override the configured defaults.sort", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["age"] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const list = await withDefault.findMany({ sort: [{ field: "age", direction: "desc" }] });
     expect(list.items.map((a) => (a as Author).name)).toEqual(["Grace", "Alan", "Ada", "Joan"]);
@@ -370,7 +370,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("breaks ties on the second field of a multi-field defaults.sort", async () => {
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["status", "name"] },
+      sort: { default: ["status", "name"] },
     }) as DefaultKavoService<Author>;
     await withDefault.createOne({ email: "b@x.io", name: "Bea", age: 30, status: "active" } as never);
     await withDefault.createOne({ email: "c@x.io", name: "Cy", age: 31, status: "active" } as never);
@@ -382,7 +382,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   it("keeps defaults.sort-ordered pages disjoint and stable across offsets", async () => {
     await seed();
     const withDefault = kavo.createCrud(Author, {
-      defaults: { sort: ["age"] },
+      sort: { default: ["age"] },
     }) as DefaultKavoService<Author>;
     const page1 = await withDefault.findMany({ limit: 2, offset: 0 });
     const page2 = await withDefault.findMany({ limit: 2, offset: 2 });
@@ -438,7 +438,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("filters on relation paths when explicitly allowlisted", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -460,7 +460,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("filters a to-one relation path with an operator other than EQ", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -486,7 +486,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     // still joins and restricts, it just doesn't select the relation
     // (that's what `include=` is for).
     const scoped = kavo.createCrud(Author, {
-      allowed: { filterable: ["name", "books.title" as never] },
+      filter: { fields: ["name", "books.title" as never] },
     }) as DefaultKavoService<Author>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -500,7 +500,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("combines a relation-path condition with an own-field condition under AND", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { filterable: ["title", "author.name" as never] },
+      filter: { fields: ["title", "author.name" as never] },
     }) as DefaultKavoService<Book>;
     await seed();
     const ada = (await authors.findMany()).items.map((a) => a as Author).find((a) => a.name === "Ada")!;
@@ -524,7 +524,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
 
   it("rejects a relation-path filter that isn't on the filterable allowlist", async () => {
     const scoped = kavo.createCrud(Book, {
-      allowed: { filterable: ["title"] },
+      filter: { fields: ["title"] },
     }) as DefaultKavoService<Book>;
 
     await expect(
@@ -542,7 +542,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
   // report actually hit.
   it("still rejects a filter on a field named in allowlists.filterable's { exclude } form (issue #371)", async () => {
     const excluded = kavo.createCrud(Author, {
-      allowed: { filterable: { exclude: ["status"] } },
+      filter: { fields: { exclude: ["status"] } },
     }) as DefaultKavoService<Author>;
     await seed();
 

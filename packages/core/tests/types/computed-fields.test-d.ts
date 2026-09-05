@@ -41,14 +41,14 @@ expectTypeOf(derived.findOne).returns.resolves.toEqualTypeOf<Author>();
 // A declared computed name is usable in `selectable` alongside real paths.
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name.slice(0, 2) } },
-  allowed: { selectable: ["id", "name", "initials"] },
+  select: { fields: ["id", "name", "initials"] },
 });
 
 // A descriptor can be declared standalone and still infer the key.
 const initials: ComputedFieldDescriptor<Author> = {
   resolve: (author) => author.name.slice(0, 2),
 };
-void kavo.createCrud(Author, { computed: { initials }, allowed: { selectable: ["id", "initials"] } });
+void kavo.createCrud(Author, { computed: { initials }, select: { fields: ["id", "initials"] } });
 
 void kavo.createCrud(Author, {
   computed: {
@@ -60,39 +60,39 @@ void kavo.createCrud(Author, {
 
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name } },
-  // @ts-expect-error — the `{ exclude }` form is barred from filterable too:
-  // excluding a name that could never be in the list is a confusion, not a
-  // no-op worth silently accepting.
-  allowed: { filterable: { exclude: ["initials"] } },
+  // @ts-expect-error — the `{ exclude }` form is barred from filter.fields
+  // too: excluding a name that could never be in the list is a confusion,
+  // not a no-op worth silently accepting.
+  filter: { fields: { exclude: ["initials"] } },
 });
 
-// `{ exclude }` on `selectable` accepts a computed name, because that list
-// really does contain one to remove.
+// `{ exclude }` on `select.fields` accepts a computed name, because that
+// list really does contain one to remove.
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name } },
-  allowed: { selectable: { exclude: ["initials"] } },
+  select: { fields: { exclude: ["initials"] } },
 });
 
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name } },
   // @ts-expect-error — a computed field can never be filterable: no column.
-  allowed: { filterable: ["initials"] },
+  filter: { fields: ["initials"] },
 });
 
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name } },
   // @ts-expect-error — nor sortable, for the same reason.
-  allowed: { sortable: ["initials"] },
+  sort: { fields: ["initials"] },
 });
 
 void kavo.createCrud(Author, {
   computed: { initials: { resolve: (author) => author.name } },
-  // @ts-expect-error — `selectable` still spell-checks real entity paths.
-  allowed: { selectable: ["nmae"] },
+  // @ts-expect-error — `select.fields` still spell-checks real entity paths.
+  select: { fields: ["nmae"] },
 });
 
 // @ts-expect-error — and a name no `computed` entry declares stays rejected.
-void kavo.createCrud(Author, { allowed: { selectable: ["initials"] } });
+void kavo.createCrud(Author, { select: { fields: ["initials"] } });
 
 // @ts-expect-error — a descriptor without `resolve` is not a descriptor.
 void kavo.createCrud(Author, { computed: { initials: { selectable: true } } });

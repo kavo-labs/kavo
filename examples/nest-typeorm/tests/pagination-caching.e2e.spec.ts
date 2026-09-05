@@ -40,7 +40,7 @@ class Reading {
 
 @Kavo(Reading, {
   pagination: { strategy: "cursor", defaultLimit: 20, maxLimit: 100 },
-  defaults: { sort: ["id"] },
+  sort: { default: ["id"] },
 })
 @Controller("cursor-readings")
 class CursorReadingController {}

@@ -43,7 +43,8 @@ const complete: OperationHandler<Todo> = {
 
 @Kavo(Todo, {
   dto: { create: CreateTodoDto, item: TodoItemDto },
-  allowed: { filterable: ["title", "done"], sortable: ["title"] },
+  filter: { fields: ["title", "done"] },
+  sort: { fields: ["title"] },
   operations: {
     deleteOne: false,
     patchOne: { handler: complete, meta: { routes: { method: "POST", path: ":id/complete" } } },
@@ -60,7 +61,7 @@ class BareController {}
 void BareController;
 
 // @ts-expect-error — a misspelled allowlist field is now a compile error.
-@Kavo(Todo, { allowed: { filterable: ["titel"] } })
+@Kavo(Todo, { filter: { fields: ["titel"] } })
 @Controller("typo-todos")
 class TypoController {}
 void TypoController;
@@ -94,7 +95,7 @@ void WrongEntityController;
 // field with no cast.
 @Kavo(Todo, {
   computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
-  allowed: { selectable: ["id", "title", "slug"] },
+  select: { fields: ["id", "title", "slug"] },
 })
 @Controller("computed-todos")
 class ComputedController {}
@@ -103,7 +104,7 @@ void ComputedController;
 @Kavo(Todo, {
   computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
   // @ts-expect-error — and never a filterable one: it has no column.
-  allowed: { filterable: ["slug"] },
+  filter: { fields: ["slug"] },
 })
 @Controller("computed-filter-todos")
 class ComputedFilterController {}
@@ -112,7 +113,7 @@ void ComputedFilterController;
 @Kavo(Todo, {
   computed: { slug: { resolve: (todo) => todo.title.toLowerCase() } },
   // @ts-expect-error — nor a sortable one.
-  allowed: { sortable: ["slug"] },
+  sort: { fields: ["slug"] },
 })
 @Controller("computed-sort-todos")
 class ComputedSortController {}
