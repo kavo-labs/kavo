@@ -114,6 +114,34 @@ standard one, including the per-operation settings scope: the loop that
 precomputes `settingsFor(operation)` walks `operations` by key and never
 checks the key against the standard table.
 
+**The per-operation settings scope is narrowed at the type level** (issue
+#415). At runtime `settingsFor(operation)` is the whole `KavoSettings`
+subtree, but `OperationConfig` only accepts the keys that operation's
+engine stages actually read, so a key it would ignore is a compile error
+rather than a silently-dropped value:
+
+| key          | accepted on                                                                 |
+| ------------ | --------------------------------------------------------------------------- |
+| `pagination` | `findMany`                                                                  |
+| `realtime`   | `createOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne` |
+| `delete`     | `findOne`, `findMany`, `deleteOne`, `restoreOne`, `purgeOne`                |
+| `cache`      | every operation                                                             |
+| `errors`     | every operation                                                             |
+
+`delete` is on the reads and the delete family because `configViewFor`
+resolves a soft-delete view for each of them — a per-operation `strategy`
+override (`operations: { deleteOne: { delete: { strategy: "hard" } } }`) is
+a supported way to force `hard` on one operation of a soft-deletable
+entity. It is _not_ accepted on `createOne`/`updateOne`/`patchOne`, which
+consult no soft-delete strategy. `cache` is _not_ narrowed: its `etag` half
+gates `If-Match`/`304` on every single-row operation — the void
+`deleteOne`/`purgeOne` included — not just the two reads its `ttl` half
+caches. For a **custom** operation the accepted subset follows from the
+`kind`/`cardinality` the entry declares: `errors`/`cache` always, `delete`
+on any `kind: "read"`, `pagination` also on a `kind: "read", cardinality:
+"many"` one; `realtime` never, since a custom operation is not a realtime
+event source.
+
 ## 3. Resolution timing and immutability
 
 All merging happens **once at bootstrap** (`resolveEntityConfig`) into a
