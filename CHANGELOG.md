@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.20.0](https://github.com/kavo-labs/kavo/compare/v0.19.0...v0.20.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core,typeorm,prisma,mongoose,mikroorm,nest:** the softDelete config key is renamed to delete. Update any `@Kavo(Entity, { softDelete: ... })` or KavoModule global defaults to use `delete` instead; the value shape is unchanged.
+* **core:** replace computed fields with ORM-derived virtual fields ([#396](https://github.com/kavo-labs/kavo/issues/396))
+
+### Features
+
+* **core:** replace computed fields with ORM-derived virtual fields ([#396](https://github.com/kavo-labs/kavo/issues/396)) ([4d5caad](https://github.com/kavo-labs/kavo/commit/4d5caade4592d8cf0f6aef3955d6849dcda5866b))
+
+
+### Bug Fixes
+
+* **core:** exclude derived fields from the writable-field universe ([#400](https://github.com/kavo-labs/kavo/issues/400)) ([20a34e9](https://github.com/kavo-labs/kavo/commit/20a34e90950dcac7f1186b53d38c42ae030232cb))
+
+
+### Refactoring
+
+* **core,typeorm,prisma,mongoose,mikroorm,nest:** rename softDelete settings key to delete ([#403](https://github.com/kavo-labs/kavo/issues/403)) ([cefca13](https://github.com/kavo-labs/kavo/commit/cefca134e1bccffce90b84af7754b877b27ce78a))
+
 ## [0.19.0](https://github.com/kavo-labs/kavo/compare/v0.18.0...v0.19.0) (2026-09-05)
 
 
