@@ -220,8 +220,8 @@ importers:
         specifier: ^0.15.1
         version: 0.15.1
       mysql2:
-        specifier: ^3.23.3
-        version: 3.23.3(@types/node@26.2.0)
+        specifier: ^3.24.3
+        version: 3.24.3(@types/node@26.2.0)
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -233,7 +233,7 @@ importers:
         version: 7.8.2
       typeorm:
         specifier: ^1.1.0
-        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.23.3(@types/node@26.2.0))(pg@8.23.0)
+        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.3(@types/node@26.2.0))(pg@8.23.0)
     devDependencies:
       '@nestjs/testing':
         specifier: ^11.2.1
@@ -364,7 +364,7 @@ importers:
         version: 0.2.2
       typeorm:
         specifier: ^1.1.0
-        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.23.3(@types/node@26.2.0))(pg@8.23.0)
+        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.3(@types/node@26.2.0))(pg@8.23.0)
 
   packages/protocols/graphql:
     dependencies:
@@ -3205,8 +3205,8 @@ packages:
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
 
-  lru.min@1.1.4:
-    resolution: {integrity: sha512-DqC6n3QQ77zdFpCMASA1a3Jlb64Hv2N2DciFGkO/4L9+q/IpIAuRlKOvCXabtRW6cQf8usbmM6BE/TOPysCdIA==}
+  lru.min@1.1.5:
+    resolution: {integrity: sha512-5J9ysMYUpYIg9RF2vJpy9SinEmSviFSe0GyPpCQ4L5QSkLAgeLXlTAOu2ZwWUU5m+0SBl6gUU1R1ZQB3aKypfA==}
     engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
 
   magic-string@0.30.21:
@@ -3413,8 +3413,8 @@ packages:
     resolution: {integrity: sha512-6rdyFg2kLrMh9Jee7/BMPuV9lEAd7lLW2YUpF9/YxR7njyoUwwQ0ZPh3TaIY50Sw6vlyD2HW3wGOkTS4P79xrQ==}
     engines: {node: '>= 10.16.0'}
 
-  mysql2@3.23.3:
-    resolution: {integrity: sha512-ehp9HEKr4wVJaBOUVxNFa+CNrsCCCZ6363/jbGhb7WpEmSRNIXjHBjFs5K2s2cXn7j/RhDieejsQJ6nfUwD6vQ==}
+  mysql2@3.24.3:
+    resolution: {integrity: sha512-OKfWHkMAg9v06neq8FmSyhbxPQKABN9PAW5G9/bDTXzJBO5xXtkKL0V27vju7HQWk9UD4Od5BZsvCtBTB1CPEw==}
     engines: {node: '>= 8.0'}
     peerDependencies:
       '@types/node': '>= 8'
@@ -7216,7 +7216,7 @@ snapshots:
 
   lru-cache@10.4.3: {}
 
-  lru.min@1.1.4: {}
+  lru.min@1.1.5: {}
 
   magic-string@0.30.21:
     dependencies:
@@ -7441,20 +7441,20 @@ snapshots:
       concat-stream: 2.0.0
       type-is: 1.6.18
 
-  mysql2@3.23.3(@types/node@26.2.0):
+  mysql2@3.24.3(@types/node@26.2.0):
     dependencies:
       '@types/node': 26.2.0
       aws-ssl-profiles: 1.1.2
       generate-function: 2.3.1
       iconv-lite: 0.7.3
       long: 5.3.2
-      lru.min: 1.1.4
+      lru.min: 1.1.5
       named-placeholders: 1.1.6
       sql-escaper: 1.5.1
 
   named-placeholders@1.1.6:
     dependencies:
-      lru.min: 1.1.4
+      lru.min: 1.1.5
 
   nan@2.28.0:
     optional: true
@@ -8253,7 +8253,7 @@ snapshots:
 
   typedarray@0.0.6: {}
 
-  typeorm@1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.23.3(@types/node@26.2.0))(pg@8.23.0):
+  typeorm@1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.3(@types/node@26.2.0))(pg@8.23.0):
     dependencies:
       '@sqltools/formatter': 1.2.5
       ansis: 4.3.1
@@ -8268,7 +8268,7 @@ snapshots:
     optionalDependencies:
       better-sqlite3: 13.0.3
       mongodb: 7.5.0
-      mysql2: 3.23.3(@types/node@26.2.0)
+      mysql2: 3.24.3(@types/node@26.2.0)
       pg: 8.23.0
     transitivePeerDependencies:
       - babel-plugin-macros
