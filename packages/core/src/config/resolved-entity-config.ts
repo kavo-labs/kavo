@@ -109,7 +109,7 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * a `null` field for everything that isn't soft-deletable, so adapters
    * branch on one object instead of re-deriving the decision.
    */
-  readonly softDelete: ResolvedSoftDelete;
+  readonly delete: ResolvedSoftDelete;
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
   /** Relation edges of this entity. */

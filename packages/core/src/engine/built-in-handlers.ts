@@ -160,7 +160,7 @@ export function builtInHandlers<Entity extends object>(
     },
     deleteOne: {
       async execute(id: EntityId, context: KavoContext<Entity>) {
-        // Hard or soft per `context.config.softDelete` — the strategy is
+        // Hard or soft per `context.config.delete` — the strategy is
         // resolved at config time and applied by the adapter,
         // so there is no branch here.
         await repositoryFor(context).delete(id, context);

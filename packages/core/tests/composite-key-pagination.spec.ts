@@ -35,7 +35,7 @@ function configWith(
     pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true, since: { field: sinceField } },
     errors: { exposeInternals: false },
     relations: { edges: {} },
-    softDelete: false,
+    delete: false,
     operations: {},
   } as unknown as KavoSettings;
   return {
@@ -46,7 +46,7 @@ function configWith(
     ...fieldGroups,
     sortDefault: defaultSort,
     search: false,
-    softDelete: { strategy: "hard", field: "deletedAt" },
+    delete: { strategy: "hard", field: "deletedAt" },
     dto: { resolve: () => null },
     relations: { all: () => [], get: () => undefined },
   } as unknown as ResolvedEntityConfig<CompositeEntity>;

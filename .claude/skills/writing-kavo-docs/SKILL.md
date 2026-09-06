@@ -24,7 +24,7 @@ Second person is rare; most pages describe the system ("Kavo stops actually dele
 - **One code block does the explaining.** Show the entity/config/request once, real and copy-pasteable (an actual entity name like `Book`, not `Entity`/`Foo`), then describe what it produces in prose. Don't add a second example that says the same thing a different way.
 - **Tables for enumerations**, not bullet lists: generated routes, config keys, operator mappings. See the routes table in `docs/getting-started/quick-start.md`.
 - **Cross-references are inline sentences that name what's on the other end**, not "see also" appendices: `See [Soft delete, restore & purge](/internals/architecture/11-soft-delete) for the full behavior: unique-index caveats, cascades, and what's deliberately not built.` The link text is the page title; the clause after the colon previews what the reader gets there, so they can decide whether to follow it.
-- **Config-key references point at the anchor**, not just the page: `` `/guides/configuration/settings#softdelete` ``, matching the heading `## softDelete` would produce.
+- **Config-key references point at the anchor**, not just the page: `` `/guides/configuration/settings#softdelete` ``, matching the heading `## delete` would produce.
 - **Links are root-relative and extensionless** (`/features/soft-delete`, not `./soft-delete.md`), matching VitePress `cleanUrls`.
 - A page lives under the section its sidebar entry already has in `docs/.vitepress/config.mts` — check the sidebar array before inventing a new section for one page.
 

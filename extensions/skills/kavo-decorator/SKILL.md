@@ -36,7 +36,7 @@ Full detail: `docs/internals/architecture/10-nestjs-integration.md`.
 | `purgeOne`   | `DELETE /:id/purge`  | 204    |
 
 `restoreOne`/`purgeOne` are off by default and turned on by config
-(`softDelete: { strategy: "soft" }` enables restore; `operations: { purgeOne: true }`
+(`delete: { strategy: "soft" }` enables restore; `operations: { purgeOne: true }`
 enables purge) — decoration time has no ORM metadata to auto-detect them from.
 
 ## `config` — the second argument (`EntityConfig<Entity>`)
@@ -59,7 +59,7 @@ interface EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto
   `{ enabled?, handler?, meta? }`, additionally lets you swap the
   `OperationHandler` or supply route `meta` (`method`, `path`, `successStatus`,
   or `enabled: false` to keep it service-only).
-- **Settings keys** (`pagination`, `limits`, `search`, `errors`, `relations`, `softDelete`,
+- **Settings keys** (`pagination`, `limits`, `search`, `errors`, `relations`, `delete`,
   `bulk`) inherited from `DeepPartial<KavoSettings>` override the global
   default for this entity only — see the `global-config` skill for the
   precedence chain these merge through, and the sections below for what

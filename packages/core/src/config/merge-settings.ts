@@ -7,7 +7,7 @@ import type { DeepPartial } from "../types/utility.js";
  * - Scalars and objects-as-values: nearer scope **replaces** farther scope,
  *   key by key — an override supplies only the keys it changes.
  * - `false` disables an inheritable feature where the schema allows it
- *   (`softDelete: false`): the `false` replaces the whole subtree.
+ *   (`delete: false`): the `false` replaces the whole subtree.
  * - Arrays replace wholesale (no element merging).
  *
  * The base is always a *complete* `KavoSettings`, so the result is too.

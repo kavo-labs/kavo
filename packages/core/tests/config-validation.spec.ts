@@ -298,27 +298,27 @@ describe("validateSettings — relation edges", () => {
 });
 
 describe("validateSettings — soft delete", () => {
-  it("rejects a softDelete that names no delete-marker field", () => {
-    for (const softDelete of [true, 1, "deletedAt", { field: "" }, { field: 5 }]) {
-      const error = rejectionOf({ softDelete });
-      expect(error.messageParams).toMatchObject({ entity: "User", path: "softDelete" });
+  it("rejects a delete that names no delete-marker field", () => {
+    for (const value of [true, 1, "deletedAt", { field: "" }, { field: 5 }]) {
+      const error = rejectionOf({ delete: value });
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "delete" });
     }
-    expect(String(rejectionOf({ softDelete: true }).messageParams["problem"])).toContain("true");
+    expect(String(rejectionOf({ delete: true }).messageParams["problem"])).toContain("true");
   });
 
   it("rejects a strategy outside auto, soft, and hard", () => {
     for (const value of ["off", "SOFT", 1, null]) {
-      expectRejected({ softDelete: { strategy: value } }, "softDelete.strategy", value);
+      expectRejected({ delete: { strategy: value } }, "delete.strategy", value);
     }
   });
 
   it("accepts `false` — the documented way to disable the feature entirely", () => {
-    expect(() => accept({ softDelete: false })).not.toThrow();
+    expect(() => accept({ delete: false })).not.toThrow();
   });
 
   it("accepts each documented strategy on a named field", () => {
     for (const strategy of ["auto", "soft", "hard"]) {
-      expect(() => accept({ softDelete: { field: "removedAt", strategy } })).not.toThrow();
+      expect(() => accept({ delete: { field: "removedAt", strategy } })).not.toThrow();
     }
   });
 });

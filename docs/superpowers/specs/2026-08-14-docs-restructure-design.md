@@ -53,7 +53,7 @@ config, and per-entity `@Kavo(Entity, config)`). Split into
 - **`module-setup.md`** — `KavoModule.forRoot`/`forRootAsync` fields, the
   `principal` extractor.
 - **`settings.md`** — the app-wide `KavoSettings` knobs: pagination, query,
-  errors, relations, arrayMutation, caching, softDelete, realtime. Written
+  errors, relations, arrayMutation, caching, delete, realtime. Written
   as task-based "how do I turn on X" sections rather than one table per
   field.
 - **`entity-config.md`** — `@Kavo(Entity, config)`: `dto`, `allowed`,

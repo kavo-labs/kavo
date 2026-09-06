@@ -128,7 +128,7 @@ types and not against a string.
 
 `EntityMetadata.softDeleteField` is always `null` — Mongoose declares no
 `@DeleteDateColumn` equivalent — so soft delete is always explicit
-`softDelete.field` configuration for this adapter, never auto-detected.
+`delete.field` configuration for this adapter, never auto-detected.
 Same position as `@kavo/prisma`.
 
 ## 2. Query translation (Filter AST → MongoDB query document)

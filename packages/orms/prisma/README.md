@@ -9,7 +9,7 @@ model delegate. `TransactionManager` is not implemented — see the
 `@kavo/nest` or any framework.
 
 Fully implemented: CRUD, filtering/sorting/pagination, soft delete
-(explicit `softDelete.field` only — Prisma declares no delete-marker
+(explicit `delete.field` only — Prisma declares no delete-marker
 column the way TypeORM's `@DeleteDateColumn` does), and relation
 includes all run through this adapter.
 

@@ -275,7 +275,7 @@ describe("@Kavo search[...] rejected when not enabled (issue #156)", () => {
  * amplification path — victim requests that never touch the attacking one.
  */
 describe("@Kavo prototype pollution over the wire", () => {
-  @Kavo(Todo, { softDelete: { strategy: "soft" } })
+  @Kavo(Todo, { delete: { strategy: "soft" } })
   @Controller("todos")
   class PollutionController {}
 
@@ -1362,7 +1362,7 @@ describe("KavoExceptionFilter — errors that never reach KavoEngine.execute", (
 
 describe("@Kavo soft-delete routes", () => {
   @Kavo(Todo, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     operations: {
       createOne: true,
       findOne: true,
@@ -1436,7 +1436,7 @@ describe("@Kavo soft-delete routes", () => {
   });
 
   it("rejects onlyDeleted on an entity that is not soft-deletable", async () => {
-    @Kavo(Todo, { softDelete: { strategy: "hard" } })
+    @Kavo(Todo, { delete: { strategy: "hard" } })
     @Controller("todos")
     class HardDeleteController {}
 
@@ -1471,7 +1471,7 @@ describe("@Kavo soft-delete routes", () => {
   });
 
   it("keeps purge unrouted unless it is asked for by name", async () => {
-    @Kavo(Todo, { softDelete: { strategy: "soft" } })
+    @Kavo(Todo, { delete: { strategy: "soft" } })
     @Controller("todos")
     class RestoreOnlyController {}
 

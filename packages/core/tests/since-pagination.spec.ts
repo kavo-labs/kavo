@@ -113,7 +113,7 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
 
   async delete(id: EntityId, context: KavoContext<Event>): Promise<void> {
     const row = this.require(id);
-    if (context.config.softDelete.strategy === "hard") {
+    if (context.config.delete.strategy === "hard") {
       this.rows = this.rows.filter((candidate) => candidate.id !== Number(id));
       return;
     }
@@ -132,7 +132,7 @@ class InMemoryEventAdapter implements RepositoryAdapter<Event> {
   }
 
   private visible(row: Event, context: KavoContext<Event>, withDeleted: boolean, onlyDeleted: boolean): boolean {
-    if (context.config.softDelete.strategy !== "soft") {
+    if (context.config.delete.strategy !== "soft") {
       return true;
     }
     if (onlyDeleted) {

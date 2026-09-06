@@ -9,7 +9,7 @@ interface in `@kavo/core`.
 `@kavo/nest` or any framework.
 
 Fully implemented: CRUD, filtering/sorting/pagination, soft delete
-(explicit `softDelete.field` only — Mongoose declares no delete-marker
+(explicit `delete.field` only — Mongoose declares no delete-marker
 path the way TypeORM's `@DeleteDateColumn` does), and relation includes
 (via `populate`) all run through this adapter.
 
@@ -118,7 +118,7 @@ foreignField })` is invisible to `schema.paths`, so the metadata seam
 
   `@kavo/prisma` shares the underlying hole (only `@kavo/typeorm` escapes
   it, because `@DeleteDateColumn` is detectable); the fix — excluding the
-  resolved `softDelete.field` from the writable projection — belongs in
+  resolved `delete.field` from the writable projection — belongs in
   core. Until then, register an explicit `update`/`patch` DTO that omits the
   marker whenever you enable `purgeOne`.
 

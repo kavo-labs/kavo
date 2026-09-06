@@ -85,13 +85,13 @@ What a request looks like when the client specifies nothing — applied only whe
 
 One subtree covers both halves of HTTP response caching. `cache.ttl` is the engine-level result cache that serves a repeated `findOne`/`findMany` read from a store without touching the adapter — a positive `ttl` turns it on, an omitted `ttl` (the default) means off, and there is no separate `enabled` key. `ttl: 0` fails bootstrap validation; `ttl: false` overrides an _inherited_ `ttl` back off without disabling `etag` at that scope. `cache.etag` is the conditional-request machinery — the ETag on single-item responses plus `If-None-Match`/`If-Match`. `cache: false` turns both halves off together. The result cache's backing store is a live object registered on `KavoOptions.cacheStore`, not a settings key (ADR-0023, ADR-0031). See [Caching & ETags](/features/caching-and-etags) and [Result cache](/features/result-cache).
 
-## softDelete
+## delete
 
-| Key                   | Type                           | Default                      |
-| --------------------- | ------------------------------ | ---------------------------- |
-| `softDelete`          | `{ field, strategy } \| false` | resolved per entity (`auto`) |
-| `softDelete.field`    | `string`                       | `"deletedAt"`                |
-| `softDelete.strategy` | `"auto" \| "soft" \| "hard"`   | `"auto"`                     |
+| Key               | Type                           | Default                      |
+| ----------------- | ------------------------------ | ---------------------------- |
+| `delete`          | `{ field, strategy } \| false` | resolved per entity (`auto`) |
+| `delete.field`    | `string`                       | `"deletedAt"`                |
+| `delete.strategy` | `"auto" \| "soft" \| "hard"`   | `"auto"`                     |
 
 See [Soft delete](/features/soft-delete).
 

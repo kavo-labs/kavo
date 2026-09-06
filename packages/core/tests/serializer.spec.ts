@@ -305,20 +305,20 @@ describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
    * A context carrying only what `deserialize` reads off it: the resolved
    * soft-delete field for *this call*. Deliberately not a full
    * `resolveEntityConfig` output — the field this class must track is
-   * `context.config.softDelete.field` specifically, resolved fresh per
+   * `context.config.delete.field` specifically, resolved fresh per
    * request/operation/call (ADR-0013's precedence chain), never a value
    * baked into the deserializer at construction.
    */
   function contextWithMarker(field: string | null): KavoContext<User> {
     return {
-      config: { softDelete: field === null ? { strategy: "hard", field: null } : { strategy: "soft", field } },
+      config: { delete: field === null ? { strategy: "hard", field: null } : { strategy: "soft", field } },
     } as KavoContext<User>;
   }
 
   it("drops the soft-delete marker field the call context resolves, from the derived default", () => {
     // The marker is an ordinary, non-generated column whenever the ORM
     // cannot declare a delete-date column (Prisma/Mongoose/MikroORM, and
-    // `@kavo/typeorm` too when `softDelete.field` names a plain column) —
+    // `@kavo/typeorm` too when `delete.field` names a plain column) —
     // exactly the shape a `generated`-only check cannot see.
     const deserializer = new DefaultDeserializer(withMarker);
     const payload = deserializer.deserialize(
@@ -338,7 +338,7 @@ describe("DefaultDeserializer — id and soft-delete marker exclusion", () => {
   it("tracks a per-call marker override, not a value fixed at construction — the same deserializer excludes a different field for a different call", () => {
     // The regression this pins: an entity-scope-only exclusion (baked in
     // once, at bootstrap) would miss an operation or per-call
-    // `softDelete.field` override that renames the marker — reopening the
+    // `delete.field` override that renames the marker — reopening the
     // exact mass-assignment gap this class exists to close, for that one
     // config shape. One `DefaultDeserializer` instance is shared across
     // every call for an entity, so tracking the override has to happen at
@@ -501,7 +501,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
       ...userMetadata,
       fields: [...userMetadata.fields, { name: "deletedAt", kind: "date" as const, nullable: true, generated: false }],
     };
-    const config = resolveEntityConfig(withMarker, { softDelete: { field: "deletedAt" } }, undefined);
+    const config = resolveEntityConfig(withMarker, { delete: { field: "deletedAt" } }, undefined);
     const deserializer = new DefaultDeserializer<User>(withMarker);
     const payload = deserializer.deserialize(
       { deletedAt: new Date(0), name: "Ada" },
@@ -709,7 +709,7 @@ function authorNode(): IncludeNode {
     path: "author",
     fields: null,
     strategy: "join",
-    softDelete: { strategy: "hard", field: null },
+    delete: { strategy: "hard", field: null },
     children: {},
   };
 }

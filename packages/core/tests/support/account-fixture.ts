@@ -36,7 +36,7 @@ export const accountMetadataWithoutMarker: EntityMetadata<Account> = {
  * The same metadata, but as `@kavo/prisma`/`@kavo/mongoose`/`@kavo/mikroorm`
  * always report it: no `@DeleteDateColumn` equivalent exists, so the marker
  * is an ordinary `generated: false` column and `softDeleteField` is `null` —
- * only the entity-scope `softDelete.field` name resolves it.
+ * only the entity-scope `delete.field` name resolves it.
  */
 export const accountMetadataWithWritableMarker: EntityMetadata<Account> = {
   ...accountMetadata,
@@ -53,7 +53,7 @@ export const accountMetadataWithNaturalKey: EntityMetadata<Account> = {
 /**
  * A second candidate marker column (`archivedAt`), alongside the usual
  * `deletedAt` — both ordinary `generated: false` columns, `softDeleteField`
- * unset. Exists to prove `softDelete.field` is excluded at the scope it is
+ * unset. Exists to prove `delete.field` is excluded at the scope it is
  * actually *resolved* at (entity, operation, or per-call — ADR-0013), not a
  * value fixed once when the deserializer was built: an entity-scope default
  * of `deletedAt` with a per-operation override renaming the marker to
@@ -70,7 +70,7 @@ export const accountMetadataWithTwoMarkerCandidates: EntityMetadata<Account> = {
 
 /**
  * In-memory adapter that honors the resolved strategy the same way a real
- * one does: it reads `context.config.softDelete` rather than deciding for
+ * one does: it reads `context.config.delete` rather than deciding for
  * itself, so these tests exercise the engine's resolution, not a mock's
  * opinion.
  */
@@ -123,9 +123,9 @@ export class InMemoryAccountAdapter implements RepositoryAdapter<Account> {
   }
 
   async delete(id: EntityId, context: KavoContext<Account>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     const row = this.require(id, context);
-    if (softDelete.strategy === "hard") {
+    if (deleteConfig.strategy === "hard") {
       this.rows = this.rows.filter((candidate) => candidate.id !== Number(id));
       return;
     }
@@ -150,7 +150,7 @@ export class InMemoryAccountAdapter implements RepositoryAdapter<Account> {
 
   async purge(id: EntityId, context: KavoContext<Account>): Promise<void> {
     const row = this.require(id, context);
-    if (context.config.softDelete.strategy === "soft" && row.deletedAt === null) {
+    if (context.config.delete.strategy === "soft" && row.deletedAt === null) {
       throw new NotDeletedException({
         messageParams: { entity: "Account", id: String(id) },
       });
@@ -159,7 +159,7 @@ export class InMemoryAccountAdapter implements RepositoryAdapter<Account> {
   }
 
   private visible(row: Account, context: KavoContext<Account>, withDeleted: boolean, onlyDeleted = false): boolean {
-    if (context.config.softDelete.strategy !== "soft") {
+    if (context.config.delete.strategy !== "soft") {
       return true;
     }
     if (onlyDeleted) {

@@ -265,7 +265,7 @@ export function buildEntityMetadata<Entity extends object>(
     relations,
     // Mongoose declares no delete-marker path the way TypeORM's
     // `@DeleteDateColumn` does, so soft delete is always explicit
-    // `softDelete.field` configuration for this adapter, never
+    // `delete.field` configuration for this adapter, never
     // auto-detected — the same position `@kavo/prisma` is in.
     softDeleteField: null,
   };

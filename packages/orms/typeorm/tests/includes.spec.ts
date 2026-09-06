@@ -87,7 +87,7 @@ beforeAll(async () => {
     include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     include: { fields: ["blog", "notes"] },
     // Filtering across a relation path is its own allowlist decision,
     // independent of whether the relation may be included.
@@ -103,7 +103,7 @@ beforeAll(async () => {
   // A *to-one* forced to `batch`. Left on `auto` a to-one joins, so the
   // batched to-one path only exists when a config asks for it.
   batchedArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "batch" } } },
   } as never) as DefaultKavoService<Article>;
@@ -111,7 +111,7 @@ beforeAll(async () => {
   // batch. `blog.name` stays filterable to prove a filter on a key-edge
   // path still resolves through its own join.
   keyArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     include: { fields: ["blog"] },
     filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
@@ -120,7 +120,7 @@ beforeAll(async () => {
   // → each article's `blog` as a key edge.
   const nestedKavo = createTypeOrmKavo(dataSource);
   nestedKavo.createCrud(Article, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);

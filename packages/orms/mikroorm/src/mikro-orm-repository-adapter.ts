@@ -237,31 +237,31 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     withDeleted: boolean,
     onlyDeleted = false,
   ): MikroWhere {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       return where ?? {};
     }
     if (onlyDeleted) {
-      return and(where, { [softDelete.field]: { $ne: null } });
+      return and(where, { [deleteConfig.field]: { $ne: null } });
     }
     if (withDeleted) {
       return where ?? {};
     }
-    return and(where, { [softDelete.field]: { $eq: null } });
+    return and(where, { [deleteConfig.field]: { $eq: null } });
   }
 
   /** The resolved strategy, refused when an operation requires soft. */
   private requireSoftDelete(context: KavoContext<Entity>, operation: string): ResolvedSoftDelete & { field: string } {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       throw new ConfigurationException(
         context.entityName,
-        "softDelete",
+        "delete",
         `'${operation}' requires a soft-deletable entity, but '${context.entityName}' ` +
           `resolves to a hard delete strategy`,
       );
     }
-    return softDelete;
+    return deleteConfig;
   }
 
   private isDeleted(row: Record<string, unknown>, field: string): boolean {
@@ -315,7 +315,7 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
    * JSON.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
-    const softDeleteField = context.config.softDelete.field;
+    const softDeleteField = context.config.delete.field;
     const data = { ...(rawData as Record<string, unknown>) };
     delete data[this.idField];
     if (softDeleteField !== null) {
@@ -362,7 +362,7 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
       // *existing* row's identity, and the soft-delete marker is
       // `deleteOne`/`restoreOne`'s state machine to change, not an
       // ordinary property an update/patch body happens to include.
-      const softDeleteField = context.config.softDelete.field;
+      const softDeleteField = context.config.delete.field;
       const data = { ...(rawData as Record<string, unknown>) };
       delete data[this.idField];
       if (softDeleteField !== null) {
@@ -377,16 +377,16 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "hard") {
+      if (deleteConfig.strategy === "hard") {
         const affected = await this.fork().nativeDelete(this.entity, { [this.idField]: id } as never);
         if (affected === 0) {
           throw this.notFound(id, context);
         }
         return;
       }
-      const { field } = softDelete;
+      const { field } = deleteConfig;
       const existing = await this.byId(id, context, true);
       if (existing === null) {
         throw this.notFound(id, context);
@@ -428,16 +428,16 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "soft") {
+      if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        if (!this.isDeleted(existing, softDelete.field)) {
+        if (!this.isDeleted(existing, deleteConfig.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
             context: errorContext(context),
@@ -522,10 +522,10 @@ function pruneIncluded<Row>(row: Row, tree: IncludeTree): Row {
       continue;
     }
     const deleted = (candidate: unknown): boolean => {
-      if (node.softDelete.strategy !== "soft") {
+      if (node.delete.strategy !== "soft") {
         return false;
       }
-      const marker = (candidate as Record<string, unknown>)[node.softDelete.field];
+      const marker = (candidate as Record<string, unknown>)[node.delete.field];
       return marker !== null && marker !== undefined;
     };
 

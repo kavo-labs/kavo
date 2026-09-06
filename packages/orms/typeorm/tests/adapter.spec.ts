@@ -678,7 +678,7 @@ function unfilteredQuery() {
 }
 
 function hardDeleteContext() {
-  return { entityName: "Author", operation: "findOne", config: { softDelete: { strategy: "hard" } } };
+  return { entityName: "Author", operation: "findOne", config: { delete: { strategy: "hard" } } };
 }
 
 describe("TypeOrmRepositoryAdapter — findOne by query", () => {

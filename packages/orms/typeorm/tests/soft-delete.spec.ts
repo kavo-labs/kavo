@@ -91,7 +91,7 @@ beforeAll(async () => {
   await dataSource.initialize();
   const kavo = createTypeOrmKavo(dataSource);
   tickets = kavo.createCrud(Ticket, {
-    softDelete: { strategy: "soft" },
+    delete: { strategy: "soft" },
     operations: {
       createOne: true,
       deleteOne: true,
@@ -103,11 +103,11 @@ beforeAll(async () => {
     },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
-    softDelete: { field: "archivedAt" },
+    delete: { field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
   receipts = kavo.createCrud(Receipt) as DefaultKavoService<Receipt>;
   coupons = kavo.createCrud(Coupon, {
-    softDelete: { field: "retiredAt" },
+    delete: { field: "retiredAt" },
     dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
   }) as DefaultKavoService<Coupon>;
 });
@@ -129,7 +129,7 @@ beforeEach(async () => {
  * the adapter's own guards are only reachable this way.
  */
 function hardContext(operation: string) {
-  return { entityName: "Receipt", operation, config: { softDelete: { strategy: "hard" } } };
+  return { entityName: "Receipt", operation, config: { delete: { strategy: "hard" } } };
 }
 
 async function newTicket(reference = "T-1"): Promise<number> {

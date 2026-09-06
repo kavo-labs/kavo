@@ -48,7 +48,7 @@ for. The only correct granularity is the entity: drop them all.
 **1. `cache` is a new `KavoSettings` key; the store is not.**
 `cache: { ttl?, etag }` (TTL in seconds; `etag` defaults `true`) merges
 through the normal precedence chain
-and is `false`-disables-the-subtree like `softDelete` (`settings.ts`,
+and is `false`-disables-the-subtree like `delete` (`settings.ts`,
 `defaults.ts` — built-in default `{ etag: true }`, no `ttl`). The backing
 store is a `CacheStore` interface (`get(entityName,
 key)`, `set(entityName, key, value, ttlSeconds)`, `invalidate(entityName)`),
@@ -84,7 +84,7 @@ include node down to its query-decided parts, `select` and `children` (the
 relation paths are the keys), because `canonicalize` must never serialize a
 live `RelationDescriptor`. Per-call _settings_ are deliberately not in the
 key: a per-call override that reshapes a response without changing the query
-— the one known case is `softDelete.strategy` — is outside the key's
+— the one known case is `delete.strategy` — is outside the key's
 contract, stated as a documented limitation rather than silently answered
 wrong.
 
@@ -168,7 +168,7 @@ write itself. Core has no ambient logger to report through (ADR-0005).
   clients and cached clients see consistent answers; ADR-0027's
   override-inherits-the-etag rule is untouched.
 - **The documented staleness gap is per-call settings**: a per-call
-  `softDelete.strategy` override that changes what the response would be
+  `delete.strategy` override that changes what the response would be
   without changing the query is outside the key. It is a stated limitation,
   not a silent wrong answer.
 - **The shipped in-process store never sweeps.** Expiry is checked on

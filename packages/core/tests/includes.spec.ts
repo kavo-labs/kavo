@@ -185,7 +185,7 @@ describe("include resolution", () => {
     authorRows.push(authorWithPosts());
     await authors.findMany({ include: ["posts"] });
     // Author has no marker field; Post does.
-    expect(includeTree(fixture.authorAdapter)["posts"]!.softDelete).toEqual({ strategy: "soft", field: "deletedAt" });
+    expect(includeTree(fixture.authorAdapter)["posts"]!.delete).toEqual({ strategy: "soft", field: "deletedAt" });
   });
 
   it("enforces include.limits.maxDepth", async () => {

@@ -12,7 +12,7 @@ export type DeleteStrategy = "hard" | "soft";
 /**
  * The shape an entity opts into to become soft-deletable: one nullable
  * delete-marker field. The field name is `deletedAt` by convention and
- * configurable (`softDelete.field`) at any scope, so this interface is the
+ * configurable (`delete.field`) at any scope, so this interface is the
  * *documented default*, not a hard requirement — what actually decides the
  * strategy is {@link resolveSoftDelete}, which reads the resolved settings
  * against the entity's metadata.
@@ -46,10 +46,10 @@ export const HARD_DELETE: ResolvedSoftDelete = Object.freeze({
 /**
  * Resolve the delete strategy for one settings scope:
  *
- * - `softDelete: false` or `softDelete.strategy: "hard"` → always hard;
- * - `softDelete.strategy: "soft"` → soft, and a missing marker field is a
+ * - `delete: false` or `delete.strategy: "hard"` → always hard;
+ * - `delete.strategy: "soft"` → soft, and a missing marker field is a
  *   bootstrap error rather than a surprise at request time;
- * - `softDelete.strategy: "auto"` (the default) → soft when the entity
+ * - `delete.strategy: "auto"` (the default) → soft when the entity
  *   actually carries a marker field, hard otherwise.
  *
  * The marker field is the configured name when the entity has such a
@@ -63,20 +63,20 @@ export function resolveSoftDelete<Entity>(
   settings: KavoSettings,
   scope: string = metadata.name,
 ): ResolvedSoftDelete {
-  const softDelete = settings.softDelete;
-  if (softDelete === false || softDelete.strategy === "hard") {
+  const deleteConfig = settings.delete;
+  if (deleteConfig === false || deleteConfig.strategy === "hard") {
     return HARD_DELETE;
   }
 
-  const configured = softDelete.field;
+  const configured = deleteConfig.field;
   const hasConfiguredColumn = metadata.fields.some((field) => field.name === configured);
   const field = hasConfiguredColumn ? configured : (metadata.softDeleteField ?? null);
 
   if (field === null) {
-    if (softDelete.strategy === "soft") {
+    if (deleteConfig.strategy === "soft") {
       throw new ConfigurationException(
         scope,
-        "softDelete.strategy",
+        "delete.strategy",
         `'soft' requires a delete-marker field, but entity '${metadata.name}' has no ` +
           `'${configured}' column and the ORM declares no delete column`,
       );

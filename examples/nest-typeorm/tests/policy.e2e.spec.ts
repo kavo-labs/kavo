@@ -73,7 +73,7 @@ class HeaderAppContextGuard implements CanActivate {
 }
 
 @Kavo(Post, {
-  softDelete: { strategy: "soft" },
+  delete: { strategy: "soft" },
   operations: {
     createOne: { policy: isAuthenticated<Post>() },
     updateOne: {

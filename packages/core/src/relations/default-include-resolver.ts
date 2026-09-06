@@ -151,7 +151,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
           fields: this.keyFieldset(draft, request, target, issues),
           strategy: "key",
           idField: target.metadata.idField,
-          softDelete: target.config.softDelete,
+          delete: target.config.delete,
           // A `key` node materializes only the FK — there is nothing below
           // it to load, so a nested path through it is a client error, not
           // a silently-truncated tree.
@@ -165,7 +165,7 @@ export class DefaultIncludeResolver<Entity extends object = object> implements I
         path: draft.path,
         fields: this.fieldsFor(draft, request, target.config, issues),
         strategy: resolvedStrategy,
-        softDelete: target.config.softDelete,
+        delete: target.config.delete,
         children: this.build(
           draft.children,
           target.config,

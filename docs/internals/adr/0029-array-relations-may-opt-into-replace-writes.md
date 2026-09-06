@@ -42,7 +42,7 @@ reserved-discriminator pattern `SearchSettings.driver` uses for a
 not-yet-built backend — but `validate-settings.ts` rejects `"resource"` and
 `"jsonPatch"` outright today, so choosing one fails at bootstrap instead of
 silently doing nothing. `arrayMutation: false` (the same convention
-`softDelete`/`realtime` use) disables the feature wholesale.
+`delete`/`realtime` use) disables the feature wholesale.
 
 **The per-relation opt-in.** `RelationDescriptor` gains `write?: boolean`,
 config-populated via `relations.edges.<name>.write` — the same "config

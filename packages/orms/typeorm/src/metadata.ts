@@ -122,7 +122,7 @@ export function buildEntityMetadata<Entity extends object>(
     relations,
     // `@DeleteDateColumn` detection: the ORM's own declaration
     // is what makes zero-config soft delete work. Explicit
-    // `softDelete.field` config still wins over it — core decides, this
+    // `delete.field` config still wins over it — core decides, this
     // only reports.
     softDeleteField: metadata.deleteDateColumn?.propertyName ?? null,
   };

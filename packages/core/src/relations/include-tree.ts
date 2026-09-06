@@ -36,7 +36,7 @@ export interface IncludeNode {
    * excluded from includes. Root-level `withDeleted` applies to the root
    * only — a per-include `withDeleted` is deliberately out of scope in v6.
    */
-  readonly softDelete: ResolvedSoftDelete;
+  readonly delete: ResolvedSoftDelete;
   readonly children: IncludeTree;
 }
 

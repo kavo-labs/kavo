@@ -239,8 +239,8 @@ const unboundHandler = (id: OperationId, entityName: string): OperationHandler<u
  *
  * The soft-delete operations default from the config alone, never from ORM
  * metadata — and only when `operations` isn't declared at all: `restoreOne`
- * turns on when the entity config declares soft delete (`softDelete.strategy:
- * "soft"` or an explicit `softDelete.field`), `purgeOne` only when named
+ * turns on when the entity config declares soft delete (`delete.strategy:
+ * "soft"` or an explicit `delete.field`), `purgeOne` only when named
  * outright. Once `operations` is declared, naming an id — `true`, or an
  * object — is what enables it regardless of that unconditional default,
  * soft-deletable or not (the soft-delete-strategy check below still
@@ -446,11 +446,11 @@ function rejectCustomOperationKeys(
  * inheriting the built-in `strategy: "auto"` is not a declaration: `auto`
  * is answered by ORM metadata, which decoration time cannot see.
  */
-function declaresSoftDelete(config: { readonly softDelete?: unknown } | undefined): boolean {
-  const softDelete = config?.softDelete;
-  if (typeof softDelete !== "object" || softDelete === null) {
+function declaresSoftDelete(config: { readonly delete?: unknown } | undefined): boolean {
+  const deleteConfig = config?.delete;
+  if (typeof deleteConfig !== "object" || deleteConfig === null) {
     return false;
   }
-  const { strategy, field } = softDelete as { strategy?: string; field?: string };
+  const { strategy, field } = deleteConfig as { strategy?: string; field?: string };
   return strategy === "soft" || typeof field === "string";
 }

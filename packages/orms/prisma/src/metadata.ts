@@ -124,7 +124,7 @@ export function buildEntityMetadata<Entity extends object>(
     relations,
     // Prisma declares no delete-marker column the way TypeORM's
     // `@DeleteDateColumn` does — soft delete is always explicit
-    // `softDelete.field` configuration for this adapter, never
+    // `delete.field` configuration for this adapter, never
     // auto-detected.
     softDeleteField: null,
   };

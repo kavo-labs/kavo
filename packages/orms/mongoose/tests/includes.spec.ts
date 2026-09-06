@@ -72,20 +72,20 @@ beforeAll(async () => {
     include: { fields: ["articles"] },
   }) as unknown as DefaultKavoService<Blog>;
   articles = kavo.createCrud(models.Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog", "notes"] },
   } as never) as unknown as DefaultKavoService<Article>;
   kavo.createCrud(models.Note);
   // Its own root instance so this Article config does not clobber the one
   // above in the shared catalog (issue #364).
   keyArticles = createMongooseKavo(database.connection).createCrud(models.Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never) as unknown as DefaultKavoService<Article>;
   const nestedKavo = createMongooseKavo(database.connection);
   nestedKavo.createCrud(models.Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);

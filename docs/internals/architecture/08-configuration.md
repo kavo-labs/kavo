@@ -12,7 +12,7 @@ built-in defaults → global (createKavo) → entity (createCrud)
 The request-cost ceilings (filter depth, `IN` array length, `like` pattern
 length, include depth/breadth) are grouped under `limits`, and `search` is a
 top-level key, both following the `false`-disables-the-subtree convention
-`cache`/`softDelete`/`realtime`/`arrayMutation` already use ([ADR-0047](/internals/adr/0047-settings-tree-groups-limits-and-lifts-search)).
+`cache`/`delete`/`realtime`/`arrayMutation` already use ([ADR-0047](/internals/adr/0047-settings-tree-groups-limits-and-lifts-search)).
 
 `BUILT_IN_DEFAULTS` (`core/src/config/defaults.ts`):
 
@@ -32,7 +32,7 @@ top-level key, both following the `false`-disables-the-subtree convention
 | `relations.edges.<name>.write`                                     | unset (`false`)                          | `boolean \| { strategy }` — opts a to-many relation into `arrayMutation` writes, inheriting the entity default (`true`) or pinning its own strategy (`{ strategy }`, issue #223); rejected on a to-one relation                                                                                                                           |
 | `arrayMutation.strategy`                                           | unset — no built-in default (issue #221) | `"replace"` \| `"resource"` \| `"jsonPatch"` — all three are implemented; the entity-wide default a `write: true` relation inherits; a write-opted relation with no strategy resolvable anywhere demands one be declared; `false` disables the feature wholesale and wins over any per-relation override (ADR-0029, issue #223)           |
 | `cache.ttl` / `etag`                                               | unset / `true`                           | TTL result cache for `findOne`/`findMany` (a positive `ttl` turns it on, omitted = off, `ttl: 0` fails validation, `ttl: false` overrides an inherited `ttl` back off — no separate `enabled` key) + ETag on single-item responses with `If-None-Match`/`If-Match`; the result cache's backing store is **not** here (ADR-0020, ADR-0031) |
-| `softDelete.field` / `strategy`                                    | `"deletedAt"` / `"auto"`                 | `auto` = soft when the entity has the marker field, `false` disables                                                                                                                                                                                                                                                                      |
+| `delete.field` / `strategy`                                        | `"deletedAt"` / `"auto"`                 | `auto` = soft when the entity has the marker field, `false` disables                                                                                                                                                                                                                                                                      |
 | `realtime` / `.events` / `.subscribableFields` / `.onPublishError` | `false` / `{}` (unset) / unset / unset   | `false` disables the subtree; any object turns it on — no separate `enabled` key; per-operation event toggles + field allowlist; registered transports are **not** here (ADR-0023)                                                                                                                                                        |
 | `operations.<id>`                                                  | `{}` (unset)                             | global operation-enablement default (issue #38); see below                                                                                                                                                                                                                                                                                |
 | `bulk.mode` / `maxBatchSize`                                       | `"atomic"` / 500                         | reserved (bulk is not built)                                                                                                                                                                                                                                                                                                              |
@@ -48,7 +48,7 @@ Implemented in `mergeSettings` (`merge-settings.ts`):
 - Scalars and objects-as-values: nearer scope **replaces** farther scope,
   key by key — an override supplies only what it changes.
 - `false` disables an inheritable feature where the schema allows it
-  (`softDelete: false`, `operations.<id>: false` at either the global
+  (`delete: false`, `operations.<id>: false` at either the global
   boolean map or the entity scope); a nearer object re-enables.
 - Arrays replace wholesale. `undefined` scopes are skipped.
 

@@ -78,7 +78,7 @@ beforeAll(async () => {
   orm = await newTestOrm([Ticket, Invoice, Coupon]);
   const kavo = createMikroOrmKavo(orm);
   tickets = kavo.createCrud(Ticket, {
-    softDelete: { strategy: "soft", field: "deletedAt" },
+    delete: { strategy: "soft", field: "deletedAt" },
     operations: {
       createOne: true,
       deleteOne: true,
@@ -90,10 +90,10 @@ beforeAll(async () => {
     },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
-    softDelete: { strategy: "soft", field: "archivedAt" },
+    delete: { strategy: "soft", field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
   coupons = kavo.createCrud(Coupon, {
-    softDelete: { strategy: "soft", field: "retiredAt" },
+    delete: { strategy: "soft", field: "retiredAt" },
     dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
   }) as DefaultKavoService<Coupon>;
 });
@@ -115,7 +115,7 @@ describe("delete-marker detection", () => {
   it("reports no ORM-declared delete column, because MikroORM declares none", () => {
     // MikroORM's soft-delete pattern is a user-defined `@Filter`, a query
     // concern rather than a column declaration — so there is nothing for the
-    // metadata seam to detect and `softDelete.field` must be configured.
+    // metadata seam to detect and `delete.field` must be configured.
     expect(buildEntityMetadata(orm, Ticket).softDeleteField).toBeNull();
     expect(buildEntityMetadata(orm, Invoice).softDeleteField).toBeNull();
   });
@@ -123,7 +123,7 @@ describe("delete-marker detection", () => {
 
 describe("zero-config soft delete", () => {
   it("is auto-enabled by a `deletedAt` property alone, with no config at all", async () => {
-    // `softDelete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
+    // `delete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
     // `resolveSoftDelete` matches that name against the entity's own columns.
     // So an adapter reporting `softDeleteField: null` does NOT mean "soft
     // delete is off until configured" — the conventional column name turns it
@@ -142,7 +142,7 @@ describe("zero-config soft delete", () => {
   it("keeps the marker out of the derived writable projection with no config at all", async () => {
     // With no `dto` block, `deletedAt` is an ordinary non-generated column —
     // `DefaultDeserializer` excludes it by name (the resolved
-    // `softDelete.field`), not just by `generated`, so a plain patch cannot
+    // `delete.field`), not just by `generated`, so a plain patch cannot
     // stamp it and bypass `deleteOne`'s already-deleted check.
     const zeroConfig = createMikroOrmKavo(orm).createCrud(Ticket) as DefaultKavoService<Ticket>;
     const created = (await zeroConfig.createOne({ reference: "T-writable", title: "x" } as never)) as Ticket;
@@ -303,7 +303,7 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
   it("removes the row outright and refuses a missing one", async () => {
     const kavo = createMikroOrmKavo(orm);
     const hard = kavo.createCrud(Invoice, {
-      softDelete: { strategy: "hard" },
+      delete: { strategy: "hard" },
     }) as DefaultKavoService<Invoice>;
 
     const created = (await hard.createOne({ number: "INV-hard" } as never)) as Invoice;
@@ -322,7 +322,7 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
     let thrown: unknown;
     try {
       createMikroOrmKavo(orm).createCrud(Invoice, {
-        softDelete: { strategy: "hard" },
+        delete: { strategy: "hard" },
         operations: { restoreOne: true },
       });
     } catch (error) {
@@ -342,7 +342,7 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
     const hardContext = {
       entityName: "Invoice",
       operation: "restoreOne",
-      config: { softDelete: { strategy: "hard" } },
+      config: { delete: { strategy: "hard" } },
     };
 
     let thrown: unknown;
@@ -366,7 +366,7 @@ describe("MikroOrmRepositoryAdapter — hard delete", () => {
     const hardContext = {
       entityName: "Invoice",
       operation: "purgeOne",
-      config: { softDelete: { strategy: "hard" } },
+      config: { delete: { strategy: "hard" } },
     };
 
     await adapter.purge(created.id, hardContext as never);

@@ -31,7 +31,7 @@ nullability + generated flags, enum members, and relation descriptors
 (`includable: false` always). `EntityMetadata.softDeleteField` is always
 `null` — Prisma declares no delete-marker column the way
 `@DeleteDateColumn` does, so soft delete is always explicit
-`softDelete.field` configuration for this adapter, never auto-detected.
+`delete.field` configuration for this adapter, never auto-detected.
 
 ## 2. Query translation (Filter AST → Prisma `where`)
 

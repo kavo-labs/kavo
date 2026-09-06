@@ -65,7 +65,7 @@ const SETTINGS_KEYS = [
   "errors",
   "relations",
   "cache",
-  "softDelete",
+  "delete",
   "realtime",
   "arrayMutation",
   "authorization",
@@ -185,7 +185,7 @@ export function resolveEntityConfig<Entity extends object>(
     search,
     include,
     projection,
-    softDelete: resolveSoftDelete(metadata, entitySettings),
+    delete: resolveSoftDelete(metadata, entitySettings),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
@@ -1116,7 +1116,7 @@ export function describeResolvedConfig<Entity>(
     select: config.select,
     search: config.search,
     include: config.include,
-    softDelete: config.softDelete,
+    delete: config.delete,
     relations: config.relations.all().map((relation) => ({
       name: relation.name,
       cardinality: relation.cardinality,

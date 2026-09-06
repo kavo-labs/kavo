@@ -62,11 +62,11 @@ let adapter: RepositoryAdapter<Writer>;
 let articleAdapter: RepositoryAdapter<Article>;
 
 function context(operation = "patchOne") {
-  return { entityName: "Writer", operation, config: { softDelete: { strategy: "hard" } } } as never;
+  return { entityName: "Writer", operation, config: { delete: { strategy: "hard" } } } as never;
 }
 
 function articleContext(operation = "patchOne") {
-  return { entityName: "Article", operation, config: { softDelete: { strategy: "hard" } } } as never;
+  return { entityName: "Article", operation, config: { delete: { strategy: "hard" } } } as never;
 }
 
 beforeAll(async () => {

@@ -188,7 +188,7 @@ describe("KavoContext.repository — a custom handler's data access", () => {
   it("applies the soft-delete strategy the request resolved, per-call override included", async () => {
     // The claim under test is that a handler's write inherits the resolved
     // config, not the frozen entity one. `InMemoryAccountAdapter` branches
-    // on `context.config.softDelete` the way a real adapter does, so a
+    // on `context.config.delete` the way a real adapter does, so a
     // context that lost the per-call view fails here.
     const archiveConfig = {
       operations: {
@@ -213,7 +213,7 @@ describe("KavoContext.repository — a custom handler's data access", () => {
     await hard.crud.createOne({ name: "acme" } as never);
 
     await soft.crud.run("archiveOne", { id: 1 } as never);
-    await hard.crud.run("archiveOne", { id: 1 } as never, { settings: { softDelete: { strategy: "hard" } } });
+    await hard.crud.run("archiveOne", { id: 1 } as never, { settings: { delete: { strategy: "hard" } } });
 
     // Soft: the row survives, marked, and is gone from the default view.
     expect(soft.adapter.rows).toHaveLength(1);

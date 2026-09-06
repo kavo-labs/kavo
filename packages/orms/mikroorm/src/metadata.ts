@@ -242,7 +242,7 @@ export function buildEntityMetadata<Entity extends object>(
     // than a column declaration, so there is nothing here to detect.
     //
     // This is *not* the same as "soft delete is off until configured".
-    // `softDelete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
+    // `delete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
     // core matches that name against the entity's own columns — so a plain
     // `deletedAt` property enables soft delete with no config at all. What
     // reporting `null` here really costs is the ability to mark the marker

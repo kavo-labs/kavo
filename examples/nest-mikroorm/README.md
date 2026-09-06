@@ -41,7 +41,7 @@ incompatibility, not something this app's wiring can work around.
 apps, but TypeORM's `@DeleteDateColumn` says so on the entity, and MikroORM has
 no equivalent — its soft-delete pattern is a user-defined `@Filter`, which is a
 query concern rather than a column declaration. So `deletedAt` is an ordinary
-nullable property and `OwnerController` names it through `softDelete.field`.
+nullable property and `OwnerController` names it through `delete.field`.
 That one config line is what enables soft delete _and_ what puts
 `PATCH /owners/:id/restore` on the router.
 

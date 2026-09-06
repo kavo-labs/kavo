@@ -43,7 +43,7 @@ export interface PaginationSettings {
    * `[since.field, idField]` ascending, forced regardless of client `sort`.
    * Must be a `date`- or `string`-kind column on the entity, and on
    * `filter.fields`/`select.fields`; a bootstrap error otherwise
-   * (`resolveEntityConfig`), the same treatment `softDelete.field` gets.
+   * (`resolveEntityConfig`), the same treatment `delete.field` gets.
    */
   readonly since: {
     readonly field: string;
@@ -134,7 +134,7 @@ export type EtagSettings = boolean;
  * features never fight.
  *
  * `false` disables the subtree wholesale (result cache **and** etags), the
- * same convention `softDelete` uses. Otherwise the result cache is on
+ * same convention `delete` uses. Otherwise the result cache is on
  * exactly when `ttl` is a positive number: `ttl`'s presence **is** the
  * switch — there is no separate `enabled` key, and no magic number to
  * remember. An omitted `ttl` (the default) means the result cache is off;
@@ -207,7 +207,7 @@ export type RealtimeFieldSelector = readonly string[] | { readonly exclude: read
 
 /**
  * Realtime event publishing. `false` disables the subtree entirely, the
- * same convention `softDelete` uses; any object enables it — there is no
+ * same convention `delete` uses; any object enables it — there is no
  * separate `enabled` switch inside.
  *
  * Registered transports are **not** a key here, unlike `events`/
@@ -296,7 +296,7 @@ export interface ArrayMutationSettings {
  * `authorization.required` only fills the gap where `policy`'s own fallback
  * chain (operation → entity → global) resolved to nothing at all, it never
  * overrides a resolved policy. `false` is not accepted here (unlike
- * `cache`/`realtime`/`softDelete`): there is nothing else in this subtree to
+ * `cache`/`realtime`/`delete`): there is nothing else in this subtree to
  * disable wholesale, so the plain object is always the shape.
  */
 export interface AuthorizationSettings {
@@ -318,11 +318,11 @@ export interface KavoSettings {
   readonly relations: RelationSettings;
   /** Result caching + the conditional-request subtree (ADRs 0020/0031). */
   readonly cache: CacheSettings | false;
-  readonly softDelete: SoftDeleteSettings | false;
+  readonly delete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;
   /**
    * `false` disables array-relation mutation entirely, the same convention
-   * `softDelete`/`realtime` use. Even when set, a strategy only applies to
+   * `delete`/`realtime` use. Even when set, a strategy only applies to
    * relations that opt in via `relations.edges.<name>.write: true`
    * (ADR-0014's Consequences section) — declaring a strategy here grants no
    * relation anything by itself.

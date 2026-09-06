@@ -572,7 +572,7 @@ describe("policy — malformed id still gets the engine's usual 400, not a polic
 describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () => {
   it("evaluates an owner-style check on restoreOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
-      softDelete: { strategy: "soft" },
+      delete: { strategy: "soft" },
       operations: { createOne: true, deleteOne: true, restoreOne: { policy: isOwner<Account>("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);
@@ -585,7 +585,7 @@ describe("policy — restoreOne/purgeOne pre-fetch sees soft-deleted rows", () =
 
   it("evaluates an owner-style check on purgeOne against the soft-deleted row instead of always 404ing", async () => {
     const { crud, adapter } = makeAccountCrud({
-      softDelete: { strategy: "soft" },
+      delete: { strategy: "soft" },
       operations: { createOne: true, deleteOne: true, purgeOne: { policy: isOwner<Account>("name") } },
     } as never);
     await crud.createOne({ name: "u-1" } as never);

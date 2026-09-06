@@ -104,7 +104,7 @@ and name it in config; that is what generates `PATCH /books/:id/restore`
 (ADR-0013):
 
 ```ts
-@Kavo(Book, { softDelete: { field: "deletedAt" } })
+@Kavo(Book, { delete: { field: "deletedAt" } })
 @Controller("books")
 export class BookController {}
 ```

@@ -11,7 +11,7 @@ import type { Pet } from "../pet/pet.entity.js";
  * Owners are soft-deletable, but — unlike the TypeORM example's `Owner`,
  * which only needs `@DeleteDateColumn` — nothing in a MikroORM entity can
  * declare a delete marker. `deletedAt` is an ordinary nullable property and
- * `OwnerController` names it through `softDelete.field`; that config is the
+ * `OwnerController` names it through `delete.field`; that config is the
  * only thing that turns it into the marker (doc 17 §5).
  *
  * Caveat worth seeing in a reference app: a soft-deleted owner still
@@ -46,7 +46,7 @@ export class Owner {
   @Property({ type: "Date", onCreate: () => new Date() })
   createdAt!: Date;
 
-  /** The soft-delete marker, named by `OwnerController`'s `softDelete.field`. */
+  /** The soft-delete marker, named by `OwnerController`'s `delete.field`. */
   @Property({ type: "Date", nullable: true })
   deletedAt: Date | null = null;
 }

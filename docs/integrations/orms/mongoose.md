@@ -94,7 +94,7 @@ MongoDB's primary key is `_id`, and `@kavo/mongoose` renders every `ObjectId` as
 Mongoose has no `@DeleteDateColumn` equivalent, so add an ordinary path and name it in config:
 
 ```ts
-@Kavo(Book, { softDelete: { field: "deletedAt" } })
+@Kavo(Book, { delete: { field: "deletedAt" } })
 @Controller("books")
 export class BookController {}
 ```

@@ -83,7 +83,7 @@ beforeAll(async () => {
   // string. The interfaces above are the shape the service actually
   // returns, which is what these tests assert.
   tickets = kavo.createCrud(models.Ticket, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     operations: {
       createOne: true,
       deleteOne: true,
@@ -95,10 +95,10 @@ beforeAll(async () => {
     },
   }) as unknown as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(models.Invoice, {
-    softDelete: { field: "archivedAt" },
+    delete: { field: "archivedAt" },
   }) as unknown as DefaultKavoService<Invoice>;
   coupons = kavo.createCrud(models.Coupon, {
-    softDelete: { field: "retiredAt" },
+    delete: { field: "retiredAt" },
     dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
   }) as unknown as DefaultKavoService<Coupon>;
 });
@@ -306,7 +306,7 @@ describe("MongooseRepositoryAdapter — hard-delete contexts assembled by hand",
   }
 
   function hardContext(operation: string) {
-    return { entityName: "Invoice", operation, config: { softDelete: { strategy: "hard" } } };
+    return { entityName: "Invoice", operation, config: { delete: { strategy: "hard" } } };
   }
 
   it("refuses restore outright on a hard-delete entity instead of silently no-opping", async () => {

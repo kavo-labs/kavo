@@ -176,7 +176,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
         include[node.relation.name] = { select: { [node.idField!]: true } };
         continue;
       }
-      const where = node.softDelete.strategy === "soft" ? { [node.softDelete.field]: null } : undefined;
+      const where = node.delete.strategy === "soft" ? { [node.delete.field]: null } : undefined;
       const children = this.buildInclude(node.children);
       if (where === undefined && children === undefined) {
         include[node.relation.name] = true;
@@ -195,18 +195,18 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     withDeleted: boolean,
     onlyDeleted = false,
   ): PrismaWhere | undefined {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       return where;
     }
     if (onlyDeleted) {
-      const deleted = { [softDelete.field]: { not: null } };
+      const deleted = { [deleteConfig.field]: { not: null } };
       return where === undefined ? deleted : { AND: [where, deleted] };
     }
     if (withDeleted) {
       return where;
     }
-    const live = { [softDelete.field]: null };
+    const live = { [deleteConfig.field]: null };
     if (where === undefined) {
       return live;
     }
@@ -215,16 +215,16 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
 
   /** The resolved strategy, refused when an operation requires soft. */
   private requireSoftDelete(context: KavoContext<Entity>, operation: string): ResolvedSoftDelete & { field: string } {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       throw new ConfigurationException(
         context.entityName,
-        "softDelete",
+        "delete",
         `'${operation}' requires a soft-deletable entity, but '${context.entityName}' ` +
           `resolves to a hard delete strategy`,
       );
     }
-    return softDelete;
+    return deleteConfig;
   }
 
   private isDeleted(row: Record<string, unknown>, field: string): boolean {
@@ -273,7 +273,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
    * JSON.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
-    const softDeleteField = context.config.softDelete.field;
+    const softDeleteField = context.config.delete.field;
     const data = { ...(rawData as Record<string, unknown>) };
     delete data[this.idField];
     if (softDeleteField !== null) {
@@ -311,7 +311,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
       // *existing* row's identity, and the soft-delete marker is
       // `deleteOne`/`restoreOne`'s state machine to change, not an
       // ordinary column an update/patch body happens to include.
-      const softDeleteField = context.config.softDelete.field;
+      const softDeleteField = context.config.delete.field;
       const data = { ...(rawData as Record<string, unknown>) };
       delete data[this.idField];
       if (softDeleteField !== null) {
@@ -324,9 +324,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
   }
 
   async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "hard") {
+      if (deleteConfig.strategy === "hard") {
         const existing = await this.byId(id, context, false);
         if (existing === null) {
           throw this.notFound(id, context);
@@ -334,7 +334,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
         await this.delegate.delete({ where: { [this.idField]: id } });
         return;
       }
-      const { field } = softDelete;
+      const { field } = deleteConfig;
       const existing = await this.byId(id, context, true);
       if (existing === null) {
         throw this.notFound(id, context);
@@ -371,16 +371,16 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
   }
 
   async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "soft") {
+      if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        if (!this.isDeleted(existing, softDelete.field)) {
+        if (!this.isDeleted(existing, deleteConfig.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
             context: errorContext(context),

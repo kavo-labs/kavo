@@ -110,7 +110,7 @@ let articleAdapter: RepositoryAdapter<Article>;
 let studioAdapter: RepositoryAdapter<Studio>;
 
 function context(operation = "replaceNovels") {
-  return { entityName: "Writer", operation, config: { softDelete: { strategy: "hard" } } } as never;
+  return { entityName: "Writer", operation, config: { delete: { strategy: "hard" } } } as never;
 }
 
 /** A plain-marker-column soft-deletable context, unlike `context()` above. */
@@ -118,7 +118,7 @@ function studioContext(operation: string) {
   return {
     entityName: "Studio",
     operation,
-    config: { softDelete: { strategy: "soft", field: "archivedAt" } },
+    config: { delete: { strategy: "soft", field: "archivedAt" } },
   } as never;
 }
 
@@ -232,7 +232,7 @@ describe("TypeOrmRepositoryAdapter#replaceRelation (arrayMutation's replace stra
     // `replaceRelation` even though the row still physically exists.
     const { writerId } = await seed();
     const [novel] = await dataSource.getRepository(Novel).save([{ title: "Ghost" }]);
-    await dataSource.getRepository(Novel).softDelete(novel!.id);
+    await dataSource.getRepository(Novel).delete(novel!.id);
 
     await expect(adapter.replaceRelation!(writerId, "novels", [novel!.id], context())).rejects.toThrowError(
       NotFoundException,
@@ -241,7 +241,7 @@ describe("TypeOrmRepositoryAdapter#replaceRelation (arrayMutation's replace stra
 });
 
 function articleContext(operation = "replaceTopics") {
-  return { entityName: "Article", operation, config: { softDelete: { strategy: "hard" } } } as never;
+  return { entityName: "Article", operation, config: { delete: { strategy: "hard" } } } as never;
 }
 
 async function seedArticle(): Promise<{ articleId: number; topicIds: number[] }> {

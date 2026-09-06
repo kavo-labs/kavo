@@ -56,9 +56,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   /**
    * The `@DeleteDateColumn` property, when the entity declares one. It is
    * what decides *how* a soft delete is written: TypeORM's own
-   * `softDelete`/`restore` (which also stamp `@UpdateDateColumn` and know
+   * `delete`/`restore` (which also stamp `@UpdateDateColumn` and know
    * about the default exclusion) for the declared column, a plain column
-   * write for a `softDelete.field` that is an ordinary column.
+   * write for a `delete.field` that is an ordinary column.
    */
   private readonly deleteDateColumn: string | null;
   /** Kept for batch loading, which re-enters through the DataSource. */
@@ -232,7 +232,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     // Soft-deleted related rows are excluded from includes — spelled out
     // rather than left to TypeORM's default, because a root `withDeleted`
     // must not silently widen the relation too.
-    const live = node.softDelete.strategy === "soft" ? `${alias}.${node.softDelete.field} IS NULL` : undefined;
+    const live = node.delete.strategy === "soft" ? `${alias}.${node.delete.field} IS NULL` : undefined;
     qb.leftJoinAndSelect(`${parentAlias}.${node.relation.name}`, alias, live);
     translator?.registerJoin(alias);
     this.joinIncludes(qb, node.children, alias, translator);
@@ -332,13 +332,13 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     withDeleted: boolean,
     onlyDeleted = false,
   ): void {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       return;
     }
-    if (softDelete.field === this.deleteDateColumn) {
+    if (deleteConfig.field === this.deleteDateColumn) {
       if (onlyDeleted) {
-        qb.withDeleted().andWhere(`${this.alias}.${softDelete.field} IS NOT NULL`);
+        qb.withDeleted().andWhere(`${this.alias}.${deleteConfig.field} IS NOT NULL`);
         return;
       }
       if (withDeleted) {
@@ -347,11 +347,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       return;
     }
     if (onlyDeleted) {
-      qb.andWhere(`${this.alias}.${softDelete.field} IS NOT NULL`);
+      qb.andWhere(`${this.alias}.${deleteConfig.field} IS NOT NULL`);
       return;
     }
     if (!withDeleted) {
-      qb.andWhere(`${this.alias}.${softDelete.field} IS NULL`);
+      qb.andWhere(`${this.alias}.${deleteConfig.field} IS NULL`);
     }
   }
 
@@ -427,16 +427,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
 
   /** The resolved strategy, refused when an operation requires soft. */
   private requireSoftDelete(context: KavoContext<Entity>, operation: string): ResolvedSoftDelete & { field: string } {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       throw new ConfigurationException(
         context.entityName,
-        "softDelete",
+        "delete",
         `'${operation}' requires a soft-deletable entity, but '${context.entityName}' ` +
           `resolves to a hard delete strategy`,
       );
     }
-    return softDelete;
+    return deleteConfig;
   }
 
   private isDeleted(row: Entity, field: string): boolean {
@@ -471,7 +471,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * loaded: this is a client-input problem, not a state one.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
-    const data = stripImmutableKeys(rawData, this.compositeIdFields ?? [this.idField], context.config.softDelete.field);
+    const data = stripImmutableKeys(rawData, this.compositeIdFields ?? [this.idField], context.config.delete.field);
     if (Object.keys(data).length === 0) {
       throw new PatchNoChangesException({
         messageParams: { entity: context.entityName, id: String(id) },
@@ -507,11 +507,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       // *existing* row's identity, and the soft-delete marker is
       // `deleteOne`/`restoreOne`'s state machine to change, not an
       // ordinary column an update/patch body happens to include.
-      const data = stripImmutableKeys(
-        rawData,
-        this.compositeIdFields ?? [this.idField],
-        context.config.softDelete.field,
-      );
+      const data = stripImmutableKeys(rawData, this.compositeIdFields ?? [this.idField], context.config.delete.field);
       // Everything the body carried may have been the id and/or the marker
       // — TypeORM's `update` rejects an empty value set outright, and there
       // is nothing left to change: the current row, unmodified, is the
@@ -536,16 +532,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "hard") {
+      if (deleteConfig.strategy === "hard") {
         const result = await this.repository.delete(this.updateCriteria(id) as never);
         if (result.affected === 0) {
           throw this.notFound(id, context);
         }
         return;
       }
-      const { field } = softDelete;
+      const { field } = deleteConfig;
       const existing = await this.byId(id, context, true).getOne();
       if (existing === null) {
         throw this.notFound(id, context);
@@ -557,7 +553,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         });
       }
       if (field === this.deleteDateColumn) {
-        // softRemove over the already-loaded row (not softDelete(id)): it
+        // softRemove over the already-loaded row (not delete(id)): it
         // goes through the same subject-persist path as `save`, so
         // @DeleteDateColumn entities get their soft-remove lifecycle hooks,
         // matching restore's `recover` counterpart below.
@@ -599,16 +595,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "soft") {
+      if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true).getOne();
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        if (!this.isDeleted(existing, softDelete.field)) {
+        if (!this.isDeleted(existing, deleteConfig.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
             context: errorContext(context),

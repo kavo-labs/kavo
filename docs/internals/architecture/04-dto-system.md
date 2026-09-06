@@ -62,7 +62,7 @@ the defaults derive from:
   ordinary writable field with no other guard. The id is fixed metadata,
   so its exclusion is resolved once; the marker is an ordinary settings key
   (entity → operation → per-call, like any other), so `DefaultDeserializer`
-  reads it off `context.config.softDelete.field` **at deserialize time**,
+  reads it off `context.config.delete.field` **at deserialize time**,
   per call — the same scope the request's own soft-delete strategy
   resolves at — not a value baked in once at bootstrap, so a per-operation
   or per-call override that renames the marker stays covered. Generated

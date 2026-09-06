@@ -501,7 +501,7 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
       pagination: { defaultLimit: 20, maxLimit: 100, strategy, count: true },
       errors: { exposeInternals: false },
       relations: { edges: {} },
-      softDelete: false,
+      delete: false,
       operations: {},
     } as unknown as KavoSettings;
     return {
@@ -514,7 +514,7 @@ describe("QueryNormalizer — cursor pagination requires a total order", () => {
       select: { ...DEFAULT_FIELD_GROUPS.select, ...fieldGroups.select },
       sortDefault: defaultSort,
       search: false,
-      softDelete: { strategy: "hard", field: "deletedAt" },
+      delete: { strategy: "hard", field: "deletedAt" },
       dto: { resolve: () => null },
       relations: { all: () => [], get: () => undefined },
     } as unknown as ResolvedEntityConfig<User>;
