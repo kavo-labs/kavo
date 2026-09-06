@@ -139,6 +139,6 @@ Not part of `KavoSettings` either, and not nested under `allowed` — the write-
 
 See [Allowed](/features/allowed).
 
-## dto / computed / operations (entity scope)
+## dto / operations (entity scope)
 
-`dto`, `computed`, and the per-entity form of `operations` aren't settings either. They're structural `EntityConfig` fields resolved once at `createCrud`/`@Kavo`. See [DTOs](/core/dtos), [Computed fields](/features/computed-fields#computed), and [CRUD operations](/core/crud-operations).
+`dto` and the per-entity form of `operations` aren't settings either. They're structural `EntityConfig` fields resolved once at `createCrud`/`@Kavo`. See [DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
