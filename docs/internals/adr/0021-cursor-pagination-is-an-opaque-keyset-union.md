@@ -296,6 +296,21 @@ contract stays "return exactly what the query asks for", and an adapter —
 including a third-party one — needs no cursor awareness beyond honouring
 `readFilter`.
 
+**The advance guard raises `KAVO_PAGINATION_NOT_ADVANCING`, a 500 of its
+own.** When `listMeta` computes a `nextCursor` equal to the one the request
+carried, the page did not advance — a client following `meta.nextCursor`
+would loop forever — so the engine refuses rather than answering. The two
+causes above (an adapter reading `query.filter` instead of
+`readFilter(query)`; a sort column whose stored values do not compare
+against the bound cursor value, the text-date case below) both land here,
+and the catalog message names both. It stays a **500** — nothing the client
+sends makes the request succeed, which rules out a 4xx — but it is **not**
+`KAVO_CONFIG_INVALID` (issue #193): the same entity, config, and request
+served page 1, so this is a data- or adapter-dependent fault, not a
+bootstrap misconfiguration, and conflating the two sent operators to audit a
+startup path that was never wrong. The guard was previously
+`KAVO_CONFIG_INVALID`; reassigning it is a wire-visible code change.
+
 **6. `ListResultDto.offset` is `0` on a cursor page.** The field is
 non-nullable and normative, and a keyset page genuinely has no absolute
 position in the match set. `0` is the honest reading of "how many rows
@@ -362,5 +377,5 @@ keyset strategy under another name is not caught.
   but kept reading `query.filter` rather than `readFilter(query)` returns
   rows `1..limit` on every request, so `hasMore` never goes false and a
   client following `nextCursor` never terminates. `KavoEngine.listMeta`
-  raises `ConfigurationException` when the token it just computed equals the
-  one the request carried.
+  raises `PaginationNotAdvancingException` (`KAVO_PAGINATION_NOT_ADVANCING`, 500) when the token it just computed equals the one the request carried —
+  see §5 for why that is its own code and not `KAVO_CONFIG_INVALID`.

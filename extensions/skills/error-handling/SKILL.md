@@ -23,7 +23,9 @@ KavoException (abstract; implements the KavoExceptionShape contract)
 ├─ BulkOperationException       carries items[] (reserved — bulk not built)
 ├─ PersistenceException
 ├─ TransactionException         carries retryable: boolean
-└─ ConfigurationException       bootstrap-only, never a wire response
+├─ ConfigurationException       bootstrap-only, never a wire response
+└─ PaginationNotAdvancingException   cursor page produced its own token → 500
+                                     (ADR-0021 §5); data-/adapter-dependent
 ```
 
 Every leaf binds exactly one catalog code; status, title, and message
@@ -37,24 +39,25 @@ on framework exception types.
 
 Codes are API surface — renaming one is a breaking (semver) change.
 
-| Code                            | HTTP | Fires when                                                                      | Payload extensions                |
-| ------------------------------- | ---- | ------------------------------------------------------------------------------- | --------------------------------- |
-| `KAVO_QUERY_INVALID`            | 400  | Any query grammar/allowlist/limit violation (aggregate)                         | `errors[]` of the sub-codes below |
-| `KAVO_QUERY_INVALID_FIELD`      | 400  | Field not on the filter/sort/select allowlist                                   | issue-level                       |
-| `KAVO_QUERY_INVALID_OPERATOR`   | 400  | Unknown or misspelled wire operator                                             | issue-level                       |
-| `KAVO_QUERY_INVALID_VALUE`      | 400  | Coercion failure, malformed bounds, bad pagination value                        | issue-level                       |
-| `KAVO_QUERY_LIMIT_EXCEEDED`     | 400  | `limits.filterDepth` / `limits.inValues` exceeded                               | issue-level                       |
-| `KAVO_QUERY_UNSUPPORTED_PARAM`  | 400  | `withDeleted` on a hard-delete entity; `include` with no include resolver wired | issue-level                       |
-| `KAVO_NOT_FOUND`                | 404  | Target row missing on `findOne`/`updateOne`/`patchOne`/`deleteOne`              | —                                 |
-| `KAVO_CONFLICT`                 | 409  | Unique/FK violation mapped by the adapter                                       | —                                 |
-| `KAVO_ALREADY_DELETED`          | 409  | Soft-deleting an already-deleted row                                            | —                                 |
-| `KAVO_NOT_DELETED`              | 409  | Restoring or purging a row that is not deleted                                  | —                                 |
-| `KAVO_OPERATION_DISABLED`       | 405  | Programmatic/HTTP call to a disabled registry entry                             | —                                 |
-| `KAVO_OPERATION_NOT_REGISTERED` | 405  | Programmatic call naming an operation the registry has no entry for at all      | —                                 |
-| `KAVO_BULK_FAILED`              | 422  | Atomic bulk failure (reserved — bulk is not built)                              | `items[]` per-index issues        |
-| `KAVO_PERSISTENCE_FAILED`       | 500  | Unrecognized adapter/driver error                                               | `cause` kept internally           |
-| `KAVO_TRANSACTION_FAILED`       | 500  | Deadlock/serialization failure                                                  | `retryable` flag                  |
-| `KAVO_CONFIG_INVALID`           | 500  | Bootstrap config error — fails startup, never a response                        | —                                 |
+| Code                            | HTTP | Fires when                                                                                                | Payload extensions                |
+| ------------------------------- | ---- | --------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `KAVO_QUERY_INVALID`            | 400  | Any query grammar/allowlist/limit violation (aggregate)                                                   | `errors[]` of the sub-codes below |
+| `KAVO_QUERY_INVALID_FIELD`      | 400  | Field not on the filter/sort/select allowlist                                                             | issue-level                       |
+| `KAVO_QUERY_INVALID_OPERATOR`   | 400  | Unknown or misspelled wire operator                                                                       | issue-level                       |
+| `KAVO_QUERY_INVALID_VALUE`      | 400  | Coercion failure, malformed bounds, bad pagination value                                                  | issue-level                       |
+| `KAVO_QUERY_LIMIT_EXCEEDED`     | 400  | `limits.filterDepth` / `limits.inValues` exceeded                                                         | issue-level                       |
+| `KAVO_QUERY_UNSUPPORTED_PARAM`  | 400  | `withDeleted` on a hard-delete entity; `include` with no include resolver wired                           | issue-level                       |
+| `KAVO_NOT_FOUND`                | 404  | Target row missing on `findOne`/`updateOne`/`patchOne`/`deleteOne`                                        | —                                 |
+| `KAVO_CONFLICT`                 | 409  | Unique/FK violation mapped by the adapter                                                                 | —                                 |
+| `KAVO_ALREADY_DELETED`          | 409  | Soft-deleting an already-deleted row                                                                      | —                                 |
+| `KAVO_NOT_DELETED`              | 409  | Restoring or purging a row that is not deleted                                                            | —                                 |
+| `KAVO_OPERATION_DISABLED`       | 405  | Programmatic/HTTP call to a disabled registry entry                                                       | —                                 |
+| `KAVO_OPERATION_NOT_REGISTERED` | 405  | Programmatic call naming an operation the registry has no entry for at all                                | —                                 |
+| `KAVO_BULK_FAILED`              | 422  | Atomic bulk failure (reserved — bulk is not built)                                                        | `items[]` per-index issues        |
+| `KAVO_PERSISTENCE_FAILED`       | 500  | Unrecognized adapter/driver error                                                                         | `cause` kept internally           |
+| `KAVO_TRANSACTION_FAILED`       | 500  | Deadlock/serialization failure                                                                            | `retryable` flag                  |
+| `KAVO_CONFIG_INVALID`           | 500  | Bootstrap config error — fails startup, never a response                                                  | —                                 |
+| `KAVO_PAGINATION_NOT_ADVANCING` | 500  | Cursor page produced the token it was given; following `meta.nextCursor` would loop forever (ADR-0021 §5) | —                                 |
 
 ## Error context & message strategy
 
