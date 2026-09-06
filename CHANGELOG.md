@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.21.0](https://github.com/kavo-labs/kavo/compare/v0.20.0...v0.21.0) (2026-09-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** `KavoSettings.authorization` and the `AuthorizationSettings` type are removed from `@kavo/core`. Configs setting `authorization: { required: true }` at any scope must drop it and configure `policy` explicitly where a default-deny posture is wanted.
+* **core,nest:** `arrayMutation: { strategy: S }` plus `relations: { edges: { r: { write: true } } }` becomes `relations: { r: { write: { strategy: S } } }`. `relations: { edges: { r: { maxDepth, strategy } } }` becomes `relations: { r: { read: { maxDepth, strategy } } }`. A global arrayMutation default has no replacement — each entity names the strategy on the relation.
+
+### Features
+
+* **core,nest:** fold arrayMutation and relations.edges into EntityConfig.relations ([#404](https://github.com/kavo-labs/kavo/issues/404)) ([#405](https://github.com/kavo-labs/kavo/issues/405)) ([36d94e6](https://github.com/kavo-labs/kavo/commit/36d94e64cfb09f2b6b05d4e5d7e56ba2a82721b9))
+* **core:** add KAVO_PAGINATION_NOT_ADVANCING for the cursor advance guard ([#420](https://github.com/kavo-labs/kavo/issues/420)) ([a703481](https://github.com/kavo-labs/kavo/commit/a7034811a1c975ba2a5a1a94416808a601724976))
+* **core:** raise FieldPath default recursion cap from 3 to 5 ([#418](https://github.com/kavo-labs/kavo/issues/418)) ([a5bf872](https://github.com/kavo-labs/kavo/commit/a5bf872896b44880c220b707bc1d0719ba9c1570))
+* **core:** remove the authorization.required default-deny switch ([#414](https://github.com/kavo-labs/kavo/issues/414)) ([30fb681](https://github.com/kavo-labs/kavo/commit/30fb681a806dafeeb7e2fadddb37aa15f899c53f))
+
+
+### Bug Fixes
+
+* **core:** narrow the per-operation settings scope ([#416](https://github.com/kavo-labs/kavo/issues/416)) ([9077852](https://github.com/kavo-labs/kavo/commit/90778529fbaa320165fda94f61891ef225e98b4d))
+
+
+### CI
+
+* bump actions/checkout from 4 to 7 ([#407](https://github.com/kavo-labs/kavo/issues/407)) ([376bf1e](https://github.com/kavo-labs/kavo/commit/376bf1efbfbfb7d3e6aebbcf59351bb3d3c1089d))
+* bump actions/setup-node from 4 to 7 ([#408](https://github.com/kavo-labs/kavo/issues/408)) ([26f13cd](https://github.com/kavo-labs/kavo/commit/26f13cdf17809f3e3601ab7857e74a6cc938d8d5))
+* bump pnpm/action-setup from 4 to 6 ([#409](https://github.com/kavo-labs/kavo/issues/409)) ([dfba960](https://github.com/kavo-labs/kavo/commit/dfba9607e49fef6d1921822ee087ec9532a28c46))
+
 ## [0.20.0](https://github.com/kavo-labs/kavo/compare/v0.19.0...v0.20.0) (2026-09-06)
 
 
