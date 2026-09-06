@@ -29,7 +29,6 @@ const PUBLIC_SURFACE: readonly string[] = [
   "ArrayMutationRelationEntry",
   "ArrayMutationStrategy",
   "AssociationInvalidShapeException",
-  "AuthorizationSettings",
   "BUILT_IN_DEFAULTS",
   "CacheSettings",
   "CacheStore",

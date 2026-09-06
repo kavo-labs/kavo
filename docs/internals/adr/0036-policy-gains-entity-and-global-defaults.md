@@ -7,8 +7,7 @@ out) is unchanged, but `PolicyNode` is gone: every scope now takes a plain
 `Policy<Entity>` function. Kept for history. (While it stood, this
 supersedes [ADR-0033](/internals/adr/0033-policy-moves-to-operation-scope-only)
 and amends [ADR-0032](/internals/adr/0032-policy-authorization-dsl)'s "Config
-surface" section and [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch)'s
-closing Consequence.)
+surface" section.)
 
 ## Context
 
@@ -19,9 +18,7 @@ ADR-0033 removed the entity-scope surface: the map never had content of its
 own the way `dto`'s entity-derived default does, so it was only ever a
 second place to type the same per-operation rule, and a config that set both
 read as a trap rather than a feature. Since then, `operations.<id>.policy`
-has been the only surface, and `policy` has had no global scope at all —
-ADR-0035 said so explicitly when it declined to nest `authorization.required`
-under `policy` for exactly that reason.
+has been the only surface, and `policy` has had no global scope at all.
 
 In practice, the common case an entity's authors reach for is not "a
 different rule per operation" but "the same rule on every write" —
@@ -55,8 +52,8 @@ unrestricted.
   tree is deep-frozen and merged field-by-field, which would corrupt a
   discriminated union's shape rather than replace it wholesale.
 - `GlobalConfig.policy?: PolicyNode` — the root-level default, set at
-  `createKavo({ policy })`. **Deliberately not a `KavoSettings` field**,
-  unlike `authorization.required`: `GlobalConfig.defaults` is typed
+  `createKavo({ policy })`. **Deliberately not a `KavoSettings` field**:
+  `GlobalConfig.defaults` is typed
   `DeepPartial<KavoSettings>`, and `DeepPartialValue`'s conditional
   distributes over a union, so `DeepPartial<PolicyNode>` would partialize
   every branch of the discriminated union independently — `{ type?:
@@ -107,34 +104,6 @@ unrestricted.
   reasoning is ADR-0032's, unchanged: a per-call parameter able to loosen a
   policy would let a caller weaken its own authorization.
 
-### Interaction with `authorization.required` (ADR-0035)
-
-ADR-0035's `authorization.required` is unaffected in mechanism: it fires
-only when the policy stage's per-operation lookup finds nothing, i.e. `node
-=== undefined` — after this ADR, that still means "operation scope said
-nothing, entity scope said nothing, global scope said nothing." An entity or
-global default now closes that gap more often than before, but the switch
-itself does not change: an operation with an _explicit_ `policy` (its own,
-or an inherited default) is still unaffected by `required` either way, and
-an operation `false`'d back to unrestricted is, correctly,
-**still exempt from `authorization.required`** — `false` resolves to `node
-=== undefined` for `checkPolicy`'s purposes (there is no rule, by the
-caller's own explicit choice), the same as an operation that never had a
-`policy` entry at all. This is intentional, not an oversight: `required`
-denies a _gap_ (nothing considered), while `false` is a considered decision
-to leave the operation open despite an inherited default; conflating the two
-would remove the one way this ADR gives an author to say "this one really is
-public."
-
-ADR-0035's Consequences bullet ("This does not reopen ADR-0032's 'no global
-`policy`' decision … `authorization.required` is a sibling switch over what
-happens when that map has nothing to say") is superseded by this ADR:
-`policy` **does** now have a global scope. The two mechanisms remain
-orthogonal, though, and that half of ADR-0035's reasoning still holds:
-`authorization.required` is not how a global default is populated — it
-still only governs the _absence_ of any policy at all, resolved _after_
-this ADR's fallback chain has already run and found nothing.
-
 ## Consequences
 
 - `EntityConfig.policy` returns as a public field, with a different shape
@@ -151,7 +120,6 @@ this ADR's fallback chain has already run and found nothing.
   `docs/guides/configuration/index.md`, and
   `docs/internals/architecture/08-configuration.md` are updated to show the
   three-scope form.
-- Nothing about the engine's enforcement point, pre-fetch behavior, 404-vs-403
-  handling, or `authorization.required`'s own mechanism changes — this ADR
-  is entirely about where a `PolicyNode` may be _declared_, not how one is
-  _evaluated_.
+- Nothing about the engine's enforcement point, pre-fetch behavior, or
+  404-vs-403 handling changes — this ADR is entirely about where a
+  `PolicyNode` may be _declared_, not how one is _evaluated_.

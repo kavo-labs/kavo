@@ -127,15 +127,6 @@ dynamically-built config might produce that the type system cannot catch.
 `EntityConfig`/`GlobalConfig` declare no other shape for `policy`, so a
 TypeScript caller gets a compile error for a malformed value already.
 
-`authorization.required` (ADR-0035) is unaffected in mechanism: it still
-fires only when the policy stage's per-operation lookup finds nothing after
-all three scopes have been walked, and an operation `false`'d back to
-unrestricted is still exempt from it — `false` is a considered decision to
-leave the operation open, not a gap. Both of ADR-0035's amendments from
-ADR-0036 (the interaction with a resolved default, and the "policy does now
-have a global scope" correction) carry forward unchanged; only the value
-type at each scope changed, from `PolicyNode` to `Policy`.
-
 ## Consequences
 
 - This is a breaking change to a public API with no back-compat shim: every

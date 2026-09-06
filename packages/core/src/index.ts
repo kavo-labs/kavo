@@ -76,7 +76,6 @@ export type { ProblemDetailsDto, QueryIssueDto } from "./errors/problem-details.
 export type {
   KavoSettings,
   ArrayMutationStrategy,
-  AuthorizationSettings,
   CacheSettings,
   EtagSettings,
   ErrorSettings,

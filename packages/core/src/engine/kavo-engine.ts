@@ -337,19 +337,8 @@ export class KavoEngine<Entity extends object> {
    * The policy stage (ADR-0037): looks up `configView.policy[operation]`
    * (already resolved nearest-scope-wins across operation/entity/global) and,
    * when it found one, evaluates it before anything else runs. An id with no
-   * entry is unrestricted by default — but denies with `ForbiddenException`
-   * instead when `configView.settings.authorization.required` is `true`
-   * (ADR-0035): a standard operation id with nothing resolved, under that
-   * switch, is treated as "forgot to configure this," not "meant to leave it
-   * open." The same switch also gates a Kavo-synthesized array-mutation
-   * operation (`replace<Relation>` etc.), which can never carry a
-   * `policy.<id>` entry of its own (`resolvePolicy` only recognizes standard
-   * ids) but is a real mutating write with a Kavo-supplied handler behind
-   * it, not an app-authored one. An **ordinary** custom operation
-   * (app-declared via `EntityConfig.operations`, not synthesized) is
-   * unaffected either way — the policy is `undefined` for it too, but the
-   * `required` branch only fires for a standard or array-mutation id, so its
-   * own handler keeps deciding for itself.
+   * entry is unrestricted by default — the opt-in posture every Kavo default
+   * takes.
    *
    * A configured policy on any single-row operation always gets the loaded
    * row: since a plain function can't be inspected for whether it reads
@@ -394,18 +383,9 @@ export class KavoEngine<Entity extends object> {
     const applyFilter =
       standard && descriptor.kind === "write" && request.id !== null ? configView.filter.apply : undefined;
     if (policy === undefined && applyFilter === undefined) {
-      // `authorization.required` also gates the array-mutation operations
-      // Kavo itself synthesizes (`replace<Relation>` etc., ADR-0014/0029) —
-      // never a `policy.<id>` entry, since `resolvePolicy` only recognizes
-      // standard operation ids, but a Kavo-supplied handler with no
-      // app-authored code behind it, unlike an ordinary custom operation
-      // (ADR-0035's amendment). No per-relation opt-out exists: an
-      // array-mutation id is synthesized after `operations.<id>` config is
-      // resolved, so it can never be named there either.
-      const gated = standard || descriptor.meta.arrayMutation !== undefined;
-      if (gated && configView.settings.authorization.required) {
-        this.denyForbidden(descriptor.id, configView, context);
-      }
+      // An operation with no resolved `policy.<id>` (and no mandatory
+      // `filter.apply`) runs unrestricted — the opt-in posture every Kavo
+      // default takes.
       return;
     }
     if (descriptor.id === "findOne") {
@@ -472,7 +452,7 @@ export class KavoEngine<Entity extends object> {
     }
   }
 
-  /** The policy stage's one denial shape — a configured rule that failed, or (ADR-0035) no rule where one is required. */
+  /** The policy stage's one denial shape — a configured rule that evaluated to `false`. */
   private denyForbidden(
     operation: OperationId,
     configView: ResolvedEntityConfig<Entity>,
@@ -934,16 +914,6 @@ export class KavoEngine<Entity extends object> {
     let settings: KavoSettings = base;
     if (overrides !== undefined) {
       settings = mergeSettings(base, overrides);
-      // Immune to per-call override, the same reasoning ADR-0037
-      // applies to `policy` itself: a per-call parameter that
-      // could loosen enforcement would let a caller weaken its own
-      // authorization, so the whole subtree is pinned to whatever
-      // global/entity/operation already resolved rather than merged.
-      settings = { ...settings, authorization: base.authorization };
-      // Pinned ahead of validation, deliberately: a malformed per-call
-      // `authorization` override (e.g. a non-boolean `required`) is
-      // already discarded above, so there is nothing of it left to
-      // reject — `validateSettings` below never sees it.
       const scope = `${config.entityName} (per-call)`;
       validateSettings(scope, settings);
     }
