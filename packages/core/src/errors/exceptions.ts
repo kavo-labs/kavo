@@ -309,3 +309,21 @@ export class ConfigurationException extends KavoException {
     });
   }
 }
+
+/**
+ * A cursor page produced the same token it was handed, so a client following
+ * `meta.nextCursor` would loop forever and the engine refuses (ADR-0021 §5).
+ * Still a 500 — nothing the client sends makes the request succeed — but a
+ * code of its own rather than `KAVO_CONFIG_INVALID`: the trigger is a data
+ * row or a half-migrated adapter, not a bootstrap misconfiguration (issue
+ * #193). The actionable two-cause text is the catalog template, keyed on
+ * `{entity}` alone.
+ */
+export class PaginationNotAdvancingException extends KavoException {
+  constructor(entity: string) {
+    super("KAVO_PAGINATION_NOT_ADVANCING", {
+      messageParams: { entity },
+      context: { entityName: entity },
+    });
+  }
+}

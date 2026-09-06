@@ -13,6 +13,7 @@ import type {
 import {
   ConfigurationException,
   CursorPaginationStrategy,
+  PaginationNotAdvancingException,
   QueryNormalizer,
   WireQuery,
   createKavo,
@@ -1025,7 +1026,7 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     return { crud, adapter };
   }
 
-  it("throws ConfigurationException instead of handing back the token it was given", async () => {
+  it("throws PaginationNotAdvancingException instead of handing back the token it was given", async () => {
     const { crud } = ignoringCrud();
     await seed(crud as never, 5);
 
@@ -1037,9 +1038,14 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
 
     // Page 2 re-derives the same boundary row, which is where a client
     // following `nextCursor` would begin looping.
-    await expect(
-      (crud as never as ReturnType<typeof cursorCrud>["crud"]).findMany({ limit: 2, cursor: token } as never),
-    ).rejects.toBeInstanceOf(ConfigurationException);
+    const error = await (crud as never as ReturnType<typeof cursorCrud>["crud"])
+      .findMany({ limit: 2, cursor: token } as never)
+      .catch((thrown: unknown) => thrown);
+    expect(error).toBeInstanceOf(PaginationNotAdvancingException);
+    // A data-/adapter-dependent 500 with its own code — not the bootstrap
+    // `KAVO_CONFIG_INVALID` it used to borrow (#193).
+    expect((error as PaginationNotAdvancingException).code).toBe("KAVO_PAGINATION_NOT_ADVANCING");
+    expect((error as PaginationNotAdvancingException).status).toBe(500);
   });
 
   it("names the adapter contract that was broken, so the message is actionable", async () => {
@@ -1067,12 +1073,16 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     const token = nextCursorOf(await client.findMany({ limit: 2 } as never));
 
     const error = await client.findMany({ limit: 2, cursor: token } as never).catch((thrown: unknown) => thrown);
-    const message = (error as ConfigurationException).message;
+    const message = (error as PaginationNotAdvancingException).message;
     expect(message).toMatch(/ORDER BY/);
     expect(message).toMatch(/sort column/);
   });
 
-  it("still reports the entity and the config path the failure belongs to", async () => {
+  it("still reports the entity and stays a 500 the client cannot retry away", async () => {
+    // The failure is data-/adapter-dependent, not a misconfigured `pagination`
+    // key, so the message no longer claims a config path — but it still names
+    // the entity, and it is still a 500: nothing the client sends fixes it
+    // (#193, and Option 3 — a 4xx — was rejected).
     const { crud } = ignoringCrud();
     await seed(crud as never, 5);
 
@@ -1080,8 +1090,9 @@ describe("cursor pagination fails loudly when a page does not advance (ADR-0021)
     const token = nextCursorOf(await client.findMany({ limit: 2 } as never));
 
     const error = await client.findMany({ limit: 2, cursor: token } as never).catch((thrown: unknown) => thrown);
-    expect(error).toBeInstanceOf(ConfigurationException);
-    expect((error as ConfigurationException).message).toContain("User");
-    expect((error as ConfigurationException).message).toContain("pagination.strategy");
+    expect(error).toBeInstanceOf(PaginationNotAdvancingException);
+    expect((error as PaginationNotAdvancingException).message).toContain("User");
+    expect((error as PaginationNotAdvancingException).context.entityName).toBe("User");
+    expect((error as PaginationNotAdvancingException).status).toBe(500);
   });
 });

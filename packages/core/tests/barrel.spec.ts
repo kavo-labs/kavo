@@ -186,6 +186,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "PagePaginationStrategy",
   "Pagination",
   "PaginationLimits",
+  "PaginationNotAdvancingException",
   "PaginationSettings",
   "PaginationStrategy",
   "PaginationStrategyName",
