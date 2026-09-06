@@ -5,7 +5,7 @@ import type { EntityCatalog } from "../metadata/entity-catalog.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
-import { entityWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
+import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
 
 const NO_RELATIONS: ReadonlySet<string> = new Set<string>();
@@ -315,7 +315,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // association. `EntityConfig.create.fields`/`update.fields`'s
     // `{ exclude }` form subtracts from this same set (issue #397), so both
     // sides read it from one place.
-    this.writableProjection = entityWritableFieldNames(metadata);
+    this.writableProjection = derivedWritableFieldNames(metadata);
   }
 
   deserialize<Shape>(raw: unknown, dto: DtoClass<Shape & object> | null, context: KavoContext<Entity>): Shape {

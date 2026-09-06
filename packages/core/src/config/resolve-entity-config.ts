@@ -20,7 +20,7 @@ import type {
   ResolvedSelectConfig,
   ResolvedSortConfig,
 } from "./resolved-entity-config.js";
-import { entityWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
+import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { FilterExpression, FilterOperator, FilterOperatorToken } from "../query/filter.js";
@@ -111,7 +111,7 @@ export function resolveEntityConfig<Entity extends object>(
   // The `{ exclude }` form of `create.fields`/`update.fields` (issue #397)
   // is resolved to a concrete array here, against the same writable-field
   // universe `DefaultDeserializer` enforces — so the two never drift.
-  const writableUniverse = entityWritableFieldNames(metadata);
+  const writableUniverse = derivedWritableFieldNames(metadata);
   const createFields = resolveWriteFields(entityName, "create.fields", entityConfig?.create, writableUniverse);
   const updateFields = resolveWriteFields(entityName, "update.fields", entityConfig?.update, writableUniverse);
   rejectDerivedWriteDtoKeys(entityName, metadata, entityConfig, createFields, updateFields);

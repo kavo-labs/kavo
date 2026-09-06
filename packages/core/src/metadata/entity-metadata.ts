@@ -84,10 +84,12 @@ export interface EntityMetadata<Entity = unknown> {
 
 /**
  * The writable-field universe a `createOne`/`updateOne` body may set when
- * no DTO class narrows it (ADR-0014): every non-generated scalar column
- * except the single primary key — a composite natural key is kept, since
- * the client supplies it on `createOne` — plus every relation, writable by
- * association.
+ * no DTO class narrows it (ADR-0014): every non-generated, non-derived
+ * scalar column except the single primary key — a composite natural key is
+ * kept, since the client supplies it on `createOne` — plus every relation,
+ * writable by association. A `derivedExpression` field (issue #373) has no
+ * backing storage column to write to, so it is excluded here the same way
+ * `generated` is.
  *
  * This is the exact set `DefaultDeserializer` strips an unknown write key
  * against, and the universe `EntityConfig.create.fields`/`update.fields`'s
@@ -99,7 +101,10 @@ export interface EntityMetadata<Entity = unknown> {
 export function derivedWritableFieldNames<Entity>(metadata: EntityMetadata<Entity>): readonly string[] {
   const columns = metadata.fields
     .filter(
-      (field) => !field.generated && (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
+      (field) =>
+        !field.generated &&
+        field.derivedExpression === undefined &&
+        (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
     )
     .map((field) => field.name);
   return [...columns, ...metadata.relations.map((relation) => relation.name)];
