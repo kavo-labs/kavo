@@ -169,8 +169,21 @@ describes (`defaultInclude` vs. `allowed.includable`) still holds verbatim,
 just re-homed: `defaults.include` names must still be on `allowed.includable`,
 checked by the same `validateDefaults` (renamed from `validateDefaultSort`)
 this ADR's `validateIncludableRelations` was folded into. `relations.edges`
-now carries only `maxDepth`/`strategy`/`write` — no permission, no default,
-loading tuning only. See ADR-0046 for the full decision.
+carried only `maxDepth`/`strategy`/`write` after that — no permission, no
+default, loading tuning only. See ADR-0046 for the full decision.
+
+## Amendment (issue #404)
+
+`relations.edges` no longer exists. Issue #404 folded per-relation loading
+tuning and the array-mutation write strategy into one entity-scope
+`EntityConfig.relations` block (`{ [relation]: { read?: { maxDepth?,
+strategy? }, write?: { strategy } } }`), off the `KavoSettings` precedence
+chain entirely — see ADR-0029's own "config surface folds into
+`EntityConfig.relations`" amendment. This ADR's decision is unchanged:
+inclusion **permission** is still `include.fields`'s alone, and a
+`relations.<name>` entry that only tunes still grants nothing. The
+fail-fast check for an unknown relation name simply reports under
+`relations.<name>` now instead of `relations.edges.<name>`.
 
 ## References
 

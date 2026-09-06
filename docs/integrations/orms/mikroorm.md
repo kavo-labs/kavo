@@ -156,7 +156,7 @@ MikroORM nests relation paths in its own query language, so `filter[author.name]
 ```ts
 @Kavo(Book, {
   allowed: { filterable: ["title", "author.name"] },
-  relations: { edges: { author: { includable: true } } },
+  allowed: { includable: ["author"] },
 })
 ```
 

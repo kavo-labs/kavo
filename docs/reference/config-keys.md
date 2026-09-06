@@ -26,7 +26,7 @@ See [Pagination](/querying/pagination) and [Settings](/guides/configuration/sett
 | `limits.includeDepth`  | `number` | `2`     |
 | `limits.includedNodes` | `number` | `10`    |
 
-The request-cost ceilings: a filter's nesting depth, an `IN`/`NOT_IN`/`BETWEEN` array's length, a `like`/`ilike` pattern's character length, and relation-include depth/breadth. `limits.includeDepth` is overridable per-subtree by `relations.edges.<name>.maxDepth`, below. See [Filtering](/querying/filtering), [Relations](/features/relations).
+The request-cost ceilings: a filter's nesting depth, an `IN`/`NOT_IN`/`BETWEEN` array's length, a `like`/`ilike` pattern's character length, and relation-include depth/breadth. `limits.includeDepth` is overridable per-subtree by `relations.<name>.read.maxDepth`, below. See [Filtering](/querying/filtering), [Relations](/features/relations).
 
 ## search
 
@@ -48,13 +48,35 @@ See [Errors](/reference/errors).
 
 ## relations
 
-| Key                               | Type                                   | Default                        |
-| --------------------------------- | -------------------------------------- | ------------------------------ |
-| `relations.edges.<name>.maxDepth` | `number`                               | inherits `limits.includeDepth` |
-| `relations.edges.<name>.strategy` | `"auto" \| "join" \| "batch" \| "key"` | `"auto"`                       |
-| `relations.edges.<name>.write`    | `boolean \| { strategy }`              | `false`                        |
+Entity scope only — not a `KavoSettings` key.
 
-Whether a relation is includable at all is `allowed.includable` (entity scope only); see [Reference/Config keys §allowed](#allowed-entity-scope-only). Which includable relations load by default is `defaults.include`, below. `relations.edges` is loading tuning only for a relation that is already includable — no permission, no default. `strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null. `write: true` inherits the entity's own `arrayMutation.strategy`. `write: { strategy }` pins this relation's own strategy instead, independent of the entity default (issue #223). See [Relations](/features/relations).
+| Key                               | Type                                     | Default                        |
+| --------------------------------- | ---------------------------------------- | ------------------------------ |
+| `relations.<name>.read.maxDepth`  | `number`                                 | inherits `limits.includeDepth` |
+| `relations.<name>.read.strategy`  | `"auto" \| "join" \| "batch" \| "key"`   | `"auto"`                       |
+| `relations.<name>.write.strategy` | `"replace" \| "resource" \| "jsonPatch"` | — (relation is not writable)   |
+
+Structural entity-scope config (issue #404, folding the former
+`relations.edges` and `arrayMutation` `KavoSettings` keys into one block) —
+keyed by the entity's own relation names, resolved directly at bootstrap,
+never merged through the global → operation → per-call chain and with no
+global default. An entry that tunes nothing (`{}`) is a bootstrap error.
+
+`read` tunes how an already-includable relation loads. Whether a relation
+is includable at all is `allowed.includable`; which includable relations
+load by default is `defaults.include` — neither lives here. `read.strategy:
+"key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has
+no local FK — bootstrap error): it materializes the edge as `{ <pk>: value
+}` read from the parent row's own foreign-key column, no join, `null` when
+the FK is null.
+
+`write.strategy` opts a to-many relation into array-mutation writes and
+names the strategy in one statement — there is no entity-level default and
+no boolean form; omitting `write` is how a relation stays non-array-mutable.
+`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `write`
+on a to-one relation is a bootstrap error (association by id already covers
+those). Write **permission** for a relation is the `create`/`update` field
+lists and registered write DTOs, not this key. See [Relations](/features/relations).
 
 ## defaults
 
@@ -65,15 +87,6 @@ Whether a relation is includable at all is `allowed.includable` (entity scope on
 | `defaults.include` | `string[]` (relation names)                    | `[]`                           |
 
 What a request looks like when the client specifies nothing — applied only when the request omits that axis; a client-supplied value replaces it outright, never merges. `defaults.sort` takes the same wire shorthand `sort=` does (`-field` for descending). `defaults.select` fields must be on `allowed.selectable`; `defaults.include` relations must be on `allowed.includable`. See [Sorting](/querying/sorting), [Field selection](/querying/field-selection), [Relations](/features/relations).
-
-## arrayMutation
-
-| Key                      | Type                                     | Default                     |
-| ------------------------ | ---------------------------------------- | --------------------------- |
-| `arrayMutation`          | `{ strategy } \| false`                  | `{}`                        |
-| `arrayMutation.strategy` | `"replace" \| "resource" \| "jsonPatch"` | unset (no built-in default) |
-
-`"replace"`, `"jsonPatch"`, and `"resource"` are all implemented. `arrayMutation.strategy` is the entity-wide default a `relations.edges.<name>.write: true` relation inherits. A relation opted in with no strategy resolvable anywhere (no entity default and no `write: { strategy }` of its own) requires one be declared explicitly (issue #221). `arrayMutation: false` disables the feature wholesale and wins over any per-relation override (issue #223). See [Relations#arrayMutation](/features/relations#arraymutation).
 
 ## cache
 

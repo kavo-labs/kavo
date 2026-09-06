@@ -5,7 +5,7 @@ Before v0.10, `relations.edges.<name>.includable: true` was how you opted a rela
 To migrate:
 
 1. Move each opted-in relation name to `allowed.includable` (see [Allowed](/features/allowed)).
-2. Keep any `maxDepth` or `strategy` on `relations.edges.<name>` exactly where it was.
+2. Move any `maxDepth` or `strategy` to `EntityConfig.relations.<name>.read` (issue #404 — the `relations.edges` `KavoSettings` key is gone; see [Relations](/features/relations)).
 
 `allowed.includable` is entity-scope-only config; there's no global `defaults` and no per-operation override. So a permission that used to come from a global default now needs its own `createCrud`/`@Kavo` registration per entity.
 
