@@ -484,10 +484,15 @@ class KavoBinder implements OnModuleInit {
           applyConditionalRequestDocs(prototype, methodName, descriptor, route, isEtagEnabled(settings.cache));
           // Fallback request-body schema (issue #264) — only when decoration
           // time had no DTO to document (`bodyDtoFor` resolved `null`
-          // there too, from the same decoration-time config); re-derived
-          // rather than stashed, since it's a pure function of the
-          // decoration-time config already sitting in `metadata.config`.
+          // there too, from the same decoration-time config). The field
+          // lists are read from the engine's *resolved* DTO resolver
+          // (`service.engine.config.dto`), not the decoration-time one: a
+          // `create.fields`/`update.fields` `{ exclude }` form (#397) can
+          // only be expanded to concrete field names once ORM metadata
+          // exists, which is now — so this documents the narrowed set the
+          // engine actually enforces rather than the full writable base.
           if (bodyDtoFor(descriptor, dtoResolver) === null) {
+            const resolvedDto = service.engine.config.dto;
             applyBodySchemaDocs(
               prototype,
               methodName,
@@ -495,10 +500,10 @@ class KavoBinder implements OnModuleInit {
               service.engine.metadata,
               {
                 creatable:
-                  shorthandFieldsOf(dtoResolver.resolve("create", descriptor.id)) ??
+                  shorthandFieldsOf(resolvedDto.resolve("create", descriptor.id)) ??
                   writableBaseOf(service.engine.metadata),
                 updatable:
-                  shorthandFieldsOf(dtoResolver.resolve("update", descriptor.id)) ??
+                  shorthandFieldsOf(resolvedDto.resolve("update", descriptor.id)) ??
                   writableBaseOf(service.engine.metadata),
               },
               relationTargetMetadata,
