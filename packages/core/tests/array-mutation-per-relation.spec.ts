@@ -226,6 +226,50 @@ describe("DefaultRelationRegistry — relations block validation", () => {
     );
   });
 
+  it("rejects a read.maxDepth that is not a positive integer, naming relations.<name>.read.maxDepth", () => {
+    for (const value of [0, -1, 1.5, "2" as never, null as never]) {
+      try {
+        new DefaultRelationRegistry(postsRelation, [], { posts: { read: { maxDepth: value } } }, "Author");
+        throw new Error("expected a ConfigurationException");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ConfigurationException);
+        expect((error as ConfigurationException).messageParams).toMatchObject({
+          path: "relations.posts.read.maxDepth",
+        });
+      }
+    }
+  });
+
+  it("accepts a positive-integer read.maxDepth", () => {
+    expect(
+      () => new DefaultRelationRegistry(postsRelation, [], { posts: { read: { maxDepth: 3 } } }, "Author"),
+    ).not.toThrow();
+  });
+
+  it("rejects a read.strategy outside join/batch/key/auto, naming relations.<name>.read.strategy", () => {
+    try {
+      new DefaultRelationRegistry(postsRelation, [], { posts: { read: { strategy: "eager" as never } } }, "Author");
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.posts.read.strategy",
+      });
+    }
+  });
+
+  it("accepts each documented read.strategy", () => {
+    for (const strategy of ["join", "batch", "auto"] as const) {
+      expect(
+        () => new DefaultRelationRegistry(postsRelation, [], { posts: { read: { strategy } } }, "Author"),
+      ).not.toThrow();
+    }
+  });
+
+  it("skips an undefined entry rather than treating it as a bare one", () => {
+    expect(() => new DefaultRelationRegistry(postsRelation, [], { posts: undefined }, "Author")).not.toThrow();
+  });
+
   it("rejects an unknown write.strategy, naming relations.<name>.write.strategy", () => {
     try {
       new DefaultRelationRegistry(postsRelation, [], { posts: { write: { strategy: "bogus" as never } } }, "Author");
