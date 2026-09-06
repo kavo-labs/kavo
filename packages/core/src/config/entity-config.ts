@@ -371,6 +371,28 @@ export interface SearchConfig<Entity> {
 }
 
 /**
+ * Every `KavoSettings` key a per-operation (or per-call) scope could carry
+ * — the whole tree except the global `operations` enablement map, which is
+ * boolean-only global state (issue #38).
+ */
+type SettingsSubtreeKey = Exclude<keyof KavoSettings, "operations">;
+
+/**
+ * A per-operation settings scope narrowed to the keys the operation
+ * actually consumes (issue #415). Keys in `Allowed` carry their normal
+ * `DeepPartial<KavoSettings>` value; every other settings key is pinned to
+ * `never`, so naming one on an operation entry is a compile error rather
+ * than a value that resolves into `settingsFor(op)` and is then silently
+ * ignored. The `never` pin — rather than a plain `Pick` of `Allowed` — is
+ * what makes the custom-operation intersection (`Ops[Id] &
+ * CustomOperationConfig<…>`, via {@link CustomOperationsOf}) actually
+ * reject a stray key: `<real value> & never` collapses to `never`.
+ */
+type OperationSettings<Allowed extends SettingsSubtreeKey> = {
+  readonly [K in SettingsSubtreeKey]?: K extends Allowed ? DeepPartial<KavoSettings>[K] : never;
+};
+
+/**
  * Per-operation configuration.
  * Naming a standard id in the parent `operations` record — this object, or
  * the `true`/`false` shorthand — is what enables or disables it (ADR-0038,
@@ -380,14 +402,22 @@ export interface SearchConfig<Entity> {
  *
  * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
  * `OperationDtoOverride` — only the fields that operation actually
- * supports (issue #131). It defaults to the full override shape so a bare
- * `OperationConfig<Entity>` (used where no specific operation id is in
- * scope) still type-checks.
+ * supports (issue #131). `Allowed` is the same idea for the settings
+ * subtree (issue #415): `StandardOperationsConfig` passes each id only the
+ * `KavoSettings` keys that id's engine stages read — `pagination` to
+ * `findMany` alone, `cache` to the reads, `realtime` to the writes,
+ * `delete` to the reads and the delete family (the operations whose
+ * behavior the resolved soft-delete view changes — `kavo-engine.ts`
+ * `configViewFor`), and `errors` to all. Both parameters default to the
+ * full shape so a bare `OperationConfig<Entity>` (used where no specific
+ * operation id is in scope — the `OperationsConfig` index signature's
+ * permissive upper bound) still type-checks.
  */
-export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOverride> extends Omit<
-  DeepPartial<KavoSettings>,
-  "operations"
-> {
+export type OperationConfig<
+  Entity = unknown,
+  DtoOverride = OperationDtoOverride,
+  Allowed extends SettingsSubtreeKey = SettingsSubtreeKey,
+> = OperationSettings<Allowed> & {
   /** Replacement handler — keeps the default DTO/serialization scaffolding. */
   readonly handler?: OperationHandler<Entity>;
   /** Opaque metadata consumed by the framework layer (route options). */
@@ -414,7 +444,7 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
    * `findMany` the policy still runs, with `entity: undefined`.
    */
   readonly policy?: Policy<Entity> | false;
-}
+};
 
 /**
  * The `operations` map's per-id DTO override shapes (issue #131): each
@@ -424,6 +454,27 @@ export interface OperationConfig<Entity = unknown, DtoOverride = OperationDtoOve
  * get neither, so setting `dto` on them is a type error before it is ever
  * a bootstrap one. The `true`/`false` shorthand is still accepted at every
  * id (ADR-0038, issue #257), for a plain enable/disable with no settings attached.
+ *
+ * The third `OperationConfig` argument narrows the settings subtree the
+ * same way (issue #415): each id names only the `KavoSettings` keys its
+ * engine stages read —
+ *
+ * - `pagination` on `findMany` alone — the sole operation the query
+ *   normalizer applies a page window for.
+ * - `realtime` on every write (`REALTIME_EVENT_BY_OPERATION`, `purgeOne`
+ *   included); a read emits nothing.
+ * - `delete` on the reads and the delete family — the operations
+ *   `configViewFor` resolves a soft-delete view for; a per-operation
+ *   `strategy` override is a shipped feature (`soft-delete.spec.ts`).
+ *   `createOne`/`updateOne`/`patchOne` consult no soft-delete strategy.
+ * - `cache` and `errors` on every id: `cache` is not narrowed because its
+ *   `etag` half governs `If-Match`/`304` on every single-row operation,
+ *   the void deletes included (`isEtagEnabled`), not just the reads its
+ *   `ttl` half caches (`isCacheableRead`).
+ *
+ * A key an id does not name is pinned to `never`, so `findOne: { pagination:
+ * … }` or `createOne: { delete: false }` is a compile error rather than a
+ * silently-dropped value.
  *
  * Unlike the root `dto` map, a per-operation override is **not** narrowed
  * against the entity's own `CreateDto`/`ItemDto`/etc. — those generics are
@@ -450,16 +501,27 @@ export interface StandardOperationsConfig<
   ItemDto = Entity,
   _ListDto = ItemDto,
 > {
-  readonly createOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
-  readonly findOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">> | boolean;
-  readonly findMany?: OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">> | boolean;
-  readonly updateOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
-  readonly patchOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">> | boolean;
+  readonly createOne?:
+    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
+  readonly findOne?:
+    OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">, "errors" | "cache" | "delete"> | boolean;
+  readonly findMany?:
+    | OperationConfig<
+        Entity,
+        Pick<OperationDtoOverride, "output" | "query">,
+        "errors" | "cache" | "delete" | "pagination"
+      >
+    | boolean;
+  readonly updateOne?:
+    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
+  readonly patchOne?:
+    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
   /** Void result, no query — no `dto` override is representable. */
-  readonly deleteOne?: OperationConfig<Entity, never> | boolean;
-  readonly restoreOne?: OperationConfig<Entity, Pick<OperationDtoOverride, "output">> | boolean;
+  readonly deleteOne?: OperationConfig<Entity, never, "errors" | "cache" | "realtime" | "delete"> | boolean;
+  readonly restoreOne?:
+    OperationConfig<Entity, Pick<OperationDtoOverride, "output">, "errors" | "cache" | "realtime" | "delete"> | boolean;
   /** Void result, no query — no `dto` override is representable. */
-  readonly purgeOne?: OperationConfig<Entity, never> | boolean;
+  readonly purgeOne?: OperationConfig<Entity, never, "errors" | "cache" | "realtime" | "delete"> | boolean;
 }
 
 /**
@@ -485,11 +547,21 @@ export interface StandardOperationsConfig<
  *   query resolution), and the mismatch is a bootstrap
  *   `ConfigurationException` rather than a type error, because `kind` is a
  *   value here and the standard eight's `Pick` is not available.
+ * - the settings subtree it accepts (issue #415) is narrowed by the `Kind`
+ *   and `Cardinality` this entry declares — see {@link CustomOperationSettingsKey}.
+ *   `Ops` carries `kind`/`cardinality` as literals from the caller's own
+ *   object, so {@link CustomOperationsOf} reads them back and passes them
+ *   here, the same route `CustomOperationResult` already uses to type
+ *   `run`'s envelope.
  *
  * A custom operation is reachable over HTTP through `meta.routes`
  * (`@kavo/nest`) and in code through `KavoService.run`.
  */
-export interface CustomOperationConfig<Entity = unknown> extends Omit<DeepPartial<KavoSettings>, "operations"> {
+export type CustomOperationConfig<
+  Entity = unknown,
+  Kind extends OperationKind = OperationKind,
+  Cardinality extends OperationCardinality = OperationCardinality,
+> = OperationSettings<CustomOperationSettingsKey<Kind, Cardinality>> & {
   /** Registered but inert when `false` — the same seam a standard id has. */
   readonly enabled?: boolean;
   /**
@@ -514,7 +586,38 @@ export interface CustomOperationConfig<Entity = unknown> extends Omit<DeepPartia
   readonly dto?: OperationDtoOverride;
   /** Opaque metadata consumed by the framework layer (route options). */
   readonly meta?: OperationMetadata;
-}
+};
+
+/**
+ * The `KavoSettings` keys a *custom* operation's config may carry, from its
+ * declared `kind`/`cardinality` (issue #415). `errors` and `cache` are
+ * always in scope — a custom response is serialized and ETagged like any
+ * other, even though `cache`'s `ttl` half never caches it
+ * (`isCacheableRead` refuses any id but `findOne`/`findMany`). A
+ * `kind: "read"` entry additionally gets `delete` — `configViewFor`
+ * resolves a soft-delete view for every read, custom ones included — and,
+ * when its result goes through the list envelope (`cardinality: "many"`),
+ * `pagination`, the one case the query normalizer applies a page window to.
+ * A `kind: "write"` custom operation drives its own writes through
+ * `context.repository`, so a resolved `delete` view changes nothing for it.
+ * `realtime` is never in scope: `REALTIME_EVENT_BY_OPERATION`'s vocabulary
+ * is closed to the standard writes.
+ *
+ * Both parameters distribute, so the wide default
+ * (`OperationKind`/`OperationCardinality`, used for the bare
+ * `CustomOperationConfig<Entity>` in `OperationsConfig`'s index-signature
+ * upper bound) resolves to `"errors" | "cache" | "delete" | "pagination"` —
+ * permissive enough to be an upper bound, while a concrete entry's own
+ * literals give the exact row.
+ */
+type CustomOperationSettingsKey<
+  Kind extends OperationKind,
+  Cardinality extends OperationCardinality,
+> = Kind extends "read"
+  ? Cardinality extends "many"
+    ? "errors" | "cache" | "delete" | "pagination"
+    : "errors" | "cache" | "delete"
+  : "errors" | "cache";
 
 /**
  * The whole `operations` map: the standard eight at their own precise
@@ -571,10 +674,26 @@ export type OperationsConfig<
  * (`EntityConfig<Book>`, `Parameters<typeof createCrud>[1]`). Mapping over
  * `string` there would demand a handler from *every* key including the
  * standard eight, so those spellings contribute nothing extra.
+ *
+ * Each mapped entry also reads `Ops[Id]`'s own `kind`/`cardinality`
+ * literals and passes them to `CustomOperationConfig`, so the settings
+ * subtree it accepts is the row {@link CustomOperationSettingsKey} names
+ * for that combination (issue #415): `errors`/`cache` always, `delete` on
+ * any `kind: "read"`, `pagination` also on a `kind: "read", cardinality:
+ * "many"` entry, `realtime` never. A missing `kind`/`cardinality` reads as
+ * the `"write"`/`"one"` default, exactly as the engine resolves it.
+ * `Ops` is already inferred here (see above), so this is another read off a
+ * known type, not a constraint that would collapse inference.
  */
 export type CustomOperationsOf<Entity, Ops> = string extends keyof Ops
   ? unknown
-  : { readonly [Id in Exclude<keyof Ops, StandardOperationId>]: CustomOperationConfig<Entity> };
+  : {
+      readonly [Id in Exclude<keyof Ops, StandardOperationId>]: CustomOperationConfig<
+        Entity,
+        Ops[Id] extends { readonly kind: infer K extends OperationKind } ? K : "write",
+        Ops[Id] extends { readonly cardinality: infer C extends OperationCardinality } ? C : "one"
+      >;
+    };
 
 /**
  * Raw entity-scope configuration — the second argument to `createCrud`.
