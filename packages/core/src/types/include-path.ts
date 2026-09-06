@@ -47,8 +47,9 @@ type IncludeInto<T, Depth extends 0 | FieldPathDepth> =
  * `'posts.comments'`, `'posts.author.posts'`.
  *
  * The relation-only sibling of {@link FieldPath} — same recursion counter,
- * same default depth 3 and hard maximum 5 (ADR-0008), same degradation to
- * `string` for `any`/`unknown`/index-signature entities. Scalar properties
+ * same default depth and hard maximum, both 5 (ADR-0008, revised by
+ * ADR-0051), same degradation to `string` for `any`/`unknown`/
+ * index-signature entities. Scalar properties
  * are excluded: `include` addresses relations, and `'name'` being rejected
  * at compile time is the point.
  *
@@ -56,4 +57,4 @@ type IncludeInto<T, Depth extends 0 | FieldPathDepth> =
  * a relation may actually be included is decided at runtime by the relation
  * registry's `includable` flag and the include-depth budget.
  */
-export type IncludePath<Entity, MaxDepth extends FieldPathDepth = 3> = IncludeInto<Entity, MaxDepth>;
+export type IncludePath<Entity, MaxDepth extends FieldPathDepth = 5> = IncludeInto<Entity, MaxDepth>;

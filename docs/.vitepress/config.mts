@@ -431,6 +431,10 @@ const config = defineConfig({
                 text: "0050 — Derived fields come from ORM metadata; core stays expression-agnostic",
                 link: "/internals/adr/0050-derived-fields-come-from-orm-metadata",
               },
+              {
+                text: "0051 — FieldPath's default recursion cap raised from 3 to 5",
+                link: "/internals/adr/0051-fieldpath-default-cap-raised-to-five",
+              },
             ],
           },
         ],

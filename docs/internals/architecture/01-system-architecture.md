@@ -269,23 +269,23 @@ Kavo is **not**:
 
 ## 9. ADR index
 
-| ADR                                                              | Decision                                                  |
-| ---------------------------------------------------------------- | --------------------------------------------------------- |
-| [0001](../adr/0001-clean-architecture-core-owns-contracts.md)    | Clean architecture: core owns all contracts               |
-| [0002](../adr/0002-package-topology.md)                          | Three packages under `orms/` / `frameworks/` parents      |
-| [0003](../adr/0003-pnpm-plain-scripts-tsc-build.md)              | pnpm workspaces, plain scripts, `tsc -b` — no task runner |
-| [0004](../adr/0004-lockstep-versioning.md)                       | Lockstep versioning                                       |
-| [0005](../adr/0005-core-zero-runtime-dependencies.md)            | Zero runtime dependencies in `@kavo/core`                 |
-| [0006](../adr/0006-registry-driven-operations.md)                | Registry-driven operation dispatch                        |
-| [0007](../adr/0007-module-augmentable-operation-metadata.md)     | Module-augmentable `OperationMetadata`                    |
-| [0008](../adr/0008-field-path-recursion-cap.md)                  | `FieldPath` recursion cap (default 3, max 5)              |
-| [0009](../adr/0009-problem-details-error-shape.md)               | RFC 9457 problem details as the wire error shape          |
-| [0010](../adr/0010-explicit-named-barrel.md)                     | Explicit named barrel in core                             |
-| [0011](../adr/0011-entity-metadata-infrastructure-seam.md)       | Entity-metadata & infrastructure seam                     |
-| [0012](../adr/0012-decoration-time-route-generation.md)          | Decoration-time route generation in `@kavo/nest`          |
-| [0013](../adr/0013-config-declared-soft-delete-operations.md)    | Soft-delete operations enabled from config, not metadata  |
-| [0014](../adr/0014-associate-by-id-not-deep-writes.md)           | Write-side relations: associate by id, no deep writes     |
-| [0015](../adr/0015-global-operation-defaults-are-engine-only.md) | Global operation defaults are engine-only, not routing    |
+| ADR                                                              | Decision                                                       |
+| ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| [0001](../adr/0001-clean-architecture-core-owns-contracts.md)    | Clean architecture: core owns all contracts                    |
+| [0002](../adr/0002-package-topology.md)                          | Three packages under `orms/` / `frameworks/` parents           |
+| [0003](../adr/0003-pnpm-plain-scripts-tsc-build.md)              | pnpm workspaces, plain scripts, `tsc -b` — no task runner      |
+| [0004](../adr/0004-lockstep-versioning.md)                       | Lockstep versioning                                            |
+| [0005](../adr/0005-core-zero-runtime-dependencies.md)            | Zero runtime dependencies in `@kavo/core`                      |
+| [0006](../adr/0006-registry-driven-operations.md)                | Registry-driven operation dispatch                             |
+| [0007](../adr/0007-module-augmentable-operation-metadata.md)     | Module-augmentable `OperationMetadata`                         |
+| [0008](../adr/0008-field-path-recursion-cap.md)                  | `FieldPath` recursion cap (max 5; default raised to 5 by 0051) |
+| [0009](../adr/0009-problem-details-error-shape.md)               | RFC 9457 problem details as the wire error shape               |
+| [0010](../adr/0010-explicit-named-barrel.md)                     | Explicit named barrel in core                                  |
+| [0011](../adr/0011-entity-metadata-infrastructure-seam.md)       | Entity-metadata & infrastructure seam                          |
+| [0012](../adr/0012-decoration-time-route-generation.md)          | Decoration-time route generation in `@kavo/nest`               |
+| [0013](../adr/0013-config-declared-soft-delete-operations.md)    | Soft-delete operations enabled from config, not metadata       |
+| [0014](../adr/0014-associate-by-id-not-deep-writes.md)           | Write-side relations: associate by id, no deep writes          |
+| [0015](../adr/0015-global-operation-defaults-are-engine-only.md) | Global operation defaults are engine-only, not routing         |
 
 ## 10. Tradeoff analysis
 

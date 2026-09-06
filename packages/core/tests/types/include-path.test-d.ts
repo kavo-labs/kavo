@@ -11,9 +11,18 @@ import { Author, Comment, Post } from "../support/blog-fixture.js";
  * back-edge, so a path can revisit a type and exercise the depth guard.
  */
 
-// The whole depth-3 expansion, pinned. Scalars (`name`, `title`, `body`) are
-// absent: `include` addresses relations, never fields.
-expectTypeOf<IncludePath<Author>>().toEqualTypeOf<"posts" | "posts.author" | "posts.comments" | "posts.author.posts">();
+// The whole depth-5 expansion, pinned (ADR-0051 raised the default cap from
+// 3 to 5). Scalars (`name`, `title`, `body`) are absent: `include` addresses
+// relations, never fields.
+expectTypeOf<IncludePath<Author>>().toEqualTypeOf<
+  | "posts"
+  | "posts.author"
+  | "posts.comments"
+  | "posts.author.posts"
+  | "posts.author.posts.author"
+  | "posts.author.posts.comments"
+  | "posts.author.posts.author.posts"
+>();
 
 // A leaf entity with no relations can include nothing at all.
 expectTypeOf<IncludePath<Comment>>().toEqualTypeOf<never>();
@@ -36,13 +45,21 @@ void typo;
 const scalar: IncludePath<Author> = "name";
 void scalar;
 
-// @ts-expect-error — depth 4 exceeds the default cap of 3.
-const tooDeep: IncludePath<Author> = "posts.author.posts.comments";
+// A depth-4 path is now within the default cap (ADR-0051): depth 5 is the
+// default and the hard maximum both.
+const withinDefault: IncludePath<Author> = "posts.author.posts.comments";
+void withinDefault;
+
+// @ts-expect-error — depth 6 exceeds the default cap of 5.
+const tooDeep: IncludePath<Author> = "posts.author.posts.author.posts.author";
 void tooDeep;
 
-// Raising the cap admits it — same knob as FieldPath, same hard maximum.
-const deepened: IncludePath<Author, 5> = "posts.author.posts.comments";
-void deepened;
+// The knob's remaining job is lowering the cap below the default — a
+// tightened `IncludePath<Author, 3>` rejects the depth-4 path the default
+// admits.
+// @ts-expect-error — depth 4 exceeds the explicitly lowered cap of 3.
+const lowered: IncludePath<Author, 3> = "posts.author.posts.comments";
+void lowered;
 
 // Untyped entities degrade to `string` rather than erroring: the runtime
 // relation registry stays the real gate.

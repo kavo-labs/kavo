@@ -1,11 +1,12 @@
 import type { IsAny, IsUnknown, Primitive } from "./utility.js";
 
 /**
- * Allowed recursion depths for {@link FieldPath}. The default cap is 3 and
- * the hard maximum is 5 — see ADR-0008. The cap exists because template-
- * literal path types grow combinatorially with depth: on entities with many
- * relations an uncapped (or deeply capped) expansion produces union types
- * large enough to slow or crash the compiler.
+ * Allowed recursion depths for {@link FieldPath}. The default cap and the
+ * hard maximum are both 5 — see ADR-0008, revised by ADR-0051 (the default
+ * was originally 3). The ceiling exists because template-literal path types
+ * grow combinatorially with depth: on entities with many relations an
+ * uncapped (or deeply capped) expansion produces union types large enough
+ * to slow or crash the compiler.
  */
 export type FieldPathDepth = 1 | 2 | 3 | 4 | 5;
 
@@ -60,5 +61,9 @@ type PathInto<T, Depth extends 0 | FieldPathDepth> =
  *
  * This is a *typing* aid, not a security boundary — the runtime allowlist
  * decides what a request may actually filter, sort, or select on.
+ *
+ * `MaxDepth` defaults to 5, the hard maximum (ADR-0051). Pass a lower value
+ * to tighten spell-checking to shallower paths for a specific use
+ * (`FieldPath<Entity, 1>` for root-only selectors).
  */
-export type FieldPath<Entity, MaxDepth extends FieldPathDepth = 3> = PathInto<Entity, MaxDepth>;
+export type FieldPath<Entity, MaxDepth extends FieldPathDepth = 5> = PathInto<Entity, MaxDepth>;
