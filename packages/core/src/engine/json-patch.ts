@@ -31,7 +31,7 @@ export interface JsonPatchParseOptions {
   readonly entityName: string;
   /** Own, non-generated column names — the id field is never in this set. */
   readonly writableFields: ReadonlySet<string>;
-  /** Relations opted into `relations.edges.<name>.write`. */
+  /** Relations opted into `EntityConfig.relations.<name>.write`. */
   readonly writeOptedRelations: ReadonlySet<string>;
   readonly operation: string;
   readonly correlationId: string;
@@ -51,13 +51,13 @@ export interface JsonPatchParseOptions {
  *   from a partial-update payload, so a client meaning "leave this field
  *   alone" simply omits the op, the same as an ordinary `patchOne` body.
  * - `/<relation>/-` (`add`/`remove` only) — a relation opted into
- *   `relations.edges.<name>.write`. `value` names the member (a scalar id
+ *   `EntityConfig.relations.<name>.write`. `value` names the member (a scalar id
  *   or an `{id}` reference, exactly `replace`'s own member shape) —
  *   addressing by identity rather than by array index/position, a
  *   deliberate, stated deviation from RFC 6902's array convention: to-many
  *   relation membership has no persisted order for an index to mean
  *   anything against. `replace` on this shape is rejected — that whole-array
- *   replacement is `arrayMutation.strategy: "replace"`'s own surface, kept
+ *   replacement is `write: { strategy: "replace" }`'s own surface, kept
  *   distinct from `jsonPatch`'s incremental one.
  *
  * Member existence (`add` of an id with no matching row, `remove` of an id
@@ -115,13 +115,13 @@ export function parseJsonPatchDocument(document: readonly unknown[], options: Js
       if (relationName === "" || !options.writeOptedRelations.has(relationName)) {
         invalid(
           `op ${index} names '${path}', which is not a relation of '${options.entityName}' opted into ` +
-            `array-mutation writes (relations.edges.${relationName || "<name>"}.write)`,
+            `array-mutation writes (relations.${relationName || "<name>"}.write)`,
         );
       }
       if (op === "replace") {
         invalid(
           `op ${index} is 'replace' on relation path '${path}' — 'jsonPatch' supports 'add'/'remove' member ` +
-            `changes only; use 'arrayMutation.strategy: "replace"' for a whole-array replace`,
+            `changes only; use 'write: { strategy: "replace" }' for a whole-array replace`,
         );
       }
       if (!hasValue || record.value === null || record.value === undefined) {

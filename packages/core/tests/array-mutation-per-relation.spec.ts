@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { EntityId, EntityMetadata, KavoContext, KavoSettings, RelationDescriptor } from "@kavo/core";
+import type { EntityId, EntityMetadata, KavoContext, RelationDescriptor } from "@kavo/core";
 import {
-  BUILT_IN_DEFAULTS,
   ConfigurationException,
   DefaultRelationRegistry,
   JsonPatchInvalidDocumentException,
   createKavo,
-  validateSettings,
   writeOptedInRelationNames,
 } from "@kavo/core";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
-/** `authorMetadata` plus a second to-many relation, so a relation-level override has a sibling to differ from. */
+/** `authorMetadata` plus a second to-many relation, so two relations can resolve to two strategies on one entity. */
 const authorMetadataTwoRelations: EntityMetadata<Author> = {
   ...authorMetadata,
   relations: [
@@ -128,15 +126,12 @@ function makeTwoRelationCrudWithReplaceOnlyAdapter(config: Record<string, unknow
   return kavo.createCrud(Author, config as never, { adapter, metadata: authorMetadataTwoRelations });
 }
 
-describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment, issue #223)", () => {
+describe("per-relation write.strategy (ADR-0029's per-relation amendment, issue #223; the only form since issue #404)", () => {
   it("resolves two different strategies for two relations on the same entity", () => {
     const { crud } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "resource" },
       relations: {
-        edges: {
-          posts: { write: true }, // inherits the entity default: "resource"
-          favorites: { write: { strategy: "replace" } }, // pinned, overrides the default
-        },
+        posts: { write: { strategy: "resource" } },
+        favorites: { write: { strategy: "replace" } },
       },
     });
     // posts: full resource surface.
@@ -151,69 +146,14 @@ describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment
     expect(crud.engine.registry.has("removeFavorites")).toBe(false);
   });
 
-  it("a relation-level override wins over the entity default", () => {
+  it("only registers replace<Relation> for a relation whose strategy is 'replace'", () => {
     const { crud } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "replace" },
-      relations: { edges: { posts: { write: { strategy: "resource" } } } },
-    });
-    // Despite the entity default being "replace", the override gives posts the full resource surface.
-    expect(crud.engine.registry.has("listPosts")).toBe(true);
-    expect(crud.engine.registry.has("addPosts")).toBe(true);
-    expect(crud.engine.registry.has("removePosts")).toBe(true);
-    expect(crud.engine.registry.has("replacePosts")).toBe(true);
-  });
-
-  it("only registers replace<Relation> for a relation whose own override names 'replace', even under an entity default of 'resource'", () => {
-    const { crud } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "resource" },
-      relations: { edges: { posts: { write: { strategy: "replace" } } } },
+      relations: { posts: { write: { strategy: "replace" } } },
     });
     expect(crud.engine.registry.has("replacePosts")).toBe(true);
     expect(crud.engine.registry.has("listPosts")).toBe(false);
     expect(crud.engine.registry.has("addPosts")).toBe(false);
     expect(crud.engine.registry.has("removePosts")).toBe(false);
-  });
-
-  it("rejects a per-relation override when arrayMutation is false at entity scope — feature-off wins", () => {
-    expect(() =>
-      makeTwoRelationCrud({
-        arrayMutation: false,
-        relations: { edges: { posts: { write: { strategy: "jsonPatch" } } } },
-      }),
-    ).toThrowError(ConfigurationException);
-  });
-
-  it("names the entity, relation and reason when arrayMutation is false and a relation pins its own strategy anyway", () => {
-    try {
-      makeTwoRelationCrud({
-        arrayMutation: false,
-        relations: { edges: { posts: { write: { strategy: "jsonPatch" } } } },
-      });
-      throw new Error("expected a ConfigurationException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        entity: "Author",
-        path: "relations.edges.posts.write",
-      });
-      expect((error as ConfigurationException).message).toContain("'arrayMutation' is false");
-    }
-  });
-
-  it("rejects a relation-level write: true with no resolvable strategy anywhere, same as the entity-wide case", () => {
-    expect(() =>
-      makeTwoRelationCrud({
-        relations: { edges: { posts: { write: true } } },
-      }),
-    ).toThrowError(ConfigurationException);
-  });
-
-  it("still accepts a plain write: true relation inheriting the entity default (back-compat)", () => {
-    const { crud } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "replace" },
-      relations: { edges: { posts: { write: true } } },
-    });
-    expect(crud.engine.registry.has("replacePosts")).toBe(true);
   });
 
   it("boots on an adapter with only replaceRelation when every write-opted relation resolves 'replace'", () => {
@@ -225,20 +165,16 @@ describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment
     // for an entity with no relation using those strategies.
     expect(() =>
       makeTwoRelationCrudWithReplaceOnlyAdapter({
-        arrayMutation: { strategy: "replace" },
-        relations: { edges: { posts: { write: true } } },
+        relations: { posts: { write: { strategy: "replace" } } },
       }),
     ).not.toThrow();
   });
 
   it("exposes each relation's resolved strategy through kavo.describe's debug dump", () => {
     const { kavo } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "resource" },
       relations: {
-        edges: {
-          posts: { write: true },
-          favorites: { write: { strategy: "replace" } },
-        },
+        posts: { write: { strategy: "resource" } },
+        favorites: { write: { strategy: "replace" } },
       },
     });
     const dump = kavo.describe("Author") as { relations: { name: string; write?: string }[] };
@@ -256,49 +192,63 @@ describe("per-relation arrayMutation.strategy (ADR-0029's per-relation amendment
     // though the first relation's own 'replace' requirement is still met.
     expect(() =>
       makeTwoRelationCrudWithReplaceOnlyAdapter({
-        arrayMutation: { strategy: "replace" },
         relations: {
-          edges: { posts: { write: true }, favorites: { write: { strategy: "resource" } } },
+          posts: { write: { strategy: "replace" } },
+          favorites: { write: { strategy: "resource" } },
         },
       }),
     ).toThrowError(ConfigurationException);
   });
 });
 
-describe("DefaultRelationRegistry — the arrayMutationDefault constructor parameter", () => {
+describe("DefaultRelationRegistry — relations block validation", () => {
   const postsRelation: readonly RelationDescriptor[] = [
     { name: "posts", target: () => Post as never, cardinality: "many", includable: false, strategy: "auto" },
   ];
 
-  it("names 'declares no arrayMutation.strategy', not 'is false', when the parameter is omitted", () => {
+  it("rejects a bare entry that tunes nothing, naming relations.<name>", () => {
     try {
-      new DefaultRelationRegistry(postsRelation, [], { posts: { write: true } }, "Author");
+      new DefaultRelationRegistry(postsRelation, [], { posts: {} }, "Author");
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).message).toContain("names a strategy");
-      expect((error as ConfigurationException).message).not.toContain("is false");
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "relations.posts",
+      });
     }
   });
 
-  it("names 'is false' when the parameter is explicitly false", () => {
+  it("rejects a { read: {} } entry that still tunes nothing", () => {
+    expect(() => new DefaultRelationRegistry(postsRelation, [], { posts: { read: {} } }, "Author")).toThrowError(
+      ConfigurationException,
+    );
+  });
+
+  it("rejects an unknown write.strategy, naming relations.<name>.write.strategy", () => {
     try {
-      new DefaultRelationRegistry(postsRelation, [], { posts: { write: true } }, "Author", false);
+      new DefaultRelationRegistry(postsRelation, [], { posts: { write: { strategy: "bogus" as never } } }, "Author");
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).message).toContain("'arrayMutation' is false");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        path: "relations.posts.write.strategy",
+      });
     }
   });
 
-  it("raises a clean ConfigurationException, not a raw TypeError, for a null write value", () => {
-    // `entityDefault: {}` (not `false`), so resolution actually reaches the
-    // `typeof write === "object"` branch — `null` is `typeof "object"` too,
-    // and without the guard `write.strategy` would throw a raw TypeError
-    // instead of the same clean error an unresolvable strategy always gets.
-    expect(
-      () => new DefaultRelationRegistry(postsRelation, [], { posts: { write: null as never } }, "Author", {}),
-    ).toThrowError(ConfigurationException);
+  it("rejects a write on a to-one relation, naming relations.<name>.write", () => {
+    const toOne: readonly RelationDescriptor[] = [
+      { name: "author", target: () => Author as never, cardinality: "one", includable: false, strategy: "auto" },
+    ];
+    try {
+      new DefaultRelationRegistry(toOne, [], { author: { write: { strategy: "replace" } } }, "Post");
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "relations.author.write" });
+    }
   });
 });
 
@@ -329,13 +279,13 @@ describe("DefaultRelationRegistry — strategy: 'key' bootstrap rejection (issue
 
   it("rejects 'key' on a to-many edge", () => {
     try {
-      new DefaultRelationRegistry(toMany, [], { posts: { strategy: "key" } }, "Author");
+      new DefaultRelationRegistry(toMany, [], { posts: { read: { strategy: "key" } } }, "Author");
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.posts.strategy",
+        path: "relations.posts.read.strategy",
       });
       expect((error as ConfigurationException).message).toContain("to-many");
     }
@@ -343,19 +293,21 @@ describe("DefaultRelationRegistry — strategy: 'key' bootstrap rejection (issue
 
   it("rejects 'key' on the inverse side of a one-to-one (no local FK)", () => {
     try {
-      new DefaultRelationRegistry(inverseToOne, [], { profile: { strategy: "key" } }, "Author");
+      new DefaultRelationRegistry(inverseToOne, [], { profile: { read: { strategy: "key" } } }, "Author");
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.profile.strategy",
+        path: "relations.profile.read.strategy",
       });
       expect((error as ConfigurationException).message).toContain("inverse side");
     }
   });
 
   it("accepts 'key' on an owning-side to-one edge", () => {
-    expect(() => new DefaultRelationRegistry(owningToOne, [], { author: { strategy: "key" } }, "Post")).not.toThrow();
+    expect(
+      () => new DefaultRelationRegistry(owningToOne, [], { author: { read: { strategy: "key" } } }, "Post"),
+    ).not.toThrow();
   });
 
   it("accepts 'key' when ownership is unknown — an adapter that cannot tell leaves it permitted", () => {
@@ -363,94 +315,40 @@ describe("DefaultRelationRegistry — strategy: 'key' bootstrap rejection (issue
       { name: "author", target: () => Author as never, cardinality: "one", includable: false, strategy: "auto" },
     ];
     expect(
-      () => new DefaultRelationRegistry(unknownOwnership, [], { author: { strategy: "key" } }, "Post"),
+      () => new DefaultRelationRegistry(unknownOwnership, [], { author: { read: { strategy: "key" } } }, "Post"),
     ).not.toThrow();
   });
 });
 
-describe("validateSettings — relations.edges.<name>.write's object form", () => {
-  function settingsWith(write: unknown): KavoSettings {
-    return {
-      ...BUILT_IN_DEFAULTS,
-      relations: { ...BUILT_IN_DEFAULTS.relations, edges: { posts: { write } } },
-    } as KavoSettings;
-  }
-
-  it("rejects an unknown strategy inside the object form, naming .write.strategy", () => {
-    expect(() => validateSettings("Author", settingsWith({ strategy: "bogus" }))).toThrowError(ConfigurationException);
-    try {
-      validateSettings("Author", settingsWith({ strategy: "bogus" }));
-    } catch (error) {
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.posts.write.strategy",
-      });
-    }
-  });
-
-  it("rejects an object form with no strategy at all, naming .write.strategy", () => {
-    try {
-      validateSettings("Author", settingsWith({}));
-      throw new Error("expected a ConfigurationException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.posts.write.strategy",
-      });
-    }
-  });
-
-  it("rejects a non-boolean, non-object write value, naming .write", () => {
-    try {
-      validateSettings("Author", settingsWith(42));
-      throw new Error("expected a ConfigurationException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.posts.write",
-      });
-    }
-  });
-
-  it("accepts every valid strategy in the object form", () => {
-    for (const strategy of ["replace", "resource", "jsonPatch"] as const) {
-      expect(() => validateSettings("Author", settingsWith({ strategy }))).not.toThrow();
-    }
-  });
-});
-
-describe("writeOptedInRelationNames — the object write form counts as opting in", () => {
-  it("includes a relation whose write names an object with a strategy", () => {
+describe("writeOptedInRelationNames", () => {
+  it("includes a relation whose entry carries a write block, skips read-only and absent ones", () => {
     expect(
       writeOptedInRelationNames({
         posts: { write: { strategy: "replace" } },
-        comments: { write: false },
-        tags: {},
+        comments: { read: { maxDepth: 1 } },
       }),
     ).toEqual(["posts"]);
   });
 
-  it("still includes a plain write: true relation, unaffected by the new form", () => {
-    expect(writeOptedInRelationNames({ posts: { write: true } })).toEqual(["posts"]);
+  it("returns [] for undefined", () => {
+    expect(writeOptedInRelationNames(undefined)).toEqual([]);
   });
 });
 
 describe("per-relation jsonPatch — engine end to end", () => {
   function makeJsonPatchMixCrud() {
     return makeTwoRelationCrud({
-      // Entity default is "replace" — posts inherits it. favorites pins its
-      // own "jsonPatch" strategy, which must still turn on jsonPatch body
-      // parsing for the whole entity's patchOne, per relation scoping.
-      arrayMutation: { strategy: "replace" },
+      // posts is `replace`, favorites is `jsonPatch` — opting even one
+      // relation into jsonPatch turns on jsonPatch body parsing for the
+      // whole entity's patchOne (ADR-0029's per-relation amendment).
       relations: {
-        edges: {
-          posts: { write: true },
-          favorites: { write: { strategy: "jsonPatch" } },
-        },
+        posts: { write: { strategy: "replace" } },
+        favorites: { write: { strategy: "jsonPatch" } },
       },
     });
   }
 
-  it("parses an array patchOne body as RFC 6902 once any relation resolves to jsonPatch, even though the entity default is 'replace'", async () => {
+  it("parses an array patchOne body as RFC 6902 once any relation resolves to jsonPatch", async () => {
     const { crud, adapter } = makeJsonPatchMixCrud();
     const response = await crud.engine.execute({
       operation: "patchOne",
@@ -475,7 +373,7 @@ describe("per-relation jsonPatch — engine end to end", () => {
     expect(response.item).toMatchObject({ id: 1, name: "Grace" });
   });
 
-  it("rejects a /<relation>/- op naming a relation that opted into 'replace', not 'jsonPatch' — the two strategies stay mutually exclusive per relation", async () => {
+  it("rejects a /<relation>/- op naming a relation on 'replace', not 'jsonPatch' — the strategies stay mutually exclusive per relation", async () => {
     const { crud } = makeJsonPatchMixCrud();
     const call = crud.engine.execute({
       operation: "patchOne",
@@ -487,20 +385,18 @@ describe("per-relation jsonPatch — engine end to end", () => {
     await expect(call).rejects.toThrowError(JsonPatchInvalidDocumentException);
   });
 
-  it("registers no replace/list/add/remove<Relation> operation for a relation pinned to 'jsonPatch' alone (no replace/resource sibling)", () => {
+  it("registers no replace/list/add/remove<Relation> operation for a relation pinned to 'jsonPatch' alone", () => {
     const { crud } = makeTwoRelationCrud({
-      arrayMutation: {}, // unset — nothing inherits it, favorites pins its own
-      relations: { edges: { favorites: { write: { strategy: "jsonPatch" } } } },
+      relations: { favorites: { write: { strategy: "jsonPatch" } } },
     });
     for (const id of ["replaceFavorites", "listFavorites", "addFavorites", "removeFavorites"]) {
       expect(crud.engine.registry.has(id)).toBe(false);
     }
   });
 
-  it("still parses and applies an RFC 6902 body correctly for an entity with no replace/resource relation at all", async () => {
+  it("still parses and applies an RFC 6902 body for an entity with no replace/resource relation at all", async () => {
     const { crud, adapter } = makeTwoRelationCrud({
-      arrayMutation: {},
-      relations: { edges: { favorites: { write: { strategy: "jsonPatch" } } } },
+      relations: { favorites: { write: { strategy: "jsonPatch" } } },
     });
     const response = await crud.engine.execute({
       operation: "patchOne",
@@ -529,10 +425,9 @@ describe("per-relation jsonPatch — engine end to end", () => {
     expect(response.item).toMatchObject({ id: 1, name: "Grace" });
   });
 
-  it("does not parse an array patchOne body as jsonPatch when no relation and no entity default resolve to it", async () => {
+  it("does not parse an array patchOne body as jsonPatch when no relation resolves to it", async () => {
     const { crud, adapter } = makeTwoRelationCrud({
-      arrayMutation: { strategy: "replace" },
-      relations: { edges: { posts: { write: true } } },
+      relations: { posts: { write: { strategy: "replace" } } },
     });
     // An array body against an entity with no jsonPatch anywhere degrades
     // to `{}` through the ordinary deserializer, exactly as it always has.

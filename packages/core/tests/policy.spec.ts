@@ -12,7 +12,7 @@ function makeCrud(config?: Parameters<ReturnType<typeof createKavo>["createCrud"
   return { crud, adapter, kavo };
 }
 
-/** `SeededAdapter` plus the one write `arrayMutation`'s `replace` strategy needs (mirrors array-mutation.spec.ts's own). */
+/** `SeededAdapter` plus the one write the `replace` strategy needs (mirrors array-mutation.spec.ts's own). */
 class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter<Entity> {
   async replaceRelation(
     id: EntityId,
@@ -38,8 +38,7 @@ function makeAuthorCrud(config?: Parameters<ReturnType<typeof createKavo>["creat
   const crud = kavo.createCrud(
     Author,
     {
-      arrayMutation: { strategy: "replace" },
-      relations: { edges: { posts: { write: true } } },
+      relations: { posts: { write: { strategy: "replace" } } },
       ...config,
     } as never,
     { adapter, metadata: authorMetadata },

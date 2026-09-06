@@ -495,7 +495,7 @@ describe("resolveEntityConfig — include.fields", () => {
         authorMetadata,
         {
           include: { fields: ["posts"], default: ["posts"] },
-          relations: { edges: { posts: { maxDepth: 1 } } },
+          relations: { posts: { read: { maxDepth: 1 } } },
         },
         undefined,
       ),

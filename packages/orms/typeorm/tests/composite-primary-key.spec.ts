@@ -255,9 +255,9 @@ describe("TypeOrmRepositoryAdapter — ManyToMany array-mutation writes on a com
   });
 
   it("is caught at createCrud bootstrap, not just at request time", () => {
-    expect(() =>
-      kavo.createCrud(Grant, { relations: { edges: { tags: { write: { strategy: "replace" } } } } } as never),
-    ).toThrow(ConfigurationException);
+    expect(() => kavo.createCrud(Grant, { relations: { tags: { write: { strategy: "replace" } } } } as never)).toThrow(
+      ConfigurationException,
+    );
   });
 });
 
@@ -270,7 +270,7 @@ describe("TypeOrmRepositoryAdapter — ManyToMany array-mutation writes on a com
 describe("TypeOrmRepositoryAdapter — OneToMany array-mutation writes on a composite-key parent (issue #263)", () => {
   it("is not rejected at createCrud bootstrap — only the ManyToMany case is", () => {
     expect(() =>
-      kavo.createCrud(Grant, { relations: { edges: { labels: { write: { strategy: "replace" } } } } } as never),
+      kavo.createCrud(Grant, { relations: { labels: { write: { strategy: "replace" } } } } as never),
     ).not.toThrow();
   });
 

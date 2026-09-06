@@ -172,7 +172,7 @@ describe("getResource/getOperation — a synthesized arrayMutation sub-collectio
   }
 
   it("reports the synthesized replace<Relation> operation id", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
+    @Kavo(Post, { relations: { tags: { write: { strategy: "replace" } } } } as never)
     class PostController {}
 
     const handler = (PostController.prototype as Record<string, unknown>).replaceTags as (
@@ -184,7 +184,7 @@ describe("getResource/getOperation — a synthesized arrayMutation sub-collectio
   });
 
   it("reports the synthesized list<Relation> operation id of the resource strategy", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "resource" }, relations: { edges: { tags: { write: true } } } } as never)
+    @Kavo(Post, { relations: { tags: { write: { strategy: "resource" } } } } as never)
     class PostController {}
 
     const handler = (PostController.prototype as Record<string, unknown>).listTags as (...args: unknown[]) => unknown;

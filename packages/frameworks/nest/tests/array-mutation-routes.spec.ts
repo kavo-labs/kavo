@@ -28,9 +28,9 @@ class Post {
   labels: Label[] = [];
 }
 
-describe("@Kavo — replace<Relation> sub-collection route generation (arrayMutation's replace strategy, ADR-0014)", () => {
-  it("generates PUT :id/<relation> for a relation opted into relations.edges.<name>.write, given an explicit strategy", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
+describe("@Kavo — replace<Relation> sub-collection route generation (replace strategy, ADR-0014)", () => {
+  it("generates PUT :id/<relation> for a relation opted into relations.<name>.write.strategy: 'replace'", () => {
+    @Kavo(Post, { relations: { tags: { write: { strategy: "replace" } } } } as never)
     class PostController {}
 
     const method = (PostController.prototype as Record<string, unknown>).replaceTags as (...args: unknown[]) => unknown;
@@ -46,15 +46,8 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
     expect((PlainController.prototype as Record<string, unknown>).replaceTags).toBeUndefined();
   });
 
-  it("generates no route when a write-opted relation declares no arrayMutation.strategy (issue #221 — no built-in default)", () => {
-    @Kavo(Post, { relations: { edges: { tags: { write: true } } } } as never)
-    class UndeclaredController {}
-
-    expect((UndeclaredController.prototype as Record<string, unknown>).replaceTags).toBeUndefined();
-  });
-
-  it("generates no replace<Relation> route when the entity declares arrayMutation.strategy: 'jsonPatch'", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { tags: { write: true } } } } as never)
+  it("generates no replace<Relation> route when the relation's write.strategy is 'jsonPatch'", () => {
+    @Kavo(Post, { relations: { tags: { write: { strategy: "jsonPatch" } } } } as never)
     class JsonPatchController {}
 
     // No synthesized PUT :id/tags route — jsonPatch reuses patchOne's own
@@ -63,7 +56,7 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
   });
 
   it("a hand-written method named replace<Relation> wins over the generated route (manual-method-wins)", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
+    @Kavo(Post, { relations: { tags: { write: { strategy: "replace" } } } } as never)
     class OverriddenController {
       replaceTags(): string {
         return "manual";
@@ -82,8 +75,8 @@ describe("@Kavo — replace<Relation> sub-collection route generation (arrayMuta
 });
 
 describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029's resource amendment)", () => {
-  it("generates GET/POST/DELETE/PUT :id/<relation> for a relation opted into relations.edges.<name>.write", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "resource" }, relations: { edges: { tags: { write: true } } } } as never)
+  it("generates GET/POST/DELETE/PUT :id/<relation> for a relation opted into relations.<name>.write", () => {
+    @Kavo(Post, { relations: { tags: { write: { strategy: "resource" } } } } as never)
     class PostController {}
 
     const prototype = PostController.prototype as Record<string, unknown>;
@@ -102,7 +95,7 @@ describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029'
   });
 
   it("generates no sub-collection routes when the relation never opts in", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "resource" } } as never)
+    @Kavo(Post, {} as never)
     class PlainController {}
 
     const prototype = PlainController.prototype as Record<string, unknown>;
@@ -113,7 +106,7 @@ describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029'
   });
 
   it("generates only replace<Relation> — not list/add/remove — under the 'replace' strategy", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "replace" }, relations: { edges: { tags: { write: true } } } } as never)
+    @Kavo(Post, { relations: { tags: { write: { strategy: "replace" } } } } as never)
     class ReplaceOnlyController {}
 
     const prototype = ReplaceOnlyController.prototype as Record<string, unknown>;
@@ -124,7 +117,7 @@ describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029'
   });
 
   it("a hand-written method named remove<Relation> wins over the generated DELETE route (manual-method-wins)", () => {
-    @Kavo(Post, { arrayMutation: { strategy: "resource" }, relations: { edges: { tags: { write: true } } } } as never)
+    @Kavo(Post, { relations: { tags: { write: { strategy: "resource" } } } } as never)
     class OverriddenController {
       removeTags(): string {
         return "manual";
@@ -138,15 +131,12 @@ describe("@Kavo — resource-strategy sub-collection route generation (ADR-0029'
   });
 });
 
-describe("@Kavo — per-relation arrayMutation.strategy (ADR-0029's per-relation amendment, issue #223)", () => {
-  it("generates the resource surface for one relation and only PUT for another, on the same entity, from a single entity default", () => {
+describe("@Kavo — per-relation write.strategy (ADR-0029's per-relation amendment, issue #223)", () => {
+  it("generates the resource surface for one relation and only PUT for another, on the same entity", () => {
     @Kavo(Post, {
-      arrayMutation: { strategy: "resource" },
       relations: {
-        edges: {
-          tags: { write: true }, // inherits the entity default: "resource"
-          labels: { write: { strategy: "replace" } }, // pinned override
-        },
+        tags: { write: { strategy: "resource" } },
+        labels: { write: { strategy: "replace" } },
       },
     } as never)
     class PostController {}
@@ -161,8 +151,8 @@ describe("@Kavo — per-relation arrayMutation.strategy (ADR-0029's per-relation
     expect(prototype.removeLabels).toBeUndefined();
   });
 
-  it("a relation-level override generates its own route shape even though the entity declares no default at all", () => {
-    @Kavo(Post, { relations: { edges: { tags: { write: { strategy: "resource" } } } } } as never)
+  it("a relation's write.strategy generates its own route shape with no entity-level config", () => {
+    @Kavo(Post, { relations: { tags: { write: { strategy: "resource" } } } } as never)
     class PostController {}
 
     const prototype = PostController.prototype as Record<string, unknown>;
@@ -173,8 +163,7 @@ describe("@Kavo — per-relation arrayMutation.strategy (ADR-0029's per-relation
 
   it("generates no route for a relation pinned to 'jsonPatch' — it reuses patchOne's own route instead", () => {
     @Kavo(Post, {
-      arrayMutation: { strategy: "resource" },
-      relations: { edges: { tags: { write: { strategy: "jsonPatch" } } } },
+      relations: { tags: { write: { strategy: "jsonPatch" } } },
     } as never)
     class PostController {}
 

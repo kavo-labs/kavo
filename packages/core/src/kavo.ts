@@ -384,7 +384,7 @@ function requireArrayMutationSupport<Entity extends object>(
   }
   throw new ConfigurationException(
     config.entityName,
-    `relations.edges.${relationNames[0]}.write`,
+    `relations.${relationNames[0]}.write`,
     `'${relationNames[0]}' opts into array-mutation writes, but this entity's repository adapter does not ` +
       `implement 'replaceRelation' — array-mutation writes are not supported by this adapter yet`,
   );
@@ -416,7 +416,7 @@ function requireResourceArrayMutationSupport<Entity extends object>(
     }
     throw new ConfigurationException(
       config.entityName,
-      `relations.edges.${relationNames[0]}.write`,
+      `relations.${relationNames[0]}.write`,
       `'${relationNames[0]}' opts into array-mutation writes under 'arrayMutation.strategy: "resource"', but this ` +
         `entity's repository adapter does not implement '${method}' — the 'resource' strategy is not supported by ` +
         `this adapter yet`,
@@ -441,7 +441,7 @@ function requireJsonPatchSupport<Entity extends object>(
   }
   throw new ConfigurationException(
     config.entityName,
-    `relations.edges.${relationNames[0]}.write`,
+    `relations.${relationNames[0]}.write`,
     `'${relationNames[0]}' opts into array-mutation writes under 'arrayMutation.strategy: "jsonPatch"', but this ` +
       `entity's repository adapter does not implement 'patchRelation' — jsonPatch array-mutation writes are not ` +
       `supported by this adapter yet`,
@@ -466,7 +466,7 @@ function requireArrayMutationCapable<Entity extends object>(
     if (adapter.supportsArrayMutation?.(name) === false) {
       throw new ConfigurationException(
         config.entityName,
-        `relations.edges.${name}.write`,
+        `relations.${name}.write`,
         `'${name}' opts into array-mutation writes, but this entity's repository adapter cannot support them ` +
           `for '${name}' specifically — see the adapter's 'supportsArrayMutation' for why`,
       );
@@ -502,7 +502,7 @@ function requireArrayMutationTargetsResolvable<Entity extends object>(
     }
     throw new ConfigurationException(
       config.entityName,
-      `relations.edges.${name}.write`,
+      `relations.${name}.write`,
       `'${name}' opts into array-mutation writes, but its target entity has no metadata this root can ` +
         `resolve — pass it through 'createCrud', or an 'infrastructure' that can derive its metadata, ` +
         `on the same root as '${config.entityName}'`,

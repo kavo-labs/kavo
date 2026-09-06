@@ -7,6 +7,7 @@ import type {
   FilterOperatorMap,
   IncludeLimits,
   OperationConfig,
+  RelationConfig,
   RelationFieldSelector,
   SearchDriver,
   SearchMode,
@@ -59,15 +60,15 @@ import { ConfigurationException } from "../errors/exceptions.js";
  * field-group blocks (issue #386) are entity-scope-only, resolved once by
  * this module directly from `EntityConfig`, never through the settings
  * precedence chain — there is no global or per-operation default for them.
+ * `relations` (issue #404, replacing `relations.edges` and `arrayMutation`)
+ * is the same: entity-scope-only, resolved by `DefaultRelationRegistry`.
  */
 const SETTINGS_KEYS = [
   "pagination",
   "errors",
-  "relations",
   "cache",
   "delete",
   "realtime",
-  "arrayMutation",
   "authorization",
 ] as const satisfies readonly (keyof KavoSettings)[];
 
@@ -138,9 +139,8 @@ export function resolveEntityConfig<Entity extends object>(
   const relations = new DefaultRelationRegistry<Entity>(
     metadata.relations,
     include.fields as readonly string[],
-    entitySettings.relations.edges,
+    (entityConfig?.relations ?? {}) as Readonly<Record<string, RelationConfig | undefined>>,
     entityName,
-    entitySettings.arrayMutation,
     include.default ?? [],
   );
 

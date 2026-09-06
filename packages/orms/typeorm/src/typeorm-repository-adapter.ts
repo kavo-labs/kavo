@@ -670,7 +670,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       if (relationMetadata === undefined) {
         throw new ConfigurationException(
           context.entityName,
-          `relations.edges.${relation}.write`,
+          `relations.${relation}.write`,
           `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
         );
       }
@@ -754,7 +754,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         if (relationMetadata === undefined) {
           throw new ConfigurationException(
             context.entityName,
-            `relations.edges.${relation}.write`,
+            `relations.${relation}.write`,
             `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
           );
         }
@@ -993,7 +993,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     if (relationMetadata === undefined) {
       throw new ConfigurationException(
         context.entityName,
-        `relations.edges.${relation}.write`,
+        `relations.${relation}.write`,
         `'${relation}' is not a relation of '${context.entityName}' known to TypeORM`,
       );
     }

@@ -59,7 +59,7 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
    * Optional: an adapter that doesn't implement this simply doesn't support
    * array-mutation writes, which `createCrud` checks for at bootstrap
    * (`ConfigurationException`) the moment a relation opts in via
-   * `relations.edges.<name>.write` — the ORM caveat ADR-0014's Consequences
+   * `EntityConfig.relations.<name>.write` — the ORM caveat ADR-0014's Consequences
    * section already names for association by id applies here too: Kavo
    * maps the payload, it does not synthesize a write an adapter declined
    * to make.

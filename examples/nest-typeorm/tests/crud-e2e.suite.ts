@@ -828,7 +828,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
       expect(afterDelete.body.tags).toEqual([]);
     });
 
-    describe("PUT /cats/:id/tags (arrayMutation's replace strategy, ADR-0029)", () => {
+    describe("PUT /cats/:id/tags (replace strategy, ADR-0029)", () => {
       async function createTag(name: string): Promise<number> {
         return (await request(server()).post("/tags").send({ name }).expect(201)).body.id as number;
       }
@@ -960,7 +960,7 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
     // `photos` opts into `resource` (ADR-0029's resource amendment) rather
     // than `tags`'s `replace` (issue #223's per-relation amendment) — two
     // different array-mutation strategies, live on the same entity.
-    describe("GET/POST/DELETE/PUT /cats/:id/photos (arrayMutation's resource strategy, issue #223)", () => {
+    describe("GET/POST/DELETE/PUT /cats/:id/photos (resource strategy, issue #223)", () => {
       async function createPhoto(url: string): Promise<number> {
         return (await request(server()).post("/photos").send({ url }).expect(201)).body.id as number;
       }

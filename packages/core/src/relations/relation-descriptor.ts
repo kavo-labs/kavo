@@ -48,23 +48,19 @@ export interface RelationDescriptor {
   readonly includable: boolean;
   /**
    * Included even when the client doesn't ask — granted by
-   * `defaults.include` (`KavoSettings`, settings.ts, issue #375), not by
-   * `relations.edges` (which tunes loading only).
+   * `include.default` (`EntityConfig`, entity-config.ts, issue #375), not by
+   * `EntityConfig.relations` (which tunes loading only).
    */
   readonly defaultInclude?: boolean;
   /** Overrides the configured `limits.includeDepth` below this node. */
   readonly maxDepth?: number;
   readonly strategy: RelationLoadStrategy;
   /**
-   * The **resolved** array-mutation strategy this relation writes through,
-   * or `undefined` if it never opted in — like `includable`, opt-in,
-   * granted by `relations.edges.<name>.write` in config. Unlike the raw
-   * `boolean | { strategy }` config shape, this is always a concrete
-   * strategy by the time a descriptor reaches this field: `write: true`'s
-   * "inherit the entity default" and `write: { strategy }`'s explicit
-   * override are both resolved down to one value by `DefaultRelationRegistry`,
-   * which also rejects (at bootstrap) a relation whose opt-in has no
-   * resolvable strategy, and one declared on a to-one relation.
+   * The array-mutation strategy this relation writes through, or `undefined`
+   * if it never opted in — like `includable`, opt-in, granted by
+   * `EntityConfig.relations.<name>.write.strategy` in config (issue #404).
+   * `DefaultRelationRegistry` copies `write.strategy` here directly and
+   * rejects (at bootstrap) a `write` declared on a to-one relation.
    */
   readonly write?: ArrayMutationStrategy;
 }

@@ -15,7 +15,7 @@ import {
 } from "@kavo/core";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
-/** `SeededAdapter` plus the four primitives `arrayMutation`'s `resource` strategy needs. */
+/** `SeededAdapter` plus the four primitives the `resource` strategy needs. */
 class ResourceCapableAdapter<Entity extends { id: number; posts?: unknown }> extends SeededAdapter<Entity> {
   readonly calls: { method: string; id: EntityId; relation: string; memberId?: EntityId }[] = [];
   /** Every id currently linked, per relation — the fixture's "database". */
@@ -104,13 +104,13 @@ function makeAuthorCrud(edgesWrite = true) {
   kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
   const crud = kavo.createCrud(
     Author,
-    { arrayMutation: { strategy: "resource" }, relations: { edges: { posts: { write: edgesWrite } } } } as never,
+    { relations: { posts: edgesWrite ? { write: { strategy: "resource" } } : undefined } } as never,
     { adapter, metadata: authorMetadata },
   );
   return { crud, adapter };
 }
 
-describe("arrayMutation.strategy: 'resource' — bootstrap", () => {
+describe("resource strategy — bootstrap", () => {
   for (const missing of ["replaceRelation", "readRelation", "addRelationMember", "removeRelationMember"] as const) {
     it(`rejects a write-opted relation under 'resource' when the adapter has no ${missing}`, () => {
       class PartiallyCapable extends SeededAdapter<Author> {
@@ -131,11 +131,10 @@ describe("arrayMutation.strategy: 'resource' — bootstrap", () => {
       delete (adapter as unknown as Record<string, unknown>)[missing];
 
       expect(() =>
-        createKavo().createCrud(
-          Author,
-          { arrayMutation: { strategy: "resource" }, relations: { edges: { posts: { write: true } } } } as never,
-          { adapter, metadata: authorMetadata },
-        ),
+        createKavo().createCrud(Author, { relations: { posts: { write: { strategy: "resource" } } } } as never, {
+          adapter,
+          metadata: authorMetadata,
+        }),
       ).toThrowError(ConfigurationException);
     });
   }

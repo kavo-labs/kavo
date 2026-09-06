@@ -52,11 +52,6 @@ import {
     item: CatItemDto,
     list: CatListDto,
   },
-  // No built-in default (issue #221 amends ADR-0029) — `tags.write` below
-  // demands an explicit strategy. This is the entity's own default, which
-  // `tags` inherits via `write: true`; `photos` below pins its own
-  // strategy instead, overriding it (issue #223).
-  arrayMutation: { strategy: "replace" },
   pagination: { defaultLimit: 10, maxLimit: 50 },
   // Explicit include-lists (the plain form, contrast Owner's `{ exclude }`
   // in owner.controller.ts): `indoor`, `livesLeft`, and `createdAt` are
@@ -72,18 +67,18 @@ import {
   // the reference app to point at.
   search: { fields: ["name"] },
   // The to-one side of the owner edge joins; `tags`/`photos` are to-many
-  // (many-to-many) and batch, both `auto`'s default — no loading tuning
+  // (many-to-many) and batch, both `auto`'s default — no `read` tuning
   // needed. `select[owner]=id,name` / `select[tags]=id,name` /
-  // `select[photos]=id,url` narrow each embedded relation. `tags.write`
-  // opts that edge into array-mutation writes, inheriting the entity's own
-  // `arrayMutation.strategy: "replace"` declared above: `PUT /cats/:id/tags`
-  // replaces the full tag set in one call, without sending the rest of the
-  // cat's body. `photos.write` opts the second edge in too, but pins its
-  // own `resource` strategy (issue #223) instead of inheriting `replace` —
+  // `select[photos]=id,url` narrow each embedded relation. Each relation
+  // names its own array-mutation `write.strategy` directly (issue #404 —
+  // there is no entity-level default to inherit): `tags` picks `replace`,
+  // so `PUT /cats/:id/tags` replaces the full tag set in one call without
+  // sending the rest of the cat's body; `photos` picks `resource`, so
   // `GET/POST/DELETE/PUT /cats/:id/photos` give it the narrower
   // list/add/remove/replace surface instead of one whole-array `PUT`.
   relations: {
-    edges: { tags: { write: true }, photos: { write: { strategy: "resource" } } },
+    tags: { write: { strategy: "replace" } },
+    photos: { write: { strategy: "resource" } },
   },
   operations: {
     createOne: true,

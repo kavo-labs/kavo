@@ -75,7 +75,7 @@ import { hasPermission } from "./owner.policy.js";
   // `include=pets` — opt-in per relation. Pets are a to-many, so they
   // batch-load: one extra query per page of owners, never a joined row
   // explosion under pagination. `address` is the to-one counterpart — it
-  // joins instead. Both are `auto`'s default, so no `relations.edges`
+  // joins instead. Both are `auto`'s default, so no `relations.<name>.read`
   // tuning is needed.
   include: { fields: ["pets", "address"] },
   operations: {
