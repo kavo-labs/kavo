@@ -258,6 +258,7 @@ export {
   NotFoundException,
   OperationDisabledException,
   OperationNotRegisteredException,
+  PaginationNotAdvancingException,
   PatchNoChangesException,
   PersistenceException,
   PreconditionFailedException,

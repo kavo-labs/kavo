@@ -15,6 +15,7 @@ import {
   NotFoundException,
   OperationDisabledException,
   OperationNotRegisteredException,
+  PaginationNotAdvancingException,
   PatchNoChangesException,
   PersistenceException,
   QueryValidationException,
@@ -59,6 +60,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_PERSISTENCE_FAILED: { status: 500, title: "Persistence failure" },
   KAVO_TRANSACTION_FAILED: { status: 500, title: "Transaction failure" },
   KAVO_CONFIG_INVALID: { status: 500, title: "Invalid configuration" },
+  KAVO_PAGINATION_NOT_ADVANCING: { status: 500, title: "Pagination not advancing" },
   KAVO_HTTP_ERROR: { status: 500, title: "HTTP error" },
   KAVO_UNEXPECTED_ERROR: { status: 500, title: "Unexpected error" },
 };
@@ -161,6 +163,11 @@ describe("exception hierarchy", () => {
     { exception: new TransactionException(), code: "KAVO_TRANSACTION_FAILED", status: 500 },
     { exception: new QueryValidationException([]), code: "KAVO_QUERY_INVALID", status: 400 },
     { exception: new ConfigurationException("User", "operations.x", "why"), code: "KAVO_CONFIG_INVALID", status: 500 },
+    {
+      exception: new PaginationNotAdvancingException("User"),
+      code: "KAVO_PAGINATION_NOT_ADVANCING",
+      status: 500,
+    },
   ] as const;
 
   it("binds each leaf to its catalog code and status", () => {
@@ -272,6 +279,21 @@ describe("exception hierarchy", () => {
     });
     expect(exception.context.entityName).toBe("User");
     expect(exception.detail).toContain("operations.purgeOne");
+  });
+
+  it("renders the advance-guard failure from the catalog template, keyed on the entity alone", () => {
+    const exception = new PaginationNotAdvancingException("Book");
+    // Only the entity is a param — the diagnostic prose is the catalog
+    // template, so a localizing consumer re-renders it from key + params.
+    expect(exception.messageParams).toEqual({ entity: "Book" });
+    expect(exception.context.entityName).toBe("Book");
+    expect(exception.detail).toContain("Book");
+    expect(exception.detail).toContain("readFilter(query)");
+    expect(exception.detail).toContain("ORDER BY");
+    expect(exception.detail).toContain("sort column");
+    // Shares the 500 with `KAVO_CONFIG_INVALID` but never its code (#193).
+    expect(exception.status).toBe(new ConfigurationException("Book", "x", "y").status);
+    expect(exception.code).not.toBe("KAVO_CONFIG_INVALID");
   });
 });
 

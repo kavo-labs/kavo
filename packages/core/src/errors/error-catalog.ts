@@ -201,6 +201,26 @@ export const ERROR_CATALOG = {
     title: "Invalid configuration",
     message: "Invalid configuration for entity '{entity}' at '{path}': {problem}",
   },
+  KAVO_PAGINATION_NOT_ADVANCING: {
+    status: 500,
+    // Data- or adapter-dependent, not a bootstrap misconfiguration: the same
+    // entity, config, and request work until the table holds two textual
+    // spellings of one instant in the sort column, or an adapter that ignores
+    // `readFilter(query)` is wired. Distinct from `KAVO_CONFIG_INVALID` so it
+    // is greppable in logs and its dashboards do not read as a startup fault
+    // (ADR-0021 §5, issue #193). The full prose lives here, not in a param,
+    // so a consumer localizing from `messageKey` + `messageParams` can
+    // re-render it.
+    title: "Pagination not advancing",
+    message:
+      "Cursor pagination for entity '{entity}' did not advance: the page produced the same token it was given, " +
+      "so the keyset predicate did not exclude the rows already served. Two causes produce this. Either the " +
+      "repository adapter's 'findMany' filters by 'query.filter' rather than 'readFilter(query)', so the " +
+      "predicate never reached the query; or it did reach the query and does not agree with 'ORDER BY', because " +
+      "the sort column's stored values compare differently from the bound cursor value — which is what a date " +
+      "column holding more than one textual spelling of an instant does on a backend that stores dates as text. " +
+      "Check the adapter first, then the sort column.",
+  },
   KAVO_HTTP_ERROR: {
     // Nominal only: this code is never thrown by a `KavoException` leaf, so
     // nothing in the hierarchy binds a fixed status to it. The `@kavo/nest`

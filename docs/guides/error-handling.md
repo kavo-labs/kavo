@@ -42,6 +42,10 @@ Iterate `errors[]` rather than assuming a single failure. A request with a bad f
 
 `KAVO_PRECONDITION_FAILED` (412) means your `If-Match` token didn't match the row's current `ETag`: someone else wrote it since you last read it. The fix is almost always to re-`GET`, resolve the conflict, and retry with the fresh tag. `KAVO_PRECONDITION_UNSUPPORTED` (also 412) is a different situation entirely: it means the check couldn't run at all (untargeted operation, caching off, `findOne` disabled), so retrying unchanged will never help. See [Caching & ETags](/features/caching-and-etags) for the full conditional-request contract.
 
+## When a cursor page stops advancing
+
+`KAVO_PAGINATION_NOT_ADVANCING` (500) means a cursor page handed back the same `meta.nextCursor` token it was given — so paging by that token would loop forever, and the engine refuses instead. Passing the token back is exactly what the docs tell you to do, so this one isn't a client mistake: the cause is server-side, either a repository adapter that ignores the keyset predicate or a sort column whose stored values don't compare the way they're ordered (classically a text-backed `date` column on SQLite holding two spellings of one instant). Retrying won't help. See [ADR-0021 §5](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) for the full diagnosis.
+
 ## What never reaches the client
 
 Driver-level detail (raw SQL error text, stack traces) never appears in `detail` unless `errors.exposeInternals` is explicitly turned on (default `false`, and it should stay off in production). An error your own [custom operation handler](/core/custom-operations) doesn't explicitly raise as a `KavoException` still reaches the client in this same shape: anything unrecognized is wrapped as `KAVO_UNEXPECTED_ERROR` (500) rather than leaking whatever internal shape it had.
