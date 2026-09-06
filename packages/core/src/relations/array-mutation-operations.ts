@@ -1,5 +1,6 @@
 import type { OperationDescriptor, OperationRegistry } from "../operations/operation-registry.js";
 import type { OperationHandler } from "../operations/operation-handler.js";
+import type { RelationConfig } from "../config/entity-config.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
 /** The four sub-collection actions `arrayMutation`'s `resource` strategy synthesizes (ADR-0029's resource amendment). */
@@ -43,30 +44,28 @@ const OPERATION_ID_BY_ACTION: Readonly<Record<ArrayMutationAction, (relationName
 
 /**
  * Relation names opted into array-mutation writes, read straight off
- * entity-level `relations.edges` config — the only view route generation
- * has at decoration time (ADR-0012), the same config-only precedent
- * `declaresSoftDelete` (`default-operation-registry.ts`) sets for
+ * entity-level `EntityConfig.relations` config — the only view route
+ * generation has at decoration time (ADR-0012), the same config-only
+ * precedent `declaresSoftDelete` (`default-operation-registry.ts`) sets for
  * `restoreOne`. A relation's cardinality is not checked here — that needs
  * ORM metadata, unavailable at decoration time — so a to-one relation
  * wrongly marked `write` still gets a route generated blindly; it is
  * rejected at bootstrap once metadata exists (`DefaultRelationRegistry`),
  * the same two-stage validation `restoreOne`/`purgeOne` get.
  *
- * `write: true` (inherit the entity default) and `write: { strategy }`
- * (this relation's own strategy, ADR-0029's per-relation amendment, issue
- * #223) both count as opting in — the *strategy* is resolved separately,
- * by whoever needs it, since this function's only job is naming which
- * relations opted in at all.
+ * Since issue #404 a `write` entry always names its own `strategy`
+ * (`write: { strategy }`) — there is no entity-level default to inherit —
+ * so decoration time and `createCrud` resolve the same strategy for the
+ * same relation from the same input, with no gap between them.
  */
 export function writeOptedInRelationNames(
-  edges:
-    Readonly<Record<string, { readonly write?: boolean | { readonly strategy?: string } } | undefined>> | undefined,
+  relations: Readonly<Record<string, RelationConfig | undefined>> | undefined,
 ): readonly string[] {
-  if (edges === undefined) {
+  if (relations === undefined) {
     return [];
   }
-  return Object.entries(edges)
-    .filter(([, edge]) => edge?.write === true || typeof edge?.write === "object")
+  return Object.entries(relations)
+    .filter(([, entry]) => entry?.write !== undefined)
     .map(([name]) => name);
 }
 
@@ -78,7 +77,7 @@ const unboundArrayMutationHandler = (
   execute(): Promise<never> {
     throw new ConfigurationException(
       entityName,
-      `relations.edges.${relationName}.write`,
+      `relations.${relationName}.write`,
       `'${operationId}' has no bound handler — this registry was built for inspection (route generation) only`,
     );
   },
@@ -108,7 +107,7 @@ export interface ArrayMutationRelationEntry {
  * Registers the `arrayMutation` operations for one write-opted-in relation
  * per entry into an already-built registry — a post-hoc step (not part of
  * `createOperationRegistry`) because these entries aren't declared through
- * `EntityConfig.operations`, they're synthesized from `relations.edges`.
+ * `EntityConfig.operations`, they're synthesized from `EntityConfig.relations`.
  *
  * Each entry's own `strategy` decides its action set, so one call can mix
  * `replace`- and `resource`-strategy relations on the same entity (ADR-0029's

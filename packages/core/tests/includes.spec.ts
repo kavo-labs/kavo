@@ -120,19 +120,19 @@ describe("include resolution", () => {
     expect(() => blog({ author: { include: { fields: ["ghosts" as never] } } })).toThrow(ConfigurationException);
   });
 
-  it("fails at bootstrap when relations.edges names a relation the entity does not have", () => {
+  it("fails at bootstrap when relations names a relation the entity does not have", () => {
     try {
-      blog({ author: { relations: { edges: { ghosts: { strategy: "join" } } } } });
+      blog({ author: { relations: { ghosts: { read: { strategy: "join" } } } as never } });
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
-      // A distinct path from the sibling allowed.includable typo check
-      // above — edges (tuning) and includable (permission) are two
+      // A distinct path from the sibling include.fields typo check above —
+      // relations (tuning) and include.fields (permission) are two
       // different config keys that both fail fast on the same kind of
       // typo, and the path is what tells them apart.
       expect((error as ConfigurationException).messageParams).toMatchObject({
         entity: "Author",
-        path: "relations.edges.ghosts",
+        path: "relations.ghosts",
       });
     }
   });
@@ -170,7 +170,7 @@ describe("include resolution", () => {
     const fixture = blog({
       post: {
         include: { fields: ["comments"] },
-        relations: { edges: { comments: { strategy: "join" } } },
+        relations: { comments: { read: { strategy: "join" } } },
       },
     });
     const { posts, postRows } = fixture;
@@ -203,7 +203,7 @@ describe("include resolution", () => {
     const fixture = blog({
       author: {
         include: { fields: ["posts"], limits: { maxDepth: 1 } },
-        relations: { edges: { posts: { maxDepth: 3 } } },
+        relations: { posts: { read: { maxDepth: 3 } } },
       },
       post: { include: { fields: ["comments"] } },
     });
@@ -260,7 +260,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
@@ -274,13 +274,13 @@ describe("strategy: 'key' (issue #364)", () => {
 
   it("rejects strategy 'key' on a to-many edge at bootstrap", () => {
     try {
-      blog({ post: { relations: { edges: { comments: { strategy: "key" } } } } });
+      blog({ post: { relations: { comments: { read: { strategy: "key" } } } } });
       throw new Error("expected a ConfigurationException");
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
       expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.comments.strategy",
+        path: "relations.comments.read.strategy",
       });
     }
   });
@@ -289,7 +289,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
     });
     fixture.postAdapter.rows.push(
@@ -305,7 +305,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
@@ -322,7 +322,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
       author: { include: { fields: ["posts"] } },
     });
@@ -334,7 +334,7 @@ describe("strategy: 'key' (issue #364)", () => {
 
   it("still enforces allowed.includable — key grants no permission of its own", async () => {
     const fixture = blog({
-      post: { relations: { edges: { author: { strategy: "key" } } } },
+      post: { relations: { author: { read: { strategy: "key" } } } },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
     await expect(fixture.posts.findMany({ include: ["author"] })).rejects.toMatchObject({
@@ -346,7 +346,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
     });
     fixture.postAdapter.rows.push(postWithAuthor(Object.assign(new Author(), { id: 7, name: "Ada" })));
@@ -361,7 +361,7 @@ describe("strategy: 'key' (issue #364)", () => {
     const fixture = blog({
       post: {
         include: { fields: ["author"] },
-        relations: { edges: { author: { strategy: "key" } } },
+        relations: { author: { read: { strategy: "key" } } },
       },
       author: { select: { fields: ["name"] } },
     });
@@ -705,23 +705,23 @@ describe("defaultInclude", () => {
 });
 
 /**
- * ADR-0028: permission moved out of `relations.edges` into
- * `allowed.includable`. `relations.edges` naming a relation used to be
- * the opt-in itself (`includable: edge.includable ?? true`); it no longer
- * grants anything — it only tunes `maxDepth`/`strategy` for a relation
- * `allowed.includable` has already opened. Which of those includable
- * relations load by default is `defaults.include`'s question (issue #375).
+ * ADR-0028: permission moved out of the per-relation config into
+ * `include.fields`. A `relations` entry naming a relation used to be the
+ * opt-in itself; it no longer grants anything — it only tunes
+ * `read.maxDepth`/`read.strategy` for a relation `include.fields` has
+ * already opened. Which of those includable relations load by default is
+ * `include.default`'s question (issue #375).
  */
-describe("allowed.includable — where inclusion permission now lives", () => {
-  it("does not open a relation that relations.edges only tunes", async () => {
+describe("include.fields — where inclusion permission now lives", () => {
+  it("does not open a relation that a relations entry only tunes", async () => {
     const fixture = blog({
-      author: { relations: { edges: { posts: { strategy: "join" } } } },
+      author: { relations: { posts: { read: { strategy: "join" } } } },
     });
 
     await expect(fixture.authors.findMany({ include: ["posts"] })).rejects.toBeInstanceOf(QueryValidationException);
   });
 
-  it("opens a relation named in allowed.includable alone, with no relations.edges entry", async () => {
+  it("opens a relation named in include.fields alone, with no relations entry", async () => {
     const fixture = blog({
       author: { include: { fields: ["posts"] } },
     });
@@ -731,11 +731,11 @@ describe("allowed.includable — where inclusion permission now lives", () => {
     expect(Object.keys(includeTree(fixture.authorAdapter))).toEqual(["posts"]);
   });
 
-  it("still applies relations.edges tuning to a relation also opened by allowed.includable", async () => {
+  it("still applies relations tuning to a relation also opened by include.fields", async () => {
     const fixture = blog({
       author: {
         include: { fields: ["posts"] },
-        relations: { edges: { posts: { strategy: "join" } } },
+        relations: { posts: { read: { strategy: "join" } } },
       },
     });
 

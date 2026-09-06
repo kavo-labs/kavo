@@ -81,13 +81,13 @@ beforeAll(async () => {
   keyArticles = createMongooseKavo(database.connection).createCrud(models.Article, {
     delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never) as unknown as DefaultKavoService<Article>;
   const nestedKavo = createMongooseKavo(database.connection);
   nestedKavo.createCrud(models.Article, {
     delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(models.Blog, {
     include: { fields: ["articles"] },

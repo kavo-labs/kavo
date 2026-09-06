@@ -10,19 +10,9 @@ import {
   replaceRelationOperationId,
   writeOptedInRelationNames,
 } from "@kavo/core";
-import type { EntityMetadata } from "@kavo/core";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
-/** `authorMetadata` plus a second to-many relation, for the "which relation gets named" tests below. */
-const authorMetadataTwoRelations: EntityMetadata<Author> = {
-  ...authorMetadata,
-  relations: [
-    ...authorMetadata.relations,
-    { name: "favorites", target: () => Post as never, cardinality: "many", includable: false, strategy: "auto" },
-  ],
-};
-
-/** `SeededAdapter` plus the one write `arrayMutation`'s `replace` strategy needs. */
+/** `SeededAdapter` plus the one write the `replace` strategy needs. */
 class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter<Entity> {
   readonly calls: { id: EntityId; relation: string; memberIds: readonly EntityId[] | null }[] = [];
 
@@ -42,7 +32,7 @@ class ReplaceCapableAdapter<Entity extends { id: number }> extends SeededAdapter
   }
 }
 
-function makeAuthorCrud(edgesWrite: boolean) {
+function makeAuthorCrud(optIn: boolean) {
   const adapter = new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]);
   const kavo = createKavo();
   // Registered on the same root so the entity catalog can resolve `Post`'s
@@ -51,69 +41,54 @@ function makeAuthorCrud(edgesWrite: boolean) {
   kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
   const crud = kavo.createCrud(
     Author,
-    { arrayMutation: { strategy: "replace" }, relations: { edges: { posts: { write: edgesWrite } } } } as never,
+    (optIn ? { relations: { posts: { write: { strategy: "replace" } } } } : {}) as never,
     { adapter, metadata: authorMetadata },
   );
   return { crud, adapter };
 }
 
-describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", () => {
-  it("accepts the 'resource' strategy with no write-opted relations (no adapter capability required)", () => {
-    expect(() =>
-      createKavo().createCrud(Author, { arrayMutation: { strategy: "resource" } } as never, {
-        adapter: new SeededAdapter<Author>(),
-        metadata: authorMetadata,
-      }),
-    ).not.toThrow();
-  });
-
-  it("accepts the 'jsonPatch' strategy with no write-opted relations (no adapter capability required)", () => {
-    expect(() =>
-      createKavo().createCrud(Author, { arrayMutation: { strategy: "jsonPatch" } } as never, {
-        adapter: new SeededAdapter<Author>(),
-        metadata: authorMetadata,
-      }),
-    ).not.toThrow();
-  });
-
+describe("array-mutation config (EntityConfig.relations.<name>.write)", () => {
   it("rejects an unknown strategy value", () => {
     expect(() =>
-      createKavo().createCrud(Author, { arrayMutation: { strategy: "bogus" } } as never, {
+      createKavo().createCrud(Author, { relations: { posts: { write: { strategy: "bogus" } } } } as never, {
         adapter: new SeededAdapter<Author>(),
         metadata: authorMetadata,
       }),
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects write: true on a to-one relation", () => {
+  it("rejects write on a to-one relation", () => {
     expect(() =>
-      createKavo().createCrud(Post, { relations: { edges: { author: { write: true } } } } as never, {
+      createKavo().createCrud(Post, { relations: { author: { write: { strategy: "replace" } } } } as never, {
         adapter: new SeededAdapter<Post>(),
         metadata: postMetadata,
       }),
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects write: true on a relation when arrayMutation is false", () => {
-    expect(() =>
-      createKavo().createCrud(
-        Author,
-        { arrayMutation: false, relations: { edges: { posts: { write: true } } } } as never,
-        { adapter: new SeededAdapter<Author>(), metadata: authorMetadata },
-      ),
-    ).toThrowError(ConfigurationException);
+  it("rejects a relations entry that tunes nothing (bare '{}')", () => {
+    try {
+      createKavo().createCrud(Author, { relations: { posts: {} } } as never, {
+        adapter: new SeededAdapter<Author>(),
+        metadata: authorMetadata,
+      });
+      throw new Error("expected a ConfigurationException");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "Author",
+        path: "relations.posts",
+      });
+    }
   });
 
   it("rejects a write-opted relation when the adapter has no replaceRelation", () => {
     expect(() =>
-      createKavo().createCrud(
-        Author,
-        { arrayMutation: { strategy: "replace" }, relations: { edges: { posts: { write: true } } } } as never,
-        {
-          adapter: new SeededAdapter<Author>(), // no replaceRelation
-          metadata: authorMetadata,
-        },
-      ),
+      createKavo().createCrud(Author, { relations: { posts: { write: { strategy: "replace" } } } } as never, {
+        adapter: new SeededAdapter<Author>(), // no replaceRelation
+        metadata: authorMetadata,
+      }),
     ).toThrowError(ConfigurationException);
   });
 
@@ -129,69 +104,16 @@ describe("array-mutation config (arrayMutation, relations.edges.<name>.write)", 
     // wire body at request time (a scalar id degrading to `undefined`, or
     // an object's first value being taken as the id).
     expect(() =>
-      createKavo().createCrud(
-        Author,
-        { arrayMutation: { strategy: "replace" }, relations: { edges: { posts: { write: true } } } } as never,
-        {
-          adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
-          metadata: authorMetadata,
-        },
-      ),
-    ).toThrowError(ConfigurationException);
-  });
-
-  it("rejects write: true on a relation when arrayMutation.strategy is left unset (issue #221)", () => {
-    expect(() =>
-      createKavo().createCrud(Author, { relations: { edges: { posts: { write: true } } } } as never, {
+      createKavo().createCrud(Author, { relations: { posts: { write: { strategy: "replace" } } } } as never, {
         adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
         metadata: authorMetadata,
       }),
     ).toThrowError(ConfigurationException);
   });
 
-  it("names the entity and relation when arrayMutation.strategy is left unset (issue #221)", () => {
-    try {
-      createKavo().createCrud(Author, { relations: { edges: { posts: { write: true } } } } as never, {
-        adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
-        metadata: authorMetadata,
-      });
-      throw new Error("expected a ConfigurationException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        entity: "Author",
-        path: "relations.edges.posts.write",
-      });
-      expect((error as ConfigurationException).message).toContain("arrayMutation.strategy");
-    }
-  });
-
-  it("names only the first offending relation when several opt into write with no strategy resolved (first-wins, not a naming-all-of-them guarantee)", () => {
-    try {
-      createKavo().createCrud(
-        Author,
-        { relations: { edges: { posts: { write: true }, favorites: { write: true } } } } as never,
-        {
-          adapter: new ReplaceCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]),
-          metadata: authorMetadataTwoRelations,
-        },
-      );
-      throw new Error("expected a ConfigurationException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      // `relations.all()` iteration order is declaration order, so `posts`
-      // (declared first on `authorMetadata`) is the one named — `favorites`
-      // is not mentioned even though it is equally unresolved.
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        path: "relations.edges.posts.write",
-      });
-    }
-  });
-
-  it("accepts arrayMutation with strategy left unset when no relation opts into write", () => {
+  it("accepts an entity with no relations block", () => {
     expect(() =>
-      createKavo().createCrud(Author, { arrayMutation: {} } as never, {
+      createKavo().createCrud(Author, {} as never, {
         adapter: new SeededAdapter<Author>(),
         metadata: authorMetadata,
       }),
@@ -205,10 +127,13 @@ describe("registerArrayMutationOperations / replaceRelationOperationId / writeOp
     expect(replaceRelationOperationId("tags")).toBe("replaceTags");
   });
 
-  it("reads only the write: true entries off relations.edges", () => {
-    expect(writeOptedInRelationNames({ posts: { write: true }, comments: { write: false }, tags: {} })).toEqual([
-      "posts",
-    ]);
+  it("reads only the entries carrying a write block off EntityConfig.relations", () => {
+    expect(
+      writeOptedInRelationNames({
+        posts: { write: { strategy: "replace" } },
+        comments: { read: { maxDepth: 1 } },
+      }),
+    ).toEqual(["posts"]);
     expect(writeOptedInRelationNames(undefined)).toEqual([]);
   });
 

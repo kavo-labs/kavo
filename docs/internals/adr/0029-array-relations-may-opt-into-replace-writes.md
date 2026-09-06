@@ -537,11 +537,67 @@ new `photos` relation pins `write: { strategy: "resource" }`, trading the
 single `PUT /cats/:id/tags`-shaped route for
 `GET`/`POST`/`DELETE`/`PUT /cats/:id/photos` instead.
 
+## Amendment — the config surface folds into `EntityConfig.relations` (issue #404)
+
+Every amendment above configures array-mutation writes through two
+`KavoSettings` keys — `relations.edges.<name>.write` for the per-relation
+opt-in and `arrayMutation` for the strategy — both merged through the
+global → entity → operation → per-call precedence chain. Issue #386 had
+already moved every _field_-shaped axis (`filter`/`sort`/`select`/`search`/
+`include`) off that chain into per-axis blocks on `EntityConfig`; this
+amendment does the same for relations, the one axis it left behind.
+
+**The config surface.** `KavoSettings.relations` and
+`KavoSettings.arrayMutation` are **removed**. `EntityConfig` gains
+`relations?: { [relationName]: { read?: { maxDepth?, strategy? }, write?:
+{ strategy } } }`, keyed by the entity's own top-level relation names and
+resolved directly by `DefaultRelationRegistry` at bootstrap — structural
+entity-scope config like `dto`/`computed`, never merged, with no global or
+built-in default. `read` carries what `relations.edges.<name>` carried
+(`maxDepth`/`strategy` loading tuning); `write` carries the strategy choice
+that `arrayMutation`, then `write: { strategy }` (issue #223), carried.
+
+**`write: true` is gone.** With no entity-level `arrayMutation` there is
+nothing for a boolean to inherit, so `write` accepts only `{ strategy }` — a
+`write` entry names its own strategy, always. This retires, structurally
+rather than by runtime check:
+
+- **Issue #221's "unset strategy is a bootstrap error"** — a required
+  `strategy` in the type makes it a compile error instead. Squarely in
+  #221's own spirit ("nobody had to choose `replace` on purpose").
+- **`arrayMutation: false`** — omitting `write` on a relation _is_ the off
+  switch now; there is no feature-wide toggle because there is no
+  feature-wide setting.
+- **`KavoModule`'s `requireArrayMutationRouteReachable`** (issue #221/#223) —
+  its entire reason to exist was the gap where decoration time saw no local
+  declaration but a global default resolved one. With no global default and
+  every strategy named at the relation, decoration time and `createCrud` see
+  identical information; the gap closes structurally. `@Kavo`'s
+  `declaredArrayMutationStrategy` helper goes with it.
+
+**What does not change.** `RelationDescriptor.write` stays the resolved
+`ArrayMutationStrategy | undefined`. The three strategies, their route
+surfaces, their bootstrap capability checks, the two-stage cardinality
+split, and the "opting one relation into `jsonPatch` changes `patchOne`'s
+body contract for the whole entity" rule are all exactly as the amendments
+above leave them — only where the strategy is _written_ moved.
+
+**Migration.** `arrayMutation: { strategy: S }` + `relations: { edges: {
+r: { write: true } } }` becomes `relations: { r: { write: { strategy: S } }
+}`. `relations: { edges: { r: { maxDepth, strategy } } }` becomes
+`relations: { r: { read: { maxDepth, strategy } } }`. A global
+`arrayMutation` default now has no home — each entity names the strategy on
+the relation.
+
 ## Consequences
 
 - All three named strategies — `replace`, `jsonPatch`, `resource` — are
   implemented today, each behind its own bootstrap capability check and its
   own mutually-exclusive route surface.
+- Since issue #404 the array-mutation write strategy is configured only at
+  `EntityConfig.relations.<name>.write.strategy` — there is no
+  `KavoSettings.arrayMutation`, no entity-level default, and no `write:
+true` boolean form.
 - `@kavo/prisma`, `@kavo/mongoose`, and `@kavo/mikroorm` do not implement
   `replaceRelation`, `patchRelation`, `readRelation`, `addRelationMember`,
   or `removeRelationMember` yet. An app on one of them that opts a relation

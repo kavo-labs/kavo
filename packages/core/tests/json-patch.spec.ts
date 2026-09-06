@@ -10,7 +10,7 @@ import {
 } from "@kavo/core";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
-/** `SeededAdapter` plus the one write `arrayMutation`'s `jsonPatch` strategy needs. */
+/** `SeededAdapter` plus the one write the `jsonPatch` strategy needs. */
 class JsonPatchCapableAdapter<Entity extends { id: number; posts?: unknown }> extends SeededAdapter<Entity> {
   readonly calls: {
     id: EntityId;
@@ -67,7 +67,7 @@ class JsonPatchCapableAdapter<Entity extends { id: number; posts?: unknown }> ex
   }
 }
 
-function makeAuthorCrud(strategy: "jsonPatch" | "replace" | false, edgesWrite = true) {
+function makeAuthorCrud(strategy: "jsonPatch" | "replace", optIn = true) {
   const adapter = new JsonPatchCapableAdapter<Author>([{ id: 1, name: "Ada", posts: [] }]);
   const kavo = createKavo();
   // Registered on the same root so the entity catalog can resolve `Post`'s
@@ -75,23 +75,19 @@ function makeAuthorCrud(strategy: "jsonPatch" | "replace" | false, edgesWrite = 
   // forms) — the same association logic `create`/`update`/`replace` run
   // through.
   kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
-  const crud = kavo.createCrud(
-    Author,
-    {
-      arrayMutation: strategy === false ? false : { strategy },
-      relations: { edges: { posts: { write: edgesWrite } } },
-    } as never,
-    { adapter, metadata: authorMetadata },
-  );
+  const crud = kavo.createCrud(Author, (optIn ? { relations: { posts: { write: { strategy } } } } : {}) as never, {
+    adapter,
+    metadata: authorMetadata,
+  });
   return { crud, adapter };
 }
 
-describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
+describe("jsonPatch strategy — bootstrap", () => {
   it("rejects a write-opted relation under jsonPatch when the adapter has no patchRelation", () => {
     expect(() =>
       createKavo().createCrud(
         Author,
-        { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { posts: { write: true } } } } as never,
+        { relations: { posts: { write: { strategy: "jsonPatch" } } } } as never,
         { adapter: new SeededAdapter<Author>(), metadata: authorMetadata }, // no patchRelation
       ),
     ).toThrowError(ConfigurationException);
@@ -106,16 +102,15 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
     expect(() =>
       kavo.createCrud(
         Author,
-        { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { posts: { write: true } } } } as never,
+        { relations: { posts: { write: { strategy: "jsonPatch" } } } } as never,
         { adapter: new SeededAdapter<Author>(), metadata: authorMetadata }, // no patchRelation
       ),
     ).toThrowError(ConfigurationException);
     expect(() =>
-      kavo.createCrud(
-        Author,
-        { arrayMutation: { strategy: "jsonPatch" }, relations: { edges: { posts: { write: true } } } } as never,
-        { adapter: new SeededAdapter<Author>(), metadata: authorMetadata },
-      ),
+      kavo.createCrud(Author, { relations: { posts: { write: { strategy: "jsonPatch" } } } } as never, {
+        adapter: new SeededAdapter<Author>(),
+        metadata: authorMetadata,
+      }),
     ).toThrowError(/patchRelation/);
   });
 
@@ -145,11 +140,10 @@ describe("arrayMutation.strategy: 'jsonPatch' — bootstrap", () => {
     const kavo = createKavo();
     kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
     expect(() =>
-      kavo.createCrud(
-        Author,
-        { arrayMutation: { strategy: "replace" }, relations: { edges: { posts: { write: true } } } } as never,
-        { adapter: new ReplaceCapable(), metadata: authorMetadata },
-      ),
+      kavo.createCrud(Author, { relations: { posts: { write: { strategy: "replace" } } } } as never, {
+        adapter: new ReplaceCapable(),
+        metadata: authorMetadata,
+      }),
     ).not.toThrow();
   });
 });
@@ -168,7 +162,7 @@ describe("patchOne — jsonPatch overlap with the ordinary object-body contract"
     expect(adapter.calls).toEqual([]); // no relation ops touched
   });
 
-  it("an array body under the 'replace' strategy is untouched — same {} DefaultDeserializer already produced", async () => {
+  it("an array body is untouched when no relation resolves to jsonPatch — same {} DefaultDeserializer already produced", async () => {
     const { crud } = makeAuthorCrud("replace", false);
     const response = await crud.engine.execute({
       operation: "patchOne",
@@ -179,18 +173,6 @@ describe("patchOne — jsonPatch overlap with the ordinary object-body contract"
     } as never);
     // Not parsed as JSON Patch: the array degrades to an empty patch, same
     // as any non-object body always has.
-    expect(response.item).toMatchObject({ id: 1, name: "Ada" });
-  });
-
-  it("an array body with arrayMutation: false is untouched, same as any non-object body", async () => {
-    const { crud } = makeAuthorCrud(false, false);
-    const response = await crud.engine.execute({
-      operation: "patchOne",
-      id: "1",
-      body: [{ op: "replace", path: "/name", value: "Grace" }] as never,
-      query: null,
-      options: null,
-    } as never);
     expect(response.item).toMatchObject({ id: 1, name: "Ada" });
   });
 });
@@ -458,19 +440,21 @@ describe("patchOne — jsonPatch document, relation ops", () => {
   });
 
   it("rejects a path naming a relation that never opted into write", async () => {
-    const { crud } = makeAuthorCrud("jsonPatch", false);
+    // `posts` is on jsonPatch (so document parsing is on), but `ghosts` is
+    // named by neither a writable field nor a jsonPatch-opted relation.
+    const { crud } = makeAuthorCrud("jsonPatch");
     await expect(
       crud.engine.execute({
         operation: "patchOne",
         id: "1",
-        body: [{ op: "add", path: "/posts/-", value: { id: 2 } }] as never,
+        body: [{ op: "add", path: "/ghosts/-", value: { id: 2 } }] as never,
         query: null,
         options: null,
       } as never),
     ).rejects.toThrowError(JsonPatchInvalidDocumentException);
   });
 
-  it("rejects 'replace' on a relation path — that surface is arrayMutation.strategy: 'replace'", async () => {
+  it("rejects 'replace' on a relation path — that surface is write.strategy 'replace'", async () => {
     const { crud } = makeAuthorCrud("jsonPatch");
     await expect(
       crud.engine.execute({

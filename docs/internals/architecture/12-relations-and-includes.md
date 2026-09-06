@@ -17,9 +17,10 @@ inclusion, and loading tuning are three different config keys (ADR-0028,
 ADR-0046): `allowed.includable` (entity-config.ts) grants `include=` access,
 one relation segment at a time from the root; `defaults.include`
 (settings.ts) names which includable relations load even when the client's
-`include=` doesn't ask; `relations.edges.<name>` (settings.ts) only tunes
+`include=` doesn't ask; `EntityConfig.relations.<name>.read` (entity-config.ts,
+issue #404 — formerly `KavoSettings.relations.edges.<name>`) only tunes
 `maxDepth`/`strategy` for a relation once it is already includable — naming
-a relation in `edges` grants nothing by itself, and naming one in
+a relation there grants nothing by itself, and naming one in
 `defaults.include` still requires the matching `allowed.includable` grant.
 
 ## 1. The registry
@@ -27,15 +28,16 @@ a relation in `edges` grants nothing by itself, and naming one in
 `DefaultRelationRegistry` merges four sources at bootstrap into one
 `RelationDescriptor` per edge:
 
-| Key                             | Source               | Default                                                                                             |
-| ------------------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
-| `name`, `target`, `cardinality` | metadata             | —                                                                                                   |
-| `includable`                    | `allowed.includable` | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
-| `defaultInclude`                | `defaults.include`   | `false`                                                                                             |
-| `maxDepth`                      | `relations.edges`    | inherit `limits.includeDepth`                                                                       |
-| `strategy`                      | `relations.edges`    | `auto`                                                                                              |
+| Key                             | Source                   | Default                                                                                             |
+| ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `name`, `target`, `cardinality` | metadata                 | —                                                                                                   |
+| `includable`                    | `allowed.includable`     | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
+| `defaultInclude`                | `defaults.include`       | `false`                                                                                             |
+| `maxDepth`                      | `relations.<name>.read`  | inherit `limits.includeDepth`                                                                       |
+| `strategy`                      | `relations.<name>.read`  | `auto`                                                                                              |
+| `write`                         | `relations.<name>.write` | `undefined` — resolved `ArrayMutationStrategy`; opt-in only, to-many only                           |
 
-A name in `allowed.includable`, `defaults.include`, or `relations.edges`
+A name in `allowed.includable`, `defaults.include`, or `relations`
 that the entity does not have is a bootstrap `ConfigurationException`: an
 allowlist typo that silently permits nothing looks exactly like working
 config until the first client asks.
@@ -137,7 +139,7 @@ and a second query is pure overhead:
 ```ts
 joinedBlogs = kavo.createCrud(Blog, {
   allowed: { includable: ["articles"] },
-  relations: { edges: { articles: { strategy: "join" } } },
+  relations: { articles: { read: { strategy: "join" } } },
 });
 ```
 
@@ -214,20 +216,22 @@ bare scalar (`{"owner": 7}`) is rejected with `AssociationInvalidShapeException`
 composite-key target (ADR-0039) is the one exception, keeping its own
 `~`-delimited scalar shorthand.
 
-### Array-relation mutation (`arrayMutation`, ADR-0029)
+### Array-relation mutation (ADR-0029)
 
 ADR-0014's named extension point — an explicit per-relation write policy —
-is `KavoSettings.arrayMutation: { strategy } | false`, resolved through the
-usual precedence chain as the entity's own default, plus a per-relation
-opt-in: `relations.edges.<name>.write: true`. A relation not opted in keeps
-the plain associate-by-id behavior above; nothing here changes for it.
+is `EntityConfig.relations.<name>.write: { strategy }` (issue #404, folding
+the former `KavoSettings.arrayMutation` and `relations.edges.<name>.write`
+into one entity-scope block). It opts a to-many relation into array-mutation
+writes **and** names its strategy in one statement — there is no
+entity-level default to inherit, no boolean form, and no feature-wide
+`false`; omitting `write` is how a relation keeps the plain
+associate-by-id behavior above.
 
-The opt-in has a second spelling since issue #223 (ADR-0029's per-relation
-amendment): `write: { strategy }` opts in **and** pins that one relation's
-own strategy, overriding the entity default — so two relations on the same
-entity can use two different strategies (one `replace`, another `resource`,
-say). `write: true` still means exactly what it always did: inherit the
-entity's own resolved `arrayMutation.strategy`.
+Two relations on the same entity can use two different strategies (one
+`replace`, another `resource`, say). `write` on a to-one relation is a
+bootstrap `ConfigurationException`. `RelationDescriptor.write` carries the
+resolved `ArrayMutationStrategy | undefined` — `DefaultRelationRegistry`
+copies `write.strategy` straight through.
 
 Three strategies are named — `"replace"`, `"resource"`, `"jsonPatch"` —
 and all three are implemented today.
@@ -308,8 +312,7 @@ it, since there is no static route table for a dynamic per-relation id).
   `addRelationMember`/`removeRelationMember` commit their membership read
   and write in one transaction, the same reason `patchRelation` does.
 - `list`/`add`/`remove<Relation>` routes are **not** generated for a
-  relation whose entity resolved `arrayMutation.strategy` to anything other
-  than `"resource"` — the three strategies' write surfaces stay mutually
+  relation whose own resolved strategy is anything other than `"resource"` — the three strategies' write surfaces stay mutually
   exclusive per entity, the same rule `replace`/`jsonPatch` already have
   between them.
 
@@ -342,7 +345,7 @@ shapes, not by a denylist:
   deliberate, stated deviation from RFC 6902's array convention: to-many
   relation membership has no persisted order for an index to mean anything
   against. `replace` is rejected on this shape — whole-array replacement is
-  `arrayMutation.strategy: "replace"`'s own surface, kept distinct.
+  `write: { strategy: "replace" }`'s own surface, kept distinct.
 
 Anything else — a malformed op, an unsupported `op` for its path shape, a
 path naming neither a writable field nor a write-opted relation, more than
@@ -371,31 +374,27 @@ one level more atomic than `replace` (whose own read-then-write is not
 transactional at all, a gap its own doc comment names), not a claim of
 whole-document atomicity.
 
-`write: true` on a relation is still checked against real cardinality at
-`createCrud`, and a write-opted relation on an adapter without
+`write` on a relation is checked against real cardinality at `createCrud`,
+and a write-opted relation on an adapter without
 `EntityWriter.patchRelation` fails at `createCrud` too — the same
-bootstrap posture `replace`'s `EntityWriter.replaceRelation` check has.
-`replace<Relation>` routes are **not** generated for a relation whose
-entity resolved `arrayMutation.strategy` to `"jsonPatch"` — the two
-strategies' write surfaces stay mutually exclusive per entity.
+bootstrap posture `replace`'s `EntityWriter.replaceRelation` check has. No
+`replace<Relation>` route is generated for a `"jsonPatch"` relation — the
+two strategies' write surfaces stay mutually exclusive per relation.
 
-### Per-relation strategy (issue #223, ADR-0029's per-relation amendment)
+### Per-relation strategy (issue #223; the only form since issue #404)
 
-Every rule above ("relation whose entity resolved `arrayMutation.strategy`
-to X") now reads as "relation whose own resolved strategy is X" — each
-relation's strategy is resolved individually (`write: true` inherits the
-entity default, `write: { strategy }` pins its own), and the three
-strategies' route surfaces stay mutually exclusive **per relation**, not
-just per entity. `createCrud` groups an entity's write-opted relations by
-their own resolved strategy and only runs the adapter capability check each
-group actually needs — a `replace`-and-`resource` entity never demands
-`resource`'s four primitives for its `replace`-strategy relation.
+Each relation's strategy is resolved individually from its own `write:
+{ strategy }` — there is no entity-level default (issue #404 removed it),
+so the three strategies' route surfaces are mutually exclusive **per
+relation**. `createCrud` groups an entity's write-opted relations by
+strategy and only runs the adapter capability check each group actually
+needs — a `replace`-and-`resource` entity never demands `resource`'s four
+primitives for its `replace`-strategy relation.
 
-The one cross-relation effect that survives: opting a single relation into
-`jsonPatch` still turns on RFC 6902 body parsing for `patchOne` across the
-whole entity (scalar `/<field>` ops included), the same as declaring
-`arrayMutation.strategy: "jsonPatch"` at entity scope always did — that was
-never a per-relation question, since `patchOne`'s route itself is shared.
+The one cross-relation effect: opting a single relation into `jsonPatch`
+turns on RFC 6902 body parsing for `patchOne` across the whole entity
+(scalar `/<field>` ops included) — `patchOne`'s route itself is shared, so
+that scope was never per-relation.
 
 See **ADR-0029** and its resource, jsonPatch, and per-relation amendments
 for the full design, including why the non-`@kavo/typeorm` adapters are

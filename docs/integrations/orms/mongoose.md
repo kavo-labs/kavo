@@ -114,7 +114,7 @@ POST /books  {"author":"<id>"}        # writable by id (ADR-0014)
 Mark it includable the same way as any other relation:
 
 ```ts
-@Kavo(Book, { relations: { edges: { author: { includable: true } } } })
+@Kavo(Book, { allowed: { includable: ["author"] } })
 ```
 
 ### Virtual fields

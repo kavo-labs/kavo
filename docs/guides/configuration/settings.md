@@ -22,7 +22,7 @@ Pair either keyset strategy with `count: false`, and index the sort tuple. The G
 
 ## limits
 
-`filterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `inValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `likePattern` (default `200`) is the max character length of a `like`/`ilike` pattern. `includeDepth` (default `2`) is the max relation-include nesting depth — overridable per-subtree by `relations.edges.<name>.maxDepth` (see [Relations](/features/relations)). `includedNodes` (default `10`) is the max total number of included relation nodes across the whole include tree.
+`filterDepth` (default `3`) is the max nesting depth of the `filter` AST (`and`/`or` groups nested inside each other). `inValues` (default `100`) is the max array length for `in`, `notIn`, and `between` filter operators. `likePattern` (default `200`) is the max character length of a `like`/`ilike` pattern. `includeDepth` (default `2`) is the max relation-include nesting depth — overridable per-subtree by `relations.<name>.read.maxDepth` (see [Relations](/features/relations)). `includedNodes` (default `10`) is the max total number of included relation nodes across the whole include tree.
 
 ## search
 
@@ -44,11 +44,9 @@ What a request looks like when the client specifies nothing — the omission-sid
 
 ## relations
 
-Moved to [Relations](/features/relations), which also covers `arrayMutation`.
-
-## arrayMutation
-
-See [Relations](/features/relations#arraymutation).
+Not a `KavoSettings` key. Per-relation read tuning and the array-mutation
+write strategy live on `EntityConfig.relations` (entity scope only) since
+issue #404 — see [Relations](/features/relations).
 
 ## cache
 

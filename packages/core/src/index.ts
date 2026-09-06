@@ -75,7 +75,6 @@ export type { ProblemDetailsDto, QueryIssueDto } from "./errors/problem-details.
 // ── Configuration ─────────────────────────────────────────────────────
 export type {
   KavoSettings,
-  ArrayMutationSettings,
   ArrayMutationStrategy,
   AuthorizationSettings,
   CacheSettings,
@@ -84,8 +83,6 @@ export type {
   PaginationSettings,
   RealtimeFieldSelector,
   RealtimeSettings,
-  RelationEdgeSettings,
-  RelationSettings,
   SoftDeleteMode,
   SoftDeleteSettings,
   PaginationStrategyName,
@@ -99,6 +96,10 @@ export type {
   StandardOperationsConfig,
   QueryFieldSelector,
   RelationFieldSelector,
+  RelationsConfig,
+  RelationConfig,
+  RelationReadConfig,
+  RelationWriteConfig,
   SelectableFieldSelector,
   FilterFieldSelector,
   FilterOperatorMap,

@@ -9,7 +9,9 @@ import type { KavoSettings } from "./settings.js";
  * `include` — issue #386) are not here: they are entity-scope-only and
  * resolved directly from `EntityConfig` by `resolve-entity-config.ts`, with
  * their own built-in fallbacks (`BUILT_IN_FILTER_LIMITS` etc.) — there is no
- * global default for them.
+ * global default for them. Per-relation config (`EntityConfig.relations` —
+ * issue #404, replacing `relations.edges` and `arrayMutation`) is the same:
+ * entity-scope-only, resolved by `DefaultRelationRegistry`, no global default.
  */
 export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   pagination: Object.freeze({
@@ -24,11 +26,6 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   }),
   errors: Object.freeze({
     exposeInternals: false,
-  }),
-  relations: Object.freeze({
-    // Inclusion is opt-in: with no edges configured, `include=` has
-    // nothing to reach.
-    edges: Object.freeze({}),
   }),
   // Off by default. A full object rather than `false` — like `delete`'s
   // default — so a partial `cache: { ttl: 60 }` override merges against a
@@ -58,15 +55,6 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // (`KavoOptions.realtimeTransports` — see `RealtimeSettings`'s doc), so
   // there is nothing transport-shaped to default here.
   realtime: false,
-  // No default strategy (issue #221 amends ADR-0029): the key is never
-  // consulted unless a relation opts in via `relations.edges.<name>.write`,
-  // and once one does, `validateArrayMutationRelations`
-  // (`resolve-entity-config.ts`) demands an explicit `strategy` rather than
-  // silently assuming one. The empty object — not `false` — is still the
-  // base, so a partial `arrayMutation: {...}` override merges against a
-  // complete base instead of replacing a `false` wholesale, the same
-  // "harmless default" reasoning `cache`'s object default documents.
-  arrayMutation: Object.freeze({}),
   // Unset: today's `STANDARD_OPERATIONS` enabled-by-default behavior (and
   // ADR-0013's soft-delete-driven `restoreOne` auto-enable) is unchanged
   // for apps that don't set a global default.

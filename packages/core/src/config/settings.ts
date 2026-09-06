@@ -1,4 +1,3 @@
-import type { RelationLoadStrategy } from "../relations/relation-descriptor.js";
 import type { StandardOperationId } from "../operations/operation.js";
 import type { RealtimeEventDto, RealtimeEventId } from "../realtime/realtime-event.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
@@ -16,8 +15,11 @@ import type { RealtimeTransport } from "../realtime/realtime-transport.js";
  * search/include, its per-axis defaults, and its per-axis ceilings — lives
  * on `EntityConfig`'s `dto`/`select`/`search`/`filter`/`sort`/`include`
  * blocks instead (issue #386), grouped by concern rather than split across
- * this schema and a separate allowlist tree. This schema carries only the
- * settings that are not field-shaped.
+ * this schema and a separate allowlist tree. Per-relation read tuning and
+ * array-mutation write policy moved the same way (issue #404): they live on
+ * `EntityConfig.relations` now, not here — this schema carried
+ * `relations.edges` and `arrayMutation` until then. This schema carries
+ * only the settings that are neither field- nor relation-shaped.
  */
 
 /** Built-in pagination strategy names; open for custom strategies. */
@@ -53,62 +55,6 @@ export interface PaginationSettings {
 export interface ErrorSettings {
   /** Leak driver-level error details into responses — off by default. */
   readonly exposeInternals: boolean;
-}
-
-/**
- * Per-relation *tuning* — the config half of a `RelationDescriptor` other
- * than permission. ORM metadata supplies shape (name, target,
- * cardinality); this supplies loading behavior once a relation is already
- * includable. Permission itself lives on `include.fields`
- * (`EntityConfig`, entity-config.ts) instead, not here (ADR-0028) — naming
- * a relation in `edges` no longer opts it in.
- */
-export interface RelationEdgeSettings {
-  /** Overrides `include.limits.maxDepth` for the subtree below this node. */
-  readonly maxDepth?: number;
-  readonly strategy?: RelationLoadStrategy;
-  /**
-   * Opts this relation into `arrayMutation` writes (ADR-0014's named
-   * extension point) — the per-relation half of the policy, `arrayMutation`
-   * itself is the strategy half. Only meaningful on a to-many relation;
-   * `write: true`/`write: {...}` on a to-one relation is a bootstrap
-   * `ConfigurationException` (`DefaultRelationRegistry`), since association
-   * by id already covers to-one writes and there is no array to mutate.
-   * Independent of `include.fields` (a relation can be write-opted-in
-   * without being read-includable, or vice versa).
-   *
-   * Two spellings (issue #223, ADR-0029's per-relation amendment):
-   * - `true` — opt in, strategy inherited from this entity's own resolved
-   *   `arrayMutation.strategy`. The original, entity-wide-only behavior.
-   * - `{ strategy }` — opt in *and* pin this relation's own strategy,
-   *   overriding whatever the entity resolves to. Two relations on the same
-   *   entity can this way use two different strategies (e.g. one `replace`,
-   *   another `jsonPatch`) — `arrayMutation.strategy` above still supplies
-   *   the default for any relation that just says `write: true`.
-   *
-   * `arrayMutation: false` at entity scope disables the feature wholesale
-   * and wins over any per-relation override — a relation cannot re-enable
-   * array-mutation writes for itself while its entity has them off
-   * (`DefaultRelationRegistry`).
-   */
-  readonly write?: boolean | { readonly strategy: ArrayMutationStrategy };
-}
-
-/**
- * Per-relation loading tuning. Inclusion *limits* live in
- * `EntityConfig.include.limits` instead (issue #386) — this block is
- * `edges` only.
- */
-export interface RelationSettings {
-  /**
-   * Per-relation loading overrides, keyed by relation property name —
-   * `maxDepth`/`strategy`/`write` only. Whether a relation is includable at
-   * all is `include.fields`'s question, and whether it defaults into an
-   * empty request is `include.default`'s — neither lives here any more; an
-   * entry here for a relation `include.fields` never named still validates
-   * and applies its loading tuning, but grants no permission.
-   */
-  readonly edges: Readonly<Record<string, RelationEdgeSettings>>;
 }
 
 /**
@@ -199,8 +145,7 @@ export interface SoftDeleteSettings {
  * Which fields a transport may expose an individual subscription to — the
  * same array-or-`exclude` shape `select.fields` uses
  * (`SelectableFieldSelector`, entity-config.ts), but plain strings: unlike
- * `EntityConfig`, `KavoSettings` carries no `Entity` type parameter
- * (`relations.edges`'s keys are plain strings for the same reason), so
+ * `EntityConfig`, `KavoSettings` carries no `Entity` type parameter, so
  * there is no layer here to check a field name against real entity paths.
  */
 export type RealtimeFieldSelector = readonly string[] | { readonly exclude: readonly string[] };
@@ -219,7 +164,8 @@ export type RealtimeFieldSelector = readonly string[] | { readonly exclude: read
  * (`kavo.ts`) is where transports are registered instead, once per
  * `createKavo` root, and reached at runtime through
  * `ResolvedEntityConfig.realtimeTransports` — structural, like `relations`
- * and `dto`, not merged through this precedence chain. See the `operations.
+ * (`EntityConfig.relations`) and `dto`, not merged through this precedence
+ * chain. See the `operations.
  * <id>.handler` doc for the same reasoning applied to another live-object
  * exception to "settings are data."
  */
@@ -255,35 +201,27 @@ export interface RealtimeSettings {
 }
 
 /**
- * `arrayMutation.strategy` values (ADR-0014's named extension point for
- * write-side relations beyond associate-by-id). `"replace"` is a whole-array
- * `PUT :id/<relation>` on the relation, still id-only per ADR-0014, with
- * partial mutation disabled (ADR-0029). `"jsonPatch"` reuses `PATCH
- * /entity/:id` (`patchOne`) instead: an array body there is parsed as an
- * RFC 6902 patch document — `add`/`replace` on `/<field>` for a scalar
- * column, `add`/`remove` on `/<relation>/-` for a write-opted-in relation's
- * membership — while an object body keeps `patchOne`'s ordinary contract
- * unchanged (ADR-0029's jsonPatch amendment). `"resource"` synthesizes four
- * per-relation sub-collection operations instead of one — `GET`/`POST`/
- * `DELETE`/`PUT` `:id/<relation>`, adding `list`/`add`/`remove`
- * single-member semantics alongside the same whole-array `replace` `PUT`
- * uses — for a relation opted into `relations.edges.<name>.write`
- * (ADR-0029's resource amendment).
+ * `EntityConfig.relations.<name>.write.strategy` values (ADR-0014's named
+ * extension point for write-side relations beyond associate-by-id).
+ * `"replace"` is a whole-array `PUT :id/<relation>` on the relation, still
+ * id-only per ADR-0014, with partial mutation disabled (ADR-0029).
+ * `"jsonPatch"` reuses `PATCH /entity/:id` (`patchOne`) instead: an array
+ * body there is parsed as an RFC 6902 patch document — `add`/`replace` on
+ * `/<field>` for a scalar column, `add`/`remove` on `/<relation>/-` for a
+ * write-opted-in relation's membership — while an object body keeps
+ * `patchOne`'s ordinary contract unchanged (ADR-0029's jsonPatch
+ * amendment). `"resource"` synthesizes four per-relation sub-collection
+ * operations instead of one — `GET`/`POST`/`DELETE`/`PUT` `:id/<relation>`,
+ * adding `list`/`add`/`remove` single-member semantics alongside the same
+ * whole-array `replace` `PUT` uses — for a relation opted into
+ * `EntityConfig.relations.<name>.write` (ADR-0029's resource amendment).
+ *
+ * Since issue #404 there is no entity-level `arrayMutation` default: a
+ * relation's `write` block names its strategy directly (`write: { strategy }`),
+ * and omitting `write` is how a relation stays non-array-mutable — there is
+ * nothing left to inherit, and nothing left to switch off wholesale.
  */
 export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
-
-/**
- * Array-relation write policy (config half — see `RelationDescriptor.write`
- * for the per-relation opt-in). `strategy` has no built-in default (issue
- * #221 amends ADR-0029): a relation opted into `write` demands one be
- * declared explicitly somewhere in the global → entity precedence chain —
- * `validateArrayMutationRelations` (`resolve-entity-config.ts`) rejects an
- * unset `strategy` the same way it already rejects `arrayMutation: false`
- * under a write-opted relation.
- */
-export interface ArrayMutationSettings {
-  readonly strategy?: ArrayMutationStrategy;
-}
 
 /**
  * The default-deny switch for the `policy` stage (ADR-0035). `policy`
@@ -315,19 +253,10 @@ export interface AuthorizationSettings {
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
   readonly errors: ErrorSettings;
-  readonly relations: RelationSettings;
   /** Result caching + the conditional-request subtree (ADRs 0020/0031). */
   readonly cache: CacheSettings | false;
   readonly delete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;
-  /**
-   * `false` disables array-relation mutation entirely, the same convention
-   * `delete`/`realtime` use. Even when set, a strategy only applies to
-   * relations that opt in via `relations.edges.<name>.write: true`
-   * (ADR-0014's Consequences section) — declaring a strategy here grants no
-   * relation anything by itself.
-   */
-  readonly arrayMutation: ArrayMutationSettings | false;
   /** The `policy` default-deny switch (ADR-0035). Excluded from per-call override — see `KavoEngine.configViewFor`. */
   readonly authorization: AuthorizationSettings;
   /**

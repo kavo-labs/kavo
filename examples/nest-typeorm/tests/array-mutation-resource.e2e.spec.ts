@@ -9,7 +9,7 @@ import { createInfrastructure } from "@kavo/typeorm";
 import { boundServer, listen, type SupertestTarget } from "./support/listen.js";
 
 /**
- * `arrayMutation.strategy: "resource"` (ADR-0029's resource amendment)
+ * `relations.tags.write.strategy: "resource"` (ADR-0029's resource amendment)
  * driven over real HTTP, against a real SQLite database — closing the one
  * gap the rest of this feature's test suite (core's fake-adapter engine
  * tests, `@kavo/typeorm`'s adapter-level tests, `@kavo/nest`'s
@@ -68,8 +68,7 @@ class Book {
 class TagController {}
 
 @Kavo(Book, {
-  arrayMutation: { strategy: "resource" },
-  relations: { edges: { tags: { write: true } } },
+  relations: { tags: { write: { strategy: "resource" } } },
 } as never)
 @Controller("resource-books")
 class BookController {}

@@ -27,7 +27,7 @@ import type { KavoContext } from "../context/kavo-context.js";
 export interface OperationMetadata {
   /**
    * Present only on the `replace`/`list`/`add`/`remove`<Relation> operations
-   * Kavo itself synthesizes from `relations.edges.<name>.write` (ADR-0014's
+   * Kavo itself synthesizes from `EntityConfig.relations.<name>.write` (ADR-0014's
    * named extension point) — never set through application config. Names
    * the relation the operation targets and which of the two synthesizing
    * strategies produced it, so `KavoEngine.resolveInput` can route the

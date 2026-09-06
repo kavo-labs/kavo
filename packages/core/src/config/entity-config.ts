@@ -1,4 +1,5 @@
-import type { KavoSettings } from "./settings.js";
+import type { ArrayMutationStrategy, KavoSettings } from "./settings.js";
+import type { RelationLoadStrategy } from "../relations/relation-descriptor.js";
 import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
@@ -152,7 +153,7 @@ export interface FilterConfig<Entity> {
  * `KavoSettings.limits.{includeDepth,includedNodes}`).
  */
 export interface IncludeLimits {
-  /** Max relation-include nesting depth (ADR-0008). Overridable per-subtree by `relations.edges.<name>.maxDepth`. Defaults to 2. */
+  /** Max relation-include nesting depth (ADR-0008). Overridable per-subtree by `relations.<name>.read.maxDepth`. Defaults to 2. */
   readonly maxDepth?: number;
   /** Max total number of included relation nodes across the whole include tree. Defaults to 10. */
   readonly maxNodes?: number;
@@ -168,10 +169,11 @@ export interface IncludeConfig<Entity> {
   /**
    * What a request may name in `include=` — which relations, one path
    * segment at a time from the root, a client may embed at all
-   * (ADR-0028). `relations.edges.<name>` (`KavoSettings`, settings.ts)
-   * still tunes `maxDepth`/`strategy` for a relation once it is includable,
-   * but does not grant permission itself: naming a relation there without
-   * also naming it here does not open it.
+   * (ADR-0028). `EntityConfig.relations.<name>.read` (issue #404, formerly
+   * `KavoSettings.relations.edges.<name>`) still tunes `maxDepth`/`strategy`
+   * for a relation once it is includable, but does not grant permission
+   * itself: naming a relation there without also naming it here does not
+   * open it.
    *
    * **Opt-in, unlike every other field-group's `fields`.** An unconfigured
    * `include.fields` means **no relation is includable** — the opt-in
@@ -197,6 +199,73 @@ export interface IncludeConfig<Entity> {
   readonly apply?: IncludeApply<Entity>;
   readonly limits?: IncludeLimits;
 }
+
+/**
+ * One relation's read-loading *tuning* — the `maxDepth`/`strategy` half of
+ * a `RelationDescriptor`, applied once the relation is already includable.
+ * Permission is `include.fields`'s job (ADR-0028), never this block: an
+ * entry here for a relation `include.fields` never named still validates
+ * and applies its tuning, but opens nothing. Was
+ * `KavoSettings.relations.edges.<name>` before issue #404 folded relation
+ * config into this one entity-scope block.
+ */
+export interface RelationReadConfig {
+  /** Overrides `include.limits.maxDepth` for the subtree below this node. */
+  readonly maxDepth?: number;
+  /**
+   * How this relation loads when included (`join`/`batch`/`key`/`auto`).
+   * `strategy: "key"` is rejected at bootstrap on a to-many relation, and
+   * on the inverse side of a one-to-one — neither has a local foreign-key
+   * column to read (`DefaultRelationRegistry`).
+   */
+  readonly strategy?: RelationLoadStrategy;
+}
+
+/**
+ * One relation's array-mutation write policy (ADR-0029). Opting in **and**
+ * naming the strategy in a single statement — since issue #404 there is no
+ * entity-level `arrayMutation` default to inherit, and omitting `write`
+ * entirely is how a relation stays non-array-mutable. Only meaningful on a
+ * to-many relation: `write` on a to-one relation is a bootstrap
+ * `ConfigurationException` (`DefaultRelationRegistry`), since association by
+ * id already covers to-one writes (ADR-0014). Independent of
+ * `include.fields` — a relation can be write-opted without being
+ * read-includable, or vice versa — and independent of write *permission*,
+ * which is the `create`/`update` field lists and registered write DTOs
+ * (ADR-0014), not this block.
+ */
+export interface RelationWriteConfig {
+  readonly strategy: ArrayMutationStrategy;
+}
+
+/**
+ * One entry in {@link RelationsConfig} — read tuning, an array-mutation
+ * write policy, or both. An entry that carries neither (`{}`, or
+ * `{ read: {} }`) tunes nothing and is a bootstrap
+ * `ConfigurationException`; drop it instead of leaving it empty.
+ */
+export interface RelationConfig {
+  readonly read?: RelationReadConfig;
+  readonly write?: RelationWriteConfig;
+}
+
+/**
+ * `EntityConfig.relations` — per-relation read tuning and array-mutation
+ * write policy, keyed by the entity's own top-level relation names (issue
+ * #404, folding `KavoSettings.relations.edges` and
+ * `KavoSettings.arrayMutation` into one entity-scope block — the same move
+ * issue #386 made for `filter`/`sort`/`select`/`search`/`include`).
+ *
+ * Structural entity-scope config like `dto`/`computed`: resolved directly
+ * by `DefaultRelationRegistry` at bootstrap, never merged through the
+ * global → operation → per-call precedence chain, and with no global or
+ * built-in default. This block never grants permission — read-includability
+ * is `include.fields` (ADR-0028), write-permission is `create`/`update`/DTO
+ * (ADR-0014).
+ */
+export type RelationsConfig<Entity> = {
+  readonly [K in IncludePath<Entity, 1>]?: RelationConfig;
+};
 
 /**
  * `EntityConfig.sort` — everything about what a request may sort by,
@@ -631,6 +700,16 @@ export interface EntityConfig<
    * includedNodes}`).
    */
   readonly include?: IncludeConfig<Entity>;
+  /**
+   * Per-relation read-loading tuning (`maxDepth`/`strategy`) and
+   * array-mutation write policy (`write.strategy`), keyed by the entity's
+   * own top-level relation names (issue #404, folding
+   * `KavoSettings.relations.edges` and `KavoSettings.arrayMutation` into
+   * one entity-scope block). Grants no permission — `include.fields`
+   * (ADR-0028) and `create`/`update`/DTO (ADR-0014) still hold that. An
+   * entry that tunes nothing (`{}`) is a bootstrap error.
+   */
+  readonly relations?: RelationsConfig<Entity>;
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an

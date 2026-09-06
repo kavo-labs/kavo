@@ -58,7 +58,7 @@ export function suggestName(input: string, candidates: readonly string[]): strin
  * Candidates as a sorted, comma-separated list — truncated with a total so
  * a 200-field entity does not turn one rejection into a wall of text.
  * `"none"` when there is nothing to offer, which is itself the answer on an
- * entity whose `relations.edges` is still empty.
+ * entity whose `EntityConfig.relations` is still empty.
  */
 export function nameList(candidates: readonly string[], cap: number = DEFAULT_LIST_CAP): string {
   if (candidates.length === 0) {

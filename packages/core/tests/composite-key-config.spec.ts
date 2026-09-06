@@ -79,11 +79,10 @@ describe("createCrud — composite-key bootstrap rejections (issue #261)", () =>
     kavo.createCrud(User, undefined, { adapter: new SeededAdapter<User>(), metadata: userMetadata });
     const adapter = new ReplaceCapableCompositeAdapter();
     expect(() =>
-      kavo.createCrud(
-        CompositeEntity,
-        { relations: { edges: { tags: { write: { strategy: "replace" } } } } } as never,
-        { adapter, metadata: compositeMetadata },
-      ),
+      kavo.createCrud(CompositeEntity, { relations: { tags: { write: { strategy: "replace" } } } } as never, {
+        adapter,
+        metadata: compositeMetadata,
+      }),
     ).not.toThrow();
   });
 
@@ -121,7 +120,7 @@ describe("createCrud — composite-key bootstrap rejections (issue #261)", () =>
     const ownerAdapter = new SeededAdapter<OwnerOfComposite>([{ id: 1 } as OwnerOfComposite]);
     const owners = kavo.createCrud(
       OwnerOfComposite,
-      { include: { fields: ["item"] }, relations: { edges: { item: { strategy: "key" } } } } as never,
+      { include: { fields: ["item"] }, relations: { item: { read: { strategy: "key" } } } } as never,
       { adapter: ownerAdapter, metadata: ownerOfCompositeMetadata },
     ) as unknown as { findMany: (q: unknown) => Promise<unknown> };
 

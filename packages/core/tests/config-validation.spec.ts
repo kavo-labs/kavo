@@ -254,48 +254,11 @@ describe("resolveEntityConfig — include.limits", () => {
   });
 });
 
-describe("validateSettings — relation edges", () => {
-  it("rejects an edge that is not an object, naming the relation", () => {
-    for (const value of [true, 5, "posts", null]) {
-      expectRejected({ relations: { edges: { posts: value } } }, "relations.edges.posts", value);
-    }
-  });
-
-  it("rejects a maxDepth that is not a positive integer", () => {
-    for (const value of NOT_POSITIVE_INTEGERS) {
-      expectRejected({ relations: { edges: { posts: { maxDepth: value } } } }, "relations.edges.posts.maxDepth", value);
-    }
-  });
-
-  it("rejects a load strategy outside join, batch, key, and auto", () => {
-    for (const value of ["eager", "JOIN", "KEY", 1]) {
-      expectRejected({ relations: { edges: { posts: { strategy: value } } } }, "relations.edges.posts.strategy", value);
-    }
-  });
-
-  // `defaults.include` vs. permission (`allowed.includable`) is no longer
-  // checkable by `validateSettings` alone — permission moved to entity-typed
-  // `EntityConfig.allowed` (ADR-0028), outside the `KavoSettings` shape
-  // this file exercises. See `config.spec.ts`'s
-  // "resolveEntityConfig — allowed.includable" describe block for that
-  // cross-check, now performed by `validateDefaults`.
-
-  it("accepts an edge that configures nothing — every sub-key is optional", () => {
-    expect(() => accept({ relations: { edges: { posts: {} } } })).not.toThrow();
-  });
-
-  it("accepts each documented load strategy", () => {
-    for (const strategy of ["join", "batch", "key", "auto"]) {
-      expect(() => accept({ relations: { edges: { posts: { strategy } } } })).not.toThrow();
-    }
-  });
-
-  it("accepts maxDepth shape regardless of includable permission", () => {
-    // `validateSettings` only checks shape now — whether `posts` is actually
-    // includable is `resolveEntityConfig`'s `allowed`-aware cross-check.
-    expect(() => accept({ relations: { edges: { posts: { maxDepth: 1 } } } })).not.toThrow();
-  });
-});
+// Per-relation config (`EntityConfig.relations`, issue #404) is validated
+// by `DefaultRelationRegistry`, not `validateSettings` — `relations` is no
+// longer a `KavoSettings` key. See `array-mutation-per-relation.spec.ts`'s
+// "DefaultRelationRegistry — relations block validation" and "strategy:
+// 'key' bootstrap rejection" describe blocks.
 
 describe("validateSettings — soft delete", () => {
   it("rejects a delete that names no delete-marker field", () => {
@@ -397,29 +360,10 @@ describe("validateSettings — realtime", () => {
   });
 });
 
-describe("validateSettings — arrayMutation", () => {
-  it("accepts `false` — the documented way to disable the feature entirely", () => {
-    expect(() => accept({ arrayMutation: false })).not.toThrow();
-  });
-
-  it("rejects an arrayMutation setting that is neither an object nor false", () => {
-    for (const value of ["replace", 1, true, null]) {
-      expectRejected({ arrayMutation: value }, "arrayMutation", value);
-    }
-  });
-
-  it("rejects a strategy outside replace, resource, and jsonPatch", () => {
-    for (const value of ["splice", 1, null]) {
-      expectRejected({ arrayMutation: { strategy: value } }, "arrayMutation.strategy", value);
-    }
-  });
-
-  it("accepts each documented strategy", () => {
-    for (const strategy of ["replace", "resource", "jsonPatch"]) {
-      expect(() => accept({ arrayMutation: { strategy } })).not.toThrow();
-    }
-  });
-});
+// `arrayMutation` is no longer a `KavoSettings` key (issue #404) — the
+// array-mutation write strategy is a per-relation choice under
+// `EntityConfig.relations.<name>.write.strategy`, validated by
+// `DefaultRelationRegistry`. See `array-mutation-per-relation.spec.ts`.
 
 describe("validateSettings — global operations default (issue #38)", () => {
   it("rejects an unknown operation id", () => {

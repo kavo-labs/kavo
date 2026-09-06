@@ -98,14 +98,14 @@ beforeAll(async () => {
   // normative pagination rule exists for.
   joinedBlogs = createTypeOrmKavo(dataSource).createCrud(Blog, {
     include: { fields: ["articles"] },
-    relations: { edges: { articles: { strategy: "join" } } },
+    relations: { articles: { read: { strategy: "join" } } },
   }) as DefaultKavoService<Blog>;
   // A *to-one* forced to `batch`. Left on `auto` a to-one joins, so the
   // batched to-one path only exists when a config asks for it.
   batchedArticles = createTypeOrmKavo(dataSource).createCrud(Article, {
     delete: { strategy: "soft" },
     include: { fields: ["blog"] },
-    relations: { edges: { blog: { strategy: "batch" } } },
+    relations: { blog: { read: { strategy: "batch" } } },
   } as never) as DefaultKavoService<Article>;
   // The same to-one loaded as its FK id alone (issue #364) — no join, no
   // batch. `blog.name` stays filterable to prove a filter on a key-edge
@@ -114,7 +114,7 @@ beforeAll(async () => {
     delete: { strategy: "soft" },
     include: { fields: ["blog"] },
     filter: { fields: ["id", "title", "blog.name"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   // A key edge nested under a batched to-many parent: Blog → articles (batch)
   // → each article's `blog` as a key edge.
@@ -122,7 +122,7 @@ beforeAll(async () => {
   nestedKavo.createCrud(Article, {
     delete: { strategy: "soft" },
     include: { fields: ["blog"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(Blog, {
     include: { fields: ["articles"] },

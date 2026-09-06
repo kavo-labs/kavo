@@ -58,7 +58,7 @@ beforeAll(() => {
     delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
     filter: { fields: ["id", "title", "blog.name"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   const nestedKavo = createPrismaKavo(client as never, {
     datamodel: Prisma.dmmf.datamodel,
@@ -68,7 +68,7 @@ beforeAll(() => {
   nestedKavo.createCrud(Article, {
     delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
-    relations: { edges: { blog: { strategy: "key" } } },
+    relations: { blog: { read: { strategy: "key" } } },
   } as never);
   nestedKeyBlogs = nestedKavo.createCrud(Blog, {
     include: { fields: ["articles"] },
