@@ -33,7 +33,7 @@ const isOwner: Policy<Post> = ({ context, entity }) => {
 })
 ```
 
-That config makes `GET /posts/:id` pass for an `admin` or the row's author, `PUT /posts/:id` require both the `post:update` permission and authorship, and `GET /posts` public despite the entity-level default. `createOne`, `patchOne`, and `deleteOne` have no operation entry, so they fall back to the entity-level `isAuthenticated` default. An operation with no policy at any scope is unrestricted by default, the same opt-in posture every other Kavo default takes. [`authorization.required`](#default-deny-authorization-required) is a separate, genuinely global switch for the opposite question: what happens when nothing was configured at any scope.
+That config makes `GET /posts/:id` pass for an `admin` or the row's author, `PUT /posts/:id` require both the `post:update` permission and authorship, and `GET /posts` public despite the entity-level default. `createOne`, `patchOne`, and `deleteOne` have no operation entry, so they fall back to the entity-level `isAuthenticated` default. An operation with no policy at any scope is unrestricted by default, the same opt-in posture every other Kavo default takes.
 
 ## The policy function
 
@@ -57,35 +57,6 @@ There is no combinator API — `and`/`or`/`not` composition is ordinary `&&`/`||
 
 Like `dto`, `policy` lives outside the settings precedence chain at every scope — it's itself a closure, and `GlobalConfig.defaults` is a `DeepPartial<KavoSettings>`, which would corrupt a function type by partializing it into a non-callable object — so `GlobalConfig.policy` is its own field rather than a `KavoSettings` key inside `defaults`. There is still no per-call override at any scope: a per-call parameter that could loosen a rule would let a caller weaken its own authorization. [Entity config](/guides/configuration/entity-config) covers where the field sits among `@Kavo`'s own keys.
 
-## Default deny (`authorization.required`)
-
-`authorization.required` flips the posture of an operation whose `policy` resolved to nothing at **any** scope — instead of running unrestricted, it answers 403 `KAVO_FORBIDDEN`, so a new operation added without a `policy` at any scope fails loudly at request time rather than shipping unauthenticated by accident (ADR-0035):
-
-```ts
-KavoModule.forRoot({
-  infrastructure: createInfrastructure(dataSource),
-  defaults: { authorization: { required: true } }, // every entity, every operation
-});
-
-@Kavo(Post, {
-  authorization: { required: true }, // this entity only
-  operations: {
-    updateOne: {
-      policy: (args) => (args.context.app.permissions ?? []).includes("post:update"),
-    },
-    findMany: { authorization: { required: false } }, // opt this one operation back out
-  },
-})
-```
-
-Unlike `policy` itself, `authorization` is an ordinary `KavoSettings` key: it merges through the usual `built-in defaults → global → entity → operation` chain, so a global default (`KavoModule.forRoot`'s `defaults`), an entity default, and a per-operation override all compose the way `cache`/`realtime`/every other settings key does — `policy`'s three scopes (above) are resolved by their own nearest-wins walk instead, not `mergeSettings`. `authorization.required` remains a genuinely different mechanism from `policy`, even though both have a global default: it governs _what happens when `policy`'s own fallback chain resolved to nothing at all_ (operation, entity, and global all silent), never overriding a policy that scope chain did resolve — including one an operation opted out of with `policy: false`, which counts as "resolved to nothing" the same as never having configured one.
-
-**Per-call is the one scope excluded.** A per-call `{ settings: { authorization: { required: false } } }` cannot loosen an entity that requires it, and — symmetrically, since the whole subtree is pinned rather than merged — a per-call override cannot tighten an entity that doesn't either. The reasoning is the same as `policy` itself: a per-call parameter able to loosen enforcement would let a caller weaken its own authorization.
-
-An operation whose `policy` resolved from any scope is unaffected by `authorization.required` either way — the switch only fills the gap where no rule resolved at all, it never overrides a resolved one. It also cannot gate an **ordinary custom operation**: a custom operation's id is never a standard operation id, so it never reaches the `policy[operation]` lookup this switch extends — its handler reaches `context.app` directly and refuses a caller on its own terms ([Custom operations](/core/custom-operations)).
-
-It **does** gate a Kavo-synthesized array-mutation operation (`replace<Relation>` and friends, from `EntityConfig.relations.<name>.write.strategy` — see [Relations](/features/relations#array-relation-write-strategies)), unlike an ordinary custom operation: that route can never carry a `policy.<id>` entry of its own either, but its handler is Kavo's own, not app-authored code, so there's no other place a check on it could live. There is no per-relation opt-out today — `operations.<id>.authorization` can't target an array-mutation id, since that id is synthesized after the point where `operations.<id>` entries are resolved. To exempt a relation, leave it out of `write`, or turn `authorization.required` off for the whole entity.
-
 ## Enforcement
 
 The policy stage runs after the context is built and before preconditions and the cache, so a denied request never learns whether its `If-Match` would have succeeded and a cache hit can never skip the check. On a single-row operation (`findOne`, `updateOne`, `patchOne`, `deleteOne`, `restoreOne`, `purgeOne`) with a resolved policy — from any scope — the engine always loads the row first and hands it to the function as `entity`: a plain function can't be inspected for whether it reads the row, so the engine doesn't try to guess, and pays for the read whenever a policy resolves. No built-in handler fetches the row ahead of mutating by id, so the policy stage loads it, evaluates, and only then lets the handler run; the pre-fetch asks for soft-deleted rows too, because `restoreOne` and `purgeOne` target a deleted row by definition. When the pre-fetch finds no row, the request answers 404 with `KAVO_NOT_FOUND`, never 403: the status code must not leak whether the row exists, ahead of what the policy would have decided. `createOne` and `findMany` have no single row, so their policy always runs with `entity: undefined`.
@@ -94,7 +65,7 @@ The policy stage runs after the context is built and before preconditions and th
 
 A denied request carries the `KAVO_FORBIDDEN` problem-details document (see [Errors](/reference/errors) for the shape). A custom operation's handler can throw `ForbiddenException` for the same status ([Custom operations](/core/custom-operations)); custom operations take no `policy` entry, their handler reaches `context.app` directly.
 
-`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches — a policy that reads `context.query.filter` can deny a caller who omitted a scoping filter, but it doesn't add one. For that — a mandatory predicate the engine composes into the query itself, rather than a pass/fail judgment against it — see [Apply](/features/apply) ([ADR-0048](/internals/adr/0048-apply-server-side-query-constraint)). A class-based `policy: PostPolicy` form remains deferred ([ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate), which also argues the enforcement choices above; [ADR-0035](/internals/adr/0035-authorization-required-default-deny-switch) covers `authorization.required`); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
+`policy` decides who may perform an operation; it does not narrow what a caller may see. `findMany` still returns every row its query matches — a policy that reads `context.query.filter` can deny a caller who omitted a scoping filter, but it doesn't add one. For that — a mandatory predicate the engine composes into the query itself, rather than a pass/fail judgment against it — see [Apply](/features/apply) ([ADR-0048](/internals/adr/0048-apply-server-side-query-constraint)). A class-based `policy: PostPolicy` form remains deferred ([ADR-0037](/internals/adr/0037-policy-collapses-to-a-single-predicate), which also argues the enforcement choices above); [System architecture](/internals/architecture/01-system-architecture) shows where the policy stage sits in the request pipeline.
 
 ## Route identity from a Nest guard
 

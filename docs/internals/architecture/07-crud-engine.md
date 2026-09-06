@@ -17,9 +17,8 @@ KavoRequest
  → Context Assembly       KavoContext: identity, config view, app context, transaction ⟨reserved⟩,
                           normalized query, correlationId, typed state bag
  → Policy                 configured operations.<id>.policy function, if any → 403 (ADR-0037);
-                          no node + authorization.required → 403 too (ADR-0035); single-row writes
-                          additionally gate their id lookup on filter.apply, if configured → 404
-                          before existence ever leaks (ADR-0048)
+                          single-row writes additionally gate their id lookup on filter.apply,
+                          if configured → 404 before existence ever leaks (ADR-0048)
  → Precondition Check     If-Match writes only: pre-read + hash → 412 / 404 (ADR-0020)
  → DTO Resolution         descriptor.input/output else the doc-4 slot default
  → Deserialization        writes only: body → allowed-key projection

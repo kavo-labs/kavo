@@ -162,6 +162,4 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     }
     bool(path, value);
   }
-
-  bool("authorization.required", settings.authorization.required);
 }

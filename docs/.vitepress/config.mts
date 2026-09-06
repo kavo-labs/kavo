@@ -376,10 +376,6 @@ const config = defineConfig({
                 link: "/internals/adr/0034-when-predicate-takes-a-single-object-argument",
               },
               {
-                text: "0035 — authorization.required denies standard operations with no configured policy",
-                link: "/internals/adr/0035-authorization-required-default-deny-switch",
-              },
-              {
                 text: "0036 — policy gains entity- and global-scope defaults",
                 link: "/internals/adr/0036-policy-gains-entity-and-global-defaults",
               },

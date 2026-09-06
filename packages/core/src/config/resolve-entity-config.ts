@@ -69,7 +69,6 @@ const SETTINGS_KEYS = [
   "cache",
   "delete",
   "realtime",
-  "authorization",
 ] as const satisfies readonly (keyof KavoSettings)[];
 
 /**
