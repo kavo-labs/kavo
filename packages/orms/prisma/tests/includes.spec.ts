@@ -43,7 +43,7 @@ beforeAll(() => {
     include: { fields: ["articles"] },
   }) as DefaultKavoService<Blog>;
   articles = kavo.createCrud(Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog", "notes"] },
     filter: { fields: ["id", "title", "blog.name"] },
   } as never) as DefaultKavoService<Article>;
@@ -55,7 +55,7 @@ beforeAll(() => {
     entities: [Blog, Article, Note],
     caseInsensitiveFilters: false,
   }).createCrud(Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
     filter: { fields: ["id", "title", "blog.name"] },
     relations: { edges: { blog: { strategy: "key" } } },
@@ -66,7 +66,7 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   });
   nestedKavo.createCrud(Article, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     include: { fields: ["blog"] },
     relations: { edges: { blog: { strategy: "key" } } },
   } as never);

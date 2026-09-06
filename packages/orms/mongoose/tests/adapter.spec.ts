@@ -128,7 +128,7 @@ function unfilteredQuery() {
 
 /** The context core resolves for `Author`, which configures no soft delete. */
 function hardDeleteContext() {
-  return { entityName: "Author", operation: "findOne", config: { softDelete: { strategy: "hard" } } };
+  return { entityName: "Author", operation: "findOne", config: { delete: { strategy: "hard" } } };
 }
 
 function authorAdapter(): RepositoryAdapter<Author> {

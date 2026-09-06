@@ -159,7 +159,7 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
 
   async delete(id: EntityId, context: KavoContext<Todo>): Promise<void> {
     const row = await this.require(id);
-    if (context.config.softDelete.strategy === "hard") {
+    if (context.config.delete.strategy === "hard") {
       this.rows = this.rows.filter((candidate) => candidate.id !== Number(id));
       return;
     }
@@ -189,7 +189,7 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
 
   async purge(id: EntityId, context: KavoContext<Todo>): Promise<void> {
     const row = await this.require(id);
-    if (context.config.softDelete.strategy === "soft" && row.deletedAt === null) {
+    if (context.config.delete.strategy === "soft" && row.deletedAt === null) {
       throw new NotDeletedException({
         messageParams: { entity: context.entityName, id: String(id) },
       });
@@ -207,7 +207,7 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
    * Driven by the resolved strategy rather than this fake's own opinion.
    */
   private visible(row: Todo, context: KavoContext<Todo>, withDeleted: boolean, onlyDeleted: boolean): boolean {
-    if (context.config.softDelete.strategy !== "soft") {
+    if (context.config.delete.strategy !== "soft") {
       return true;
     }
     if (onlyDeleted) {

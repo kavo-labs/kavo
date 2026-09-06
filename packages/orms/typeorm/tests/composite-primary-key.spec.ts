@@ -221,7 +221,7 @@ describe("composite primary keys — @kavo/typeorm (issue #261)", () => {
 });
 
 function grantContext(operation = "replaceTags") {
-  return { entityName: "Grant", operation, config: { softDelete: { strategy: "hard" } } } as never;
+  return { entityName: "Grant", operation, config: { delete: { strategy: "hard" } } } as never;
 }
 
 describe("TypeOrmRepositoryAdapter — array-mutation reads on a composite-key parent (issue #263)", () => {
@@ -281,7 +281,7 @@ describe("TypeOrmRepositoryAdapter — OneToMany array-mutation writes on a comp
     const updated = await grantAdapter.replaceRelation!("u3~onboarding", "labels", [label!.id], {
       entityName: "Grant",
       operation: "replaceLabels",
-      config: { softDelete: { strategy: "hard" } },
+      config: { delete: { strategy: "hard" } },
     } as never);
     expect(updated).toMatchObject({ userId: "u3", topic: "onboarding" });
     expect(updated.labels.map((l) => l.id)).toEqual([label!.id]);
@@ -297,7 +297,7 @@ describe("TypeOrmRepositoryAdapter — OneToMany array-mutation writes on a comp
       grantAdapter.replaceRelation!("nope~nope", "labels", [], {
         entityName: "Grant",
         operation: "replaceLabels",
-        config: { softDelete: { strategy: "hard" } },
+        config: { delete: { strategy: "hard" } },
       } as never),
     ).rejects.toThrowError(NotFoundException);
   });
@@ -306,7 +306,7 @@ describe("TypeOrmRepositoryAdapter — OneToMany array-mutation writes on a comp
     await grants.createOne({ userId: "u4", topic: "review", note: "n" } as never);
     const [label] = await dataSource.getRepository(Label).save([{ text: "notes" }]);
     const ctx = (operation: string) =>
-      ({ entityName: "Grant", operation, config: { softDelete: { strategy: "hard" } } }) as never;
+      ({ entityName: "Grant", operation, config: { delete: { strategy: "hard" } } }) as never;
 
     const added = await grantAdapter.addRelationMember!("u4~review", "labels", label!.id, ctx("addLabel"));
     expect(added.labels.map((l) => l.id)).toEqual([label!.id]);

@@ -11,7 +11,7 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
  * Routes: POST /articles, GET /articles, GET/PUT/PATCH/DELETE
  * /articles/:id, plus PATCH /articles/:id/restore and DELETE
  * /articles/:id/purge — the two soft-delete routes appear because
- * `softDelete.field` is *declared* here (ADR-0013: route generation runs at
+ * `delete.field` is *declared* here (ADR-0013: route generation runs at
  * decoration time, where no ORM metadata exists, so config alone decides).
  *
  * `?include=author` embeds the author via `populate`; `author` is also
@@ -26,7 +26,7 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     item: ArticleItemDto,
     list: ArticleListDto,
   },
-  softDelete: { field: "deletedAt" },
+  delete: { field: "deletedAt" },
   operations: {
     createOne: true,
     findOne: true,

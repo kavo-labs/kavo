@@ -902,7 +902,7 @@ export class KavoEngine<Entity extends object> {
     // — the normalizer rejects it outright otherwise (a client that thinks
     // it is seeing deleted rows should be told it is not), and on a
     // hard-delete entity there is nothing for it to widen anyway.
-    const softDeletable = config.softDelete.strategy === "soft";
+    const softDeletable = config.delete.strategy === "soft";
     const query = normalizer.normalizeInput(softDeletable ? { withDeleted: true } : undefined, config);
     const context = createKavoContext<Entity>({
       operation: "findOne",
@@ -971,7 +971,7 @@ export class KavoEngine<Entity extends object> {
       // A narrowed scope may change the delete strategy (an operation that
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
-      softDelete: resolveSoftDelete(this.deps.metadata, settings, `${config.entityName} (${request.operation})`),
+      delete: resolveSoftDelete(this.deps.metadata, settings, `${config.entityName} (${request.operation})`),
       dto: config.dto,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
@@ -1410,7 +1410,7 @@ export class KavoEngine<Entity extends object> {
       // Never read by the serializer's projection step (only an adapter's
       // own load decides what ends up in scope) — a neutral placeholder
       // satisfies the type without implying a query-time decision was made.
-      softDelete: HARD_DELETE,
+      delete: HARD_DELETE,
       children: {},
     };
     const include: IncludeTree = { [arrayMutation.relation]: node };
@@ -1710,7 +1710,7 @@ function registeredIds<Entity extends object>(registry: OperationRegistry<Entity
  * deliberately not (ADR-0031): the key is entity + operation + target id +
  * query (the id is a separate key part, `cacheKey`), and a per-call
  * settings override that reshapes a response without changing the query —
- * the one known case is `softDelete.strategy` — is outside the key's
+ * the one known case is `delete.strategy` — is outside the key's
  * contract.
  */
 function queryFingerprint<Entity>(query: NormalizedQueryContext<Entity>): unknown {

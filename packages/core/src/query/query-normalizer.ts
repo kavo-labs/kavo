@@ -775,7 +775,7 @@ function parseSoftDeleteFlag<Entity>(
     });
     return false;
   }
-  if (config.softDelete.strategy !== "soft") {
+  if (config.delete.strategy !== "soft") {
     issues.push({
       field,
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",

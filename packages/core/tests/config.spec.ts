@@ -41,11 +41,11 @@ describe("mergeSettings — merge algebra", () => {
   });
 
   it("lets `false` disable an inheritable feature", () => {
-    const merged = mergeSettings(BUILT_IN_DEFAULTS, { softDelete: false });
-    expect(merged.softDelete).toBe(false);
+    const merged = mergeSettings(BUILT_IN_DEFAULTS, { delete: false });
+    expect(merged.delete).toBe(false);
     // …and a nearer object re-enables it.
-    const reEnabled = mergeSettings(merged, { softDelete: { field: "removedAt" } });
-    expect(reEnabled.softDelete).toEqual({ field: "removedAt" });
+    const reEnabled = mergeSettings(merged, { delete: { field: "removedAt" } });
+    expect(reEnabled.delete).toEqual({ field: "removedAt" });
   });
 
   it("skips undefined scopes", () => {

@@ -30,7 +30,7 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
     // nothing to reach.
     edges: Object.freeze({}),
   }),
-  // Off by default. A full object rather than `false` — like `softDelete`'s
+  // Off by default. A full object rather than `false` — like `delete`'s
   // default — so a partial `cache: { ttl: 60 }` override merges against a
   // complete base instead of replacing a `false` wholesale. `ttl`'s
   // presence is the switch: omitted (the default) means off, and any
@@ -49,11 +49,11 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   // `auto`: soft for entities carrying the marker field, hard for the rest
   // nothing to configure for entities that aren't
   // soft-deletable.
-  softDelete: Object.freeze({
+  delete: Object.freeze({
     field: "deletedAt",
     strategy: "auto" as const,
   }),
-  // Off by default, the same `false` sentinel `softDelete`/`cache` use at
+  // Off by default, the same `false` sentinel `delete`/`cache` use at
   // this scope. Registered transports live outside this tree entirely
   // (`KavoOptions.realtimeTransports` — see `RealtimeSettings`'s doc), so
   // there is nothing transport-shaped to default here.

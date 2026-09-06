@@ -179,7 +179,7 @@ describe("crudTools", () => {
     const service = createKavo().createCrud(
       Note,
       {
-        softDelete: { strategy: "soft" },
+        delete: { strategy: "soft" },
         operations: { createOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
       },
       { adapter, metadata: noteMetadata },

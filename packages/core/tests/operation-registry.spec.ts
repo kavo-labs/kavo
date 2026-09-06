@@ -706,7 +706,7 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
 
   it("global enable composes with an entity that already declares soft delete", () => {
     const registry = createOperationRegistry<User>(
-      { softDelete: { strategy: "soft", field: "deletedAt" } } as UserConfig,
+      { delete: { strategy: "soft", field: "deletedAt" } } as UserConfig,
       standardHandlers,
       { restoreOne: true },
     );
@@ -715,7 +715,7 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
 
   it("global disable wins over the soft-delete auto-enable of restoreOne", () => {
     const registry = createOperationRegistry<User>(
-      { softDelete: { strategy: "soft", field: "deletedAt" } } as UserConfig,
+      { delete: { strategy: "soft", field: "deletedAt" } } as UserConfig,
       standardHandlers,
       { restoreOne: false },
     );
@@ -723,12 +723,12 @@ describe("createOperationRegistry — global operations default (issue #38)", ()
   });
 
   it("suppresses the soft-delete auto-enable of restoreOne once operations is declared (issue #257)", () => {
-    // softDelete alone would auto-enable restoreOne (the test above this
+    // delete alone would auto-enable restoreOne (the test above this
     // block, with no `operations` key at all). Once `operations` is
     // declared, that auto-enable no longer applies on its own — restoreOne
     // still needs naming, soft-deletable or not.
     const registry = createOperationRegistry<User>(
-      { softDelete: { strategy: "soft", field: "deletedAt" }, operations: { createOne: true } } as UserConfig,
+      { delete: { strategy: "soft", field: "deletedAt" }, operations: { createOne: true } } as UserConfig,
       standardHandlers,
     );
     expect(registry.get("restoreOne")?.enabled).toBe(false);

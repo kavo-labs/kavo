@@ -55,21 +55,21 @@ describe("delete strategy resolution", () => {
       ...accountMetadata,
       fields: [...accountMetadata.fields, { name: "archivedAt", kind: "date", nullable: true, generated: false }],
     } as typeof accountMetadata;
-    expect(resolveSoftDelete(metadata, settings({ softDelete: { field: "archivedAt" } }))).toEqual({
+    expect(resolveSoftDelete(metadata, settings({ delete: { field: "archivedAt" } }))).toEqual({
       strategy: "soft",
       field: "archivedAt",
     });
   });
 
   it("resolves hard when soft delete is switched off entirely", () => {
-    expect(resolveSoftDelete(accountMetadata, settings({ softDelete: false })).strategy).toBe("hard");
-    expect(resolveSoftDelete(accountMetadata, settings({ softDelete: { strategy: "hard" } })).strategy).toBe("hard");
+    expect(resolveSoftDelete(accountMetadata, settings({ delete: false })).strategy).toBe("hard");
+    expect(resolveSoftDelete(accountMetadata, settings({ delete: { strategy: "hard" } })).strategy).toBe("hard");
   });
 
   it("rejects strategy 'soft' on an entity with no marker field", () => {
-    expect(() =>
-      resolveSoftDelete(accountMetadataWithoutMarker, settings({ softDelete: { strategy: "soft" } })),
-    ).toThrow(ConfigurationException);
+    expect(() => resolveSoftDelete(accountMetadataWithoutMarker, settings({ delete: { strategy: "soft" } }))).toThrow(
+      ConfigurationException,
+    );
   });
 });
 
@@ -144,7 +144,7 @@ describe("soft delete lifecycle", () => {
   });
 
   it("restores a deleted row into the item slot, and refuses to restore a live one", async () => {
-    const { crud } = makeAccountCrud({ softDelete: { strategy: "soft" } });
+    const { crud } = makeAccountCrud({ delete: { strategy: "soft" } });
     await crud.createOne({ name: "acme" } as never);
     await crud.deleteOne(1);
 
@@ -168,7 +168,7 @@ describe("soft delete lifecycle", () => {
   });
 
   it("hard-deletes when the entity opts out, leaving restore unavailable", async () => {
-    const { crud, adapter } = makeAccountCrud({ softDelete: false });
+    const { crud, adapter } = makeAccountCrud({ delete: false });
     await crud.createOne({ name: "acme" } as never);
     await crud.deleteOne(1);
     expect(adapter.rows).toHaveLength(0);
@@ -177,7 +177,7 @@ describe("soft delete lifecycle", () => {
 
   it("applies a per-operation strategy override", async () => {
     const { crud, adapter } = makeAccountCrud({
-      operations: { createOne: true, deleteOne: { softDelete: { strategy: "hard" } } },
+      operations: { createOne: true, deleteOne: { delete: { strategy: "hard" } } },
     });
     await crud.createOne({ name: "acme" } as never);
     await crud.deleteOne(1);
@@ -193,7 +193,7 @@ describe("soft-delete operation enablement (ADR-0013)", () => {
   });
 
   it("enables restoreOne when the config declares soft delete", () => {
-    for (const config of [{ softDelete: { strategy: "soft" } }, { softDelete: { field: "archivedAt" } }] as const) {
+    for (const config of [{ delete: { strategy: "soft" } }, { delete: { field: "archivedAt" } }] as const) {
       const registry = createOperationRegistry<Account>(config as AccountConfig);
       expect(registry.get("restoreOne")?.enabled).toBe(true);
       expect(registry.get("purgeOne")?.enabled).toBe(false);
@@ -201,7 +201,7 @@ describe("soft-delete operation enablement (ADR-0013)", () => {
   });
 
   it("treats an inherited 'auto' strategy as no declaration", () => {
-    const registry = createOperationRegistry<Account>({ softDelete: { strategy: "auto" } } as AccountConfig);
+    const registry = createOperationRegistry<Account>({ delete: { strategy: "auto" } } as AccountConfig);
     expect(registry.get("restoreOne")?.enabled).toBe(false);
   });
 
@@ -238,7 +238,7 @@ describe("the soft-delete marker and primary key are not mass-assignable", () =>
     // `accountMetadataWithWritableMarker` reports `softDeleteField: null`
     // and `generated: false` on `deletedAt` — exactly what
     // Prisma/Mongoose/MikroORM (and `@kavo/typeorm` with a plain-column
-    // `softDelete.field`) report, the shape a `generated`-only exclusion
+    // `delete.field`) report, the shape a `generated`-only exclusion
     // cannot see.
     const { crud, adapter } = makeAccountCrud(undefined, accountMetadataWithWritableMarker);
     await crud.createOne({ name: "acme" } as never);
@@ -274,8 +274,8 @@ describe("the soft-delete marker and primary key are not mass-assignable", () =>
     const crud = createKavo().createCrud(
       Account,
       {
-        softDelete: { field: "deletedAt" },
-        operations: { createOne: { softDelete: { field: "archivedAt" } } },
+        delete: { field: "deletedAt" },
+        operations: { createOne: { delete: { field: "archivedAt" } } },
       } as never,
       { adapter, metadata: accountMetadataWithTwoMarkerCandidates },
     );

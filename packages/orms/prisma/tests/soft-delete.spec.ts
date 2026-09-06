@@ -56,7 +56,7 @@ beforeAll(() => {
     caseInsensitiveFilters: false,
   });
   tickets = kavo.createCrud(Ticket, {
-    softDelete: { field: "deletedAt" },
+    delete: { field: "deletedAt" },
     operations: {
       createOne: true,
       deleteOne: true,
@@ -68,10 +68,10 @@ beforeAll(() => {
     },
   }) as DefaultKavoService<Ticket>;
   invoices = kavo.createCrud(Invoice, {
-    softDelete: { field: "archivedAt" },
+    delete: { field: "archivedAt" },
   }) as DefaultKavoService<Invoice>;
   coupons = kavo.createCrud(Coupon, {
-    softDelete: { field: "retiredAt" },
+    delete: { field: "retiredAt" },
     dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
   }) as DefaultKavoService<Coupon>;
 });
@@ -101,7 +101,7 @@ function invoiceAdapter() {
 }
 
 function hardDeleteContext(operation: string) {
-  return { entityName: "Invoice", operation, config: { softDelete: { strategy: "hard" } } };
+  return { entityName: "Invoice", operation, config: { delete: { strategy: "hard" } } };
 }
 
 describe("metadata seam — no auto-detected soft-delete column", () => {

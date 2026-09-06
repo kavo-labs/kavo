@@ -109,24 +109,24 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     bool("cache.etag", cache.etag);
   }
 
-  if (settings.softDelete !== false) {
+  if (settings.delete !== false) {
     if (
-      typeof settings.softDelete !== "object" ||
-      settings.softDelete === null ||
-      typeof settings.softDelete.field !== "string" ||
-      settings.softDelete.field.length === 0
+      typeof settings.delete !== "object" ||
+      settings.delete === null ||
+      typeof settings.delete.field !== "string" ||
+      settings.delete.field.length === 0
     ) {
       throw new ConfigurationException(
         entityName,
-        "softDelete",
-        `expected false or { field: string, strategy: … }, got ${JSON.stringify(settings.softDelete)}`,
+        "delete",
+        `expected false or { field: string, strategy: … }, got ${JSON.stringify(settings.delete)}`,
       );
     }
-    const strategy = settings.softDelete.strategy;
+    const strategy = settings.delete.strategy;
     if (strategy !== "auto" && strategy !== "soft" && strategy !== "hard") {
       throw new ConfigurationException(
         entityName,
-        "softDelete.strategy",
+        "delete.strategy",
         `expected "auto", "soft", or "hard", got ${JSON.stringify(strategy)}`,
       );
     }

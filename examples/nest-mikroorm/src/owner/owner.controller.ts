@@ -7,7 +7,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * CRUD over the relation side. The unique `email` column is what surfaces a
  * database unique-violation as an RFC 9457 409 conflict.
  *
- * Soft delete: `softDelete.field` names an ordinary nullable column, because
+ * Soft delete: `delete.field` names an ordinary nullable column, because
  * nothing in a MikroORM entity can declare a delete marker (doc 17 §5) —
  * this is the one config line that turns `deletedAt` into the marker *and*
  * puts `PATCH /owners/:id/restore` on the router (ADR-0013: route generation
@@ -32,7 +32,7 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     item: OwnerItemDto,
     list: OwnerListDto,
   },
-  softDelete: { field: "deletedAt" },
+  delete: { field: "deletedAt" },
   filter: { fields: { exclude: ["deletedAt"] } },
   sort: { fields: { exclude: ["deletedAt"] } },
   select: { fields: { exclude: ["deletedAt"] } },

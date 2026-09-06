@@ -192,7 +192,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         const children = this.buildPopulate(node.children);
         return {
           path: node.relation.name,
-          ...(node.softDelete.strategy === "soft" && { match: { [node.softDelete.field]: null } }),
+          ...(node.delete.strategy === "soft" && { match: { [node.delete.field]: null } }),
           ...(children && { populate: children }),
         };
       });
@@ -219,18 +219,18 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     withDeleted: boolean,
     onlyDeleted = false,
   ): MongoWhere {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       return where;
     }
     if (onlyDeleted) {
-      const deleted = { [softDelete.field]: { $ne: null } };
+      const deleted = { [deleteConfig.field]: { $ne: null } };
       return Object.keys(where).length === 0 ? deleted : { $and: [where, deleted] };
     }
     if (withDeleted) {
       return where;
     }
-    const live = { [softDelete.field]: { $eq: null } };
+    const live = { [deleteConfig.field]: { $eq: null } };
     if (Object.keys(where).length === 0) {
       return live;
     }
@@ -239,16 +239,16 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
 
   /** The resolved strategy, refused when an operation requires soft. */
   private requireSoftDelete(context: KavoContext<Entity>, operation: string): ResolvedSoftDelete & { field: string } {
-    const softDelete = context.config.softDelete;
-    if (softDelete.strategy !== "soft") {
+    const deleteConfig = context.config.delete;
+    if (deleteConfig.strategy !== "soft") {
       throw new ConfigurationException(
         context.entityName,
-        "softDelete",
+        "delete",
         `'${operation}' requires a soft-deletable entity, but '${context.entityName}' ` +
           `resolves to a hard delete strategy`,
       );
     }
-    return softDelete;
+    return deleteConfig;
   }
 
   private isDeleted(row: Record<string, unknown>, field: string): boolean {
@@ -302,7 +302,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    * JSON.
    */
   private requirePatchChanges(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): void {
-    const softDeleteField = context.config.softDelete.field;
+    const softDeleteField = context.config.delete.field;
     const changes = { ...(rawData as Record<string, unknown>) };
     delete changes[this.idField];
     if (softDeleteField !== null) {
@@ -341,7 +341,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       // *existing* document's identity, and the soft-delete marker is
       // `deleteOne`/`restoreOne`'s state machine to change, not an
       // ordinary path an update/patch body happens to include.
-      const softDeleteField = context.config.softDelete.field;
+      const softDeleteField = context.config.delete.field;
       const changes = { ...(rawData as Record<string, unknown>) };
       delete changes[this.idField];
       if (softDeleteField !== null) {
@@ -377,9 +377,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "hard") {
+      if (deleteConfig.strategy === "hard") {
         const existing = await this.byId(id, context, false);
         if (existing === null) {
           throw this.notFound(id, context);
@@ -387,7 +387,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
         await this.model.deleteOne({ [this.idField]: { $eq: id } });
         return;
       }
-      const { field } = softDelete;
+      const { field } = deleteConfig;
       // The write repeats the "still live" predicate the read established,
       // so the transition is atomic: two concurrent deletes cannot both
       // succeed, and the stored timestamp is the first one's, not the
@@ -443,16 +443,16 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
   }
 
   async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
-    const softDelete = context.config.softDelete;
+    const deleteConfig = context.config.delete;
     try {
-      if (softDelete.strategy === "soft") {
+      if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a
         // document that is already soft-deleted, never a live one.
         const existing = await this.byId(id, context, true);
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        if (!this.isDeleted(existing, softDelete.field)) {
+        if (!this.isDeleted(existing, deleteConfig.field)) {
           throw new NotDeletedException({
             messageParams: { entity: context.entityName, id: String(id) },
             context: errorContext(context),

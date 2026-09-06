@@ -264,8 +264,8 @@ function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
  * identifier is fixed metadata — so it is excluded once, at construction.
  *
  * The soft-delete marker gets the same exclusion, but resolved **per call**
- * from `context.config.softDelete.field` rather than baked in at
- * construction: `softDelete` is an ordinary settings key (entity → operation
+ * from `context.config.delete.field` rather than baked in at
+ * construction: `delete` is an ordinary settings key (entity → operation
  * → per-call, ADR-0013), so the field an operation actually writes through
  * can differ from the entity's own default — an `update`/`patch` this class
  * cannot see through `context` is exactly what the per-adapter strip in each
@@ -336,7 +336,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // against a context that never went through the engine (a test stub,
     // say), and the exclusion degrading to "none" there is the same
     // graceful fallback the id exclusion already makes.
-    const softDeleteField = explicit === null ? (context.config?.softDelete?.field ?? null) : null;
+    const softDeleteField = explicit === null ? (context.config?.delete?.field ?? null) : null;
     // `create.default`/`update.default` (`createOne` and `updateOne` only —
     // never `patchOne`, whose omission means "leave unchanged" rather than
     // "reset"). Optional chaining for the same reason `softDeleteField`

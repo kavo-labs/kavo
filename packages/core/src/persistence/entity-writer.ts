@@ -17,7 +17,7 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
   /** Partial update (`PATCH` semantics — only present keys are written). */
   patch(id: Id, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity>;
   /**
-   * Delete by the strategy on `context.config.softDelete`:
+   * Delete by the strategy on `context.config.delete`:
    * hard by default, soft when the entity carries a delete-marker field.
    * Soft-deleting an already-deleted row raises `AlreadyDeletedException`.
    */

@@ -33,7 +33,7 @@ const articleSchema = new Schema(
     // — ADR-0014; a bare scalar is rejected, issue #291).
     author: { type: Schema.Types.ObjectId, ref: AUTHOR_MODEL },
     // Mongoose declares no `@DeleteDateColumn` equivalent, so the marker is
-    // an ordinary path that the controller names via `softDelete.field`.
+    // an ordinary path that the controller names via `delete.field`.
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },

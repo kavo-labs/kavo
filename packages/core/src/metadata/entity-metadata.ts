@@ -77,7 +77,7 @@ export interface EntityMetadata<Entity = unknown> {
    * The delete-marker column the ORM itself declares (`@DeleteDateColumn`
    * in `@kavo/typeorm`), or `null`/absent when it declares none. This is
    * the detection half of the soft-delete strategy resolution; explicit
-   * `softDelete.field` configuration wins over it.
+   * `delete.field` configuration wins over it.
    */
   readonly softDeleteField?: string | null;
 }

@@ -126,7 +126,7 @@ describe("buildEntityMetadata — fields", () => {
 
   it("reports no auto-detected soft-delete field", () => {
     // Mongoose declares no @DeleteDateColumn equivalent, so soft delete is
-    // always explicit `softDelete.field` configuration for this adapter.
+    // always explicit `delete.field` configuration for this adapter.
     expect(metadata.softDeleteField).toBeNull();
   });
 });

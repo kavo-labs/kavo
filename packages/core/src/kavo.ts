@@ -350,7 +350,7 @@ function requireSoftDeletable<Entity extends object>(
   config: ResolvedEntityConfig<Entity>,
   registry: OperationRegistry<Entity>,
 ): void {
-  if (config.softDelete.strategy === "soft") {
+  if (config.delete.strategy === "soft") {
     return;
   }
   for (const id of ["restoreOne", "purgeOne"] as const) {
@@ -362,7 +362,7 @@ function requireSoftDeletable<Entity extends object>(
       `operations.${id}`,
       `'${id}' needs a soft-deletable entity, but '${config.entityName}' resolves to a ` +
         `hard delete strategy — give it a delete-marker column (@DeleteDateColumn) or ` +
-        `set softDelete.field to an existing column`,
+        `set delete.field to an existing column`,
     );
   }
 }
