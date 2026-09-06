@@ -311,7 +311,7 @@ part or `findOne(1)` and `findOne(2)` would share one entry.
 folding each include node to its query-decided parts, because the include
 tree carries live `RelationDescriptor`s `canonicalize` must not serialize.
 Per-call settings are deliberately not in the key; the one known
-response-reshaping case without a query change is `softDelete.strategy`,
+response-reshaping case without a query change is `delete.strategy`,
 stated as a limitation rather than silently answered wrong.
 
 After any successful write — standard or custom — the entity's every entry

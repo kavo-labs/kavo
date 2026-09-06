@@ -243,7 +243,7 @@ git commit -m "docs: split module-setup out of configuration.md"
 
 **Interfaces:**
 
-- Produces: `/integrations/nest/configuration/settings`, with headings (and therefore anchors) `## pagination`, `## query`, `## errors`, `## relations`, `## arrayMutation`, `## caching`, `## softDelete`, `## realtime`, `## operations (global scope only)` — note these become `##` (page-level) headings here, not `###` as they were nested under `## Settings fields` in the old page. This changes their anchor ids from e.g. `#pagination` (was already `#pagination` as an `###`, VitePress anchors don't include parent headings, so **the anchor ids are unchanged** by the promotion from `###` to `##`.
+- Produces: `/integrations/nest/configuration/settings`, with headings (and therefore anchors) `## pagination`, `## query`, `## errors`, `## relations`, `## arrayMutation`, `## caching`, `## delete`, `## realtime`, `## operations (global scope only)` — note these become `##` (page-level) headings here, not `###` as they were nested under `## Settings fields` in the old page. This changes their anchor ids from e.g. `#pagination` (was already `#pagination` as an `###`, VitePress anchors don't include parent headings, so **the anchor ids are unchanged** by the promotion from `###` to `##`.
 
 Source content: `docs/guides/configuration/index.md` lines 92–246 (`## Settings fields (KavoSettings)` through the end of the `### operations (global scope only)` subsection, i.e. everything before `## @Kavo(Entity, config)`).
 
@@ -261,7 +261,7 @@ Create the file with:
    - `relations` (source lines 123–164): this section has two parts — the `relations`/`relations.edges.<name>` field descriptions (convert to prose per the rule above), and the **"Migrating from before v0.10" block** (source lines 144–164, including the nested "`defaultInclude` needs its own care" callout). Copy the migration block **verbatim, unshortened** — it is safety-critical upgrade guidance, not reference filler.
    - `arrayMutation` (source lines 166–182): keep the code example and the `replaceRelation`/ADR-0029 paragraph.
    - `caching` (source lines 184–203): keep the `::: danger`-adjacent safety paragraphs verbatim — "Redaction belongs in the DTO, not in an interceptor", the `@Override`/ETag split, the pre-v0.9 failure-mode paragraph, and the "One limit survives" paragraph are all correctness-critical; convert only the plain one-row field table (`etag`) to a sentence.
-   - `softDelete` (source lines 205–212).
+   - `delete` (source lines 205–212).
    - `realtime` (source lines 214–223).
    - `operations` (global scope only) (source lines 225–246): keep the code example; the operation-id-to-default-enabled table may stay a table (it's a lookup table by nature, not narrative reference) or become a bullet list — either is fine, keep all eight operation ids and their defaults.
 
@@ -400,7 +400,7 @@ built-in defaults → global (KavoModule) → entity (@Kavo config) → operatio
 A field you don't set at a given scope just falls through to the next one down. The full merge semantics (deep-merge rules, what "unset" means per field) are in [Configuration](/internals/architecture/08-configuration) — these pages document what each field means and where you can set it:
 
 - **[Module setup](/integrations/nest/configuration/module-setup)** — `KavoModule.forRoot`/`forRootAsync`, and the `principal` extractor.
-- **[Settings](/integrations/nest/configuration/settings)** — the app-wide `KavoSettings` fields: pagination, query, errors, relations, arrayMutation, caching, softDelete, realtime.
+- **[Settings](/integrations/nest/configuration/settings)** — the app-wide `KavoSettings` fields: pagination, query, errors, relations, arrayMutation, caching, delete, realtime.
 - **[Entity config](/integrations/nest/configuration/entity-config)** — `@Kavo(Entity, config)`'s own fields: `dto`, `allowed`, `computed`.
 - **[Operations](/integrations/nest/configuration/operations)** — per-operation overrides, custom operations, and custom list metadata.
 ```

@@ -59,5 +59,5 @@ relation targets.
   `.name`.
 - `EntityMetadata.softDeleteField` is always `null` from this adapter —
   Prisma has no `@DeleteDateColumn`-equivalent declaration to detect, so
-  soft delete is always explicit `softDelete.field` configuration here,
+  soft delete is always explicit `delete.field` configuration here,
   never auto-detected (unlike `@kavo/typeorm`).

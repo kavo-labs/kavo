@@ -142,7 +142,7 @@ With it off, `ilike` behaves exactly like `like`. On SQLite that is not even a l
 MikroORM has no `@DeleteDateColumn` equivalent. Its soft-delete pattern is a user-defined `@Filter`, which Kavo cannot detect, so add an ordinary property and name it in config:
 
 ```ts
-@Kavo(Book, { softDelete: { field: "deletedAt" } })
+@Kavo(Book, { delete: { field: "deletedAt" } })
 @Controller("books")
 export class BookController {}
 ```

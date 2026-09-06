@@ -20,9 +20,9 @@ export class Book {
 
 That column alone is enough for `deleteOne` to soft-delete and for reads to hide deleted rows. Two more capabilities are opt-in, one config line each, because each is a piece of public API worth stating on purpose rather than getting for free:
 
-- **Restore.** `@Kavo(Book, { softDelete: { strategy: "soft" } })` turns on `PATCH /books/:id/restore`, which clears the marker and returns the row again.
+- **Restore.** `@Kavo(Book, { delete: { strategy: "soft" } })` turns on `PATCH /books/:id/restore`, which clears the marker and returns the row again.
 - **Purge.** `DELETE /books/:id/purge` permanently removes an already-soft-deleted row. Naming `purgeOne` declares `operations` as an [exclusive whitelist](/guides/configuration/operations#operations), so every other standard operation needs naming too: `@Kavo(Book, { operations: { createOne: true, findOne: true, findMany: true, updateOne: true, patchOne: true, deleteOne: true, purgeOne: true } })`.
 
 Both can be combined. Attempting to restore a row that isn't deleted, or purge one that is still live, returns a 409, not a silent no-op. Pass `?withDeleted=true` on a read to opt back into seeing soft-deleted rows for that request. See [Soft delete, restore & purge](/internals/architecture/11-soft-delete) for the full behavior: unique-index caveats, cascades, and what's deliberately not built (bulk restore/purge).
 
-For the `softDelete` config key itself (`field`, `strategy`), see [Settings](/guides/configuration/settings#softdelete).
+For the `delete` config key itself (`field`, `strategy`), see [Settings](/guides/configuration/settings#softdelete).

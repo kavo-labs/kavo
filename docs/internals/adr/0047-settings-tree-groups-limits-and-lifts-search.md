@@ -6,7 +6,7 @@
 
 `KavoSettings` mostly follows one convention for its optional subsystems:
 each lives at a top-level key, and `false` disables the subtree wholesale
-(`cache`, `softDelete`, `realtime`, `arrayMutation`). `search`, though, was
+(`cache`, `delete`, `realtime`, `arrayMutation`). `search`, though, was
 buried at `query.search` — a scope discoverable only by already knowing the
 `query` block exists — while the request-cost ceilings that guard filter
 depth, `IN`-array length, and `like`-pattern length (`query.maxFilterDepth`/
@@ -25,7 +25,7 @@ follows:
 
 - `search` moves to a **top-level** key, keeping its `SearchSettings | false`
   shape and `false`-disables-the-subtree convention (the same one `cache`/
-  `softDelete`/`realtime`/`arrayMutation` already use).
+  `delete`/`realtime`/`arrayMutation` already use).
 - `maxFilterDepth`, `maxInValues`, and `maxLikePatternLength` join a new
   **`LimitsSettings`** block, alongside `relations.maxIncludeDepth` and
   `relations.maxIncludedNodes` (renamed `includeDepth`/`includedNodes`),

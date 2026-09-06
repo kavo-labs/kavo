@@ -82,7 +82,7 @@ The existing adapters each export a `createInfrastructure(client, options?)` tha
 ## What you don't have to implement
 
 - **Filter/sort/pagination validation** is already done before your adapter sees the query. You only need to translate an already-valid `NormalizedQueryContext` into your backend's native query shape.
-- **Soft delete's routing decision** happens in the engine, which resolves the effective strategy (soft vs. hard) from config. Your adapter's `delete`/`restore`/`purge` methods just need to honor `context.config.softDelete` when deciding how to act. See [Soft delete](/features/soft-delete).
+- **Soft delete's routing decision** happens in the engine, which resolves the effective strategy (soft vs. hard) from config. Your adapter's `delete`/`restore`/`purge` methods just need to honor `context.config.delete` when deciding how to act. See [Soft delete](/features/soft-delete).
 - **Array-mutation writes.** `replaceRelation`/`patchRelation` are optional. An adapter that doesn't implement them simply doesn't support that feature. `createCrud` checks for the method at bootstrap the moment a relation opts into `write`, and fails fast with a clear `ConfigurationException` rather than at request time.
 - **Transactions.** `context.transaction` is an opaque handle a caller may pass through. Without an adapter supplying one, writes are simply non-transactional. Nothing in the engine requires it.
 

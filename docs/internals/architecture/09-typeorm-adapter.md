@@ -54,8 +54,8 @@ filterable when explicitly allowlisted.
 `EntityMetadata.softDeleteField`; reads scope themselves to live rows —
 `.withDeleted()` for a declared delete column, an explicit
 `<alias>.<field> IS NULL` for a marker column named through config — and
-`delete`/`restore`/`purge` branch on `context.config.softDelete`,
-reaching for TypeORM's own `softDelete`/`restore` only when the field is
+`delete`/`restore`/`purge` branch on `context.config.delete`,
+reaching for TypeORM's own `delete`/`restore` only when the field is
 the declared one.
 Missing rows raise `NotFoundException` (load returns `null`;
 `delete` checks `affected === 0`).
@@ -98,7 +98,7 @@ Two of the three have since landed and are documented above rather than
 here:
 
 - **Soft delete (doc 11):** built. The strategy branch lives in
-  `delete`/`restore`/`purge` reading `context.config.softDelete`, and query
+  `delete`/`restore`/`purge` reading `context.config.delete`, and query
   methods add the `IS NULL` predicate driven by `query.withDeleted` (§3).
 - **Includes (doc 12):** built. `buildQuery` joins to-one nodes
   from the validated `IncludeTree` and `loadBatches` issues one extra query

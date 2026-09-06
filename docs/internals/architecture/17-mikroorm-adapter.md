@@ -255,7 +255,7 @@ there is nothing for the metadata seam to detect — the same position
 whose `@DeleteDateColumn` the seam reports.
 
 **That is not the same as "soft delete is off until you configure it."**
-`softDelete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
+`delete` defaults to `{ field: "deletedAt", strategy: "auto" }`, and
 `resolveSoftDelete` matches the configured _name_ against the entity's own
 columns before falling back to `softDeleteField`. So an entity carrying a
 plain `deletedAt` property is soft-deletable with no config whatsoever. What
@@ -269,7 +269,7 @@ the marker is always an ordinary property, so the `IS NULL` /
 (default, `withDeleted`, `onlyDeleted`).
 
 **Do not also enable a MikroORM `@Filter` for soft delete.** Kavo owns the
-scoping through `softDelete.field`; a default-on MikroORM filter would AND
+scoping through `delete.field`; a default-on MikroORM filter would AND
 a second predicate onto every query and quietly defeat `withDeleted`. Use
 one or the other.
 
@@ -322,7 +322,7 @@ writable projection by name, not just by `generated`.** Because nothing
 declares the marker column, it is an ordinary non-generated property, and
 `@PrimaryKey() id: string = v4()` — the idiomatic UUID spelling — carries
 none of MikroORM's generated flags either. `DefaultDeserializer` excludes
-`metadata.idField` and the resolved `softDelete.field` from its derived
+`metadata.idField` and the resolved `delete.field` from its derived
 default regardless of `generated`, so a client cannot rewrite a row's
 identity or soft-delete/revive it through a plain `PATCH`/`PUT` when the
 entity has no explicit write DTO. `mergeAndFlush` additionally strips both

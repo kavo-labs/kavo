@@ -79,7 +79,7 @@ Two edges follow from that:
   seam cannot see.
 - `EntityMetadata.softDeleteField` is always `null` from this adapter —
   Mongoose declares no `@DeleteDateColumn` equivalent — so soft delete is
-  always explicit `softDelete.field` configuration here, never
+  always explicit `delete.field` configuration here, never
   auto-detected. Same position as `@kavo/prisma` (ADR-0017).
 - Because the id is a string on the wire, an entity's id sorts and compares
   lexicographically wherever core treats it as an ordinary value. That is

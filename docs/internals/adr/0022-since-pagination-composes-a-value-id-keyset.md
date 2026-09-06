@@ -196,7 +196,7 @@ is not part of either binding's list shape. The same
   configured field mid-poll makes an in-flight `since` value compare
   against a different column.
 - **`pagination.since.field` is one more bootstrap-checked config key**,
-  following `softDelete.field`'s precedent rather than inventing a new
+  following `delete.field`'s precedent rather than inventing a new
   validation home.
 - **The token is one `|`-join heavier than the issue's literal
   `?since=<value>` framing implied**, but still plain text an adopter can

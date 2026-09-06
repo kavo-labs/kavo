@@ -5,7 +5,7 @@
 ## Context
 
 Soft delete resolves per entity: an entity carrying a delete-marker
-column (`@DeleteDateColumn`, or a column named by `softDelete.field`) is
+column (`@DeleteDateColumn`, or a column named by `delete.field`) is
 soft-deletable, everything else is hard-deleted. That decision
 needs entity metadata, which exists only at bootstrap.
 
@@ -24,8 +24,8 @@ the boundary ADR-0002 forbids.
 the one input both registry builds share:
 
 - `restoreOne` is on when the config _declares_ soft delete for the
-  entity: `softDelete: { strategy: "soft" }`, or an explicit
-  `softDelete.field`. Inheriting the built-in `strategy: "auto"` is not a
+  entity: `delete: { strategy: "soft" }`, or an explicit
+  `delete.field`. Inheriting the built-in `strategy: "auto"` is not a
   declaration — `auto` is answered by metadata, which decoration time
   cannot see.
 - `purgeOne` is off until named: `operations: { purgeOne: true }`.
@@ -52,7 +52,7 @@ exclude deleted rows; only the extra routes wait on the declaration.
   no change to support soft delete — restore/purge appeared by enabling entries.
 - Cost: zero-config soft delete is not _entirely_ zero-config. An entity
   gets soft deletes and exclusion for free, but its restore route takes
-  one line (`softDelete: { strategy: "soft" }`). Stating it is also the
+  one line (`delete: { strategy: "soft" }`). Stating it is also the
   honest signal that un-deleting is now part of the entity's public API.
 - If a later change moves route generation behind a bootstrap-time
   registration (a DX option), this rule can relax to pure

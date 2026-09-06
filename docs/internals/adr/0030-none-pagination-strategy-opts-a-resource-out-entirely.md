@@ -5,7 +5,7 @@
 ## Context
 
 `pagination.maxLimit` always clamps `findMany`, and `PaginationSettings` had
-no escape hatch — unlike `softDelete`, `realtime`, and `arrayMutation`, which
+no escape hatch — unlike `delete`, `realtime`, and `arrayMutation`, which
 each accept `false` at entity scope to switch the whole subtree off
 (`packages/core/src/config/settings.ts`). A resource that genuinely never
 wants a page boundary (a small lookup/reference table) could only raise
@@ -13,7 +13,7 @@ wants a page boundary (a small lookup/reference table) could only raise
 arbitrary ceiling the OpenAPI docs would advertise (issue #225).
 
 The `false`-disables-the-subtree convention does not transfer directly here.
-`softDelete`/`realtime`/`arrayMutation` are each a whole top-level
+`delete`/`realtime`/`arrayMutation` are each a whole top-level
 `KavoSettings` key that can be `SomeSettings | false`; `pagination` itself is
 never optional — every `findMany` response still needs a `limit`/`offset`
 pair for the envelope, so there is no whole subtree to switch off. The two

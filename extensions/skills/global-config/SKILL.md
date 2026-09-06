@@ -65,7 +65,7 @@ the same object is `createKavo(options).createCrud(Entity, config?)`.
 | `limits.includeDepth` / `includedNodes`           | 2 / 10                   | include depth budget and total node cap                                |
 | `errors.exposeInternals`                          | `false`                  | leak driver detail into responses                                      |
 | `relations.edges.<name>`                          | `{}`                     | per-relation `includable` / `defaultInclude` / `maxDepth` / `strategy` |
-| `softDelete.field` / `strategy`                   | `"deletedAt"` / `"auto"` | `auto` = soft when the entity has the marker field; `false` disables   |
+| `delete.field` / `strategy`                       | `"deletedAt"` / `"auto"` | `auto` = soft when the entity has the marker field; `false` disables   |
 | `operations.<id>`                                 | `{}` (unset)             | global operation-enablement default (issue #38); see caveat below      |
 | `bulk.mode` / `maxBatchSize`                      | `"atomic"` / 500         | reserved (bulk is not built)                                           |
 

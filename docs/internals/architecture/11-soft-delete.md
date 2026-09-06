@@ -19,14 +19,14 @@ instead of removing the row, and every read excludes stamped rows.
 `resolveSoftDelete(metadata, settings)` produces a `ResolvedSoftDelete`
 — a two-member union, so `strategy: "soft"` always comes with a `field`:
 
-| Settings                                | Result                                         |
-| --------------------------------------- | ---------------------------------------------- |
-| `softDelete: false`                     | `hard`                                         |
-| `softDelete.strategy: "hard"`           | `hard`                                         |
-| `softDelete.strategy: "soft"`           | `soft` — no marker field is a config error     |
-| `softDelete.strategy: "auto"` (default) | `soft` when a marker field exists, else `hard` |
+| Settings                            | Result                                         |
+| ----------------------------------- | ---------------------------------------------- |
+| `delete: false`                     | `hard`                                         |
+| `delete.strategy: "hard"`           | `hard`                                         |
+| `delete.strategy: "soft"`           | `soft` — no marker field is a config error     |
+| `delete.strategy: "auto"` (default) | `soft` when a marker field exists, else `hard` |
 
-The marker field is the configured `softDelete.field` when the entity has
+The marker field is the configured `delete.field` when the entity has
 such a column, otherwise the one the ORM declares
 (`EntityMetadata.softDeleteField` — `@DeleteDateColumn` in
 `@kavo/typeorm`). Explicit configuration wins over detection; an entity
@@ -35,12 +35,12 @@ with neither costs nothing.
 Only `@kavo/typeorm` can supply the detection half: none of Prisma,
 Mongoose, or MikroORM has a declaration that marks a column as the delete
 marker, so all three report `softDeleteField: null` and soft delete there
-is _always_ explicit `softDelete.field` configuration (ADR-0017,
+is _always_ explicit `delete.field` configuration (ADR-0017,
 ADR-0018, doc 17 §5). MikroORM comes closest — it has a soft-delete
 pattern — but it is a user-defined `@Filter`, a query concern rather than
 a column declaration, and nothing in it is detectable as "this column is
 the marker". This is not a TypeORM-exclusive concern, though: any adapter's
-`softDelete.field` — including `@kavo/typeorm`'s, when it names an ordinary
+`delete.field` — including `@kavo/typeorm`'s, when it names an ordinary
 column rather than a `@DeleteDateColumn` — is excluded from the derived
 `create`/`update`/`patch` writable projection by name, not by `generated`,
 precisely because the marker column cannot always be marked generated
@@ -49,8 +49,8 @@ the resolved marker (and the id field) from an `update`/`patch` payload as
 defence in depth, so it survives even a write DTO that names it explicitly.
 
 Resolution runs at every settings scope, so an operation or a single call
-may narrow it (`operations: { deleteOne: { softDelete: { strategy: "hard" } } }`),
-and the result rides on `KavoContext.config.softDelete`. Adapters branch
+may narrow it (`operations: { deleteOne: { delete: { strategy: "hard" } } }`),
+and the result rides on `KavoContext.config.delete`. Adapters branch
 on that object — they never re-derive the decision.
 
 ## 2. Operations
@@ -62,8 +62,8 @@ on that object — they never re-derive the decision.
 | `purgeOne`   | Permanently removes an already-soft-deleted row. A live row → 409 `KAVO_NOT_DELETED`. Under a hard strategy it is just a delete. |
 
 Enablement is config-declared, not metadata-driven (**ADR-0013**):
-`restoreOne` switches on with `softDelete: { strategy: "soft" }` (or an
-explicit `softDelete.field`), `purgeOne` with
+`restoreOne` switches on with `delete: { strategy: "soft" }` (or an
+explicit `delete.field`), `purgeOne` with
 `operations: { purgeOne: true }`. Enabling either on an entity that
 resolves to `hard` is a bootstrap `ConfigurationException`. Reads and
 `deleteOne` still adapt with no config at all.
@@ -100,7 +100,7 @@ adapter adds `<alias>.<field> IS NULL` (default) or
 `<alias>.<field> IS NOT NULL` (`onlyDeleted`) itself. `@kavo/prisma` and
 `@kavo/mongoose`, and `@kavo/mikroorm` have no ORM-declared marker column
 at all (ADR-0017, ADR-0018, doc 17 §5), so both flags are always the same
-plain field-predicate over the configured `softDelete.field`.
+plain field-predicate over the configured `delete.field`.
 
 ## 4. Edges
 

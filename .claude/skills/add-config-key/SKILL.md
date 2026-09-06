@@ -32,7 +32,7 @@ through the engine, stop; it belongs in `KavoSettings`.
    - scalars and object-as-value keys: nearer scope replaces farther scope,
      key by key;
    - `false` disables an inheritable feature where the schema allows it
-     (follow the `softDelete` / `operations.<id>` pattern) — a nearer object
+     (follow the `delete` / `operations.<id>` pattern) — a nearer object
      re-enables it;
    - arrays replace wholesale, never merge element-wise;
    - `undefined` at any scope is skipped, not treated as an explicit override.

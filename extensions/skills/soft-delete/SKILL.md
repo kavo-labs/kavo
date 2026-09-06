@@ -1,6 +1,6 @@
 ---
 name: soft-delete
-description: Reference for Kavo's soft delete, restore, and purge behavior — strategy resolution (auto/soft/hard), enabling restoreOne/purgeOne, read semantics and withDeleted, and edge cases (unique constraints, cascades). Use when configuring softDelete, wiring restore/purge routes, or answering "what happens to a deleted row" questions.
+description: Reference for Kavo's soft delete, restore, and purge behavior — strategy resolution (auto/soft/hard), enabling restoreOne/purgeOne, read semantics and withDeleted, and edge cases (unique constraints, cascades). Use when configuring delete, wiring restore/purge routes, or answering "what happens to a deleted row" questions.
 ---
 
 # Soft delete, restore & purge reference
@@ -26,14 +26,14 @@ every read excludes stamped rows.
 
 ## Strategy resolution (`resolveSoftDelete`)
 
-| Settings                                | Result                                                   |
-| --------------------------------------- | -------------------------------------------------------- |
-| `softDelete: false`                     | `hard`                                                   |
-| `softDelete.strategy: "hard"`           | `hard`                                                   |
-| `softDelete.strategy: "soft"`           | `soft` — no marker field on the entity is a config error |
-| `softDelete.strategy: "auto"` (default) | `soft` when a marker field exists, else `hard`           |
+| Settings                            | Result                                                   |
+| ----------------------------------- | -------------------------------------------------------- |
+| `delete: false`                     | `hard`                                                   |
+| `delete.strategy: "hard"`           | `hard`                                                   |
+| `delete.strategy: "soft"`           | `soft` — no marker field on the entity is a config error |
+| `delete.strategy: "auto"` (default) | `soft` when a marker field exists, else `hard`           |
 
-The marker field is the configured `softDelete.field` (default
+The marker field is the configured `delete.field` (default
 `"deletedAt"`) if the entity has that column, otherwise whatever the ORM
 declares (`@DeleteDateColumn` in `@kavo/typeorm`). Explicit config wins over
 detection; an entity with neither costs nothing.
@@ -43,7 +43,7 @@ call can narrow it:
 
 ```ts
 @Kavo(Owner, {
-  operations: { deleteOne: { softDelete: { strategy: "hard" } } },
+  operations: { deleteOne: { delete: { strategy: "hard" } } },
 })
 ```
 
@@ -61,7 +61,7 @@ column:
 
 ```ts
 @Kavo(Owner, {
-  softDelete: { strategy: "soft" }, // enables PATCH /:id/restore
+  delete: { strategy: "soft" }, // enables PATCH /:id/restore
   operations: { purgeOne: true },   // enables DELETE /:id/purge
 })
 ```

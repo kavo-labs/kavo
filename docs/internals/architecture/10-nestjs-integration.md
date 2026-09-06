@@ -128,7 +128,7 @@ its own `meta.routes` (`method`, `path`, `successStatus`);
 walks the registry, soft delete's restore/purge appeared by _enabling
 entries_ — this generator did not change. Their enablement is
 config-declared rather than metadata-driven, precisely because
-decoration time has no ORM metadata (ADR-0013): `softDelete: { strategy:
+decoration time has no ORM metadata (ADR-0013): `delete: { strategy:
 "soft" }` adds the restore route, `operations: { purgeOne: true }` the
 purge route.
 

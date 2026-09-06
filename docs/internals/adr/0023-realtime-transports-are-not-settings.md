@@ -10,7 +10,7 @@ field-subscription allowlist (`subscribableFields`) are exactly the kind of
 plain data every other `KavoSettings` key already holds, merged
 `built-in defaults → global → entity → operation` and deep-frozen once
 resolved (`deepFreeze`, merge-settings.ts) — the same treatment
-`softDelete` or `relations.edges` get.
+`delete` or `relations.edges` get.
 
 The obvious place for the list of registered `RealtimeTransport`s (a
 WebSocket server, a broker connection — whatever `publish()` an app hands
@@ -51,14 +51,14 @@ This mirrors an existing exception in the same schema: `operations.<id>.
 handler` (a live object with an `execute` method) is deliberately excluded
 from `SETTINGS_KEYS` — the subset `pickSettings` merges from `EntityConfig`
 — for the identical reason. `RealtimeSettings` stays exactly what
-`softDelete`/`relations`/every other key already is: enablement and rules,
+`delete`/`relations`/every other key already is: enablement and rules,
 never behavior.
 
 `RealtimeSettings` keeps `events`, `subscribableFields`, and
 `onPublishError` (a function — already safe, since `deepFreeze`'s
 `typeof value === "object"` guard never touches functions in the first
 place) — the actual configuration, still merged through the normal
-precedence chain and still `false`-disables-the-subtree like `softDelete`.
+precedence chain and still `false`-disables-the-subtree like `delete`.
 Only the live objects moved out.
 
 (Issue #247 later removed the `enabled` key this ADR originally listed

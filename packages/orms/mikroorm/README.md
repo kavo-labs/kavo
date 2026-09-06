@@ -86,7 +86,7 @@ even a loss — SQLite's own `LIKE` is already ASCII case-insensitive.
   before core ever sees the row.
 - **The soft-delete marker is writable, and it is on by default.** Nothing
   in a MikroORM entity declares a delete column, so the adapter cannot mark
-  it generated — but `softDelete` defaults to
+  it generated — but `delete` defaults to
   `{ field: "deletedAt", strategy: "auto" }` and core matches that _name_
   against your columns, so any entity with a `deletedAt` property is
   soft-deletable with no config at all. The marker then sits in the derived
@@ -110,7 +110,7 @@ even a loss — SQLite's own `LIKE` is already ASCII case-insensitive.
   `@kavo/mongoose` makes for `select: false`: Kavo does not manage such a
   property at all, so write it through a custom operation or the ORM.
 - **A MikroORM `@Filter` is applied on top of Kavo's scoping.** Kavo owns
-  soft-delete scoping through `softDelete.field`; a default-on MikroORM
+  soft-delete scoping through `delete.field`; a default-on MikroORM
   soft-delete filter would AND a second predicate onto every query and
   quietly defeat `withDeleted`. Use one or the other, not both.
 - **No transactions.** The `TransactionManager` seam is unbuilt across every
