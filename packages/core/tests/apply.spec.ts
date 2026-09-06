@@ -581,6 +581,29 @@ describe("create.apply/update.apply — force write-body values the client canno
     await crud.createOne({ title: "hello", authorId: 5 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 5 });
   });
+
+  it("still forces a value for a field create.fields's { exclude } removed from the body allowlist (issue #397)", async () => {
+    // The "clients can't set it, the server does" idiom: `apply` runs after
+    // deserialization (kavo-engine's `applyWriteApply`), so it reaches the
+    // adapter even though `authorId` is stripped from the client body.
+    const { crud, adapter } = makeCrud({
+      create: { fields: { exclude: ["authorId"] }, apply: () => ({ authorId: 7 }) },
+    } as never);
+    await crud.createOne({ title: "hello", authorId: 999 } as never);
+    expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 7 });
+  });
+
+  it("does NOT fill a field create.fields's { exclude } removed via create.default — apply is the tool for that", async () => {
+    // `default` is applied inside the deserializer's loop over the writable
+    // allowlist, so a field the allowlist no longer contains is never
+    // filled. Pre-existing for the plain array form; `{ exclude }` just
+    // makes it easy to reach. Documented in docs/features/allowed.md.
+    const { crud, adapter } = makeCrud({
+      create: { fields: { exclude: ["authorId"] }, default: { authorId: 7 } },
+    } as never);
+    await crud.createOne({ title: "hello" } as never);
+    expect(adapter.rows[0]).not.toHaveProperty("authorId");
+  });
 });
 
 describe("create.apply/update.apply — bootstrap validation", () => {
