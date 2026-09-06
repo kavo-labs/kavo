@@ -1,6 +1,6 @@
-# ADR-0008 — `FieldPath` recursion cap (default 3, max 5)
+# ADR-0008 — `FieldPath` recursion cap (max 5)
 
-**Status:** accepted
+**Status:** accepted — the default cap was raised from 3 to 5 by [ADR-0051](/internals/adr/0051-fieldpath-default-cap-raised-to-five) (issue #417). The mechanism below (tuple-decrement counter, hard maximum 5, degrade-to-`string`) is unchanged; only the default value moved. The "default 3" and the `FieldPath<T, 4|5>` opt-in phrasing in the sections below are pre-ADR-0051 and read as history.
 
 ## Context
 

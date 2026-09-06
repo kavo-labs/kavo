@@ -82,16 +82,18 @@ checked against its entity.
 
 ## 2. `FieldPath` implementation notes
 
-`FieldPath<TEntity, TMaxDepth = 3>` (`types/field-path.ts`) produces the
+`FieldPath<TEntity, TMaxDepth = 5>` (`types/field-path.ts`) produces the
 union of dot-paths into an entity — `'name' | 'profile.city' |
 'posts.comments.text'` — used by filter, sort, and selection typings so
 relation paths are spell-checked at compile time.
 
-- **Recursion cap:** default depth 3, hard maximum 5 (`FieldPathDepth`),
-  decremented through a tuple table (`Prev`). The cap exists because the
-  union grows combinatorially with depth — entities with many relations
-  would otherwise produce unions large enough to slow or crash the
-  compiler (ADR-0008).
+- **Recursion cap:** default depth 5 (equal to the hard maximum;
+  originally 3, raised by ADR-0051), decremented through a tuple table
+  (`Prev`). `FieldPathDepth` bounds `TMaxDepth` to `1 | 2 | 3 | 4 | 5`; the
+  parameter's remaining use is _lowering_ the cap (`FieldPath<T, 1>` for
+  root-only selectors). The ceiling exists because the union grows
+  combinatorially with depth — entities with many relations would otherwise
+  produce unions large enough to slow or crash the compiler (ADR-0008).
 - **`any` / `unknown`:** degrade to `string` (detected via the `0 extends
 1 & T` probe) — untyped entities get no spell-checking but stay usable;
   the runtime allowlist remains the actual gate.
@@ -107,9 +109,11 @@ relation paths are spell-checked at compile time.
 
 ### `IncludePath` — the relation-only sibling
 
-`IncludePath<TEntity, TMaxDepth = 3>` (`types/include-path.ts`) types
+`IncludePath<TEntity, TMaxDepth = 5>` (`types/include-path.ts`) types
 `QueryContext.include`, so `include: ['posts.commentz']` is a compile
-error rather than a runtime 400.
+error rather than a runtime 400. (`include.fields`/`include.default` in
+`EntityConfig` pin `TMaxDepth` to 1 — top-level relation names only,
+ADR-0028.)
 
 It reuses `FieldPath`'s `Prev` counter, cap, and every degradation rule
 above — ADR-0008's cap is one policy, not a pattern each path type
