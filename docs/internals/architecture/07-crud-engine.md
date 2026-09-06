@@ -60,15 +60,15 @@ createCrud(Order, {
 });
 ```
 
-| Key           | Required | Default   | What it decides                                                                                                                           |
-| ------------- | -------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `handler`     | yes      | —         | The behavior. There is no built-in to fall back to.                                                                                       |
-| `kind`        | no       | `"write"` | `"read"` runs query resolution and takes no body; `@kavo/nest` binds `@Query` instead of `@Body`.                                         |
-| `cardinality` | no       | `"one"`   | `"many"` maps the result through the list envelope, so the handler returns a `FindManyResult`.                                            |
-| `enabled`     | no       | `true`    | `false` registers the entry inert, exactly as it does for a standard id.                                                                  |
-| `dto`         | no       | —         | `input`/`output` on a write, `output`/`query` on a read. The wrong field for the resolved `kind` is a bootstrap `ConfigurationException`. |
-| `meta`        | no       | `{}`      | Framework metadata; in `@kavo/nest` the route (doc 10).                                                                                   |
-| settings keys | no       | —         | The operation scope of the precedence chain, same as any standard id.                                                                     |
+| Key           | Required | Default   | What it decides                                                                                                                                                                                                                |
+| ------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `handler`     | yes      | —         | The behavior. There is no built-in to fall back to.                                                                                                                                                                            |
+| `kind`        | no       | `"write"` | `"read"` runs query resolution and takes no body; `@kavo/nest` binds `@Query` instead of `@Body`.                                                                                                                              |
+| `cardinality` | no       | `"one"`   | `"many"` maps the result through the list envelope, so the handler returns a `FindManyResult`.                                                                                                                                 |
+| `enabled`     | no       | `true`    | `false` registers the entry inert, exactly as it does for a standard id.                                                                                                                                                       |
+| `dto`         | no       | —         | `input`/`output` on a write, `output`/`query` on a read. The wrong field for the resolved `kind` is a bootstrap `ConfigurationException`.                                                                                      |
+| `meta`        | no       | `{}`      | Framework metadata; in `@kavo/nest` the route (doc 10).                                                                                                                                                                        |
+| settings keys | no       | —         | The operation scope of the precedence chain, narrowed by `kind`/`cardinality` (issue #415): `errors`/`cache` always, `delete` on a `kind: "read"`, `pagination` also on `kind: "read", cardinality: "many"`; `realtime` never. |
 
 Everything downstream treats the entry as ordinary. The engine dispatches it
 through the same lifecycle; DTO resolution falls back to the entity's own
