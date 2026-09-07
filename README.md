@@ -13,7 +13,7 @@
   <a href="https://www.npmjs.com/package/@kavo/core"><img src="https://img.shields.io/npm/v/%40kavo%2Fcore?label=npm" alt="Latest version on npm" /></a>
   <a href="https://github.com/kavo-labs/kavo/actions/workflows/ci.yml"><img src="https://img.shields.io/github/check-runs/kavo-labs/kavo/main?nameFilter=build%20(node%20lts%2F*)&label=build" alt="Build status on main" /></a>
   <a href="https://github.com/kavo-labs/kavo/actions/workflows/ci.yml"><img src="https://img.shields.io/github/check-runs/kavo-labs/kavo/main?nameFilter=test%20(node%20lts%2F*)&label=tests" alt="Test status on main" /></a>
-  <a href="https://github.com/kavo-labs/kavo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kavo-labs/kavo?label=license" alt="Apache-2.0 licensed" /></a>
+  <a href="https://github.com/kavo-labs/kavo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kavo-labs/kavo?label=license" alt="MIT licensed" /></a>
   <a href="https://www.npmjs.com/package/@kavo/core"><img src="https://img.shields.io/npm/dm/%40kavo%2Fcore?label=downloads" alt="Downloads per month on npm" /></a>
   <a href="https://kavo.js.org"><img src="https://img.shields.io/badge/docs-kavo.js.org-1f6feb" alt="Documentation" /></a>
 </p>

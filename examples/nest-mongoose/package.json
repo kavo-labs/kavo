@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Kavo reference application over NestJS + Mongoose (Blog example: a ref edge loaded by populate, a scalar array, string _ids, and soft delete).",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -b",

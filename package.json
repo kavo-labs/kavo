@@ -2,7 +2,7 @@
   "name": "kavo",
   "private": true,
   "description": "Kavo — a production-grade CRUD framework for TypeScript (monorepo root).",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "packageManager": "pnpm@10.34.5",
   "engines": {
     "node": ">=22"

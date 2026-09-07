@@ -2,7 +2,7 @@
   "name": "@kavo/core",
   "version": "0.21.0",
   "description": "Kavo core — framework- and ORM-independent contracts and type system. Zero runtime dependencies.",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },

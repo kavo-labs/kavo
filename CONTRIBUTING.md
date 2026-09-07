@@ -487,4 +487,4 @@ and a PR is judged on its diff and a green gate either way.
 ## License
 
 By contributing, you agree that your contributions are licensed under the
-[Apache License 2.0](LICENSE), the same license that covers the project.
+[MIT License](LICENSE), the same license that covers the project.

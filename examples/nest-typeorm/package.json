@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Kavo reference application over NestJS + TypeORM (Pet example: single-table inheritance, a relation, and full CRUD over HTTP).",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -b",

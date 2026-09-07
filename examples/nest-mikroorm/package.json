@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Kavo reference application over NestJS + MikroORM (Pet example: single-table inheritance, relations both ways, relation-path filtering, and config-declared soft delete).",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "tsc -b",

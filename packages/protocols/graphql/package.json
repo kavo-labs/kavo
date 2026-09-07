@@ -2,7 +2,7 @@
   "name": "@kavo/graphql",
   "version": "0.21.0",
   "description": "Kavo GraphQL binding — builds a GraphQL schema over a createCrud service, delegating every resolver to the same engine REST uses.",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
