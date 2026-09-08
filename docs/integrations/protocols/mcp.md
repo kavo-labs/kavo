@@ -40,6 +40,10 @@ The default controller uses the SDK's Streamable HTTP transport, run stateless. 
 
 An entity that never declared soft delete still gets `restoreOne` and `purgeOne` tools. Calling either surfaces `OperationDisabledException` as a normal `isError` tool result, exactly like the equivalent disabled REST route would. `findMany`'s `filter` and `sort` args use the same raw-AST/`-field` convention [GraphQL](/integrations/protocols/graphql) does.
 
+## Custom operations
+
+A [custom operation](/core/custom-operations) reaches this toolset too, with no per-entity config: `crudTools` walks the same operation registry route generation reads, so an enabled custom id gets a `<entity>.<operationId>` tool as long as its `operations.<id>.dto.output` is declared — a custom id has no entity-derived DTO fallback the way the standard eight do, so one with nothing declared has nothing to build even a loose schema from, and is left out. The tool's schema follows the same shape the standard eight use: `{ id }` when the operation is single-row and declares no `dto.input`, `{ id, ...anyFields }` when it also declares one, and the equivalent id-less shapes for a many-cardinality operation.
+
 A successful call returns `{ content: [{ type: "text", text: JSON.stringify(result) }] }`. A `KavoException` (not found, disabled operation, a conflict) is caught and turned into `isError: true` with `${code}: ${detail}` as the text, MCP's own convention for an expected domain failure. Anything the engine didn't itself raise still propagates as a protocol-level error.
 
 ## No auth guard by default
