@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.1](https://github.com/kavo-labs/kavo/compare/v0.21.0...v0.21.1) (2026-09-08)
+
+
+### Features
+
+* add benchmark suite and documentation ([2a4eac4](https://github.com/kavo-labs/kavo/commit/2a4eac4996d42a57d051f835179f005e6f3d4e41))
+* **core,typeorm,prisma,mongoose,mikroorm,nest:** add identifier config key for the …One lookup axis ([e828eef](https://github.com/kavo-labs/kavo/commit/e828eef5f181e47adda8a2a39748cc0278d4b95c)), closes [#419](https://github.com/kavo-labs/kavo/issues/419)
+
+
+### Documentation
+
+* add SECURITY.md ([fd5ae42](https://github.com/kavo-labs/kavo/commit/fd5ae42eee4bf52940be8b178c2f8d9b52ab9cec))
+
 ## [0.21.0](https://github.com/kavo-labs/kavo/compare/v0.20.0...v0.21.0) (2026-09-06)
 
 
