@@ -22,20 +22,20 @@ pnpm benchmark:http:sqlite       # in-memory SQLite only
 
 ### Modes
 
-| Mode | Adapter | What it adds vs engine-only |
-|------|---------|---------------------------|
-| **fake** | `InMemoryTodoAdapter` | HTTP parsing, NestJS routing, serialization |
-| **sqlite** | TypeORM + in-memory SQLite | Above + real ORM, SQL generation |
+| Mode       | Adapter                    | What it adds vs engine-only                 |
+| ---------- | -------------------------- | ------------------------------------------- |
+| **fake**   | `InMemoryTodoAdapter`      | HTTP parsing, NestJS routing, serialization |
+| **sqlite** | TypeORM + in-memory SQLite | Above + real ORM, SQL generation            |
 
 ## What's measured
 
-| Route | Operation |
-|-------|-----------|
+| Route                                | Operation                   |
+| ------------------------------------ | --------------------------- |
 | `GET /todos?limit=20&sort=-priority` | List with pagination + sort |
-| `GET /todos/:id` | Single fetch by ID |
-| `POST /todos` | Create with JSON body |
-| `PATCH /todos/:id` | Partial update |
-| `DELETE /todos/:id` | Delete |
+| `GET /todos/:id`                     | Single fetch by ID          |
+| `POST /todos`                        | Create with JSON body       |
+| `PATCH /todos/:id`                   | Partial update              |
+| `DELETE /todos/:id`                  | Delete                      |
 
 autocannon params: 10 connections, 1s duration per bench iteration, pipelining 10.
 

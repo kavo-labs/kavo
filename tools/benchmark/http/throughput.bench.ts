@@ -3,7 +3,15 @@ import { describe, it, beforeAll, afterAll } from "vitest";
 import { Test } from "@nestjs/testing";
 import { Controller, Inject } from "@nestjs/common";
 import { Kavo, KavoModule, getKavoServiceToken } from "@kavo/nest";
-import type { ClassRef, DefaultKavoService, KavoInfrastructure, EntityId, EntityMetadata, NormalizedQueryContext, RepositoryAdapter } from "@kavo/core";
+import type {
+  ClassRef,
+  DefaultKavoService,
+  KavoInfrastructure,
+  EntityId,
+  EntityMetadata,
+  NormalizedQueryContext,
+  RepositoryAdapter,
+} from "@kavo/core";
 import { NotFoundException, NotDeletedException } from "@kavo/core";
 import autocannon from "autocannon";
 
@@ -142,7 +150,12 @@ describe("HTTP throughput — fake (in-memory)", () => {
   });
 
   it("POST /todos", async () => {
-    await bench("POST /todos", `http://127.0.0.1:${port}/todos`, "POST", JSON.stringify({ title: "bench", done: false, priority: 1 }));
+    await bench(
+      "POST /todos",
+      `http://127.0.0.1:${port}/todos`,
+      "POST",
+      JSON.stringify({ title: "bench", done: false, priority: 1 }),
+    );
   });
 
   it("PATCH /todos/:id", async () => {
