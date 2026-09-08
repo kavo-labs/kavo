@@ -223,6 +223,32 @@ export interface RealtimeSettings {
  */
 export type ArrayMutationStrategy = "replace" | "resource" | "jsonPatch";
 
+/**
+ * Names the scalar field `…One` routes and `EntityReader.findOneById`
+ * resolve against, in place of `EntityMetadata.idField` (ADR-0052). Lookup
+ * axis only — the forced sort tiebreaker, cursor/since keyset, realtime
+ * ids, immutable-key stripping, and association-by-id (ADR-0014) all stay
+ * on the true primary key regardless of this setting.
+ *
+ * Global → entity scope only: deliberately absent from every operation's
+ * and per-call's `Allowed` settings union (`entity-config.ts`), so it can
+ * never be overridden per-operation or per-request — the same mechanism
+ * that already pins `pagination` to `findMany` alone. Omitted (the
+ * default) preserves today's behavior exactly: identity comes from ORM
+ * metadata.
+ *
+ * Rejected at bootstrap (`ConfigurationException`) when: the field doesn't
+ * exist on the entity, is a relation or a derived field, its
+ * `FieldMetadata.kind` isn't `"string"`/`"number"`, the entity has
+ * `compositeIdFields` (out of scope for v1), or the adapter doesn't
+ * implement `RepositoryAdapter.supportsIdentifierField`. Uniqueness is the
+ * caller's responsibility — `FieldMetadata` carries no `unique` flag, so
+ * Kavo cannot verify it.
+ */
+export interface IdentifierSettings {
+  readonly field: string;
+}
+
 /** The full settings tree. */
 export interface KavoSettings {
   readonly pagination: PaginationSettings;
@@ -231,6 +257,8 @@ export interface KavoSettings {
   readonly cache: CacheSettings | false;
   readonly delete: SoftDeleteSettings | false;
   readonly realtime: RealtimeSettings | false;
+  /** See `IdentifierSettings` (ADR-0052). Unset: identity comes from ORM metadata. */
+  readonly identifier?: IdentifierSettings;
   /**
    * Global operation enablement, keyed by standard operation id — booleans
    * only, unlike the richer per-entity `EntityConfig.operations` (which also

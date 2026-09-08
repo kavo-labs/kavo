@@ -85,10 +85,11 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     id: EntityId,
     query: NormalizedQueryContext<Entity> | null,
     context: KavoContext<Entity>,
+    identifierField?: string,
   ): Promise<Entity | null> {
     try {
       const where = this.scopeToLive(
-        { [this.idField]: { $eq: id } },
+        { [identifierField ?? this.idField]: { $eq: id } },
         context,
         query?.withDeleted ?? false,
         query?.onlyDeleted ?? false,
@@ -259,8 +260,9 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     id: EntityId,
     context: KavoContext<Entity>,
     withDeleted: boolean,
+    identifierField?: string,
   ): Promise<Record<string, unknown> | null> {
-    const where = this.scopeToLive({ [this.idField]: { $eq: id } }, context, withDeleted);
+    const where = this.scopeToLive({ [identifierField ?? this.idField]: { $eq: id } }, context, withDeleted);
     const row = await this.model.findOne(where, null, { lean: true });
     // Left as raw document data: the callers below only test the
     // delete-marker field, and anything returned to core goes through
@@ -279,13 +281,23 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async update(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
-    return this.writeExisting(id, data, context);
+  async update(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
+    return this.writeExisting(id, data, context, identifierField);
   }
 
-  async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  async patch(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     this.requirePatchChanges(id, data, context);
-    return this.writeExisting(id, data, context);
+    return this.writeExisting(id, data, context, identifierField);
   }
 
   /**
@@ -332,9 +344,14 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    * reported without a separate existence check — no read-then-write gap
    * for a concurrent delete to slip through.
    */
-  private async writeExisting(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async writeExisting(
+    id: EntityId,
+    rawData: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     try {
-      const where = this.scopeToLive({ [this.idField]: { $eq: id } }, context, false);
+      const where = this.scopeToLive({ [identifierField ?? this.idField]: { $eq: id } }, context, false);
       // Defence in depth, mirroring the deserializer's own exclusion: even
       // an explicit write DTO that legitimately names the id (to assign a
       // natural key on `create`) must not be allowed to reassign an
@@ -350,7 +367,7 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       if (Object.keys(changes).length === 0) {
         // MongoDB rejects an empty `$set`. Nothing to write is not an
         // error — it is the current document, unchanged.
-        const existing = await this.byId(id, context, false);
+        const existing = await this.byId(id, context, false, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -376,15 +393,16 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async delete(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
+    const lookupField = identifierField ?? this.idField;
     try {
       if (deleteConfig.strategy === "hard") {
-        const existing = await this.byId(id, context, false);
+        const existing = await this.byId(id, context, false, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        await this.model.deleteOne({ [this.idField]: { $eq: id } });
+        await this.model.deleteOne({ [lookupField]: { $eq: id } });
         return;
       }
       const { field } = deleteConfig;
@@ -396,12 +414,12 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
       // stored marker tells them apart — but it no longer *decides* the
       // write, it only explains a write that matched nothing.
       const updated = await this.model.findOneAndUpdate(
-        { [this.idField]: { $eq: id }, [field]: { $eq: null } },
+        { [lookupField]: { $eq: id }, [field]: { $eq: null } },
         { $set: { [field]: new Date() } },
         { lean: true },
       );
       if (updated === null || updated === undefined) {
-        const existing = await this.byId(id, context, true);
+        const existing = await this.byId(id, context, true, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -415,19 +433,20 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async restore(id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+  async restore(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<Entity> {
     try {
       const { field } = this.requireSoftDelete(context, "restore");
+      const lookupField = identifierField ?? this.idField;
       // Same atomic shape as `delete`, mirrored: only a document that is
       // actually deleted may be restored, so the predicate is part of the
       // write rather than a check that precedes it.
       const restored = await this.model.findOneAndUpdate(
-        { [this.idField]: { $eq: id }, [field]: { $ne: null } },
+        { [lookupField]: { $eq: id }, [field]: { $ne: null } },
         { $set: { [field]: null } },
         { new: true, lean: true },
       );
       if (restored === null || restored === undefined) {
-        const existing = await this.byId(id, context, true);
+        const existing = await this.byId(id, context, true, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -442,13 +461,14 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async purge(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
+    const lookupField = identifierField ?? this.idField;
     try {
       if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a
         // document that is already soft-deleted, never a live one.
-        const existing = await this.byId(id, context, true);
+        const existing = await this.byId(id, context, true, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -459,12 +479,12 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
           });
         }
       } else {
-        const existing = await this.byId(id, context, false);
+        const existing = await this.byId(id, context, false, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
       }
-      await this.model.deleteOne({ [this.idField]: { $eq: id } });
+      await this.model.deleteOne({ [lookupField]: { $eq: id } });
     } catch (error) {
       throw this.mapError(error, context, true);
     }
@@ -486,6 +506,16 @@ export class MongooseRepositoryAdapter<Entity extends object> implements Reposit
    */
   private mapError(error: unknown, context: KavoContext<Entity>, addressedById = false) {
     return mapDriverError(error, errorContext(context), addressedById ? this.idField : undefined);
+  }
+
+  /**
+   * ADR-0052: any real scalar path can be queried directly through
+   * Mongoose's own predicate shape, once core has already confirmed (at
+   * bootstrap, `resolve-entity-config.ts`) that `field` is a non-relation,
+   * non-derived, `string`/`number`-kind column.
+   */
+  supportsIdentifierField(_field: string): boolean {
+    return true;
   }
 
   private notFound(id: EntityId, context: KavoContext<Entity>): NotFoundException {

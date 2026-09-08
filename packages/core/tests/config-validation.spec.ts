@@ -286,6 +286,22 @@ describe("validateSettings — soft delete", () => {
   });
 });
 
+describe("validateSettings — identifier (ADR-0052)", () => {
+  it("accepts omitted — the default, identity comes from ORM metadata", () => {
+    expect(() => accept({})).not.toThrow();
+  });
+
+  it("accepts { field: string }", () => {
+    expect(() => accept({ identifier: { field: "username" } })).not.toThrow();
+  });
+
+  it("rejects a value that isn't { field: string }", () => {
+    for (const value of ["username", {}, { field: "" }, { field: 5 }, { field: null }, 1, true]) {
+      expectRejected({ identifier: value }, "identifier", value);
+    }
+  });
+});
+
 describe("validateSettings — realtime", () => {
   it("defaults to `false` — no separate `enabled` key (issue #247)", () => {
     expect(BUILT_IN_DEFAULTS.realtime).toBe(false);

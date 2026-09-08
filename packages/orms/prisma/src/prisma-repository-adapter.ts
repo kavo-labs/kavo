@@ -71,10 +71,11 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     id: EntityId,
     query: NormalizedQueryContext<Entity> | null,
     context: KavoContext<Entity>,
+    identifierField?: string,
   ): Promise<Entity | null> {
     try {
       const where = this.scopeToLive(
-        { [this.idField]: id },
+        { [identifierField ?? this.idField]: id },
         context,
         query?.withDeleted ?? false,
         query?.onlyDeleted ?? false,
@@ -235,8 +236,9 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     id: EntityId,
     context: KavoContext<Entity>,
     withDeleted: boolean,
+    identifierField?: string,
   ): Promise<Record<string, unknown> | null> {
-    const where = this.scopeToLive({ [this.idField]: id }, context, withDeleted);
+    const where = this.scopeToLive({ [identifierField ?? this.idField]: id }, context, withDeleted);
     return (await this.delegate.findFirst({ where })) as Record<string, unknown> | null;
   }
 
@@ -250,13 +252,23 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     }
   }
 
-  async update(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
-    return this.writeExisting(id, data, context);
+  async update(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
+    return this.writeExisting(id, data, context, identifierField);
   }
 
-  async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  async patch(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     this.requirePatchChanges(id, data, context);
-    return this.writeExisting(id, data, context);
+    return this.writeExisting(id, data, context, identifierField);
   }
 
   /**
@@ -299,9 +311,14 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
    * exactly as it is to reads — reviving one is `restore`'s job, so
    * existence is checked against the live scope before the write.
    */
-  private async writeExisting(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async writeExisting(
+    id: EntityId,
+    rawData: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     try {
-      const existing = await this.byId(id, context, false);
+      const existing = await this.byId(id, context, false, identifierField);
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -317,25 +334,29 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
       if (softDeleteField !== null) {
         delete data[softDeleteField];
       }
-      return (await this.delegate.update({ where: { [this.idField]: id }, data })) as Entity;
+      // Always the row's real primary key (`identifierField` may have
+      // addressed it by a different column, ADR-0052) — Prisma's `where`
+      // for a plain `update`/`delete` must name a unique column, and the
+      // primary key is the one Kavo already knows is unique.
+      return (await this.delegate.update({ where: { [this.idField]: existing[this.idField] }, data })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
   }
 
-  async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async delete(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
     try {
       if (deleteConfig.strategy === "hard") {
-        const existing = await this.byId(id, context, false);
+        const existing = await this.byId(id, context, false, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
-        await this.delegate.delete({ where: { [this.idField]: id } });
+        await this.delegate.delete({ where: { [this.idField]: existing[this.idField] } });
         return;
       }
       const { field } = deleteConfig;
-      const existing = await this.byId(id, context, true);
+      const existing = await this.byId(id, context, true, identifierField);
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -345,16 +366,19 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
           context: errorContext(context),
         });
       }
-      await this.delegate.update({ where: { [this.idField]: id }, data: { [field]: new Date() } });
+      await this.delegate.update({
+        where: { [this.idField]: existing[this.idField] },
+        data: { [field]: new Date() },
+      });
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
   }
 
-  async restore(id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+  async restore(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<Entity> {
     try {
       const { field } = this.requireSoftDelete(context, "restore");
-      const existing = await this.byId(id, context, true);
+      const existing = await this.byId(id, context, true, identifierField);
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -364,19 +388,23 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
           context: errorContext(context),
         });
       }
-      return (await this.delegate.update({ where: { [this.idField]: id }, data: { [field]: null } })) as Entity;
+      return (await this.delegate.update({
+        where: { [this.idField]: existing[this.idField] },
+        data: { [field]: null },
+      })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
   }
 
-  async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async purge(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
     try {
+      let existing: Record<string, unknown> | null;
       if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
-        const existing = await this.byId(id, context, true);
+        existing = await this.byId(id, context, true, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -387,15 +415,25 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
           });
         }
       } else {
-        const existing = await this.byId(id, context, false);
+        existing = await this.byId(id, context, false, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
       }
-      await this.delegate.delete({ where: { [this.idField]: id } });
+      await this.delegate.delete({ where: { [this.idField]: existing[this.idField] } });
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
+  }
+
+  /**
+   * ADR-0052: any real scalar column can be looked up against directly via
+   * `findFirst`'s `where`, once core has already confirmed (at bootstrap,
+   * `resolve-entity-config.ts`) that `field` is a non-relation, non-derived,
+   * `string`/`number`-kind column.
+   */
+  supportsIdentifierField(_field: string): boolean {
+    return true;
   }
 
   private notFound(id: EntityId, context: KavoContext<Entity>): NotFoundException {

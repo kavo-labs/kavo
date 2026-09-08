@@ -113,12 +113,23 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
     id: EntityId,
     query: NormalizedQueryContext<Todo> | null,
     context: KavoContext<Todo>,
+    identifierField?: string,
   ): Promise<Todo | null> {
-    const row = this.rows.find((candidate) => candidate.id === Number(id)) ?? null;
+    const row =
+      identifierField === undefined
+        ? (this.rows.find((candidate) => candidate.id === Number(id)) ?? null)
+        : (this.rows.find(
+            (candidate) => String((candidate as unknown as Record<string, unknown>)[identifierField]) === String(id),
+          ) ?? null);
     if (row === null) {
       return null;
     }
     return this.visible(row, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false) ? row : null;
+  }
+
+  /** ADR-0052: any real scalar field the fake fixture carries. */
+  supportsIdentifierField(_field: string): boolean {
+    return true;
   }
 
   async findOne(query: NormalizedQueryContext<Todo>, context: KavoContext<Todo>): Promise<Todo | null> {
@@ -147,20 +158,25 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
     return row;
   }
 
-  async update(id: EntityId, data: Partial<Todo>): Promise<Todo> {
-    const row = await this.require(id);
+  async update(
+    id: EntityId,
+    data: Partial<Todo>,
+    context?: KavoContext<Todo>,
+    identifierField?: string,
+  ): Promise<Todo> {
+    const row = await this.require(id, identifierField);
     Object.assign(row, data);
     return row;
   }
 
-  async patch(id: EntityId, data: Partial<Todo>): Promise<Todo> {
-    return this.update(id, data);
+  async patch(id: EntityId, data: Partial<Todo>, context?: KavoContext<Todo>, identifierField?: string): Promise<Todo> {
+    return this.update(id, data, context, identifierField);
   }
 
-  async delete(id: EntityId, context: KavoContext<Todo>): Promise<void> {
-    const row = await this.require(id);
+  async delete(id: EntityId, context: KavoContext<Todo>, identifierField?: string): Promise<void> {
+    const row = await this.require(id, identifierField);
     if (context.config.delete.strategy === "hard") {
-      this.rows = this.rows.filter((candidate) => candidate.id !== Number(id));
+      this.rows = this.rows.filter((candidate) => candidate.id !== row.id);
       return;
     }
     if (row.deletedAt !== null) {
@@ -176,8 +192,8 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
    * this fake's own opinion — `deletedAt` is a plain property here, which
    * is exactly what a marker column is.
    */
-  async restore(id: EntityId, context: KavoContext<Todo>): Promise<Todo> {
-    const row = await this.require(id);
+  async restore(id: EntityId, context: KavoContext<Todo>, identifierField?: string): Promise<Todo> {
+    const row = await this.require(id, identifierField);
     if (row.deletedAt === null) {
       throw new NotDeletedException({
         messageParams: { entity: context.entityName, id: String(id) },
@@ -187,14 +203,14 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
     return row;
   }
 
-  async purge(id: EntityId, context: KavoContext<Todo>): Promise<void> {
-    const row = await this.require(id);
+  async purge(id: EntityId, context: KavoContext<Todo>, identifierField?: string): Promise<void> {
+    const row = await this.require(id, identifierField);
     if (context.config.delete.strategy === "soft" && row.deletedAt === null) {
       throw new NotDeletedException({
         messageParams: { entity: context.entityName, id: String(id) },
       });
     }
-    this.rows = this.rows.filter((candidate) => candidate.id !== Number(id));
+    this.rows = this.rows.filter((candidate) => candidate.id !== row.id);
   }
 
   private live(query: NormalizedQueryContext<Todo>, context: KavoContext<Todo>): readonly Todo[] {
@@ -216,8 +232,13 @@ export class InMemoryTodoAdapter implements RepositoryAdapter<Todo> {
     return withDeleted || row.deletedAt === null;
   }
 
-  private async require(id: EntityId): Promise<Todo> {
-    const row = this.rows.find((candidate) => candidate.id === Number(id)) ?? null;
+  private async require(id: EntityId, identifierField?: string): Promise<Todo> {
+    const row =
+      identifierField === undefined
+        ? (this.rows.find((candidate) => candidate.id === Number(id)) ?? null)
+        : (this.rows.find(
+            (candidate) => String((candidate as unknown as Record<string, unknown>)[identifierField]) === String(id),
+          ) ?? null);
     if (row === null) {
       throw new NotFoundException({
         messageParams: { entity: "Todo", id: String(id) },

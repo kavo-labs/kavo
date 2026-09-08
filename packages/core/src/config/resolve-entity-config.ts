@@ -69,6 +69,7 @@ const SETTINGS_KEYS = [
   "cache",
   "delete",
   "realtime",
+  "identifier",
 ] as const satisfies readonly (keyof KavoSettings)[];
 
 /**
@@ -135,6 +136,7 @@ export function resolveEntityConfig<Entity extends object>(
   );
   validateSettings(entityName, entitySettings);
   validateSincePagination(entityName, metadata, entitySettings, filter, select);
+  const identifierField = validateIdentifierConfig(entityName, metadata, entitySettings);
   const relations = new DefaultRelationRegistry<Entity>(
     metadata.relations,
     include.fields as readonly string[],
@@ -185,6 +187,7 @@ export function resolveEntityConfig<Entity extends object>(
     include,
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
+    identifierField,
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
@@ -1099,6 +1102,72 @@ function validateSincePagination<Entity extends object>(
 }
 
 /**
+ * Resolve and validate `settings.identifier` (ADR-0052). Returns the
+ * effective `…One` lookup field: `metadata.idField` when unset, or the
+ * configured field once it passes every check below. The adapter
+ * capability check (`RepositoryAdapter.supportsIdentifierField`) happens
+ * separately in `kavo.ts`, where the adapter is in scope.
+ */
+function validateIdentifierConfig<Entity extends object>(
+  entityName: string,
+  metadata: EntityMetadata<Entity>,
+  settings: KavoSettings,
+): string {
+  const { identifier } = settings;
+  if (identifier === undefined) {
+    return metadata.idField;
+  }
+  const { field } = identifier;
+  if (metadata.compositeIdFields !== undefined) {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `entity '${entityName}' has a composite primary key (compositeIdFields) — 'identifier' is not ` +
+        `supported on a composite-key entity`,
+    );
+  }
+  if (field === metadata.idField) {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `'identifier.field' names the entity's own primary key ('${field}') — omit 'identifier' instead`,
+    );
+  }
+  const relationNames = new Set(metadata.relations.map((relation) => relation.name));
+  if (relationNames.has(field)) {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `'${field}' is a relation, not a scalar column — 'identifier.field' must name a scalar column`,
+    );
+  }
+  const column = metadata.fields.find((candidate) => candidate.name === field);
+  if (column === undefined) {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `entity '${entityName}' has no '${field}' column — set 'identifier.field' to an existing column`,
+    );
+  }
+  if (column.derivedExpression !== undefined) {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `'${field}' is a derived field (ADR-0050) with no addressable storage column — 'identifier.field' ` +
+        `must name a real column`,
+    );
+  }
+  if (column.kind !== "string" && column.kind !== "number") {
+    throw new ConfigurationException(
+      entityName,
+      "identifier.field",
+      `'${field}' must be a 'string'- or 'number'-kind column, got '${column.kind}'`,
+    );
+  }
+  return field;
+}
+
+/**
  * Debug dump: the resolved configuration for one
  * entity as a plain printable object — what you `console.log` when a
  * merge result surprises you.
@@ -1116,6 +1185,7 @@ export function describeResolvedConfig<Entity>(
     search: config.search,
     include: config.include,
     delete: config.delete,
+    identifierField: config.identifierField,
     relations: config.relations.all().map((relation) => ({
       name: relation.name,
       cardinality: relation.cardinality,

@@ -12,26 +12,32 @@ import type { KavoContext } from "../context/kavo-context.js";
  */
 export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> {
   create(data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity>;
-  /** Full replace (`PUT` semantics — the engine supplies a complete shape). */
-  update(id: Id, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity>;
+  /**
+   * Full replace (`PUT` semantics — the engine supplies a complete shape).
+   * `identifierField`: see `EntityReader.findOneById`'s doc (ADR-0052) —
+   * the same optional lookup-column override, since a `PUT`/`PATCH`/
+   * `DELETE`/restore/purge route addresses the same `…One` lookup axis a
+   * `GET` on the same `:id` does.
+   */
+  update(id: Id, data: Partial<Entity>, context: KavoContext<Entity>, identifierField?: string): Promise<Entity>;
   /** Partial update (`PATCH` semantics — only present keys are written). */
-  patch(id: Id, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity>;
+  patch(id: Id, data: Partial<Entity>, context: KavoContext<Entity>, identifierField?: string): Promise<Entity>;
   /**
    * Delete by the strategy on `context.config.delete`:
    * hard by default, soft when the entity carries a delete-marker field.
    * Soft-deleting an already-deleted row raises `AlreadyDeletedException`.
    */
-  delete(id: Id, context: KavoContext<Entity>): Promise<void>;
+  delete(id: Id, context: KavoContext<Entity>, identifierField?: string): Promise<void>;
   /**
    * Un-delete a soft-deleted row and return it. A row that is not deleted
    * raises `NotDeletedException`; a missing one, `NotFoundException`.
    */
-  restore(id: Id, context: KavoContext<Entity>): Promise<Entity>;
+  restore(id: Id, context: KavoContext<Entity>, identifierField?: string): Promise<Entity>;
   /**
    * Permanently delete an already-soft-deleted row. Under a hard delete
    * strategy this is just a delete — the row is gone either way.
    */
-  purge(id: Id, context: KavoContext<Entity>): Promise<void>;
+  purge(id: Id, context: KavoContext<Entity>, identifierField?: string): Promise<void>;
   /**
    * Bootstrap-time capability query for one specific relation, checked
    * before any of `replaceRelation`/`patchRelation`/`readRelation`/
@@ -49,6 +55,18 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
    * relation it would otherwise accept via the methods below.
    */
   supportsArrayMutation?(relation: string): boolean;
+  /**
+   * Bootstrap-time capability query for the `identifier` settings key
+   * (ADR-0052): can this adapter look `findOneById` up against `field`
+   * instead of the entity's primary key? Optional and, unlike
+   * `supportsArrayMutation`, defaults to **unsupported** — unimplemented
+   * means "this adapter never learned to look up by anything but its
+   * primary key," checked once at `createCrud` bootstrap and turned into a
+   * `ConfigurationException` rather than adapter-specific runtime
+   * breakage. All four ORM adapters support it, returning `true` for any
+   * real, non-relation, non-generated column.
+   */
+  supportsIdentifierField?(field: string): boolean;
   /**
    * `arrayMutation`'s `replace` strategy (ADR-0014's named extension
    * point): whole-array replace of a to-many relation, still id-only —

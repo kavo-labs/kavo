@@ -51,6 +51,21 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
     );
   }
 
+  if (settings.identifier !== undefined) {
+    if (
+      typeof settings.identifier !== "object" ||
+      settings.identifier === null ||
+      typeof settings.identifier.field !== "string" ||
+      settings.identifier.field.length === 0
+    ) {
+      throw new ConfigurationException(
+        entityName,
+        "identifier",
+        `expected { field: string } or omitted, got ${JSON.stringify(settings.identifier)}`,
+      );
+    }
+  }
+
   bool("errors.exposeInternals", settings.errors.exposeInternals);
 
   if (settings.cache !== false) {

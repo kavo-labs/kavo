@@ -111,11 +111,12 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     id: EntityId,
     query: NormalizedQueryContext<Entity> | null,
     context: KavoContext<Entity>,
+    identifierField?: string,
   ): Promise<Entity | null> {
     try {
       const include = query?.include ?? {};
       const where = this.scopeToLive(
-        { [this.idField]: id },
+        { [identifierField ?? this.idField]: id },
         context,
         query?.withDeleted ?? false,
         query?.onlyDeleted ?? false,
@@ -273,8 +274,9 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     id: EntityId,
     context: KavoContext<Entity>,
     withDeleted: boolean,
+    identifierField?: string,
   ): Promise<Record<string, unknown> | null> {
-    const where = this.scopeToLive({ [this.idField]: id }, context, withDeleted);
+    const where = this.scopeToLive({ [identifierField ?? this.idField]: id }, context, withDeleted);
     const row = await this.fork().findOne(this.entity, where as never);
     return row === null ? null : (toPlain(row) as Record<string, unknown>);
   }
@@ -292,13 +294,23 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async update(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
-    return this.mergeAndFlush(id, data, context);
+  async update(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
+    return this.mergeAndFlush(id, data, context, identifierField);
   }
 
-  async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  async patch(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     this.requirePatchChanges(id, data, context);
-    return this.mergeAndFlush(id, data, context);
+    return this.mergeAndFlush(id, data, context, identifierField);
   }
 
   /**
@@ -346,12 +358,17 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
    * turn a missing id into `NotFoundException`, so this costs no extra
    * query.
    */
-  private async mergeAndFlush(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async mergeAndFlush(
+    id: EntityId,
+    rawData: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     try {
       const em = this.fork();
       // Scoped to live rows: a soft-deleted row is invisible to updates,
       // exactly as it is to reads. Reviving one is `restore`'s job.
-      const where = this.scopeToLive({ [this.idField]: id }, context, false);
+      const where = this.scopeToLive({ [identifierField ?? this.idField]: id }, context, false);
       const existing = await em.findOne(this.entity, where as never);
       if (existing === null) {
         throw this.notFound(id, context);
@@ -376,18 +393,19 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async delete(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
+    const lookupField = identifierField ?? this.idField;
     try {
       if (deleteConfig.strategy === "hard") {
-        const affected = await this.fork().nativeDelete(this.entity, { [this.idField]: id } as never);
+        const affected = await this.fork().nativeDelete(this.entity, { [lookupField]: id } as never);
         if (affected === 0) {
           throw this.notFound(id, context);
         }
         return;
       }
       const { field } = deleteConfig;
-      const existing = await this.byId(id, context, true);
+      const existing = await this.byId(id, context, true, identifierField);
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -397,16 +415,17 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
           context: errorContext(context),
         });
       }
-      await this.fork().nativeUpdate(this.entity, { [this.idField]: id } as never, { [field]: new Date() } as never);
+      await this.fork().nativeUpdate(this.entity, { [lookupField]: id } as never, { [field]: new Date() } as never);
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
   }
 
-  async restore(id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+  async restore(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<Entity> {
     try {
       const { field } = this.requireSoftDelete(context, "restore");
-      const existing = await this.byId(id, context, true);
+      const lookupField = identifierField ?? this.idField;
+      const existing = await this.byId(id, context, true, identifierField);
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -416,7 +435,7 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
           context: errorContext(context),
         });
       }
-      await this.fork().nativeUpdate(this.entity, { [this.idField]: id } as never, { [field]: null } as never);
+      await this.fork().nativeUpdate(this.entity, { [lookupField]: id } as never, { [field]: null } as never);
       // Clearing the marker is a single-field write with no relation
       // involvement, so the already-loaded row is corrected in place rather
       // than re-read.
@@ -427,13 +446,14 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
     }
   }
 
-  async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async purge(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
+    const lookupField = identifierField ?? this.idField;
     try {
       if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
-        const existing = await this.byId(id, context, true);
+        const existing = await this.byId(id, context, true, identifierField);
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -444,7 +464,7 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
           });
         }
       }
-      const affected = await this.fork().nativeDelete(this.entity, { [this.idField]: id } as never);
+      const affected = await this.fork().nativeDelete(this.entity, { [lookupField]: id } as never);
       if (affected === 0) {
         throw this.notFound(id, context);
       }
@@ -471,6 +491,17 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
       result[name] = unwrapAssociation(result[name], idFieldOf());
     }
     return result;
+  }
+
+  /**
+   * ADR-0052: any real scalar property can be looked up against directly
+   * through MikroORM's own `where` shape (`findOne`/`nativeUpdate`/
+   * `nativeDelete` all accept an arbitrary criteria object), once core has
+   * already confirmed (at bootstrap, `resolve-entity-config.ts`) that
+   * `field` is a non-relation, non-derived, `string`/`number`-kind column.
+   */
+  supportsIdentifierField(_field: string): boolean {
+    return true;
   }
 
   private notFound(id: EntityId, context: KavoContext<Entity>): NotFoundException {
