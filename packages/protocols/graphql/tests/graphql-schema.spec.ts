@@ -5,6 +5,7 @@ import {
   GraphQLBoolean,
   GraphQLInputObjectType,
   GraphQLInt,
+  GraphQLList,
   GraphQLNonNull,
   GraphQLObjectType,
   GraphQLString,
@@ -372,14 +373,171 @@ describe("custom operations reach GraphQL (issue #153)", () => {
       { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
     );
 
-    expect(() =>
+    try {
       createKavoGraphQLSchema({
         name: "Todo",
         service,
         itemType: TodoType,
         operations: { noShapeOne: { type: TodoType } },
-      }),
-    ).toThrowError(ConfigurationException);
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as Error).message).toMatch(/no declared 'dto.output'/);
+    }
+  });
+
+  it("refuses naming a standard operation id in 'operations'", () => {
+    const service = createKavo().createCrud(Todo, undefined, {
+      adapter: new InMemoryTodoAdapter(),
+      metadata: todoMetadata,
+    });
+
+    try {
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service,
+        itemType: TodoType,
+        operations: { findOne: { type: TodoType } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as Error).message).toMatch(/standard eight operations/);
+    }
+  });
+
+  it("refuses naming an id the entity never declared", () => {
+    const service = createKavo().createCrud(Todo, undefined, {
+      adapter: new InMemoryTodoAdapter(),
+      metadata: todoMetadata,
+    });
+
+    try {
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service,
+        itemType: TodoType,
+        operations: { ghostOne: { type: TodoType } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as Error).message).toMatch(/never declared/);
+    }
+  });
+
+  it("refuses naming a disabled custom operation", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo }, enabled: false },
+        },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+
+    try {
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service,
+        itemType: TodoType,
+        operations: { markDoneOne: { type: TodoType } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as Error).message).toMatch(/is disabled/);
+    }
+  });
+
+  it("refuses an 'inputType' named for an operation with no declared dto.input", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo } },
+        },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+
+    const MarkDoneInput = new GraphQLInputObjectType({
+      name: "MarkDoneInput",
+      fields: { note: { type: GraphQLString } },
+    });
+
+    try {
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service,
+        itemType: TodoType,
+        operations: { markDoneOne: { type: TodoType, inputType: MarkDoneInput } },
+      });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
+      expect((error as Error).message).toMatch(/no declared 'dto.input'/);
+    }
+  });
+
+  it("exposes a cardinality-'many' custom read as a query field with no id argument", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push(
+      { id: 1, title: "a", done: true },
+      { id: 2, title: "b", done: false },
+      { id: 3, title: "c", done: true },
+    );
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          doneMany: {
+            kind: "read",
+            cardinality: "many",
+            handler: {
+              async execute() {
+                const rows = adapter.rows.filter((row) => row.done);
+                return { entities: rows, total: rows.length };
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const DoneManyResult = new GraphQLObjectType({
+      name: "TodoDoneManyResult",
+      fields: { items: { type: new GraphQLNonNull(new GraphQLList(new GraphQLNonNull(TodoType))) } },
+    });
+
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service,
+      itemType: TodoType,
+      operations: { doneMany: { type: DoneManyResult } },
+    });
+
+    const fields = schema.getQueryType()?.getFields();
+    expect(fields?.["todoDoneMany"]?.args).toEqual([]);
+
+    const result = await graphql({ schema, source: `query { todoDoneMany { items { id done } } } ` });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.todoDoneMany).toEqual({
+      items: [
+        { id: 1, done: true },
+        { id: 3, done: true },
+      ],
+    });
   });
 
   it("leaves an un-named custom operation off the schema even when it declares a dto", async () => {

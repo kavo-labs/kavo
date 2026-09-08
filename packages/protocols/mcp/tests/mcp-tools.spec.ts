@@ -309,6 +309,40 @@ describe("custom operations reach MCP (issue #153)", () => {
     const bindings = crudTools({ name: "Todo", service });
     expect(bindings.some((binding) => binding.tool.name === "todo.markDoneOne")).toBe(false);
   });
+
+  it("adds a tool for a cardinality-'many' custom read, taking no id and no body", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "a", done: true }, { id: 2, title: "b", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          doneMany: {
+            kind: "read",
+            cardinality: "many",
+            handler: {
+              async execute() {
+                const rows = adapter.rows.filter((row) => row.done);
+                return { entities: rows, total: rows.length };
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const tool = find(bindings, "todo.doneMany");
+    expect(tool.tool.inputSchema).toEqual({ type: "object", properties: {}, required: [] });
+
+    const result = await tool.handler({});
+    expect(result.isError).toBeUndefined();
+    const payload = JSON.parse((result.content[0] as { text: string }).text);
+    expect(payload.items).toEqual([{ id: 1, title: "a", done: true }]);
+  });
 });
 
 describe("cursor-paginated entities are refused at bootstrap", () => {
