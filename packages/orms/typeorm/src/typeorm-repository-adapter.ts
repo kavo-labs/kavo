@@ -105,10 +105,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     id: EntityId,
     query: NormalizedQueryContext<Entity> | null,
     context: KavoContext<Entity>,
+    identifierField?: string,
   ): Promise<Entity | null> {
     try {
       const include = query?.include ?? {};
-      const qb = this.byId(id, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false);
+      const qb = this.byId(id, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false, identifierField);
       this.joinIncludes(qb, include, this.alias);
       const entity = await qb.getOne();
       if (entity !== null) {
@@ -414,15 +415,40 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     context: KavoContext<Entity>,
     withDeleted: boolean,
     onlyDeleted = false,
+    identifierField?: string,
   ): SelectQueryBuilder<Entity> {
     const qb = this.repository.createQueryBuilder(this.alias);
     if (this.compositeIdFields === null) {
-      qb.where(`${this.alias}.${this.idField} = :id`, { id });
+      qb.where(`${this.alias}.${identifierField ?? this.idField} = :id`, { id });
     } else {
       qb.where(this.compositeCriteria(id) as ObjectLiteral);
     }
     this.scopeToLive(qb, context, withDeleted, onlyDeleted);
     return qb;
+  }
+
+  /**
+   * Resolves `id` (matched against `identifierField`, ADR-0052) to the
+   * entity's real primary-key value — needed by the hard-delete/purge paths
+   * below, which otherwise never load the row before addressing it by id
+   * through TypeORM's bare-scalar `Repository.delete`/`.update` shorthand,
+   * which always means the primary key. A no-op (no extra query) when
+   * `identifierField` is unset or already names the primary key.
+   */
+  private async resolvePrimaryKey(
+    id: EntityId,
+    context: KavoContext<Entity>,
+    identifierField: string | undefined,
+    withDeleted: boolean,
+  ): Promise<EntityId> {
+    if (identifierField === undefined || identifierField === this.idField || this.compositeIdFields !== null) {
+      return id;
+    }
+    const row = await this.byId(id, context, withDeleted, false, identifierField).getOne();
+    if (row === null) {
+      throw this.notFound(id, context);
+    }
+    return (row as Record<string, unknown>)[this.idField] as EntityId;
   }
 
   /** The resolved strategy, refused when an operation requires soft. */
@@ -454,13 +480,23 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     }
   }
 
-  async update(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
-    return this.mergeAndSave(id, data, context);
+  async update(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
+    return this.mergeAndSave(id, data, context, identifierField);
   }
 
-  async patch(id: EntityId, data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  async patch(
+    id: EntityId,
+    data: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     this.requirePatchChanges(id, data, context);
-    return this.mergeAndSave(id, data, context);
+    return this.mergeAndSave(id, data, context, identifierField);
   }
 
   /**
@@ -493,11 +529,16 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * *currently loaded* relation state on `existing`, which is exactly what
    * the extra preload would otherwise fetch.
    */
-  private async mergeAndSave(id: EntityId, rawData: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+  private async mergeAndSave(
+    id: EntityId,
+    rawData: Partial<Entity>,
+    context: KavoContext<Entity>,
+    identifierField?: string,
+  ): Promise<Entity> {
     try {
       // Scoped to live rows: a soft-deleted row is invisible to updates,
       // exactly as it is to reads. Reviving one is `restore`'s job.
-      const existing = await this.byId(id, context, false).getOne();
+      const existing = await this.byId(id, context, false, false, identifierField).getOne();
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -521,7 +562,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         return await this.repository.save(existing);
       }
       if (this.compositeIdFields === null) {
-        await this.repository.update(id, data as never);
+        // The row's real primary key (`identifierField` may have addressed
+        // it by a different column, ADR-0052) — TypeORM's bare-scalar
+        // `Repository.update` shorthand always means the primary key.
+        const pkValue = (existing as Record<string, unknown>)[this.idField] as EntityId;
+        await this.repository.update(pkValue as never, data as never);
       } else {
         await this.repository.update(this.compositeCriteria(id) as never, data as never);
       }
@@ -531,18 +576,19 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     }
   }
 
-  async delete(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async delete(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
     try {
       if (deleteConfig.strategy === "hard") {
-        const result = await this.repository.delete(this.updateCriteria(id) as never);
+        const pkValue = await this.resolvePrimaryKey(id, context, identifierField, false);
+        const result = await this.repository.delete(this.updateCriteria(pkValue) as never);
         if (result.affected === 0) {
           throw this.notFound(id, context);
         }
         return;
       }
       const { field } = deleteConfig;
-      const existing = await this.byId(id, context, true).getOne();
+      const existing = await this.byId(id, context, true, false, identifierField).getOne();
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -559,17 +605,19 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // matching restore's `recover` counterpart below.
         await this.repository.softRemove(existing);
       } else {
-        await this.repository.update(this.updateCriteria(id) as never, { [field]: new Date() } as never);
+        const pkValue =
+          this.compositeIdFields === null ? ((existing as Record<string, unknown>)[this.idField] as EntityId) : id;
+        await this.repository.update(this.updateCriteria(pkValue) as never, { [field]: new Date() } as never);
       }
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
   }
 
-  async restore(id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+  async restore(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<Entity> {
     try {
       const { field } = this.requireSoftDelete(context, "restore");
-      const existing = await this.byId(id, context, true).getOne();
+      const existing = await this.byId(id, context, true, false, identifierField).getOne();
       if (existing === null) {
         throw this.notFound(id, context);
       }
@@ -586,7 +634,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
       // A plain marker column is a single-field write with no relation
       // involvement: mutate the already-loaded row instead of re-reading it.
-      await this.repository.update(this.updateCriteria(id) as never, { [field]: null } as never);
+      const pkValue =
+        this.compositeIdFields === null ? ((existing as Record<string, unknown>)[this.idField] as EntityId) : id;
+      await this.repository.update(this.updateCriteria(pkValue) as never, { [field]: null } as never);
       existing[field as keyof Entity] = null as never;
       return existing;
     } catch (error) {
@@ -594,13 +644,14 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     }
   }
 
-  async purge(id: EntityId, context: KavoContext<Entity>): Promise<void> {
+  async purge(id: EntityId, context: KavoContext<Entity>, identifierField?: string): Promise<void> {
     const deleteConfig = context.config.delete;
     try {
+      let pkValue: EntityId = id;
       if (deleteConfig.strategy === "soft") {
         // Purge is the second step of a two-step delete: it removes a row
         // that is already soft-deleted, never a live one.
-        const existing = await this.byId(id, context, true).getOne();
+        const existing = await this.byId(id, context, true, false, identifierField).getOne();
         if (existing === null) {
           throw this.notFound(id, context);
         }
@@ -610,8 +661,13 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
             context: errorContext(context),
           });
         }
+        if (this.compositeIdFields === null) {
+          pkValue = (existing as Record<string, unknown>)[this.idField] as EntityId;
+        }
+      } else {
+        pkValue = await this.resolvePrimaryKey(id, context, identifierField, true);
       }
-      const result = await this.repository.delete(this.updateCriteria(id) as never);
+      const result = await this.repository.delete(this.updateCriteria(pkValue) as never);
       if (result.affected === 0) {
         throw this.notFound(id, context);
       }
@@ -639,6 +695,18 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       .getMetadata(this.entity)
       .relations.find((candidate) => candidate.propertyName === relation);
     return (relationMetadata?.joinColumns.length ?? 0) <= 1;
+  }
+
+  /**
+   * ADR-0052: any real scalar column can be looked up against directly with
+   * a `QueryBuilder` `WHERE`, once core has already confirmed (at
+   * bootstrap, `resolve-entity-config.ts`) that `field` is a non-relation,
+   * non-derived, `string`/`number`-kind column. A composite-key entity has
+   * no single column `identifier` could address instead of the full key
+   * tuple, so it's unsupported there.
+   */
+  supportsIdentifierField(_field: string): boolean {
+    return this.compositeIdFields === null;
   }
 
   /**
