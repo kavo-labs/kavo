@@ -110,6 +110,15 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * branch on one object instead of re-deriving the decision.
    */
   readonly delete: ResolvedSoftDelete;
+  /**
+   * The `…One` lookup axis (ADR-0052): `metadata.idField` unless
+   * `settings.identifier` names a different column, in which case this is
+   * that column's name. Everything PK-derived (sort tiebreaker, cursor/
+   * since keyset, realtime ids, immutable-key stripping, association-by-id)
+   * ignores this field and reads `EntityMetadata.idField`/
+   * `compositeIdFields` directly instead.
+   */
+  readonly identifierField: string;
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
   /** Relation edges of this entity. */

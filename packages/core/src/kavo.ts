@@ -148,6 +148,9 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         cacheStore,
         options.policy,
       );
+      if (metadata.idField !== resolved.identifierField) {
+        requireIdentifierFieldSupport(resolved, adapter as unknown as RepositoryAdapter<Entity>);
+      }
       // `builtInHandlers()` takes no adapter: the built-ins read the
       // request's `context.repository`, which the engine below fills from
       // this same `adapter` (ADR-0025). One rule for every handler —
@@ -471,6 +474,27 @@ function requireArrayMutationCapable<Entity extends object>(
           `for '${name}' specifically — see the adapter's 'supportsArrayMutation' for why`,
       );
     }
+  }
+}
+
+/**
+ * Fails fast at `createCrud` when `identifier` (ADR-0052) names a field the
+ * entity's repository adapter cannot look `findOneById` up by. Unlike
+ * `supportsArrayMutation`, unimplemented (`undefined`) means unsupported —
+ * an adapter has to opt in explicitly, since a silent PK fall-back would
+ * quietly ignore the configured field instead of erroring.
+ */
+function requireIdentifierFieldSupport<Entity extends object>(
+  config: ResolvedEntityConfig<Entity>,
+  adapter: RepositoryAdapter<Entity>,
+): void {
+  if (adapter.supportsIdentifierField?.(config.identifierField) !== true) {
+    throw new ConfigurationException(
+      config.entityName,
+      "identifier.field",
+      `'identifier' names '${config.identifierField}', but this entity's repository adapter does not ` +
+        `support looking rows up by a field other than its primary key`,
+    );
   }
 }
 

@@ -405,7 +405,12 @@ export class KavoEngine<Entity extends object> {
         applyFilter !== undefined
           ? ((await applyFilter({ context, resource: context.entityName, operation: descriptor.id, params })) ?? null)
           : null;
-      const found = await context.repository.findOneById(id, this.policyPrefetchQuery(filterRoot), context);
+      const found = await context.repository.findOneById(
+        id,
+        this.policyPrefetchQuery(filterRoot),
+        context,
+        configView.identifierField,
+      );
       if (found === null) {
         throw new NotFoundException({
           messageParams: { entity: configView.entityName, id: String(request.id) },
@@ -894,7 +899,7 @@ export class KavoEngine<Entity extends object> {
       query,
       correlationId,
     });
-    const entity = await repository.findOneById(id, query, context);
+    const entity = await repository.findOneById(id, query, context, config.identifierField);
     if (entity === null) {
       return null;
     }
@@ -943,6 +948,9 @@ export class KavoEngine<Entity extends object> {
       // forces `hard` on a soft-deletable entity, say), so it is resolved
       // against the settings actually in force for this call.
       delete: resolveSoftDelete(this.deps.metadata, settings, `${config.entityName} (${request.operation})`),
+      // Structural, not per-call (ADR-0052): `identifier` is excluded from
+      // every operation's settings `Allowed` union, so it never varies here.
+      identifierField: config.identifierField,
       dto: config.dto,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
@@ -1322,16 +1330,20 @@ export class KavoEngine<Entity extends object> {
       }
       return id;
     }
-    const idField = metadata.fields.find((field) => field.name === metadata.idField);
-    if (idField?.kind !== "number" || typeof id !== "string") {
+    // ADR-0052: an `identifier` config key retargets this coercion to the
+    // configured field's kind instead of the primary key's — the lookup
+    // axis only, nothing else `metadata.idField` still governs.
+    const lookupFieldName = this.deps.config.identifierField;
+    const lookupField = metadata.fields.find((field) => field.name === lookupFieldName);
+    if (lookupField?.kind !== "number" || typeof id !== "string") {
       return id;
     }
     const value = Number(id);
     if (Number.isNaN(value)) {
       throw QueryValidationException.single({
-        field: metadata.idField,
+        field: lookupFieldName,
         code: "KAVO_QUERY_INVALID_VALUE",
-        detail: `Value '${id}' for field '${metadata.idField}' is not a valid number.`,
+        detail: `Value '${id}' for field '${lookupFieldName}' is not a valid number.`,
       });
     }
     return value;

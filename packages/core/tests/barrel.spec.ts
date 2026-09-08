@@ -130,6 +130,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "GlobalConfig",
   "HARD_DELETE",
   "IdentifiedWrite",
+  "IdentifierSettings",
   "IncludeNode",
   "IncludeRequest",
   "IncludePath",

@@ -79,6 +79,7 @@ export type {
   CacheSettings,
   EtagSettings,
   ErrorSettings,
+  IdentifierSettings,
   PaginationSettings,
   RealtimeFieldSelector,
   RealtimeSettings,

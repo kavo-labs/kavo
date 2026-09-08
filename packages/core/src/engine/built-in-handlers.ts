@@ -101,7 +101,12 @@ export function builtInHandlers<Entity extends object>(
     },
     findOne: {
       async execute(id: EntityId, context: KavoContext<Entity>) {
-        const entity = await repositoryFor(context).findOneById(id, context.query, context);
+        const entity = await repositoryFor(context).findOneById(
+          id,
+          context.query,
+          context,
+          context.config.identifierField,
+        );
         return entity ?? notFound(context, id);
       },
     },
@@ -132,15 +137,16 @@ export function builtInHandlers<Entity extends object>(
     },
     updateOne: {
       async execute(input: IdentifiedWrite<Entity>, context: KavoContext<Entity>) {
-        return repositoryFor(context).update(input.id, input.data, context);
+        return repositoryFor(context).update(input.id, input.data, context, context.config.identifierField);
       },
     },
     patchOne: {
       async execute(input: IdentifiedWrite<Entity>, context: KavoContext<Entity>) {
         const repository = repositoryFor(context);
+        const identifierField = context.config.identifierField;
         const relationPatch = input.relationPatch;
         if (relationPatch === undefined) {
-          return repository.patch(input.id, input.data, context);
+          return repository.patch(input.id, input.data, context, identifierField);
         }
         // `arrayMutation`'s `jsonPatch` strategy: field changes commit
         // first, then one `patchRelation` call per relation the document
@@ -149,7 +155,9 @@ export function builtInHandlers<Entity extends object>(
         // transaction) rather than one transaction spanning the whole
         // document (ADR-0029's jsonPatch amendment).
         let entity =
-          Object.keys(input.data).length > 0 ? await repository.patch(input.id, input.data, context) : undefined;
+          Object.keys(input.data).length > 0
+            ? await repository.patch(input.id, input.data, context, identifierField)
+            : undefined;
         for (const [relation, changes] of Object.entries(relationPatch)) {
           // `patchRelation` is confirmed present by `requireJsonPatchSupport`
           // at bootstrap, once — never per request.
@@ -163,7 +171,7 @@ export function builtInHandlers<Entity extends object>(
         // Hard or soft per `context.config.delete` — the strategy is
         // resolved at config time and applied by the adapter,
         // so there is no branch here.
-        await repositoryFor(context).delete(id, context);
+        await repositoryFor(context).delete(id, context, context.config.identifierField);
         return null;
       },
     },
@@ -171,12 +179,12 @@ export function builtInHandlers<Entity extends object>(
       async execute(id: EntityId, context: KavoContext<Entity>) {
         // Restore returns the revived row: it reuses the `item` DTO slot,
         // so no new DTO shape enters the system.
-        return repositoryFor(context).restore(id, context);
+        return repositoryFor(context).restore(id, context, context.config.identifierField);
       },
     },
     purgeOne: {
       async execute(id: EntityId, context: KavoContext<Entity>) {
-        await repositoryFor(context).purge(id, context);
+        await repositoryFor(context).purge(id, context, context.config.identifierField);
         return null;
       },
     },
