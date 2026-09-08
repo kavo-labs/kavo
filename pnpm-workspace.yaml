@@ -5,6 +5,7 @@ packages:
   - packages/frameworks/*
   - packages/protocols/*
   - examples/*
+  - tools/*
 
 allowBuilds:
   "@prisma/client": true

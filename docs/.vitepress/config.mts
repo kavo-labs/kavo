@@ -200,6 +200,7 @@ const config = defineConfig({
           { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
           { text: "Error Handling", link: "/guides/error-handling" },
           { text: "Custom Adapter", link: "/guides/custom-adapter" },
+          { text: "Benchmarks", link: "/guides/benchmarks" },
           { text: "Migrating Relations Config (pre-v0.10)", link: "/guides/migrating-relations-v0-10" },
           { text: "Using the API", link: "/using-the-api" },
         ],

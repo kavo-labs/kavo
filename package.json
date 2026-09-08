@@ -24,7 +24,11 @@
     "docs:links": "./scripts/check-doc-links.sh",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "benchmark": "pnpm --filter @kavo/benchmark run",
+    "benchmark:engine": "pnpm --filter @kavo/benchmark run:engine",
+    "benchmark:http": "pnpm --filter @kavo/benchmark run:http",
+    "benchmark:http:fake": "pnpm --filter @kavo/benchmark run:http"
   },
   "devDependencies": {
     "@braintree/sanitize-url": "^7.1.2",

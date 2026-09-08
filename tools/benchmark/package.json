@@ -1,0 +1,28 @@
+{
+  "name": "@kavo/benchmark",
+  "private": true,
+  "description": "Kavo benchmarks — engine micro-benchmarks and HTTP throughput measurement.",
+  "type": "module",
+  "scripts": {
+    "run": "echo 'use --engine or --http flags'",
+    "run:engine": "vitest bench --config vitest.config.ts engine/",
+    "run:http": "vitest run --config vitest.http.config.ts http/throughput.bench.ts --reporter=verbose",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@kavo/core": "workspace:*",
+    "@kavo/nest": "workspace:*",
+    "@kavo/typeorm": "workspace:*",
+    "@nestjs/common": "^11.2.1",
+    "@nestjs/core": "^11.2.1",
+    "@nestjs/platform-express": "^11.2.1",
+    "@nestjs/testing": "^11.2.1",
+    "autocannon": "^8.0.0",
+    "express": "^5.1.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/autocannon": "^7.12.7",
+    "vitest": "^4.1.10"
+  }
+}

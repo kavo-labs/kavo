@@ -12,6 +12,7 @@
     { "path": "packages/protocols/mcp" },
     { "path": "examples/nest-typeorm" },
     { "path": "examples/nest-mongoose" },
-    { "path": "examples/nest-mikroorm" }
+    { "path": "examples/nest-mikroorm" },
+    { "path": "tools/benchmark" }
   ]
 }
