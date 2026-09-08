@@ -149,6 +149,7 @@ export { createMemoryCacheStore } from "./caching/cache-store.js";
 
 // ── Operations ────────────────────────────────────────────────────────
 export type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operations/operation.js";
+export { STANDARD_OPERATION_IDS } from "./operations/operation.js";
 export type { OperationHandler, OperationMetadata } from "./operations/operation-handler.js";
 export type { OperationDescriptor, OperationRegistry } from "./operations/operation-registry.js";
 
