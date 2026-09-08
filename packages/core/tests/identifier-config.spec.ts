@@ -223,6 +223,23 @@ describe("identifier config key (ADR-0052)", () => {
     ).toThrow(ConfigurationException);
   });
 
+  it("rejects a derived field", () => {
+    const kavo = createKavo();
+    const derivedMetadata: EntityMetadata<Account> = {
+      ...accountMetadata,
+      fields: [
+        ...accountMetadata.fields,
+        { name: "displayName", kind: "string", nullable: false, generated: false, derivedExpression: "concat" },
+      ],
+    };
+    expect(() =>
+      kavo.createCrud(Account, { identifier: { field: "displayName" } } as never, {
+        metadata: derivedMetadata,
+        adapter: new InMemoryAccountAdapter(),
+      }),
+    ).toThrow(ConfigurationException);
+  });
+
   it("rejects a relation name", () => {
     const kavo = createKavo();
     expect(() =>

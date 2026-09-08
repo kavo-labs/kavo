@@ -28,18 +28,33 @@ class Book {
   authorId!: number | null;
 }
 
+class Article {
+  id!: number;
+  title!: string;
+  blogId!: number | null;
+  deletedAt!: Date | null;
+}
+
 let client: PrismaClient;
 let kavo: KavoInstance;
 let authors: DefaultKavoService<Author>;
+let articles: DefaultKavoService<Article>;
 
 beforeAll(() => {
   client = newTestPrismaClient();
   kavo = createPrismaKavo(client as never, {
     datamodel: Prisma.dmmf.datamodel,
-    entities: [Author, Book],
+    entities: [Author, Book, Article],
     caseInsensitiveFilters: false,
   });
   authors = kavo.createCrud(Author, { identifier: { field: "email" } } as never) as DefaultKavoService<Author>;
+  articles = kavo.createCrud(Article, {
+    identifier: { field: "title" },
+    delete: { field: "deletedAt", strategy: "soft" },
+    // ADR-0038: declaring `operations` at all makes it an exclusive
+    // whitelist, so every operation this suite exercises must be named.
+    operations: { createOne: true, findOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
+  } as never) as DefaultKavoService<Article>;
 });
 
 afterAll(async () => {
@@ -49,6 +64,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await client.book.deleteMany();
   await client.author.deleteMany();
+  await client.article.deleteMany();
 });
 
 describe("identifier config key — @kavo/prisma (ADR-0052)", () => {
@@ -103,5 +119,21 @@ describe("identifier config key — @kavo/prisma (ADR-0052)", () => {
     } as never)) as Author;
 
     await expect(authors.findOne(String(created.id) as never)).rejects.toThrow(NotFoundException);
+  });
+
+  it("soft-deletes, restores, and purges by the configured field, not the primary key", async () => {
+    const created = (await articles.createOne({ title: "hello-world" } as never)) as Article;
+    expect(created.id).toBeGreaterThan(0);
+
+    await articles.deleteOne("hello-world" as never);
+    await expect(articles.findOne("hello-world" as never)).rejects.toThrow(NotFoundException);
+
+    const restored = await articles.restoreOne("hello-world" as never);
+    expect(restored).toMatchObject({ title: "hello-world" });
+    await expect(articles.findOne("hello-world" as never)).resolves.toMatchObject({ title: "hello-world" });
+
+    await articles.deleteOne("hello-world" as never);
+    await articles.purgeOne("hello-world" as never);
+    await expect(articles.restoreOne("hello-world" as never)).rejects.toThrow(NotFoundException);
   });
 });

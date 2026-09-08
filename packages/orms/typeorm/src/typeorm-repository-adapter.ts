@@ -433,7 +433,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
    * below, which otherwise never load the row before addressing it by id
    * through TypeORM's bare-scalar `Repository.delete`/`.update` shorthand,
    * which always means the primary key. A no-op (no extra query) when
-   * `identifierField` is unset or already names the primary key.
+   * `identifierField` is undefined (a caller outside the engine — the
+   * engine itself always resolves it to a real column name, defaulting to
+   * `EntityMetadata.idField`) or already names the primary key — which is
+   * every composite-key entity, since `identifier` is bootstrap-rejected
+   * there (`resolve-entity-config.ts`), so its resolved `identifierField`
+   * is always `EntityMetadata.idField` unchanged.
    */
   private async resolvePrimaryKey(
     id: EntityId,
@@ -441,7 +446,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     identifierField: string | undefined,
     withDeleted: boolean,
   ): Promise<EntityId> {
-    if (identifierField === undefined || identifierField === this.idField || this.compositeIdFields !== null) {
+    if (identifierField === undefined || identifierField === this.idField) {
       return id;
     }
     const row = await this.byId(id, context, withDeleted, false, identifierField).getOne();
@@ -605,8 +610,15 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // matching restore's `recover` counterpart below.
         await this.repository.softRemove(existing);
       } else {
+        // The row's real primary key when `identifierField` addressed it by
+        // a different column (ADR-0052) — `updateCriteria`'s bare-scalar
+        // shorthand always means the primary key. Composite-key entities
+        // never carry an `identifierField` (bootstrap-rejected), so this is
+        // always `id` unchanged for them.
         const pkValue =
-          this.compositeIdFields === null ? ((existing as Record<string, unknown>)[this.idField] as EntityId) : id;
+          identifierField !== undefined && identifierField !== this.idField
+            ? ((existing as Record<string, unknown>)[this.idField] as EntityId)
+            : id;
         await this.repository.update(this.updateCriteria(pkValue) as never, { [field]: new Date() } as never);
       }
     } catch (error) {
@@ -634,8 +646,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       }
       // A plain marker column is a single-field write with no relation
       // involvement: mutate the already-loaded row instead of re-reading it.
+      // See `delete`'s identical `pkValue` derivation above for why this
+      // branches on `identifierField`, not `compositeIdFields`.
       const pkValue =
-        this.compositeIdFields === null ? ((existing as Record<string, unknown>)[this.idField] as EntityId) : id;
+        identifierField !== undefined && identifierField !== this.idField
+          ? ((existing as Record<string, unknown>)[this.idField] as EntityId)
+          : id;
       await this.repository.update(this.updateCriteria(pkValue) as never, { [field]: null } as never);
       existing[field as keyof Entity] = null as never;
       return existing;
