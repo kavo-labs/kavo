@@ -108,6 +108,25 @@ One subtree covers both halves of HTTP response caching. `cache.ttl` is the engi
 
 See [Soft delete](/features/soft-delete).
 
+## identifier
+
+| Key                | Type                 | Default                          |
+| ------------------ | -------------------- | -------------------------------- |
+| `identifier`       | `{ field } \| unset` | unset (`EntityMetadata.idField`) |
+| `identifier.field` | `string`             | —                                |
+
+Global → entity scope only — never per-operation, never per-call. Retargets
+the `…One` route param and `EntityReader.findOneById` to a scalar column
+other than the entity's primary key (`GET /users/:username` instead of
+`GET /users/:id`); the sort tiebreaker, cursor/since keyset, realtime ids,
+immutable-key stripping on writes, and association-by-id all stay on the
+real primary key regardless of this setting. Rejected at bootstrap on a
+composite-key entity, an unknown/relation/derived field name, a field whose
+kind isn't `string`/`number`, or an adapter that doesn't implement
+`RepositoryAdapter.supportsIdentifierField` (`@kavo/typeorm`, `@kavo/prisma`,
+and `@kavo/mongoose` do; `@kavo/mikroorm` doesn't). Kavo does not verify the
+field is actually unique — see ADR-0052.
+
 ## realtime
 
 | Key                           | Type                                        | Default |
