@@ -7,10 +7,12 @@ import {
   GraphQLSchema,
   GraphQLString,
   type GraphQLFieldConfig,
+  type GraphQLFieldConfigArgumentMap,
   type GraphQLInputObjectType,
+  type GraphQLOutputType,
 } from "graphql";
-import type { DefaultKavoService, EntityId } from "@kavo/core";
-import { ConfigurationException } from "@kavo/core";
+import type { DefaultKavoService, EntityId, OperationId, OperationRegistry, StandardOperationId } from "@kavo/core";
+import { ConfigurationException, STANDARD_OPERATION_IDS } from "@kavo/core";
 import { GraphQLJSON } from "./json-scalar.js";
 
 /**
@@ -52,6 +54,16 @@ import { GraphQLJSON } from "./json-scalar.js";
 function paginationStrategyOf(service: object): string | undefined {
   const engine = (service as { engine?: { config?: { settings?: { pagination?: { strategy?: string } } } } }).engine;
   return engine?.config?.settings?.pagination?.strategy;
+}
+
+/**
+ * The bound entity's operation registry, read the same structurally-typed
+ * way {@link paginationStrategyOf} reads `engine.config` — `engine` is not
+ * itself in `BoundKavoService`'s `Pick` for the same reason, so custom
+ * operation discovery (the #153 amendment) reaches for it the same way.
+ */
+function registryOf(service: object): OperationRegistry | undefined {
+  return (service as { engine?: { registry?: OperationRegistry } }).engine?.registry;
 }
 
 function requireOffsetPageable(entityName: string, strategy: string | undefined, protocolName: string): void {
@@ -100,6 +112,11 @@ function parseSortArg(tokens: readonly string[] | undefined): { field: string; d
  * side. Calling `restoreOne`/`purgeOne` against an entity that never
  * declared soft delete still raises `OperationDisabledException` from the
  * engine itself — this binding does not re-check that, same as REST.
+ *
+ * `run` is the same generic custom-operation dispatcher `KavoService.run`
+ * always had (ADR-0006's #145 amendment) — picked here so `crudFields` can
+ * call a custom operation the same way it calls the standard eight, rather
+ * than by reaching past this structural type into `DefaultKavoService`.
  */
 export type BoundKavoService<
   Entity extends object,
@@ -111,8 +128,26 @@ export type BoundKavoService<
   ListDto,
 > = Pick<
   DefaultKavoService<Entity, Id, CreateDto, UpdateDto, PatchDto, unknown, ItemDto, ListDto>,
-  "findOne" | "findMany" | "createOne" | "updateOne" | "patchOne" | "deleteOne" | "restoreOne" | "purgeOne"
+  "findOne" | "findMany" | "createOne" | "updateOne" | "patchOne" | "deleteOne" | "restoreOne" | "purgeOne" | "run"
 >;
+
+/**
+ * One custom operation (ADR-0006's #145 amendment) to expose on an entity's
+ * GraphQL schema — opt-in per id (the #153 amendment): naming an id here is
+ * what reaches the schema, there is no automatic derivation from the
+ * registry the way the standard eight get one. `crudFields` still refuses
+ * an id named here whose registry entry has no declared `dto.output` (or,
+ * when `inputType` is given, no declared `dto.input`) — GraphQL needs an
+ * actual output/input type to build a field with, and unlike the standard
+ * eight a custom operation has no entity-derived fallback shape to reach
+ * for (ADR-0006).
+ */
+export interface KavoGraphQLCustomOperation {
+  /** The field's result type. */
+  readonly type: GraphQLOutputType;
+  /** The input type for a write operation's body. Omit for an id-only or bodyless operation. */
+  readonly inputType?: GraphQLInputObjectType;
+}
 
 /**
  * One entity's GraphQL binding: a query root (`<name>`/`<name>s`) plus
@@ -147,10 +182,22 @@ export interface KavoGraphQLOptions<
   readonly restoreOne?: boolean;
   /** Adds `purge<Name>(id): Boolean` — meaningful only for a soft-deletable entity. */
   readonly purgeOne?: boolean;
+  /**
+   * Custom operations (issue #145) to expose on this entity's schema, keyed
+   * by operation id — opt-in per id, see {@link KavoGraphQLCustomOperation}.
+   * An id named here that the entity's `operations` config never declared,
+   * that is disabled, or whose registry entry has no matching declared DTO
+   * shape is a `ConfigurationException` at schema-build time.
+   */
+  readonly operations?: Readonly<Record<string, KavoGraphQLCustomOperation>>;
 }
 
 function lowerFirst(value: string): string {
   return value.charAt(0).toLowerCase() + value.slice(1);
+}
+
+function upperFirst(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 /**
@@ -173,8 +220,18 @@ export function crudFields<
   query: Record<string, GraphQLFieldConfig<unknown, unknown>>;
   mutation: Record<string, GraphQLFieldConfig<unknown, unknown>>;
 } {
-  const { name, service, itemType, createInputType, updateInputType, patchInputType, deleteOne, restoreOne, purgeOne } =
-    options;
+  const {
+    name,
+    service,
+    itemType,
+    createInputType,
+    updateInputType,
+    patchInputType,
+    deleteOne,
+    restoreOne,
+    purgeOne,
+    operations: customOperations,
+  } = options;
   requireOffsetPageable(name, paginationStrategyOf(service), "GraphQL");
   const fieldName = lowerFirst(name);
   const idArgs = { id: { type: new GraphQLNonNull(GraphQLInt) } };
@@ -270,6 +327,79 @@ export function crudFields<
         return true;
       },
     };
+  }
+
+  const standardIds: ReadonlySet<StandardOperationId> = new Set(STANDARD_OPERATION_IDS);
+  const registry = registryOf(service);
+  for (const [id, custom] of Object.entries(customOperations ?? {})) {
+    if (standardIds.has(id as StandardOperationId)) {
+      throw new ConfigurationException(
+        name,
+        `operations.${id}`,
+        `'${id}' is one of the standard eight operations — GraphQL already exposes it unconditionally, ` +
+          `so it has no place in 'operations'`,
+      );
+    }
+    const descriptor = registry?.get(id as OperationId);
+    if (descriptor === undefined) {
+      throw new ConfigurationException(
+        name,
+        `operations.${id}`,
+        `'${id}' names a GraphQL custom operation, but the entity never declared 'operations.${id}' — ` +
+          `add it there first, or remove it from this schema's 'operations' option`,
+      );
+    }
+    if (!descriptor.enabled) {
+      throw new ConfigurationException(
+        name,
+        `operations.${id}`,
+        `'${id}' is disabled on this entity — a disabled operation cannot be exposed on the GraphQL schema`,
+      );
+    }
+    if (descriptor.output === null) {
+      throw new ConfigurationException(
+        name,
+        `operations.${id}`,
+        `'${id}' has no declared 'dto.output' — a custom operation needs a declared output shape to reach ` +
+          `GraphQL, unlike the standard eight it has no entity-derived fallback; declare 'dto.output' on ` +
+          `the operation, or remove it from this schema's 'operations' option`,
+      );
+    }
+    if (custom.inputType !== undefined && descriptor.input === null) {
+      throw new ConfigurationException(
+        name,
+        `operations.${id}`,
+        `'${id}' names an 'inputType' here, but the operation has no declared 'dto.input' — declare ` +
+          `'dto.input' on the operation, or drop 'inputType' from this schema's 'operations' option`,
+      );
+    }
+
+    const takesId = descriptor.cardinality === "one";
+    const takesInput = custom.inputType !== undefined;
+    const args: GraphQLFieldConfigArgumentMap = {};
+    if (takesId) {
+      Object.assign(args, idArgs);
+    }
+    if (takesInput) {
+      args["input"] = { type: new GraphQLNonNull(custom.inputType as GraphQLInputObjectType) };
+    }
+
+    const field: GraphQLFieldConfig<unknown, unknown> = {
+      type: custom.type,
+      args,
+      resolve: (_root: unknown, resolverArgs: { id?: number; input?: unknown }) =>
+        service.run(id, {
+          id: takesId ? (resolverArgs.id as Id) : undefined,
+          body: takesInput ? (resolverArgs.input as never) : undefined,
+        } as never),
+    };
+
+    const customFieldName = `${fieldName}${upperFirst(id)}`;
+    if (descriptor.kind === "read") {
+      query[customFieldName] = field;
+    } else {
+      mutation[customFieldName] = field;
+    }
   }
 
   return { query, mutation };

@@ -82,5 +82,34 @@ router matches in declaration order. Registered after `findOne`, a custom
 `GET /orders/pending` would be answered by `GET /orders/:id`.
 
 A custom operation is reachable in code through `KavoService.run(id, …)`,
-which is the same engine call the eight named methods make. It stays out of
-the GraphQL and MCP bindings, which expose the standard operations only.
+which is the same engine call the eight named methods make.
+
+**Amendment (issue #153):** `@kavo/graphql` and `@kavo/mcp` no longer
+enumerate the standard eight from a hardcoded id union — both walk
+`service.engine.registry.all()`, the same registry route generation and the
+engine already read, so a custom operation is visible to either binding
+without either package growing a second mechanism. A custom entry reaches
+a binding only when it is **enabled** and its registry entry declares a
+`dto.output` — a custom id has no entity-derived DTO fallback the way the
+standard eight do (`DefaultDtoResolver` only knows the six fixed slots), so
+an id with nothing declared has nothing to build even a JSON Schema from,
+and is excluded rather than guessed at. `@kavo/mcp` stops there: MCP tools
+carry loose JSON Schema, so an eligible id gets a tool
+(`<entity>.<operationId>`, the same `<prefix>.<id>` shape the standard eight
+already use) with no further per-entity declaration, id-only or
+id-plus-freeform-body depending on whether `dto.input` is also declared.
+`@kavo/graphql` needs one more thing: a real `GraphQLOutputType` (and,
+for a write with a body, a `GraphQLInputObjectType`) to build a typed
+field with, and nothing in the registry can hand it one — so a custom
+operation reaches a GraphQL schema only when its id is _also_ named in
+that schema's `operations` option, with those types supplied by hand,
+mirroring how `createInputType`/`updateInputType`/etc. already opt a
+standard mutation in. Naming an id there whose registry entry is missing,
+disabled, or lacks the matching declared shape is a `ConfigurationException`
+at schema-build time, not a silent omission — the schema's `operations`
+option is asking for something specific, and there's a real mismatch to
+report when it can't be honored. `descriptor.kind` decides query vs.
+mutation for a GraphQL field the same way it already decides the eight's
+placement; nothing enforces that a `kind: "read"` custom operation is
+actually side-effect free, the same trust the engine already places in a
+declared `kind`.

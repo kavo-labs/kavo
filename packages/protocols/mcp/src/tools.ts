@@ -1,6 +1,6 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { DefaultKavoService, EntityId } from "@kavo/core";
-import { ConfigurationException, KavoException } from "@kavo/core";
+import type { DefaultKavoService, EntityId, OperationRegistry, StandardOperationId } from "@kavo/core";
+import { ConfigurationException, KavoException, STANDARD_OPERATION_IDS } from "@kavo/core";
 
 /**
  * `sort: ["-createdAt", "name"]` → `[{ field: "createdAt", direction: "desc" }, { field: "name", direction: "asc" }]`
@@ -27,7 +27,7 @@ function parseSortArg(tokens: readonly string[] | undefined): { field: string; d
  */
 export type BoundKavoService<Entity extends object, Id extends EntityId, CreateDto, UpdateDto, PatchDto> = Pick<
   DefaultKavoService<Entity, Id, CreateDto, UpdateDto, PatchDto, unknown, unknown, unknown>,
-  "findOne" | "findMany" | "createOne" | "updateOne" | "patchOne" | "deleteOne" | "restoreOne" | "purgeOne"
+  "findOne" | "findMany" | "createOne" | "updateOne" | "patchOne" | "deleteOne" | "restoreOne" | "purgeOne" | "run"
 >;
 
 /**
@@ -55,6 +55,15 @@ export type BoundKavoService<Entity extends object, Id extends EntityId, CreateD
 function paginationStrategyOf(service: object): string | undefined {
   const engine = (service as { engine?: { config?: { settings?: { pagination?: { strategy?: string } } } } }).engine;
   return engine?.config?.settings?.pagination?.strategy;
+}
+
+/**
+ * The bound entity's operation registry, read the same structurally-typed
+ * way `paginationStrategyOf` reads `engine.config` — custom operation
+ * discovery (the #153 amendment) reaches for it the same way.
+ */
+function registryOf(service: object): OperationRegistry | undefined {
+  return (service as { engine?: { registry?: OperationRegistry } }).engine?.registry;
 }
 
 function requireOffsetPageable(entityName: string, strategy: string | undefined): void {
@@ -150,6 +159,16 @@ const freeformObjectSchema: Tool["inputSchema"] = { type: "object" };
  * tool, and calling it surfaces `OperationDisabledException` as a normal
  * `isError` result (`guarded`), exactly like calling the disabled REST
  * route would.
+ *
+ * A **custom** operation (ADR-0006's #145 amendment) reaches this toolset
+ * too, unlike the standard eight without needing a name in `options` — MCP
+ * tools carry loose JSON Schema rather than a typed GraphQL field, so there
+ * is nothing a caller needs to hand-author the way `@kavo/graphql`'s
+ * `operations` option does. The opt-in instead is the registry entry
+ * itself (the #153 amendment): an enabled custom operation reaches this
+ * toolset only when its `dto.output` is declared — a custom id with no
+ * declared shape has nothing to build even a loose schema from, so it is
+ * excluded rather than guessed at.
  */
 export function crudTools<Entity extends object, Id extends EntityId, CreateDto, UpdateDto, PatchDto>(
   options: KavoMcpToolsOptions<Entity, Id, CreateDto, UpdateDto, PatchDto>,
@@ -158,7 +177,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
   requireOffsetPageable(name, paginationStrategyOf(service));
   const prefix = lowerFirst(name);
 
-  return [
+  const bindings: KavoMcpToolBinding[] = [
     {
       tool: { name: `${prefix}.findOne`, description: `Find one ${name} by id.`, inputSchema: idOnlySchema },
       handler: (args) => guarded(() => service.findOne(args["id"] as Id)),
@@ -242,4 +261,39 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
         }),
     },
   ];
+
+  const standardIds: ReadonlySet<StandardOperationId> = new Set(STANDARD_OPERATION_IDS);
+  for (const descriptor of registryOf(service)?.all() ?? []) {
+    if (standardIds.has(descriptor.id as StandardOperationId) || !descriptor.enabled || descriptor.output === null) {
+      continue;
+    }
+    const takesId = descriptor.cardinality === "one";
+    const takesInput = descriptor.input !== null;
+    const inputSchema = takesId
+      ? takesInput
+        ? idAndFreeformSchema
+        : idOnlySchema
+      : takesInput
+        ? freeformObjectSchema
+        : objectSchema({}, []);
+
+    bindings.push({
+      tool: {
+        name: `${prefix}.${descriptor.id}`,
+        description: `Custom ${descriptor.kind} operation '${descriptor.id}' on ${name}.`,
+        inputSchema,
+      },
+      handler: (args) => {
+        if (takesId) {
+          const { id, ...body } = args;
+          return guarded(() =>
+            service.run(descriptor.id, takesInput ? { id: id as Id, body: body as never } : { id: id as Id }),
+          );
+        }
+        return guarded(() => service.run(descriptor.id, takesInput ? { body: args as never } : {}));
+      },
+    });
+  }
+
+  return bindings;
 }

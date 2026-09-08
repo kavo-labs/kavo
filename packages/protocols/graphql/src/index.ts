@@ -2,6 +2,7 @@ export {
   createKavoGraphQLSchema,
   mergeKavoGraphQLSchemas,
   type KavoGraphQLOptions,
+  type KavoGraphQLCustomOperation,
   type BoundKavoService,
 } from "./schema.js";
 export { registerKavoGraphQLTypes, getKavoGraphQLTypes, type KavoGraphQLTypes } from "./registry.js";

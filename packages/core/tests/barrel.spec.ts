@@ -227,6 +227,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "ResolvedIncludeConfig",
   "ResolvedSoftDelete",
   "STANDARD_OPERATIONS",
+  "STANDARD_OPERATION_IDS",
   "ScalarKeys",
   "SearchDriver",
   "SearchMode",

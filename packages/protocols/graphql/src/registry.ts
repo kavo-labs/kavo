@@ -1,5 +1,6 @@
 import type { ClassRef } from "@kavo/core";
 import type { GraphQLInputObjectType, GraphQLObjectType } from "graphql";
+import type { KavoGraphQLCustomOperation } from "./schema.js";
 
 /**
  * GraphQL object/input types (and which mutations to expose) for one
@@ -23,6 +24,8 @@ export interface KavoGraphQLTypes {
   readonly restoreOne?: boolean;
   /** Adds `purge<Name>(id): Boolean` — meaningful only for a soft-deletable entity. */
   readonly purgeOne?: boolean;
+  /** Custom operations (issue #145) to expose on this entity's schema — see `KavoGraphQLOptions.operations`. */
+  readonly operations?: Readonly<Record<string, KavoGraphQLCustomOperation>>;
 }
 
 const typeRegistry = new Map<ClassRef, KavoGraphQLTypes>();
