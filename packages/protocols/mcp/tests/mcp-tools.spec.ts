@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { KavoContext } from "@kavo/core";
 import { builtInHandlers, ConfigurationException, createKavo, withListMeta } from "@kavo/core";
+import type { KavoMcpToolBinding } from "@kavo/mcp";
 import { crudTools } from "@kavo/mcp";
 import {
   InMemoryNoteAdapter,
@@ -198,6 +200,114 @@ describe("crudTools", () => {
     const purged = await find(bindings, "note.purgeOne").handler({ id: created.id });
     expect(JSON.parse((purged.content[0] as { text: string }).text)).toEqual({ purged: true });
     expect(adapter.rows).toHaveLength(0);
+  });
+});
+
+/**
+ * A custom operation (ADR-0006's #145 amendment) reaches MCP unconditionally
+ * — unlike `@kavo/graphql`, no per-entity option names it — as long as its
+ * registry entry declares a `dto.output` (the #153 amendment): MCP tools
+ * carry loose JSON Schema, so there is nothing to hand-author the way
+ * GraphQL's typed fields need.
+ */
+describe("custom operations reach MCP (issue #153)", () => {
+  function find(bindings: readonly KavoMcpToolBinding[], name: string): KavoMcpToolBinding {
+    const binding = bindings.find((candidate) => candidate.tool.name === name);
+    if (binding === undefined) {
+      throw new Error(`no tool named ${name}`);
+    }
+    return binding;
+  }
+
+  it("adds a tool for an enabled custom write that declares dto.output, dispatched through service.run", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "write tests", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: {
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                const { id } = input as { id: number };
+                return context.repository.update(id, { done: true }, context);
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const result = await find(bindings, "todo.markDoneOne").handler({ id: 1 });
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ id: 1, done: true });
+    expect(adapter.rows[0]?.done).toBe(true);
+  });
+
+  it("adds a tool for a custom read, taking id only (no declared dto.input)", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "peek", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          statusOne: {
+            kind: "read",
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                return context.repository.findOneById(input as number, null, context);
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const tool = find(bindings, "todo.statusOne");
+    expect(tool.tool.inputSchema).toEqual({
+      type: "object",
+      properties: { id: { type: ["string", "number"] } },
+      required: ["id"],
+    });
+
+    const result = await tool.handler({ id: 1 });
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ id: 1, title: "peek" });
+  });
+
+  it("excludes an enabled custom operation with no declared dto.output", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: { noShapeOne: { handler: { async execute() {} } } },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    expect(bindings.some((binding) => binding.tool.name === "todo.noShapeOne")).toBe(false);
+  });
+
+  it("excludes a disabled custom operation even when it declares dto.output", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo }, enabled: false },
+        },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    expect(bindings.some((binding) => binding.tool.name === "todo.markDoneOne")).toBe(false);
   });
 });
 

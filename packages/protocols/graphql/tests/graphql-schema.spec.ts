@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { KavoContext } from "@kavo/core";
 import { ConfigurationException, createKavo } from "@kavo/core";
 import {
   GraphQLBoolean,
@@ -273,6 +274,126 @@ describe("createKavoGraphQLSchema", () => {
     expect(purged.data?.purgeNote).toBe(true);
 
     expect(adapter.rows).toHaveLength(0);
+  });
+});
+
+/**
+ * A custom operation (ADR-0006's #145 amendment) reaches GraphQL only when
+ * named in `operations` *and* its registry entry declares a `dto.output`
+ * (the #153 amendment) — issue #153.
+ */
+describe("custom operations reach GraphQL (issue #153)", () => {
+  const TodoType = new GraphQLObjectType({
+    name: "Todo",
+    fields: {
+      id: { type: new GraphQLNonNull(GraphQLInt) },
+      title: { type: new GraphQLNonNull(GraphQLString) },
+      done: { type: new GraphQLNonNull(GraphQLBoolean) },
+    },
+  });
+
+  it("exposes an opted-in custom write as a mutation field, dispatched through service.run", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "write tests", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: {
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                const { id } = input as { id: number };
+                return context.repository.update(id, { done: true }, context);
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service,
+      itemType: TodoType,
+      operations: { markDoneOne: { type: TodoType } },
+    });
+
+    const result = await graphql({ schema, source: `mutation { todoMarkDoneOne(id: 1) { id done } }` });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.todoMarkDoneOne).toEqual({ id: 1, done: true });
+    expect(adapter.rows[0]?.done).toBe(true);
+  });
+
+  it("exposes an opted-in custom read as a query field, decided by the registry's kind", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "peek", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          statusOne: {
+            kind: "read",
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                return context.repository.findOneById(input as number, null, context);
+              },
+            },
+            dto: { output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service,
+      itemType: TodoType,
+      operations: { statusOne: { type: TodoType } },
+    });
+
+    expect(schema.getMutationType()).toBeUndefined();
+    const result = await graphql({ schema, source: `query { todoStatusOne(id: 1) { id title } }` });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.todoStatusOne).toEqual({ id: 1, title: "peek" });
+  });
+
+  it("refuses a named custom operation with no declared dto.output", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          noShapeOne: { handler: { async execute() {} } },
+        },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        service,
+        itemType: TodoType,
+        operations: { noShapeOne: { type: TodoType } },
+      }),
+    ).toThrowError(ConfigurationException);
+  });
+
+  it("leaves an un-named custom operation off the schema even when it declares a dto", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: { markDoneOne: { handler: { async execute() {} }, dto: { output: Todo } } },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const schema = createKavoGraphQLSchema({ name: "Todo", service, itemType: TodoType });
+    expect(schema.getMutationType()).toBeUndefined();
   });
 });
 
