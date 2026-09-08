@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { NotFoundException, type DefaultKavoService, type KavoInstance } from "@kavo/core";
-import { createPrismaKavo } from "@kavo/prisma";
+import { NotFoundException, type DefaultKavoService, type KavoInstance, type RepositoryAdapter } from "@kavo/core";
+import { createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
 
 /**
@@ -135,5 +135,39 @@ describe("identifier config key — @kavo/prisma (ADR-0052)", () => {
     await articles.deleteOne("hello-world" as never);
     await articles.purgeOne("hello-world" as never);
     await expect(articles.restoreOne("hello-world" as never)).rejects.toThrow(NotFoundException);
+  });
+
+  it("byte-identical when called directly with no identifierField argument, like every pre-existing caller", async () => {
+    const created = (await authors.createOne({
+      email: "direct-call@x.io",
+      name: "Direct",
+      age: 30,
+      status: "active",
+    } as never)) as Author;
+
+    const writer = createInfrastructure(client as never, {
+      datamodel: Prisma.dmmf.datamodel,
+      entities: [Author, Book, Article],
+      caseInsensitiveFilters: false,
+    }).adapterFor(Author) as RepositoryAdapter<Author>;
+    const context = { entityName: "Author", operation: "findOne", config: { delete: { strategy: "hard" } } };
+    // No 4th argument on any of these — the same call every adapter method
+    // received before `identifierField` existed, and must still behave
+    // exactly the same: addressed by the real primary key, not 'email'.
+    const found = await writer.findOneById(created.id, null, context as never);
+    expect(found).toMatchObject({ email: "direct-call@x.io" });
+
+    await writer.update(
+      created.id,
+      { name: "Updated directly" } as never,
+      {
+        ...context,
+        operation: "updateOne",
+      } as never,
+    );
+    await expect(authors.findOne("direct-call@x.io" as never)).resolves.toMatchObject({ name: "Updated directly" });
+
+    await writer.delete(created.id, { ...context, operation: "deleteOne" } as never);
+    await expect(authors.findOne("direct-call@x.io" as never)).rejects.toThrow(NotFoundException);
   });
 });

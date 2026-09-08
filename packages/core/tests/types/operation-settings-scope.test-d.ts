@@ -15,6 +15,9 @@ import { Author } from "../support/blog-fixture.js";
  *   cache      → every operation (its `etag` half gates If-Match/304 on the
  *                writes and void deletes too, not just the reads it caches)
  *   errors     → every operation
+ *   identifier → no operation (ADR-0052) — global/entity scope only, never
+ *                per-operation or per-call; naming it under any `operations.<id>`
+ *                is a compile error for every id, standard or custom.
  *
  * For a custom operation the accepted subset follows from the `kind` and
  * `cardinality` literals the entry declares: `errors`/`cache` always,
@@ -95,6 +98,18 @@ void kavo.createCrud(Author, {
     findMany: { realtime: false },
   },
 });
+void kavo.createCrud(Author, {
+  operations: {
+    // @ts-expect-error — identifier (ADR-0052) is global/entity scope only, never per-operation.
+    findOne: { identifier: { field: "slug" } },
+  },
+});
+void kavo.createCrud(Author, {
+  operations: {
+    // @ts-expect-error — identifier is out of scope for a write operation too.
+    updateOne: { identifier: { field: "slug" } },
+  },
+});
 
 // ── Custom operations — accepted ─────────────────────────────────────
 
@@ -161,5 +176,11 @@ void kavo.createCrud(Author, {
   operations: {
     // @ts-expect-error — explicit kind: "write" is still no soft-delete scope.
     markPaidOne: { handler, kind: "write", delete: false },
+  },
+});
+void kavo.createCrud(Author, {
+  operations: {
+    // @ts-expect-error — identifier (ADR-0052) is never in scope for a custom operation either.
+    markPaidOne: { handler, identifier: { field: "slug" } },
   },
 });

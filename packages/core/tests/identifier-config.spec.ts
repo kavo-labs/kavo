@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityId, EntityMetadata, KavoContext, NormalizedQueryContext, RepositoryAdapter } from "@kavo/core";
-import { ConfigurationException, NotFoundException, createKavo } from "@kavo/core";
+import { ConfigurationException, NotFoundException, QueryValidationException, createKavo } from "@kavo/core";
 
 /**
  * `identifier` config key (ADR-0052) — the `…One` lookup axis retargeted to
@@ -187,6 +187,58 @@ describe("identifier config key (ADR-0052)", () => {
       options: null,
     } as never);
     expect(adapter.rows).toHaveLength(0);
+  });
+
+  it("coerces the route id against a number-kind configured field, not the primary key's kind", async () => {
+    const adapter = new InMemoryAccountAdapter();
+    adapter.rows.push({ id: 1, username: "alice", email: "a@example.com", ownerId: 42 });
+    const kavo = createKavo();
+    const crud = kavo.createCrud(Account, { identifier: { field: "ownerId" } } as never, {
+      metadata: accountMetadata,
+      adapter,
+    });
+    // Route ids arrive as strings; a number-kind identifier field must be
+    // `Number()`-coerced the same way the primary key's own kind would be —
+    // `coerceId` (kavo-engine.ts) now reads the *configured* field's kind.
+    const found = await crud.engine.execute({
+      operation: "findOne",
+      id: "42",
+      body: null,
+      query: null,
+      options: null,
+    } as never);
+    expect((found.item as { ownerId: number }).ownerId).toBe(42);
+
+    await expect(
+      crud.engine.execute({
+        operation: "findOne",
+        id: "not-a-number",
+        body: null,
+        query: null,
+        options: null,
+      } as never),
+    ).rejects.toThrow(QueryValidationException);
+  });
+
+  it("returns one of the matching rows for a non-unique configured field, rather than erroring — uniqueness is caller-beware (ADR-0052)", async () => {
+    const adapter = new InMemoryAccountAdapter();
+    adapter.rows.push(
+      { id: 1, username: "dup", email: "a@example.com", ownerId: 1 },
+      { id: 2, username: "dup", email: "b@example.com", ownerId: 2 },
+    );
+    const kavo = createKavo();
+    const crud = kavo.createCrud(Account, { identifier: { field: "username" } } as never, {
+      metadata: accountMetadata,
+      adapter,
+    });
+    const found = await crud.engine.execute({
+      operation: "findOne",
+      id: "dup",
+      body: null,
+      query: null,
+      options: null,
+    } as never);
+    expect(["a@example.com", "b@example.com"]).toContain((found.item as { email: string }).email);
   });
 
   it("rejects an unknown field name at bootstrap", () => {
