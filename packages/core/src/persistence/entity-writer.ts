@@ -63,9 +63,8 @@ export interface EntityWriter<Entity = unknown, Id extends EntityId = EntityId> 
    * means "this adapter never learned to look up by anything but its
    * primary key," checked once at `createCrud` bootstrap and turned into a
    * `ConfigurationException` rather than adapter-specific runtime
-   * breakage. An adapter that does support it (`@kavo/typeorm`,
-   * `@kavo/prisma`, `@kavo/mongoose`) returns `true` for any real,
-   * non-relation, non-generated column.
+   * breakage. All four ORM adapters support it, returning `true` for any
+   * real, non-relation, non-generated column.
    */
   supportsIdentifierField?(field: string): boolean;
   /**

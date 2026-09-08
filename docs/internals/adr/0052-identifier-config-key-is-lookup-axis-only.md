@@ -129,11 +129,13 @@ Unimplemented (`undefined`) means "this adapter cannot look up by a
 field other than its primary key" — checked once at `createCrud`
 bootstrap when `identifier` is configured, turned into a
 `ConfigurationException` rather than adapter-specific runtime breakage.
-`@kavo/typeorm`, `@kavo/prisma`, and `@kavo/mongoose` implement it
-(returning `true` for any non-relation, non-generated column); `@kavo/mikroorm`
-does not implement it, so configuring `identifier` on a MikroORM entity
-is a bootstrap error — consistent with that adapter being out of scope
-per the issue.
+All four ORM adapters implement it (returning `true` for any
+non-relation, non-generated column) — `@kavo/mikroorm` was originally out
+of scope per the issue, but its `findOne`/`nativeUpdate`/`nativeDelete`
+already accept an arbitrary criteria object the same way `@kavo/mongoose`'s
+predicates do, so extending it cost no new mechanism, only the same
+per-method `identifierField ?? this.idField` swap the other three
+adapters already carry.
 
 **Threading the resolved field to the adapter.** The route `:id` is one
 lookup axis shared by every `…One` operation — `findOne` reads it,

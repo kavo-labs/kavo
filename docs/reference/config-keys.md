@@ -123,9 +123,8 @@ immutable-key stripping on writes, and association-by-id all stay on the
 real primary key regardless of this setting. Rejected at bootstrap on a
 composite-key entity, an unknown/relation/derived field name, a field whose
 kind isn't `string`/`number`, or an adapter that doesn't implement
-`RepositoryAdapter.supportsIdentifierField` (`@kavo/typeorm`, `@kavo/prisma`,
-and `@kavo/mongoose` do; `@kavo/mikroorm` doesn't). Kavo does not verify the
-field is actually unique — see ADR-0052.
+`RepositoryAdapter.supportsIdentifierField` — all four ORM adapters do.
+Kavo does not verify the field is actually unique — see ADR-0052.
 
 ## realtime
 
