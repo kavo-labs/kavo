@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Schema } from "mongoose";
-import { NotFoundException, type DefaultKavoService, type KavoInstance } from "@kavo/core";
-import { createMongooseKavo } from "@kavo/mongoose";
+import { NotFoundException, type DefaultKavoService, type KavoInstance, type RepositoryAdapter } from "@kavo/core";
+import { createInfrastructure, createMongooseKavo } from "@kavo/mongoose";
 import { clearCollections, startTestDatabase, type TestDatabase } from "./support/database.js";
 
 /**
@@ -111,5 +111,32 @@ describe("identifier config key — @kavo/mongoose (ADR-0052)", () => {
     await pages.deleteOne("about" as never);
     await pages.purgeOne("about" as never);
     await expect(pages.restoreOne("about" as never)).rejects.toThrow(NotFoundException);
+  });
+
+  it("byte-identical when called directly with no identifierField argument, like every pre-existing caller", async () => {
+    const created = (await pages.createOne({ slug: "direct-call" } as never)) as Page;
+
+    const writer = createInfrastructure(database.connection).adapterFor(
+      models.Page as never,
+    ) as RepositoryAdapter<Page>;
+    const context = {
+      entityName: "Page",
+      operation: "deleteOne",
+      config: { delete: { field: "deletedAt", strategy: "soft" } },
+    };
+    // No 4th argument — the same call every adapter method received before
+    // `identifierField` existed, and must still behave exactly the same:
+    // addressed by the real `_id`, not the configured 'slug'.
+    await writer.delete(created._id, context as never);
+    const restored = await writer.restore(created._id, { ...context, operation: "restoreOne" } as never);
+    expect(restored).toMatchObject({ slug: "direct-call" });
+    await writer.update(
+      created._id,
+      { slug: "direct-call" } as never,
+      {
+        ...context,
+        operation: "updateOne",
+      } as never,
+    );
   });
 });
