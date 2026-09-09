@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RealtimeEventDto, RealtimeTransport } from "@kavo/core";
+import type { KavoContext, RealtimeEventDto, RealtimeTransport } from "@kavo/core";
 import { ConfigurationException, createKavo } from "@kavo/core";
 import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
 import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
@@ -265,6 +265,157 @@ describe("realtime — engine emit hook", () => {
     expect(transport.events).toHaveLength(2);
     expect(Object.isFrozen(transport)).toBe(false);
     expect(Object.isFrozen(transport.events)).toBe(false);
+  });
+});
+
+describe("realtime — custom operations (issue #175)", () => {
+  it("publishes nothing for a custom write that declares no realtimeEvent (unchanged default)", async () => {
+    const transport = new FakeTransport();
+    const { crud } = makeCrud(
+      {
+        realtime: { events: {} },
+        operations: {
+          createOne: true,
+          markPaidOne: {
+            kind: "write",
+            handler: {
+              async execute(input: { id: number }, context: KavoContext<User>) {
+                return context.repository.patch(input.id, { status: "paid" } as never, context);
+              },
+            },
+          },
+        },
+      } as never,
+      [transport],
+    );
+    await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
+    transport.events.splice(0, transport.events.length);
+
+    await crud.run("markPaidOne", { id: 1 } as never);
+
+    expect(transport.events).toHaveLength(0);
+  });
+
+  it("publishes the declared event, using the request id, for a custom write on an existing row", async () => {
+    const transport = new FakeTransport();
+    const { crud } = makeCrud(
+      {
+        realtime: { events: {} },
+        operations: {
+          createOne: true,
+          markPaidOne: {
+            kind: "write",
+            realtimeEvent: "updated",
+            handler: {
+              async execute(input: { id: number; body: { status: string } }, context: KavoContext<User>) {
+                return context.repository.patch(input.id, { status: input.body.status } as never, context);
+              },
+            },
+          },
+        },
+      } as never,
+      [transport],
+    );
+    await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
+    transport.events.splice(0, transport.events.length);
+
+    await crud.run("markPaidOne", { id: 1, body: { status: "active" } } as never);
+
+    expect(transport.events).toHaveLength(1);
+    const event = transport.events[0]!;
+    expect(event.event).toBe("updated");
+    expect(event.id).toBe(1);
+    expect(event.channel).toBe("User.1");
+    expect(event.item).toMatchObject({ id: 1, status: "active" });
+    expect(event.changed).toEqual(["status"]);
+  });
+
+  it("derives the id from the written row when a custom write op takes no request id (createOne-style)", async () => {
+    const transport = new FakeTransport();
+    const { crud } = makeCrud(
+      {
+        realtime: { events: {} },
+        operations: {
+          createOne: true,
+          adoptOne: {
+            kind: "write",
+            realtimeEvent: "created",
+            handler: {
+              async execute(input: { name: string; email: string; age: number }, context: KavoContext<User>) {
+                return context.repository.create(input as never, context);
+              },
+            },
+          },
+        },
+      } as never,
+      [transport],
+    );
+
+    await crud.run("adoptOne", { body: { name: "Grace", email: "g@x.io", age: 40 } } as never);
+
+    expect(transport.events).toHaveLength(1);
+    const event = transport.events[0]!;
+    expect(event.event).toBe("created");
+    expect(event.id).toBe(1);
+    expect(event.channel).toBe("User.1");
+    expect(event.item).toMatchObject({ name: "Grace" });
+  });
+
+  it("honors realtime.events: { <id>: false } for a custom operation's declared event", async () => {
+    const transport = new FakeTransport();
+    const { crud } = makeCrud(
+      {
+        realtime: { events: { updated: false } },
+        operations: {
+          createOne: true,
+          markPaidOne: {
+            kind: "write",
+            realtimeEvent: "updated",
+            handler: {
+              async execute(input: { id: number }, context: KavoContext<User>) {
+                return context.repository.patch(input.id, { status: "active" } as never, context);
+              },
+            },
+          },
+        },
+      } as never,
+      [transport],
+    );
+    await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
+    transport.events.splice(0, transport.events.length);
+
+    await crud.run("markPaidOne", { id: 1 } as never);
+
+    expect(transport.events).toHaveLength(0);
+  });
+
+  it("rejects realtimeEvent declared on a kind: 'read' custom operation at bootstrap", () => {
+    expect(() =>
+      makeCrud({
+        operations: {
+          findPendingMany: { kind: "read", cardinality: "many", realtimeEvent: "updated" },
+        },
+      } as never),
+    ).toThrowError(ConfigurationException);
+  });
+
+  it("rejects realtimeEvent declared on a cardinality: 'many' custom write at bootstrap", () => {
+    expect(() =>
+      makeCrud({
+        operations: {
+          bulkTouchMany: {
+            kind: "write",
+            cardinality: "many",
+            realtimeEvent: "updated",
+            handler: {
+              async execute() {
+                return { entities: [], total: 0 };
+              },
+            },
+          },
+        },
+      } as never),
+    ).toThrowError(ConfigurationException);
   });
 });
 

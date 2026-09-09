@@ -436,6 +436,15 @@ function registerCustomOperation<Entity extends object>(
   const cardinality =
     requireOneOf(entityName, id, "cardinality", custom.cardinality, ["one", "many"] as const) ?? "one";
 
+  if (custom.realtimeEvent !== undefined && (kind !== "write" || cardinality !== "one")) {
+    throw new ConfigurationException(
+      entityName,
+      `operations.${id}.realtimeEvent`,
+      `'${id}' declares 'realtimeEvent' but is ${kind === "read" ? "a read" : "a 'many' write"} — only a ` +
+        `'kind: "write"', 'cardinality: "one"' operation writes a single row a 'RealtimeEventDto' can describe`,
+    );
+  }
+
   registry.register({
     id,
     kind,
@@ -444,6 +453,7 @@ function registerCustomOperation<Entity extends object>(
     handler,
     ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     meta: custom.meta ?? {},
+    ...(custom.realtimeEvent !== undefined ? { realtimeEvent: custom.realtimeEvent } : {}),
   });
 }
 

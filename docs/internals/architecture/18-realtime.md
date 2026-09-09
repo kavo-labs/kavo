@@ -21,9 +21,43 @@ closed, five-member vocabulary — `"created" | "updated" | "patched" |
 "deleted" | "restored"` — one per standard write outcome.
 `REALTIME_EVENT_BY_OPERATION` (`kavo-engine.ts`) maps `deleteOne` and
 `purgeOne` both to `"deleted"`: a subscriber only needs to know the row is
-gone, not which delete strategy produced that. A custom operation never
-emits — the vocabulary stays closed until a future issue decides what one
-publishes as.
+gone, not which delete strategy produced that.
+
+A custom operation has no fixed mapping — its `kind`/`cardinality` don't
+say what it means the way the standard eight's do — so it declares which of
+the five ids its write publishes as, via `operations.<id>.realtimeEvent`
+(issue #175):
+
+```ts
+operations: {
+  markPaidOne: {
+    kind: "write",
+    handler: { execute: (input, context) => context.repository.patch(input.id, { paidAt: new Date() }) },
+    realtimeEvent: "updated",
+  },
+}
+```
+
+Only meaningful on a `kind: "write"`, `cardinality: "one"` entry — a
+`RealtimeEventDto` describes one row, and those are the only custom
+operations that write exactly one. Declaring it on a read or a `"many"`
+write is a bootstrap `ConfigurationException`
+(`registerCustomOperation`). An entry that declares nothing still emits
+nothing, same as before this field existed — the vocabulary itself stays
+closed: a custom operation publishes as one of the five standard ids, never
+under its own name, so a subscriber can still learn the whole vocabulary
+from `RealtimeEventId` alone. Once declared, the same `realtime` settings
+subtree a standard write reads (§2 below, and doc 04's config precedence
+chain) applies to a custom operation's publish too — `realtime.events.
+updated: false` mutes `markPaidOne`'s `"updated"` the same way it mutes
+`updateOne`'s.
+
+The event's `id` and `changed` follow the same rules a standard write's do:
+`id` comes off the request when the operation targeted one (`markPaidOne`
+patching `/orders/7`), or off the written row's id field otherwise (a
+custom operation that creates a row, the same fallback `createOne` uses);
+`changed` (`"updated"`/`"patched"` only) is the field names present in the
+write payload.
 
 ## 2. The engine's publish hook
 

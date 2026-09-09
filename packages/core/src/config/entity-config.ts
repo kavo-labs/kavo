@@ -9,6 +9,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
 import type { Policy } from "../policy/kavo-policy.js";
+import type { RealtimeEventId } from "../realtime/realtime-event.js";
 import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { FilterExpression, FilterOperatorToken } from "../query/filter.js";
 
@@ -591,6 +592,20 @@ export type CustomOperationConfig<
    * slot — so this is the only way to give it a shape of its own.
    */
   readonly dto?: OperationDtoOverride;
+  /**
+   * Which realtime event this operation's write publishes as (issue #175).
+   * The standard eight derive theirs from a fixed vocabulary
+   * (`REALTIME_EVENT_BY_OPERATION`); a custom operation's semantics are
+   * whatever the application said, so it has to say which of the five
+   * `RealtimeEventId`s applies — there is no way to infer `markPaidOne`'s
+   * event from its name or its `kind`. Only meaningful on a `kind: "write"`,
+   * `cardinality: "one"` operation (a single-row write is the only shape a
+   * `RealtimeEventDto` can describe — one `id`, one `item`); declaring it on
+   * a read or a `"many"` write is a bootstrap `ConfigurationException`.
+   * Omitted, the operation emits nothing — the same silent default every
+   * custom operation had before this field existed.
+   */
+  readonly realtimeEvent?: RealtimeEventId;
   /** Opaque metadata consumed by the framework layer (route options). */
   readonly meta?: OperationMetadata;
 };
@@ -607,15 +622,19 @@ export type CustomOperationConfig<
  * `pagination`, the one case the query normalizer applies a page window to.
  * A `kind: "write"` custom operation drives its own writes through
  * `context.repository`, so a resolved `delete` view changes nothing for it.
- * `realtime` is never in scope: `REALTIME_EVENT_BY_OPERATION`'s vocabulary
- * is closed to the standard writes.
+ * A `kind: "write"`, `cardinality: "one"` entry additionally gets
+ * `realtime` (issue #175): the same settings a standard write's `realtime`
+ * narrows apply to whatever event id the entry's own `realtimeEvent` names.
+ * `cardinality: "many"` gets no `realtime` — a `RealtimeEventDto` describes
+ * one row, and a custom operation cannot declare `realtimeEvent` at that
+ * cardinality in the first place (`registerCustomOperation`).
  *
  * Both parameters distribute, so the wide default
  * (`OperationKind`/`OperationCardinality`, used for the bare
  * `CustomOperationConfig<Entity>` in `OperationsConfig`'s index-signature
- * upper bound) resolves to `"errors" | "cache" | "delete" | "pagination"` —
- * permissive enough to be an upper bound, while a concrete entry's own
- * literals give the exact row.
+ * upper bound) resolves to `"errors" | "cache" | "delete" | "pagination" |
+ * "realtime"` — permissive enough to be an upper bound, while a concrete
+ * entry's own literals give the exact row.
  */
 type CustomOperationSettingsKey<
   Kind extends OperationKind,
@@ -624,7 +643,9 @@ type CustomOperationSettingsKey<
   ? Cardinality extends "many"
     ? "errors" | "cache" | "delete" | "pagination"
     : "errors" | "cache" | "delete"
-  : "errors" | "cache";
+  : Cardinality extends "many"
+    ? "errors" | "cache"
+    : "errors" | "cache" | "realtime";
 
 /**
  * The whole `operations` map: the standard eight at their own precise
