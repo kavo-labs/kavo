@@ -303,6 +303,7 @@ export {
   DefaultOperationRegistry,
   STANDARD_OPERATIONS,
   createOperationRegistry,
+  isUnboundOperationHandler,
   type StandardHandlerFactory,
 } from "./operations/default-operation-registry.js";
 export { builtInHandlers, type FindManyResult, type IdentifiedWrite } from "./engine/built-in-handlers.js";

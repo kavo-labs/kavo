@@ -565,14 +565,21 @@ export type CustomOperationConfig<
   /** Registered but inert when `false` — the same seam a standard id has. */
   readonly enabled?: boolean;
   /**
-   * The operation's behavior. Required: nothing else can supply it.
+   * The operation's behavior. Optional only when something else supplies
+   * the implementation — in practice, `@kavo/nest`'s `@Override(id)`, which
+   * resolves ahead of this field and, when present, backs the route
+   * instead. Core itself has no such seam, so a `createCrud` registry entry
+   * with no `handler` still cannot run: it registers, but invoking it
+   * raises `ConfigurationException`. A framework layer that resolves the
+   * implementation another way (`@Override`) is expected to validate that
+   * every enabled custom operation ends up with one, at its own bind time.
    *
-   * It reads and writes through `context.repository`, the entity's own
-   * `RepositoryAdapter` (ADR-0025), so it needs nothing in scope where it
-   * is written — which is what makes it writable inside a `@Kavo` config,
-   * evaluated at class-decoration time (ADR-0012).
+   * When given, it reads and writes through `context.repository`, the
+   * entity's own `RepositoryAdapter` (ADR-0025), so it needs nothing in
+   * scope where it is written — which is what makes it writable inside a
+   * `@Kavo` config, evaluated at class-decoration time (ADR-0012).
    */
-  readonly handler: OperationHandler<Entity>;
+  readonly handler?: OperationHandler<Entity>;
   /** Defaults to `"write"`. A `"read"` runs query resolution and takes no body. */
   readonly kind?: OperationKind;
   /** Defaults to `"one"`. A `"many"` handler must return a `FindManyResult`. */

@@ -153,6 +153,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "evaluateFilter",
   "isCursorPagination",
   "isSincePagination",
+  "isUnboundOperationHandler",
   "hasKeyset",
   "readFilter",
   "sinceValueOf",

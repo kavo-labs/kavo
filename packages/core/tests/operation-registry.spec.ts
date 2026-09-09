@@ -11,6 +11,7 @@ import {
   DefaultOperationRegistry,
   STANDARD_OPERATIONS,
   createOperationRegistry,
+  isUnboundOperationHandler,
 } from "@kavo/core";
 import { User, contextStub } from "./support/user-fixture.js";
 
@@ -562,12 +563,31 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects a custom entry with no handler, naming the key path", () => {
-    // A type error on a literal config (`CustomOperationConfig.handler` is
-    // required); this is the runtime mirror, for a cast or erased one.
+  it("registers a custom entry with no handler as an unbound placeholder (issue #424)", async () => {
+    // `CustomOperationConfig.handler` is optional — a framework layer may
+    // supply the implementation another way (`@kavo/nest`'s `@Override`),
+    // which core cannot see from here. It registers rather than failing
+    // bootstrap, and only throws if actually invoked with nothing else
+    // ever having supplied a real handler.
+    const registry = createOperationRegistry<User>(
+      { operations: { markPaidOne: { meta: {} } } } as unknown as UserConfig,
+      standardHandlers,
+      undefined,
+      "User",
+    );
+    const entry = registry.get("markPaidOne");
+    expect(entry).toMatchObject({ enabled: true });
+    expect(entry?.handler !== undefined && isUnboundOperationHandler(entry.handler)).toBe(true);
+    await expect(async () => entry?.handler.execute({}, contextStub())).rejects.toMatchObject({
+      code: "KAVO_CONFIG_INVALID",
+      messageParams: { entity: "User", path: "operations.markPaidOne" },
+    });
+  });
+
+  it("rejects a custom entry whose handler is present but malformed, naming the key path", () => {
     try {
       createOperationRegistry<User>(
-        { operations: { markPaidOne: { meta: {} } } } as unknown as UserConfig,
+        { operations: { markPaidOne: { handler: {} } } } as unknown as UserConfig,
         standardHandlers,
         undefined,
         "User",
