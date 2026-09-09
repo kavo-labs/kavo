@@ -875,6 +875,55 @@ describe("@Kavo custom operations (issue #145)", () => {
       "x-kavo-entity": "Todo",
     });
   });
+
+  it("still documents a handler-less, @Override-backed operation's response schema (issue #424)", async () => {
+    @Kavo(Todo, {
+      operations: {
+        // No `handler`, and no `dto.output` either — the fallback
+        // entity-derived response schema (issue #264) is what should carry
+        // the operation's Swagger docs.
+        publishOne: {
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class HandlerlessDocumentedController {
+      @Override("publishOne")
+      async publish(id: string, body: unknown): Promise<unknown> {
+        return { id: Number(id), overridden: true, body };
+      }
+    }
+
+    await bootstrap(HandlerlessDocumentedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos/{id}/publish"] as {
+        post?: {
+          requestBody?: unknown;
+          responses?: Record<string, { content?: Record<string, { schema?: object }> }>;
+        };
+      }
+    )?.post;
+    // The bind-time handler-less check (issue #424) runs in `KavoBinder`,
+    // the same pass that finishes this operation's Swagger docs — it must
+    // not short-circuit them. The response schema falls back to Todo's own
+    // selectable columns, the same shape `applyResponseSchemaDocs` gives any
+    // undocumented single-row operation.
+    expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
+      title: "Todo",
+      type: "object",
+      properties: { id: { type: "number" }, title: { type: "string" }, done: { type: "boolean" } },
+      "x-kavo-entity": "Todo",
+    });
+    // No request-body schema: `applyBodySchemaDocs`'s fallback (issue #264)
+    // only covers `createOne`/`updateOne`/`patchOne`, and the `@Override`
+    // method's own `body: unknown` parameter carries no concrete type for
+    // Nest's Swagger plugin to reflect — an existing, orthogonal gap, not
+    // something #424 changes.
+    expect(operation?.requestBody).toBeUndefined();
+  });
 });
 
 describe("@Kavo custom operations reaching data (issue #152)", () => {
