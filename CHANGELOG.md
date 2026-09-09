@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.2](https://github.com/kavo-labs/kavo/compare/v0.21.1...v0.21.2) (2026-09-09)
+
+
+### Features
+
+* **core:** allow handler-less custom operations (issue [#424](https://github.com/kavo-labs/kavo/issues/424)) ([3a1b21f](https://github.com/kavo-labs/kavo/commit/3a1b21f35222c155d41a3907092eeafed1bc6759))
+
 ## [0.21.1](https://github.com/kavo-labs/kavo/compare/v0.21.0...v0.21.1) (2026-09-08)
 
 
