@@ -54,6 +54,7 @@ A custom entry needs a `handler` (there's no built-in to fall back to) and accep
 - **`cardinality`** (`"one"` | `"many"`, default `"one"`): `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way `findMany` does.
 - **`dto`**: since a custom operation has no root `dto` slot, this is the only way to give it a shape. With no `dto.output`, the result is projected through the entity's own columns. A result sharing nothing with them raises a `KAVO_CONFIG_INVALID` naming the operation, rather than silently serializing to `{}`.
 - **`meta.routes`**: same route options every standard operation gets. With none, the route defaults to `POST /<operation id>`.
+- **`realtimeEvent`** (one of `RealtimeEventId`, unset by default): which realtime event this operation's write publishes as — see [Realtime events](/features/realtime-events). Only valid on `kind: "write"`, `cardinality: "one"`; declaring it anywhere else is a bootstrap error. Unset, the operation publishes nothing.
 
 Naming follows the same convention as the built-ins: camelCase, always spelling out cardinality (`markPaidOne`, not `markPaid`).
 

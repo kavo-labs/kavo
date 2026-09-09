@@ -89,6 +89,7 @@ A custom-operation entry accepts:
 - **`enabled`** (`boolean`, default: `true`): `false` registers the entry inert: no route, and calling it answers `405 KAVO_OPERATION_DISABLED`.
 - **`dto`** (`{ input?, output?, query? }`): `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root DTO slot of its own, so this is where it gets a shape.
 - **`meta`** (`OperationMetadata`, default: `{}`): the route, as above. Without it the operation is routed `POST /<operation id>`.
+- **`realtimeEvent`** (`RealtimeEventId`, unset by default): which of the five standard event ids this operation's write publishes as ([Realtime events](/features/realtime-events)). Only valid on `kind: "write"`, `cardinality: "one"` — declaring it on a read or a `"many"` write is a bootstrap error. Unset, the operation publishes nothing.
 - **any settings key** (same shape as global `KavoSettings`): the operation scope of the precedence chain, exactly as for a standard id.
 
 Naming follows the same convention the built-ins do: camelCase, always spelling out cardinality (`markPaidOne`, `findPendingMany`). An id that differs from a standard one only by case is refused at bootstrap, since `deleteone` is a slip rather than a name.

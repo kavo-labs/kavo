@@ -97,6 +97,11 @@ every handler reaches persistence, built-in and custom alike.
   config-supplied handler could not write through the framework at all.
   Widening the realtime vocabulary to custom ids is its own decision
   (which event id would `markPaidOne` publish?) and is not taken here.
+  **Resolved by issue #175**: `CustomOperationConfig.realtimeEvent` lets a
+  `kind: "write"`, `cardinality: "one"` custom operation declare which of
+  the five standard event ids its write publishes as — the vocabulary
+  itself stays closed (doc 18 §1), only which id an operation maps to
+  widened.
 - **Not taken: resolving a handler through the host's container**, so that
   `operations.markPaidOne.handler` could name a class Nest instantiates.
   That reaches injected application services, which this decision does not,
