@@ -21,7 +21,7 @@ and doesn't touch `EntityConfig` at all:
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Disable** a standard operation         | `operations: { deleteOne: false }` — the entry stays in the registry so tooling can report it, but calling it raises `OperationDisabledException` and no route is generated.                                                 |
 | **Override** a standard operation (data) | `operations: { findOne: { handler } }` — a plain `OperationHandler` object replaces the handler; keeps the default DTO and serialization scaffolding.                                                                        |
-| **Add a custom** operation               | `operations: { markPaidOne: { handler, meta: { routes } } }` (issue #145): any key outside the standard eight. `handler` is required; `kind`/`cardinality` default to a single-row write; `dto` gives it a shape of its own. |
+| **Add a custom** operation               | `operations: { markPaidOne: { handler, meta: { routes } } }` (issue #145): any key outside the standard eight. `kind`/`cardinality` default to a single-row write; `dto` gives it a shape of its own. `handler` is optional (issue #424) — omit it only when an `@Override` method supplies the implementation (see below); otherwise it is required. |
 | **Override** a standard operation (code) | `@Override(operationId?)` (issue #23) — a controller method is the implementation; `@Kavo` still generates the route from the registry. See below.                                                                           |
 
 Standard operations that are off by default (`purgeOne`, `restoreOne`) are
@@ -75,6 +75,13 @@ Constraints, because `@Kavo` still owns the route:
   engine, so a method that replaces the handler must pass the trailing
   `preconditions` on (`this.base.updateOne(id, data, { preconditions })`)
   for the guard to still apply (ADR-0020).
+- A custom operation may omit its config-level `handler` entirely when an
+  `@Override(id)` method is its whole implementation (issue #424) — the DI-aware
+  case, since a config handler is a plain object with no `this`. Core registers
+  an unbound placeholder that throws only if invoked; `@kavo/nest`'s `KavoBinder`
+  validates at bind time and raises `ConfigurationException` if no matching
+  `@Override` backs it. `isUnboundOperationHandler` (core barrel) is exported for
+  framework layers doing their own proactive check.
 - Overriding an operation that's absent, disabled, or service-only
   (`meta.routes.enabled: false`) throws at decoration time too — there is no
   route for `@Override` to attach to.
@@ -157,6 +164,11 @@ meta: {
 4. **`packages/frameworks/nest`** — usually **nothing**. Route generation reads
    the registry, so a new enabled entry with `meta.routes` becomes a route with
    no generator changes. Touching the generator is a signal you special-cased.
+5. **`packages/protocols/graphql` / `packages/protocols/mcp`** — **nothing**.
+   Both bindings are registry-driven too (ADR-0006), so a custom operation
+   surfaces automatically as a GraphQL field and an MCP tool (issue #423). No
+   per-operation work there; just know the new operation is now exposed on those
+   surfaces as well.
 
 ## Tests
 
