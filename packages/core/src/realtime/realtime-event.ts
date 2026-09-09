@@ -4,9 +4,13 @@ import type { EntityId } from "../types/entity-id.js";
  * Realtime event ids — the closed vocabulary a `RealtimeTransport` publishes
  * under. One per standard write outcome; `deleteOne` and `purgeOne` both map
  * to `"deleted"` (a subscriber only needs to know the row is gone, not which
- * delete strategy produced that). There is deliberately no id for a custom
- * operation — the vocabulary stays closed until a future issue decides what
- * a non-standard write publishes as.
+ * delete strategy produced that). A custom operation has no fixed mapping —
+ * its `kind`/`cardinality` don't say what it means the way the standard
+ * eight's do — so it declares which of these five it publishes as via
+ * `CustomOperationConfig.realtimeEvent` (issue #175); one that declares
+ * nothing emits nothing, the same silent default every custom operation had
+ * before that field existed. The vocabulary itself stays closed: a custom
+ * operation publishes as one of these five, never under its own id.
  *
  * Issue #160 / ADR-0024 (filtered collection subscriptions) considered, and rejected,
  * adding ids for a row entering/leaving a filtered subscriber's view on an

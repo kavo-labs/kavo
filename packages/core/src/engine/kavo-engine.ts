@@ -136,9 +136,11 @@ const INPUT_SLOTS: Readonly<Partial<Record<StandardOperationId, DtoSlot>>> = {
 /**
  * Which realtime event a standard write operation's success maps to.
  * `deleteOne`/`purgeOne` share `"deleted"` — a subscriber only needs to
- * know the row is gone, not which delete strategy produced that. Absent
- * ids (every read, and any custom operation) never emit — the vocabulary
- * is closed to what `RealtimeEventId` names.
+ * know the row is gone, not which delete strategy produced that. Every read
+ * is absent and never emits. A custom operation isn't looked up here at all
+ * — `emitRealtimeEvent` reads its `descriptor.realtimeEvent` instead
+ * (issue #175), which is `undefined` (never emits) unless the operation's
+ * own config declared one.
  */
 const REALTIME_EVENT_BY_OPERATION: Readonly<Partial<Record<StandardOperationId, RealtimeEventId>>> = {
   createOne: "created",
@@ -506,7 +508,8 @@ export class KavoEngine<Entity extends object> {
    *
    * Every check before the transport loop is ordered cheapest-first and
    * returns immediately, so an entity with realtime off (the default) or a
-   * write that only maps to `undefined` (every read, any custom operation)
+   * write that only maps to `undefined` (every read, and a custom operation
+   * that declared no `realtimeEvent`, issue #175)
    * pays for nothing beyond one map lookup and a couple of property reads
    * — no `RealtimeEventDto` is even constructed.
    */
@@ -518,7 +521,9 @@ export class KavoEngine<Entity extends object> {
     response: KavoResponse,
     context: KavoContext<Entity>,
   ): Promise<void> {
-    const eventId = REALTIME_EVENT_BY_OPERATION[descriptor.id as StandardOperationId];
+    const eventId = isStandardOperationId(descriptor.id)
+      ? REALTIME_EVENT_BY_OPERATION[descriptor.id]
+      : descriptor.realtimeEvent;
     if (eventId === undefined) {
       return;
     }
@@ -535,7 +540,7 @@ export class KavoEngine<Entity extends object> {
       return;
     }
 
-    const id = this.realtimeEntityId(descriptor.id as StandardOperationId, request, result);
+    const id = this.realtimeEntityId(descriptor, request, result);
     if (id === undefined) {
       return;
     }
@@ -741,37 +746,46 @@ export class KavoEngine<Entity extends object> {
    * `createOne` has no request id — its id comes off the created row via
    * the entity's own id field. Every other write op targets an id the
    * request already carries, already coerced to the id column's kind by
-   * `resolveInput`'s earlier call.
+   * `resolveInput`'s earlier call. A custom operation (issue #175) follows
+   * the same rule by request shape rather than by id: one that targets a
+   * row (`request.id` set, the `markPaidOne` case) uses that id; one that
+   * doesn't (the `createOne` case — a custom create, or any other handler
+   * that manufactures a new row) falls back to reading the id field off its
+   * result, exactly as `createOne` does.
    */
   private realtimeEntityId(
-    operationId: StandardOperationId,
+    descriptor: OperationDescriptor<Entity>,
     request: KavoRequest<Entity>,
     result: unknown,
   ): string | number | undefined {
-    if (operationId === "createOne") {
-      const { compositeIdFields } = this.deps.metadata;
-      const row = result as Record<string, unknown> | null;
-      if (compositeIdFields !== undefined) {
-        const values = compositeIdFields.map((field) => row?.[field]);
-        if (values.some((value) => typeof value !== "string" && typeof value !== "number")) {
-          return undefined;
-        }
-        return encodeCompositeId(values as readonly (string | number)[]);
-      }
-      const value = row?.[this.deps.metadata.idField];
-      return typeof value === "string" || typeof value === "number" ? value : undefined;
+    if (descriptor.id !== "createOne" && request.id !== null && request.id !== undefined) {
+      const id = this.coerceId(request.id);
+      return typeof id === "string" || typeof id === "number" ? id : undefined;
     }
-    const id = this.coerceId(request.id);
-    return typeof id === "string" || typeof id === "number" ? id : undefined;
+    const { compositeIdFields } = this.deps.metadata;
+    const row = result as Record<string, unknown> | null;
+    if (compositeIdFields !== undefined) {
+      const values = compositeIdFields.map((field) => row?.[field]);
+      if (values.some((value) => typeof value !== "string" && typeof value !== "number")) {
+        return undefined;
+      }
+      return encodeCompositeId(values as readonly (string | number)[]);
+    }
+    const value = row?.[this.deps.metadata.idField];
+    return typeof value === "string" || typeof value === "number" ? value : undefined;
   }
 
   /**
    * `"updated"`/`"patched"` only: the field names present in the write
    * payload — see `RealtimeEventDto.changed`'s doc for why this is not a
-   * diff against the row's previous value.
+   * diff against the row's previous value. `updateOne`/`patchOne`'s input
+   * nests the body under `data`; a custom operation's (issue #175) nests it
+   * under `body` when the request carried an id, or is the bare body itself
+   * when it didn't (`resolveInput`'s `createOne`-and-custom-writes branch).
    */
   private changedFields(input: unknown): readonly string[] {
-    const data = (input as { data?: unknown } | null)?.data;
+    const wrapped = input as { data?: unknown; body?: unknown } | null;
+    const data = wrapped?.data ?? wrapped?.body ?? wrapped;
     if (typeof data !== "object" || data === null) {
       return [];
     }

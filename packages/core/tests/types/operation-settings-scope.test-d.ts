@@ -22,7 +22,9 @@ import { Author } from "../support/blog-fixture.js";
  * For a custom operation the accepted subset follows from the `kind` and
  * `cardinality` literals the entry declares: `errors`/`cache` always,
  * `delete` on any `kind: "read"`, `pagination` also on `kind: "read",
- * cardinality: "many"`, `realtime` never.
+ * cardinality: "many"`, `realtime` on `kind: "write", cardinality: "one"`
+ * (issue #175 — the entry also has to declare `realtimeEvent` for it to do
+ * anything, but the settings key is in scope either way), never otherwise.
  *
  * Collected by `*.spec.ts` only, so nothing here runs — `tsc` checks the
  * `@ts-expect-error` directives, and an unused one is itself an error.
@@ -133,6 +135,13 @@ void kavo.createCrud(Author, {
 void kavo.createCrud(Author, {
   operations: { markPaidOne: { handler, errors: { exposeInternals: true }, cache: { etag: false } } },
 });
+// A `kind: "write"`, `cardinality: "one"` custom operation is a realtime event source (issue #175).
+void kavo.createCrud(Author, {
+  operations: { markPaidOne: { handler, realtime: false, realtimeEvent: "updated" } },
+});
+void kavo.createCrud(Author, {
+  operations: { markPaidOne: { handler, kind: "write", realtime: false, realtimeEvent: "updated" } },
+});
 
 // ── Custom operations — rejected ─────────────────────────────────────
 
@@ -156,14 +165,14 @@ void kavo.createCrud(Author, {
 });
 void kavo.createCrud(Author, {
   operations: {
-    // @ts-expect-error — a custom operation is never a realtime event source.
-    markPaidOne: { handler, realtime: false },
+    // @ts-expect-error — a read emits no realtime event, custom ids included.
+    peekArchivedOne: { handler, kind: "read", realtime: false },
   },
 });
 void kavo.createCrud(Author, {
   operations: {
-    // @ts-expect-error — a custom operation is never a realtime event source, kind: "write" included.
-    markPaidOne: { handler, kind: "write", realtime: false },
+    // @ts-expect-error — a "many" write has no single row for a RealtimeEventDto to describe.
+    markPaidMany: { handler, cardinality: "many", realtime: false },
   },
 });
 void kavo.createCrud(Author, {

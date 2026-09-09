@@ -1,6 +1,7 @@
 import type { OperationCardinality, OperationId, OperationKind } from "./operation.js";
 import type { OperationHandler, OperationMetadata } from "./operation-handler.js";
 import type { DtoClass } from "../dto/dto.js";
+import type { RealtimeEventId } from "../realtime/realtime-event.js";
 
 /** One registered operation: the unit the engine dispatches through. */
 export interface OperationDescriptor<Entity = unknown, Input = unknown, Output = unknown> {
@@ -21,6 +22,16 @@ export interface OperationDescriptor<Entity = unknown, Input = unknown, Output =
   /** Explicit query DTO; `null`/absent = the slot default. Typing only — see doc 04 §8. */
   readonly query?: DtoClass | null;
   readonly meta: OperationMetadata;
+  /**
+   * The realtime event a **custom** operation's write publishes as (issue
+   * #175) — `CustomOperationConfig.realtimeEvent`, carried through
+   * unvalidated at this layer (`createOperationRegistry` already checked it
+   * against `kind`/`cardinality` at bootstrap). Absent on every standard id,
+   * whose event comes from `REALTIME_EVENT_BY_OPERATION` instead — the two
+   * never overlap because a standard id is never routed through
+   * `registerCustomOperation`.
+   */
+  readonly realtimeEvent?: RealtimeEventId;
 }
 
 /**
