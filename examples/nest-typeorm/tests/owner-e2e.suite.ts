@@ -88,6 +88,22 @@ export function registerOwnerE2eSuite(getApp: () => INestApplication): void {
       });
     });
 
+    describe("welcomeOne — handler-less custom operation (issue #424)", () => {
+      // No `operations.welcomeOne.handler` in owner.controller.ts —
+      // `@Override("welcomeOne")` alone backs the route, which is what lets
+      // it reach the DI-injected `OwnerWelcomeService` a config-level
+      // handler never could.
+      it("POST /owners/:id/welcome runs the @Override method and stamps startedAt", async () => {
+        const { id } = await createOwner();
+        const response = await request(server()).post(`/owners/${id}/welcome`).expect(201);
+        expect(response.body.id).toBe(id);
+        expect(response.body.startedAt).not.toBeNull();
+
+        const after = await request(server()).get(`/owners/${id}`).expect(200);
+        expect(after.body.startedAt).toBe(response.body.startedAt);
+      });
+    });
+
     describe("Soft delete, restore, purge", () => {
       it("DELETE stamps deletedAt instead of removing the row — findOne 404s but the row survives underneath", async () => {
         const { id } = await createOwner();
