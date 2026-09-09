@@ -5,6 +5,7 @@ import { Owner } from "./owner.entity.js";
 import { CreateOwnerDto, UpdateOwnerDto, PatchOwnerDto, OwnerItemDto, OwnerListDto } from "./owner.dtos.js";
 import { OwnerAppContextGuard } from "./owner-app-context.guard.js";
 import { hasPermission } from "./owner.policy.js";
+import { OwnerWelcomeService } from "./owner-welcome.service.js";
 
 /**
  * CRUD over the relation side. The unique `email` column is what surfaces a
@@ -54,6 +55,16 @@ import { hasPermission } from "./owner.policy.js";
  * `request.user` onto `context.app`. No other route on this
  * controller, and no other controller in this app, is gated — see
  * `docs/guides/wiring-your-own-auth` for more on writing a policy function.
+ *
+ * Custom operation without a config-level `handler`: `POST /owners/:id/welcome`
+ * (`welcomeOne`, issue #424) declares no `handler` at all — its `operations`
+ * entry below is route metadata only. `@Override("welcomeOne")` is the whole
+ * implementation, and it needs to be: welcoming an owner means calling the
+ * injected `OwnerWelcomeService`, which a config-level handler (a plain
+ * object with no `this` and no constructor) could never reach. Omitting both
+ * a `handler` and a matching `@Override` is a `ConfigurationException` at
+ * `KavoModule`'s bind time, not a silent no-op route — see
+ * `docs/guides/configuration/operations#custom-operations`.
  */
 @Kavo(Owner, {
   dto: {
@@ -87,12 +98,20 @@ import { hasPermission } from "./owner.policy.js";
     purgeOne: true,
     restoreOne: true,
     deleteOne: { policy: hasPermission("owner:delete") },
+    // No `handler` — `@Override("welcomeOne")` below is the whole
+    // implementation (issue #424).
+    welcomeOne: {
+      meta: { routes: { method: "POST", path: ":id/welcome" } },
+    },
   },
 })
 @Controller("owners")
 @UseGuards(OwnerAppContextGuard)
 export class OwnerController {
-  constructor(@Inject(getKavoServiceToken(Owner)) private readonly base: DefaultKavoService<Owner>) {}
+  constructor(
+    @Inject(getKavoServiceToken(Owner)) private readonly base: DefaultKavoService<Owner>,
+    private readonly welcomeService: OwnerWelcomeService,
+  ) {}
 
   @Override()
   async createOne(dto: CreateOwnerDto): Promise<unknown> {
@@ -107,5 +126,19 @@ export class OwnerController {
   @Override()
   async patchOne(id: EntityId, dto: PatchOwnerDto, preconditions: RequestPreconditions | null): Promise<unknown> {
     return this.base.patchOne(id as never, dto as never, { preconditions: preconditions ?? undefined });
+  }
+
+  /**
+   * `welcomeOne`'s entire implementation — there is no config-level
+   * `handler` to fall back to (issue #424). Notifying through
+   * `OwnerWelcomeService` is exactly what a config-level handler cannot do
+   * (no `this`, no constructor injection); marking `startedAt` afterwards
+   * goes through the same typed service every other override here uses.
+   */
+  @Override("welcomeOne")
+  async welcome(id: EntityId): Promise<unknown> {
+    const owner = await this.base.findOne(id as never);
+    await this.welcomeService.notify(owner.email);
+    return this.base.patchOne(id as never, { startedAt: new Date() } as never);
   }
 }

@@ -101,16 +101,25 @@ await overridden.run("markFeaturedOne", { body: new AuthorProfileDto() });
 
 // ── The malformed shapes ──────────────────────────────────────────────
 
+// `handler` is optional (issue #424) — a framework layer may supply the
+// implementation another way (`@kavo/nest`'s `@Override`), which core has
+// no way to see from here. No `@ts-expect-error`: this type-checks, and
+// `operation-registry.spec.ts` covers the runtime placeholder it registers.
 kavo.createCrud(Author, {
   operations: {
-    // @ts-expect-error — a custom operation has no built-in behavior, so `handler` is required.
     markFeaturedOne: { meta: { routes: { method: "POST" } } },
   },
 });
 
+// The boolean shorthand on a custom id is still a bootstrap
+// `ConfigurationException` at runtime (`operation-registry.spec.ts`'s
+// "rejects the boolean shorthand on a custom id" case), but is no longer a
+// type error to write, now that `handler` is optional (issue #424):
+// `CustomOperationConfig` has gone from "one required field, `handler`" to
+// "every field optional," and `true` intersects cleanly with an
+// all-optional interface the same way `{}` would. No `@ts-expect-error`.
 kavo.createCrud(Author, {
   operations: {
-    // @ts-expect-error — the boolean shorthand only enables an operation that already exists.
     markFeaturedOne: true,
   },
 });

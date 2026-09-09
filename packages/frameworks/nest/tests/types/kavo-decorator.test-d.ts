@@ -66,7 +66,15 @@ void BareController;
 class TypoController {}
 void TypoController;
 
-// @ts-expect-error — an unknown standard operation id is rejected.
+// A misspelled standard id (`findAll`) reads as a custom one, and the
+// boolean shorthand on a custom id is still a bootstrap
+// `ConfigurationException` at runtime (`createOperationRegistry`'s
+// `registerCustomOperation` rejects a non-object custom entry outright,
+// unrelated to `handler`), but is no longer a type error to write, now that
+// `CustomOperationConfig.handler` is optional (issue #424): every field on
+// it is optional, and `false` intersects cleanly with an all-optional
+// interface the same way `{}` would — see `custom-operations.test-d.ts` in
+// `@kavo/core` for the same hole on the boolean shorthand. No `@ts-expect-error`.
 @Kavo(Todo, { operations: { findAll: false } })
 @Controller("unknown-op-todos")
 class UnknownOperationController {}

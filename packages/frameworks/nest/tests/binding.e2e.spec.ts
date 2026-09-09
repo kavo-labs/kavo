@@ -722,6 +722,76 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(response.body).toEqual({ id: 1, overridden: true, body: { title: "t" } });
   });
 
+  it("runs a handler-less custom operation entirely off its @Override method (issue #424)", async () => {
+    @Kavo(Todo, {
+      operations: {
+        // No `handler` — `@Override("publishOne")` below supplies the
+        // implementation instead.
+        publishOne: {
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class HandlerlessOverrideController {
+      @Override("publishOne")
+      async publish(id: string, body: unknown): Promise<unknown> {
+        return { id: Number(id), overridden: true, body };
+      }
+    }
+
+    await bootstrap(HandlerlessOverrideController);
+
+    const response = await request(server()).post("/todos/1/publish").send({ title: "t" }).expect(201);
+    expect(response.body).toEqual({ id: 1, overridden: true, body: { title: "t" } });
+  });
+
+  it("rejects, at bind time, a handler-less custom operation with no @Override to back it (issue #424)", async () => {
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class UnbackedCustomController {}
+
+    const moduleRef = Test.createTestingModule({
+      imports: [
+        KavoModule.forRootAsync({
+          useFactory: () => ({ infrastructure: fakeInfrastructure(new InMemoryTodoAdapter()) }),
+        }),
+      ],
+      controllers: [UnbackedCustomController],
+    });
+    const app = await moduleRef.compile();
+    await expect(app.init()).rejects.toBeInstanceOf(ConfigurationException);
+    const error = (await app.init().catch((thrown: unknown) => thrown)) as ConfigurationException;
+    expect(error.code).toBe("KAVO_CONFIG_INVALID");
+    expect(error.context.entityName).toBe("Todo");
+    expect(error.messageParams).toMatchObject({ path: "operations.publishOne" });
+    expect(error.detail).toContain('@Override("publishOne")');
+  });
+
+  it("does not require a handler or an @Override for a handler-less custom operation registered disabled", async () => {
+    @Kavo(Todo, {
+      operations: {
+        publishOne: {
+          enabled: false,
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class DisabledUnbackedController {}
+
+    // No throw at bind time — a disabled entry never runs, so nothing needs
+    // to supply its implementation.
+    await bootstrap(DisabledUnbackedController);
+    await request(server()).post("/todos/1/publish").expect(404);
+  });
+
   it("routes a custom read under GET, with the query parsed the way findMany's is", async () => {
     let received: NormalizedQueryContext<Todo> | null = null;
 
@@ -804,6 +874,55 @@ describe("@Kavo custom operations (issue #145)", () => {
       title: "TodoReceiptDto",
       "x-kavo-entity": "Todo",
     });
+  });
+
+  it("still documents a handler-less, @Override-backed operation's response schema (issue #424)", async () => {
+    @Kavo(Todo, {
+      operations: {
+        // No `handler`, and no `dto.output` either — the fallback
+        // entity-derived response schema (issue #264) is what should carry
+        // the operation's Swagger docs.
+        publishOne: {
+          meta: { routes: { method: "POST", path: ":id/publish" } },
+        },
+      },
+    })
+    @Controller("todos")
+    class HandlerlessDocumentedController {
+      @Override("publishOne")
+      async publish(id: string, body: unknown): Promise<unknown> {
+        return { id: Number(id), overridden: true, body };
+      }
+    }
+
+    await bootstrap(HandlerlessDocumentedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos/{id}/publish"] as {
+        post?: {
+          requestBody?: unknown;
+          responses?: Record<string, { content?: Record<string, { schema?: object }> }>;
+        };
+      }
+    )?.post;
+    // The bind-time handler-less check (issue #424) runs in `KavoBinder`,
+    // the same pass that finishes this operation's Swagger docs — it must
+    // not short-circuit them. The response schema falls back to Todo's own
+    // selectable columns, the same shape `applyResponseSchemaDocs` gives any
+    // undocumented single-row operation.
+    expect(operation?.responses?.["201"]?.content?.["application/json"]?.schema).toMatchObject({
+      title: "Todo",
+      type: "object",
+      properties: { id: { type: "number" }, title: { type: "string" }, done: { type: "boolean" } },
+      "x-kavo-entity": "Todo",
+    });
+    // No request-body schema: `applyBodySchemaDocs`'s fallback (issue #264)
+    // only covers `createOne`/`updateOne`/`patchOne`, and the `@Override`
+    // method's own `body: unknown` parameter carries no concrete type for
+    // Nest's Swagger plugin to reflect — an existing, orthogonal gap, not
+    // something #424 changes.
+    expect(operation?.requestBody).toBeUndefined();
   });
 });
 

@@ -83,7 +83,7 @@ export class OrderController {}
 
 A custom-operation entry accepts:
 
-- **`handler`** (`OperationHandler<Entity>`, required): the operation's behavior. There's no built-in to fall back to, so an entry without one fails at bootstrap.
+- **`handler`** (`OperationHandler<Entity>`, optional): the operation's behavior. There's no built-in to fall back to, so an entry without one needs something else to supply it — in `@kavo/nest`, an `@Override(id)` method on the controller (below). Neither present is a bootstrap error.
 - **`kind`** (`"read"` | `"write"`, default: `"write"`): a read runs query resolution and takes no request body; the generated route binds `@Query` instead of `@Body`.
 - **`cardinality`** (`"one"` | `"many"`, default: `"one"`): `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way a `findMany` handler does.
 - **`enabled`** (`boolean`, default: `true`): `false` registers the entry inert: no route, and calling it answers `405 KAVO_OPERATION_DISABLED`.
@@ -114,6 +114,7 @@ Worth knowing before you reach for one:
 
 - **Custom routes are matched first.** Custom entries are registered ahead of the standard table, so `GET /orders/pending` reaches its own handler rather than `GET /orders/:id`. The flip side is that a custom entry whose `meta.routes` reproduces a standard route's shape takes that route.
 - **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it's a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
+- **`@Override(id)` can be the whole implementation.** A DI-aware custom operation — one that needs another Nest provider, or a cross-entity transaction — cannot be expressed as a config-level `handler`; write it as an `@Override(id)` method instead and leave `handler` off the config entry entirely (issue #424). `@kavo/nest` resolves the override ahead of the generated route, so the config-level handler is never reached. Omitting both is caught at `KavoModule`'s bind time (`onModuleInit`), not silently: `ConfigurationException` names the operation and says it needs one or the other. See [`@Override`](/reference/decorators#override-operationid).
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
 - **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `dto.output`, the handler's return value is filtered to the entity's own columns (plus any opted-in virtual field), exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its own shape needs a DTO:
 

@@ -192,15 +192,56 @@ function resolveDtoOverride(
   return resolved;
 }
 
-const unboundHandler = (id: OperationId, entityName: string): OperationHandler<unknown> => ({
-  execute(): Promise<never> {
-    throw new ConfigurationException(
-      entityName,
-      `operations.${id}`,
-      `operation '${id}' has no bound handler — this registry was built ` + `for inspection (route generation) only`,
-    );
-  },
-});
+/**
+ * Marks a placeholder handler as unbound, so `isUnboundOperationHandler` can
+ * tell it apart from a real implementation without knowing anything about
+ * how it got there — inspection-only mode (below) and a handler-less custom
+ * operation (`registerCustomOperation`) both produce one.
+ */
+const UNBOUND_OPERATION_HANDLER = Symbol("kavo.unboundOperationHandler");
+
+function markUnbound<Entity>(handler: OperationHandler<Entity>): OperationHandler<Entity> {
+  return Object.assign(handler, { [UNBOUND_OPERATION_HANDLER]: true });
+}
+
+/**
+ * Whether `handler` is one of the placeholders this module hands out rather
+ * than a real implementation — a registry built for inspection only
+ * (`@kavo/nest` route generation, ADR-0012), or a custom operation
+ * (`CustomOperationConfig.handler`, now optional) whose implementation is
+ * meant to come from somewhere else, e.g. `@kavo/nest`'s `@Override`. A
+ * framework layer that resolves implementations that way uses this to
+ * validate, at its own bind time, that every enabled custom operation ended
+ * up with a real one — core itself has no such seam, so it only ever hands
+ * back a handler that throws when actually invoked.
+ */
+export function isUnboundOperationHandler<Entity>(handler: OperationHandler<Entity>): boolean {
+  return (handler as unknown as Record<symbol, unknown>)[UNBOUND_OPERATION_HANDLER] === true;
+}
+
+const unboundHandler = (id: OperationId, entityName: string): OperationHandler<unknown> =>
+  markUnbound({
+    execute(): Promise<never> {
+      throw new ConfigurationException(
+        entityName,
+        `operations.${id}`,
+        `operation '${id}' has no bound handler — this registry was built ` + `for inspection (route generation) only`,
+      );
+    },
+  });
+
+const unboundCustomHandler = (id: OperationId, entityName: string): OperationHandler<unknown> =>
+  markUnbound({
+    execute(): Promise<never> {
+      throw new ConfigurationException(
+        entityName,
+        `operations.${id}`,
+        `custom operation '${id}' has no bound handler — a custom operation has no built-in behavior to ` +
+          `fall back to, so it must supply one: { handler: { execute(input, context) { … } } }, or, in ` +
+          `@kavo/nest, an @Override("${id}") method`,
+      );
+    },
+  });
 
 /**
  * Build one entity's operation registry from its config (the
@@ -326,13 +367,15 @@ export function createOperationRegistry<Entity extends object>(
 /**
  * Validate one custom `operations` entry and register it.
  *
- * Everything here is a bootstrap `ConfigurationException` naming the entity
- * and the key path, because a custom operation is declared once and every
- * way of getting it wrong is knowable then. The type system rejects most of
- * these already (`CustomOperationConfig` requires `handler` and closes
- * `kind`/`cardinality` to their unions); this is the runtime mirror, for
- * configs that arrive erased or cast — the same defence `resolveAllowed`
- * and `rejectDerivedWriteDtoKeys` apply to their own invariants.
+ * Everything here except the missing-`handler` case is a bootstrap
+ * `ConfigurationException` naming the entity and the key path, because a
+ * custom operation is declared once and every other way of getting it
+ * wrong is knowable then. The type system rejects most of these already
+ * (`kind`/`cardinality` are closed to their unions); this is the runtime
+ * mirror, for configs that arrive erased or cast — the same defence
+ * `resolveAllowed` and `rejectDerivedWriteDtoKeys` apply to their own
+ * invariants. A missing `handler` (issue #424) is not knowable as wrong
+ * here — see `isUnboundOperationHandler`'s doc comment.
  */
 function registerCustomOperation<Entity extends object>(
   registry: OperationRegistry<Entity>,
@@ -366,13 +409,28 @@ function registerCustomOperation<Entity extends object>(
   }
 
   const custom = entry as CustomOperationConfig<Entity>;
-  if (typeof custom.handler?.execute !== "function") {
+  // `handler` is optional (issue #424): a caller with no handler of its own
+  // may still supply the implementation another way — `@kavo/nest`'s
+  // `@Override(id)` is the sanctioned case — so this registers a
+  // placeholder rather than failing bootstrap outright. It throws only if
+  // and when it is actually invoked, which is what happens if nothing ever
+  // does supply an implementation; `isUnboundOperationHandler` is how a
+  // framework layer that resolves implementations elsewhere validates that
+  // proactively, at its own bind time. A present-but-malformed `handler` —
+  // an erased or cast config could carry anything — is still a bootstrap
+  // error, the same defence every other check in this function applies.
+  let handler: OperationHandler<Entity>;
+  if (custom.handler === undefined) {
+    handler = unboundCustomHandler(id, entityName) as unknown as OperationHandler<Entity>;
+  } else if (typeof custom.handler.execute !== "function") {
     throw new ConfigurationException(
       entityName,
       `operations.${id}.handler`,
       `custom operation '${id}' has no handler — a custom operation has no built-in behavior to ` +
         `fall back to, so it must supply one: { handler: { execute(input, context) { … } } }`,
     );
+  } else {
+    handler = custom.handler;
   }
   const kind = requireOneOf(entityName, id, "kind", custom.kind, ["read", "write"] as const) ?? "write";
   const cardinality =
@@ -383,7 +441,7 @@ function registerCustomOperation<Entity extends object>(
     kind,
     cardinality,
     enabled: custom.enabled ?? true,
-    handler: custom.handler,
+    handler,
     ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     meta: custom.meta ?? {},
   });

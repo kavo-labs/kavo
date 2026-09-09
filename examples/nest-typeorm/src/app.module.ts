@@ -6,6 +6,7 @@ import type { KavoAppContext, RealtimeTransport } from "@kavo/core";
 import type { DataSource } from "typeorm";
 import { DATA_SOURCE, DatabaseModule, type SqlOptions } from "./database.module.js";
 import { OwnerController } from "./owner/owner.controller.js";
+import { OwnerWelcomeService } from "./owner/owner-welcome.service.js";
 import { CatController } from "./cat/cat.controller.js";
 import { DogController } from "./dog/dog.controller.js";
 import { TagController } from "./tag/tag.controller.js";
@@ -96,6 +97,7 @@ export class AppModule {
           provide: APP_PIPE,
           useValue: new ValidationPipe({ whitelist: true, transform: true }),
         },
+        OwnerWelcomeService,
       ],
     };
   }
