@@ -355,8 +355,14 @@ export function Kavo<
  * moment) on the two ways this can be misconfigured: two methods claiming
  * the same operation, or an override naming an operation id that the
  * registry doesn't have enabled — a silent no-op override is a footgun.
+ *
+ * Exported for `KavoModule`'s discovery binder, which re-derives the same
+ * map at bind time (from the real, `createCrud`-built registry rather than
+ * this decoration-time inspection-only one) to validate that every enabled
+ * handler-less custom operation (issue #424) is actually backed by one of
+ * these methods.
  */
-function collectOverrides(
+export function collectOverrides(
   prototype: Record<string, unknown>,
   entityName: string,
   registry: { get(id: OperationId): OperationDescriptor<object> | undefined },

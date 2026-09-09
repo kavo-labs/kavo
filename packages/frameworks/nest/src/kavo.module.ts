@@ -1,11 +1,18 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, EntityMetadata, KavoInstance, OperationDtoMap } from "@kavo/core";
-import { ConfigurationException, DefaultDtoResolver, createKavo, isEtagEnabled, shorthandFieldsOf } from "@kavo/core";
+import type { ClassRef, EntityMetadata, KavoInstance, OperationDtoMap, OperationRegistry } from "@kavo/core";
+import {
+  ConfigurationException,
+  DefaultDtoResolver,
+  createKavo,
+  isEtagEnabled,
+  isUnboundOperationHandler,
+  shorthandFieldsOf,
+} from "@kavo/core";
 import type { KavoModuleOptions } from "./kavo-options.js";
 import type { KavoConditionalDocEntry, KavoControllerMetadata } from "./kavo.decorator.js";
-import { getRegisteredKavoControllers } from "./kavo.decorator.js";
+import { collectOverrides, getRegisteredKavoControllers } from "./kavo.decorator.js";
 import { KavoExceptionFilter } from "./kavo-exception.filter.js";
 import { createDefaultGraphQLController, DEFAULT_GRAPHQL_PATH } from "./graphql/default-graphql.controller.js";
 import { createDefaultMcpController, DEFAULT_MCP_PATH } from "./mcp/default-mcp.controller.js";
@@ -306,6 +313,38 @@ function serviceProvider(metadata: KavoControllerMetadata): Provider {
 }
 
 /**
+ * Issue #424: a custom operation (`operations.<id>`) may now omit `handler`
+ * when an `@Override(id)` method supplies the implementation instead —
+ * `@kavo/nest` resolves that override ahead of the generated route, so the
+ * registry's own placeholder (`isUnboundOperationHandler`) never runs. If
+ * neither is present, core has no way to know that at registry-build time
+ * (`@Override` is a `@kavo/nest` concept it has never heard of), so it hands
+ * back a handler that only throws when actually invoked. This is the
+ * proactive check: at bind time, once both the real registry and every
+ * `@Override`'d method are known, fail fast rather than let a caller
+ * discover the gap on the first request.
+ */
+function requireCustomOperationHandlers(
+  prototype: Record<string, unknown>,
+  entityName: string,
+  registry: OperationRegistry<object>,
+): void {
+  const overrides = collectOverrides(prototype, entityName, registry);
+  for (const descriptor of registry.all()) {
+    if (!descriptor.enabled || !isUnboundOperationHandler(descriptor.handler) || overrides.has(descriptor.id)) {
+      continue;
+    }
+    throw new ConfigurationException(
+      entityName,
+      `operations.${descriptor.id}`,
+      `'${descriptor.id}' has neither a handler nor an @Override("${descriptor.id}") method — a custom ` +
+        `operation needs one or the other to run: add operations.${descriptor.id}.handler, or an ` +
+        `@Override("${descriptor.id}") method on the controller`,
+    );
+  }
+}
+
+/**
  * Runs once at `onModuleInit`, after Nest has finished instantiating every
  * controller in the app — late enough that `DiscoveryService` sees the full,
  * real module graph, and still well before the first request, which is all
@@ -340,6 +379,11 @@ class KavoBinder implements OnModuleInit {
         continue;
       }
       const service = this.kavo.createCrud(metadata.entity, metadata.config);
+      requireCustomOperationHandlers(
+        metatype.prototype as Record<string, unknown>,
+        metadata.entity.name,
+        service.engine.registry,
+      );
       instance[KAVO_SERVICE_PROPERTY] = service;
       instance[KAVO_APP_CONTEXT_PROPERTY] = extractAppContext;
 
