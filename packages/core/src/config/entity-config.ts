@@ -257,7 +257,7 @@ export interface RelationConfig {
  * `KavoSettings.arrayMutation` into one entity-scope block — the same move
  * issue #386 made for `filter`/`sort`/`select`/`search`/`include`).
  *
- * Structural entity-scope config like `dto`/`computed`: resolved directly
+ * Structural entity-scope config like `dto`: resolved directly
  * by `DefaultRelationRegistry` at bootstrap, never merged through the
  * global → operation → per-call precedence chain, and with no global or
  * built-in default. This block never grants permission — read-includability

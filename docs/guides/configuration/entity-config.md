@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every settings field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity: `dto`, `allowed` (see [Allowed](/features/allowed)), `policy` (below, an entity-wide default), and `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)) — which is also where `policy` may be overridden per operation.
+`@Kavo(Entity, config)` accepts every `KavoSettings` field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity and never merge through the scope chain: `dto`, `policy` (below, an entity-wide default), `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)), and the per-axis query blocks `filter`, `sort`, `select`, `search`, and `include` — each holding that axis's `fields` allowlist, its `default` for an omitted request, its `apply` server-side override (ADR-0048), and (for `filter`/`include`) its request-cost `limits`. The write-side siblings are `create` and `update`. Per-relation read tuning and array-mutation write policy is `relations`. [Allowed](/features/allowed) covers the `fields` allowlists in full; [Config keys](/reference/config-keys) is the field-by-field table for all of them.
 
 ## dto
 
