@@ -9,12 +9,12 @@ Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, confi
 ### pagination
 
 | Key                       | Type                                                            | Default       |
-| ------------------------- | ------------------------------------------------------------------ | ------------- |
-| `pagination.defaultLimit` | `number`                                                          | `20`          |
-| `pagination.maxLimit`     | `number`                                                          | `100`         |
+| ------------------------- | --------------------------------------------------------------- | ------------- |
+| `pagination.defaultLimit` | `number`                                                        | `20`          |
+| `pagination.maxLimit`     | `number`                                                        | `100`         |
 | `pagination.strategy`     | `"offset" \| "page" \| "cursor" \| "since" \| "none" \| string` | `"offset"`    |
-| `pagination.count`        | `boolean`                                                         | `true`        |
-| `pagination.since.field`  | `string`                                                          | `"updatedAt"` |
+| `pagination.count`        | `boolean`                                                       | `true`        |
+| `pagination.since.field`  | `string`                                                        | `"updatedAt"` |
 
 `strategy: "none"` (ADR-0030) opts the entity out of pagination — `findMany` serves the whole match set, `defaultLimit`/`maxLimit` go unused, and a client-sent `limit`/`offset` is rejected rather than ignored. `pagination.since.field` is consulted only under `strategy: "since"` (ADR-0022), where a missing column is a bootstrap error. See [Pagination](/querying/pagination) and [Settings](/guides/configuration/settings#pagination).
 
@@ -69,7 +69,7 @@ Global → entity scope only — never per-operation, never per-call. Retargets 
 ### operations
 
 | Key                                | Type      | Default                                      |
-| ---------------------------------- | --------- | ------------------------------------------- |
+| ---------------------------------- | --------- | -------------------------------------------- |
 | `operations.<standardOperationId>` | `boolean` | see [CRUD operations](/core/crud-operations) |
 
 Global scope only — a boolean map keyed by the standard operation ids. Coarser than the per-entity `EntityConfig.operations` (below), which also carries `handler`/`meta`/`dto`/`policy` and always wins over this map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
@@ -80,68 +80,68 @@ Not `KavoSettings`. Declared on `EntityConfig` directly, so there is no global d
 
 ### filter
 
-| Key                            | Type                                                                                    | Default            |
-| ------------------------------ | -------------------------------------------------------------------------------------- | ------------------ |
-| `filter.fields`                | `FieldPath[] \| { exclude: FieldPath[] } \| { <field>: FilterOperatorToken[] }`        | every own column   |
-| `filter.default`               | `FilterExpression<Entity>`                                                              | unset              |
-| `filter.apply`                 | `(args) => FilterExpression \| undefined`                                               | unset              |
-| `filter.limits.maxDepth`       | `number`                                                                                | `3`                |
-| `filter.limits.maxInValues`    | `number`                                                                                | `100`              |
-| `filter.limits.maxLikePatternLength` | `number`                                                                          | `200`              |
+| Key                                  | Type                                                                            | Default          |
+| ------------------------------------ | ------------------------------------------------------------------------------- | ---------------- |
+| `filter.fields`                      | `FieldPath[] \| { exclude: FieldPath[] } \| { <field>: FilterOperatorToken[] }` | every own column |
+| `filter.default`                     | `FilterExpression<Entity>`                                                      | unset            |
+| `filter.apply`                       | `(args) => FilterExpression \| undefined`                                       | unset            |
+| `filter.limits.maxDepth`             | `number`                                                                        | `3`              |
+| `filter.limits.maxInValues`          | `number`                                                                        | `100`            |
+| `filter.limits.maxLikePatternLength` | `number`                                                                        | `200`            |
 
 `fields` in the map form (`{ field: ["eq", "in"] }`) restricts which operators are permitted per named field; a field named there is implicitly on the allowlist, and one absent from a map permits every operator. `default` is the predicate applied when a request supplies no `filter=` — a client `filter=` wins outright, never merges. `apply` (ADR-0048) is `AND`ed into every read and into the id lookup of every single-row write, and the client can only narrow further inside that `AND`. `limits` are per-request cost ceilings (issue #386, formerly `KavoSettings.limits.{filterDepth,inValues,likePattern}`). See [Filtering](/querying/filtering).
 
 ### sort
 
-| Key            | Type                                             | Default |
-| -------------- | ----------------------------------------------- | ------- |
-| `sort.fields`  | `FieldPath[] \| { exclude: FieldPath[] }`        | every own column |
-| `sort.default` | `(-FieldPath \| FieldPath)[]` (wire shorthand)   | `[]`    |
-| `sort.apply`   | `(args) => sort keys \| undefined`               | unset   |
+| Key            | Type                                           | Default          |
+| -------------- | ---------------------------------------------- | ---------------- |
+| `sort.fields`  | `FieldPath[] \| { exclude: FieldPath[] }`      | every own column |
+| `sort.default` | `(-FieldPath \| FieldPath)[]` (wire shorthand) | `[]`             |
+| `sort.apply`   | `(args) => sort keys \| undefined`             | unset            |
 
 `default` takes the same wire shorthand `sort=` does (`-field` for descending) and is used only when the request sends no `sort=`. `apply` (ADR-0048) prepends forced keys ahead of the client's own sort, deduplicating a client field already named. Fields are validated against `fields` at bootstrap. See [Sorting](/querying/sorting).
 
 ### select
 
-| Key              | Type                                                       | Default                        |
-| ---------------- | -------------------------------------------------------- | ------------------------------ |
-| `select.fields`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every own column           |
-| `select.default` | `FieldPath<Entity,1>[]`                                   | unset — every selectable field |
-| `select.apply`   | `(args) => fields \| undefined`                           | unset                          |
+| Key              | Type                                                          | Default                        |
+| ---------------- | ------------------------------------------------------------- | ------------------------------ |
+| `select.fields`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every own column               |
+| `select.default` | `FieldPath<Entity,1>[]`                                       | unset — every selectable field |
+| `select.apply`   | `(args) => fields \| undefined`                               | unset                          |
 
 `fields` is depth 1 — `select=` addresses the entity's own columns, and an included relation is projected through `select[<relation>]=` against the target's own `select.fields` (ADR-0045); a relation-dotted entry neither type-checks nor boots. `fields` also closes the response body: a column left off is not served, which is what makes it a confidentiality control and not just a validation list (ADR-0026). A registered `dto.item`/`dto.list` with a runtime shape **replaces** the projection and wins even where wider. `default` is the projection for a request that sends no `select=`, validated against `fields` at bootstrap. `apply` (ADR-0048) is additive only, never a mask. See [Field selection](/querying/field-selection).
 
 ### search
 
-| Key             | Type                                             | Default       |
-| --------------- | ---------------------------------------------- | ------------- |
-| `search`        | `{ fields?, default?, mode?, driver? } \| false` | `false`       |
-| `search.fields` | `FieldPath[] \| { exclude: FieldPath[] }` (relation paths allowed) | every own string-kind column |
-| `search.default`| `string`                                        | unset         |
-| `search.mode`   | `"substring" \| "words"`                         | `"substring"` |
-| `search.driver` | `"orm"`                                          | `"orm"`       |
+| Key              | Type                                                               | Default                      |
+| ---------------- | ------------------------------------------------------------------ | ---------------------------- |
+| `search`         | `{ fields?, default?, mode?, driver? } \| false`                   | `false`                      |
+| `search.fields`  | `FieldPath[] \| { exclude: FieldPath[] }` (relation paths allowed) | every own string-kind column |
+| `search.default` | `string`                                                           | unset                        |
+| `search.mode`    | `"substring" \| "words"`                                           | `"substring"`                |
+| `search.driver`  | `"orm"`                                                            | `"orm"`                      |
 
 `false` (the default) disables search — `search[query]` is rejected with a 400 until an entity or operation scope sets an object. Unlike `filter.fields`/`sort.fields`, `search.fields` entries may be relation paths (`"brand.name"`) — a search box spreads one term across whatever fields make sense. `default` is the term used when a request sends no `search[query]`. See [Search](/querying/search).
 
 ### include
 
-| Key                      | Type                                                   | Default                 |
-| ------------------------ | ---------------------------------------------------- | ----------------------- |
-| `include.fields`         | `IncludePath<Entity,1>[] \| { exclude: IncludePath<Entity,1>[] }` | `[]` — nothing includable |
-| `include.default`        | `IncludePath<Entity,1>[]`                             | `[]`                    |
-| `include.apply`          | `(args) => relation paths \| undefined`               | unset                   |
-| `include.limits.maxDepth`| `number`                                              | `2`                     |
-| `include.limits.maxNodes`| `number`                                              | `10`                    |
+| Key                       | Type                                                              | Default                   |
+| ------------------------- | ----------------------------------------------------------------- | ------------------------- |
+| `include.fields`          | `IncludePath<Entity,1>[] \| { exclude: IncludePath<Entity,1>[] }` | `[]` — nothing includable |
+| `include.default`         | `IncludePath<Entity,1>[]`                                         | `[]`                      |
+| `include.apply`           | `(args) => relation paths \| undefined`                           | unset                     |
+| `include.limits.maxDepth` | `number`                                                          | `2`                       |
+| `include.limits.maxNodes` | `number`                                                          | `10`                      |
 
 `fields` is **opt-in**, unlike every other axis: unconfigured means no relation is includable (the posture `relations.edges` had before ADR-0028). `{ exclude: [] }`, written explicitly, means the opposite — every relation includable. `default` relations are included even when `include=` doesn't name them, and each must also be on `fields` (ADR-0028's cross-check). `apply` (ADR-0048) force-includes paths on every request, still subject to the depth/breadth limits and the `fields` allowlist. `include.limits.maxDepth` is overridable per-subtree by `relations.<name>.read.maxDepth`, below. See [Relations](/features/relations).
 
 ### relations
 
-| Key                               | Type                                     | Default                             |
-| --------------------------------- | ---------------------------------------- | ----------------------------------- |
-| `relations.<name>.read.maxDepth`  | `number`                                 | inherits `include.limits.maxDepth`  |
-| `relations.<name>.read.strategy`  | `"auto" \| "join" \| "batch" \| "key"`   | `"auto"`                            |
-| `relations.<name>.write.strategy` | `"replace" \| "resource" \| "jsonPatch"` | — (relation is not array-mutable)   |
+| Key                               | Type                                     | Default                            |
+| --------------------------------- | ---------------------------------------- | ---------------------------------- |
+| `relations.<name>.read.maxDepth`  | `number`                                 | inherits `include.limits.maxDepth` |
+| `relations.<name>.read.strategy`  | `"auto" \| "join" \| "batch" \| "key"`   | `"auto"`                           |
+| `relations.<name>.write.strategy` | `"replace" \| "resource" \| "jsonPatch"` | — (relation is not array-mutable)  |
 
 Keyed by the entity's own top-level relation names, resolved directly at bootstrap, never merged and with no global default (issue #404, folding the former `KavoSettings.relations.edges` and `KavoSettings.arrayMutation` into one block). An entry that tunes nothing (`{}`) is a bootstrap error.
 
@@ -151,14 +151,14 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 
 ### create / update
 
-| Key             | Type                                                          | Default                                                           |
-| --------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| `create.fields` | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
-| `create.default`| `Partial<EntityInput<Entity>>`                               | unset                                                            |
-| `create.apply`  | `(args) => Partial<EntityInput<Entity>> \| undefined`        | unset                                                            |
-| `update.fields` | same shape as `create.fields`                                | same default as `create.fields`                                  |
-| `update.default`| `Partial<EntityInput<Entity>>`                              | unset                                                            |
-| `update.apply`  | same shape as `create.apply`                                 | unset                                                            |
+| Key              | Type                                                          | Default                                                           |
+| ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `create.fields`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
+| `create.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
+| `create.apply`   | `(args) => Partial<EntityInput<Entity>> \| undefined`         | unset                                                             |
+| `update.fields`  | same shape as `create.fields`                                 | same default as `create.fields`                                   |
+| `update.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
+| `update.apply`   | same shape as `create.apply`                                  | unset                                                             |
 
 Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A registered `dto.create`/`dto.update` class with a runtime shape **replaces** this projection and wins over `fields`.
 
@@ -166,23 +166,23 @@ Their own top-level objects rather than nested under a shared `allowed` block (i
 
 ### policy
 
-| Key      | Type              | Default |
-| -------- | ----------------- | ------- |
-| `policy` | `Policy<Entity>`  | unset   |
+| Key      | Type             | Default |
+| -------- | ---------------- | ------- |
+| `policy` | `Policy<Entity>` | unset   |
 
 A single entity-default authorization function (ADR-0037), not a per-operation map. Resolved by its own "nearest scope wins" walk: falls back to `GlobalConfig.policy` (`createKavo({ policy })`), overridden per operation by `operations.<id>.policy`, including `operations.<id>.policy: false` to opt one operation out. No per-call override. Absent every scope, the operation runs unrestricted. See [CRUD operations](/core/crud-operations).
 
 ### dto / operations (entity scope)
 
-| Key              | Type                                                            |
-| ---------------- | ------------------------------------------------------------- |
-| `dto.create`     | DTO class                                                      |
-| `dto.update`     | DTO class                                                      |
-| `dto.patch`      | DTO class \| `{ fields: FieldPath<Entity,1>[] }`               |
-| `dto.query`      | DTO class                                                      |
-| `dto.item`       | DTO class \| `{ fields: FieldPath<Entity,1>[] }`               |
-| `dto.list`       | DTO class \| `{ fields: FieldPath<Entity,1>[] }`               |
-| `operations.<standardId>` | `boolean \| { handler?, meta?, dto?, policy?, + narrowed settings }` |
+| Key                       | Type                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| `dto.create`              | DTO class                                                                                       |
+| `dto.update`              | DTO class                                                                                       |
+| `dto.patch`               | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
+| `dto.query`               | DTO class                                                                                       |
+| `dto.item`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
+| `dto.list`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
+| `operations.<standardId>` | `boolean \| { handler?, meta?, dto?, policy?, + narrowed settings }`                            |
 | `operations.<customId>`   | `{ handler?, kind?, cardinality?, dto?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
 
 `dto.create`/`dto.update` accept a registered class only — their writable-field list is the top-level `create`/`update` keys above (issue #388). `patch`/`item`/`list` additionally accept the inline `{ fields }` shorthand (issue #386). A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
