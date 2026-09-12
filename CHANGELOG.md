@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.3](https://github.com/kavo-labs/kavo/compare/v0.21.2...v0.21.3) (2026-09-12)
+
+
+### Features
+
+* **core:** let a custom operation publish a realtime event ([#429](https://github.com/kavo-labs/kavo/issues/429)) ([1569c88](https://github.com/kavo-labs/kavo/commit/1569c8861ef59e829244595ea5544c58b4926fd1))
+* **docs:** clarify optional handler for custom operations in SKILL.md ([b339ddf](https://github.com/kavo-labs/kavo/commit/b339ddf8af68c444553c0b70823ed87c64596ec6))
+
+
+### Documentation
+
+* sync config reference and add-config-key skill with the issue [#386](https://github.com/kavo-labs/kavo/issues/386) field-group schema ([39d8676](https://github.com/kavo-labs/kavo/commit/39d867645ed7e97a03b1c1b7bf13d8f467e7d953))
+
 ## [0.21.2](https://github.com/kavo-labs/kavo/compare/v0.21.1...v0.21.2) (2026-09-09)
 
 
