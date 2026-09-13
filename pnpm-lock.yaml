@@ -95,8 +95,8 @@ importers:
         specifier: ^7.1.11
         version: 7.1.11(@mikro-orm/core@7.1.11(dataloader@2.2.3))
       '@mikro-orm/sqlite':
-        specifier: ^7.1.14
-        version: 7.1.14(@mikro-orm/core@7.1.11(dataloader@2.2.3))
+        specifier: ^7.2.0
+        version: 7.2.0(@mikro-orm/core@7.1.11(dataloader@2.2.3))
       '@nestjs/common':
         specifier: ^11.2.1
         version: 11.2.1(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -318,8 +318,8 @@ importers:
         specifier: ^7.1.11
         version: 7.1.11(@mikro-orm/core@7.1.11(dataloader@2.2.3))(reflect-metadata@0.2.2)
       '@mikro-orm/sqlite':
-        specifier: ^7.1.14
-        version: 7.1.14(@mikro-orm/core@7.1.11(dataloader@2.2.3))
+        specifier: ^7.2.0
+        version: 7.2.0(@mikro-orm/core@7.1.11(dataloader@2.2.3))
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -1130,17 +1130,17 @@ packages:
     peerDependencies:
       '@mikro-orm/core': 7.1.11
 
-  '@mikro-orm/sql@7.1.14':
-    resolution: {integrity: sha512-4deS9ep+CVPx48z6AdE6KUPdUbMRNvCsaA4XQPU8YRf3D501z6SIxwk/9JyIWtR3r1DwHYGdwfYUjckPSC9BmQ==}
+  '@mikro-orm/sql@7.2.0':
+    resolution: {integrity: sha512-ZpuCfBL6XAYrJsUglvXrah+erB9gVgkoSuIKR/x+o1o/OVOE8ljgRxYIIIMGE+LetR9s1wrDQjrwfm0gghqsiA==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.1.14
+      '@mikro-orm/core': 7.2.0
 
-  '@mikro-orm/sqlite@7.1.14':
-    resolution: {integrity: sha512-tfjpB3knnkvfxBUVZotKleAUYX1rWzxsJsjvflgLjSr4LZpyhEgab2Rz8YZ2QpywPApbMwdd9YBgTtt66e+8Cw==}
+  '@mikro-orm/sqlite@7.2.0':
+    resolution: {integrity: sha512-Z617OmwJv0uctAI3p/VHmclvsR7hxqWU8+bebw5NQsA1YVoI3Gucbhj/Q/14INulxNw+UDBvk0bQ1GIf2UVWAA==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.1.14
+      '@mikro-orm/core': 7.2.0
 
   '@minimistjs/subarg@1.0.0':
     resolution: {integrity: sha512-Q/ONBiM2zNeYUy0mVSO44mWWKYM3UHuEK43PKIOzJCbvUnPoMH1K+gk3cf1kgnCVJFlWmddahQQCmrmBGlk9jQ==}
@@ -5259,15 +5259,15 @@ snapshots:
       '@mikro-orm/core': 7.1.11(dataloader@2.2.3)
       kysely: 0.29.4
 
-  '@mikro-orm/sql@7.1.14(@mikro-orm/core@7.1.11(dataloader@2.2.3))':
+  '@mikro-orm/sql@7.2.0(@mikro-orm/core@7.1.11(dataloader@2.2.3))':
     dependencies:
       '@mikro-orm/core': 7.1.11(dataloader@2.2.3)
       kysely: 0.29.5
 
-  '@mikro-orm/sqlite@7.1.14(@mikro-orm/core@7.1.11(dataloader@2.2.3))':
+  '@mikro-orm/sqlite@7.2.0(@mikro-orm/core@7.1.11(dataloader@2.2.3))':
     dependencies:
       '@mikro-orm/core': 7.1.11(dataloader@2.2.3)
-      '@mikro-orm/sql': 7.1.14(@mikro-orm/core@7.1.11(dataloader@2.2.3))
+      '@mikro-orm/sql': 7.2.0(@mikro-orm/core@7.1.11(dataloader@2.2.3))
       better-sqlite3: 13.0.3
       kysely: 0.29.5
 
@@ -5985,7 +5985,7 @@ snapshots:
       obug: 2.1.4
       std-env: 4.2.0
       tinyrainbow: 3.1.1
-      vitest: 4.1.10(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
+      vitest: 4.1.10(@types/node@26.2.0)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@types/node@26.2.0)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
 
   '@vitest/expect@4.1.10':
     dependencies:
