@@ -131,6 +131,55 @@ jobs:
       - name: Test under Bun
         run: pnpm run generate && pnpm run test:bun
 
+  # `@kavo/nest`'s peer range spans three NestJS majors (10/11/12), but
+  # `build`/`test` above only ever install whatever version is pinned in
+  # devDependencies — one major, never all three. This job actually installs
+  # each supported major in turn and re-runs @kavo/nest's own suite against
+  # it, so a peer range widened in package.json is backed by a real install +
+  # test rather than an unverified claim. v10 is not in the matrix: it is
+  # already the oldest release ADR history predates, and nothing currently
+  # regression-tests it either — widen the matrix if that changes. Deliberately
+  # its own job rather than a step in `pnpm check`: it reinstalls dependencies
+  # mid-job, which would corrupt the workspace state every other gate step
+  # relies on if it ran inline.
+  nest-compat:
+    name: nest compat (nestjs v${{ matrix.nest }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nest: ["11", "12"]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Overrides only @kavo/nest's own install, not the lockfile: the
+      # matrix leg's point is exercising the peer range, not shipping this
+      # version as the pinned devDependency.
+      - name: Install NestJS v${{ matrix.nest }}
+        run: |
+          pnpm --filter @kavo/nest add -D \
+            @nestjs/common@^${{ matrix.nest }} \
+            @nestjs/core@^${{ matrix.nest }} \
+            @nestjs/platform-express@^${{ matrix.nest }} \
+            @nestjs/swagger@^${{ matrix.nest }} \
+            @nestjs/testing@^${{ matrix.nest }}
+
+      - name: Test @kavo/nest against NestJS v${{ matrix.nest }}
+        run: pnpm run generate && pnpm run test:nest-compat
+
   # Deliberately its own job rather than a step in `pnpm check`. It re-runs
   # the whole suite under v8 instrumentation, so folding it into the gate
   # would roughly double the command developers run all day for a signal
