@@ -1582,6 +1582,13 @@ export function registerCrudE2eSuite(getApp: () => INestApplication): void {
         .send({ name: "BadAddr", email: "badaddr@x.io", address: { id: -1 } })
         .expect(400);
       expect(response.body.detail).toContain("address");
+      // The app's ValidationPipe uses kavoValidationExceptionFactory (issue
+      // #437), so the nested ValidateNested failure also names its exact
+      // dot-joined field on errors[], not just somewhere in the flattened
+      // detail text.
+      expect(response.body.errors).toContainEqual(
+        expect.objectContaining({ field: "address.id", detail: expect.stringContaining("positive") }),
+      );
     });
 
     it("rejects a non-integer element in POST /cats' tags array", async () => {

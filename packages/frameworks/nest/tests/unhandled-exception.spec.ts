@@ -60,4 +60,42 @@ describe("toKavoExceptionShape", () => {
     expect(toKavoExceptionShape(new NotFoundException("x")).context.correlationId).toBeUndefined();
     expect(toKavoExceptionShape(new Error("x")).context.correlationId).toBeUndefined();
   });
+
+  describe("issue field errors (kavoValidationExceptionFactory body)", () => {
+    it("surfaces a fieldErrors array as KavoExceptionShape.issues", () => {
+      const shape = toKavoExceptionShape(
+        new BadRequestException({
+          message: "amount must be a positive number",
+          fieldErrors: [{ field: "amount", detail: "amount must be a positive number" }],
+        }),
+      );
+      expect(shape.code).toBe("KAVO_HTTP_ERROR");
+      expect(shape.issues).toEqual([{ field: "amount", detail: "amount must be a positive number" }]);
+    });
+
+    it("omits issues when there is no fieldErrors key at all", () => {
+      const shape = toKavoExceptionShape(new BadRequestException(["a plain flattened message"]));
+      expect(shape.issues).toBeUndefined();
+    });
+
+    it("omits issues when fieldErrors is present but not an array", () => {
+      const shape = toKavoExceptionShape(new BadRequestException({ message: "x", fieldErrors: "not-an-array" }));
+      expect(shape.issues).toBeUndefined();
+    });
+
+    it("omits issues for an empty fieldErrors array rather than surfacing errors: []", () => {
+      const shape = toKavoExceptionShape(new BadRequestException({ message: "x", fieldErrors: [] }));
+      expect(shape.issues).toBeUndefined();
+    });
+
+    it("omits issues entirely when any entry fails the structural guard", () => {
+      const shape = toKavoExceptionShape(
+        new BadRequestException({
+          message: "x",
+          fieldErrors: [{ field: "amount", detail: "ok" }, { field: "amount" /* no detail */ }],
+        }),
+      );
+      expect(shape.issues).toBeUndefined();
+    });
+  });
 });

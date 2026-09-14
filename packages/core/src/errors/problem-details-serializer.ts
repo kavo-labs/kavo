@@ -1,7 +1,6 @@
 import type { KavoExceptionShape } from "./kavo-exception-shape.js";
 import type { ProblemDetailsDto } from "./problem-details.js";
 import { ERROR_CATALOG } from "./error-catalog.js";
-import { QueryValidationException } from "./exceptions.js";
 
 /** Base URI under which every problem `type` lives (ADR-0009). */
 const PROBLEM_TYPE_BASE = "https://kavo.dev/errors/";
@@ -43,9 +42,7 @@ export function toProblemDetails(
       instance: `urn:kavo:request:${exception.context.correlationId}`,
     }),
     code: exception.code,
-    ...(exception instanceof QueryValidationException && {
-      errors: exception.issues,
-    }),
+    ...(exception.issues !== undefined && { errors: exception.issues }),
   };
 }
 

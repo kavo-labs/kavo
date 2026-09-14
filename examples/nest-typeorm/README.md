@@ -17,7 +17,11 @@ Every entity but `Dog` also validates its write bodies with `class-validator`
 own (see `docs/internals/architecture/04-dto-system.md`), so this app's own
 `ValidationPipe` (`app.module.ts`) plus each entity's registered
 `dto.create`/`update`/`patch` class is what a validation layer looks like
-bolted onto Kavo from application code, with no framework changes. `Owner`
+bolted onto Kavo from application code, with no framework changes. That
+pipe's `exceptionFactory: kavoValidationExceptionFactory` (issue #437) is
+what turns a failing body into a structured, per-field `errors[]` on the
+problem-details response instead of a single flattened `detail` string.
+`Owner`
 and `Cat` additionally `@Override()` their `createOne`/`updateOne`/`patchOne`
 (see `owner.controller.ts`) to give the body a concrete compile-time type
 inside the method — since issue #281, that override is no longer required

@@ -54,4 +54,12 @@ Driver-level detail (raw SQL error text, stack traces) never appears in `detail`
 
 The problem-details filter is registered app-wide, not just on `@Kavo`-generated routes. An unmatched route, a global validation pipe, or a bug in a hand-written controller method still answers in this same shape (`KAVO_HTTP_ERROR` for a framework-level exception, `KAVO_UNEXPECTED_ERROR` for anything else). A client never has to special-case "was this a Kavo route or not."
 
+By default, a body rejected by a global NestJS `ValidationPipe` reports `KAVO_HTTP_ERROR` with a single flattened `detail` string — Nest's own default behavior, joining every failing `class-validator` constraint's message. Passing `@kavo/nest`'s `kavoValidationExceptionFactory` as that pipe's `exceptionFactory` gets you `errors[]` here too, one entry per **field** (`{ field, detail }`, no `code` — there's no Kavo error code for an app's own `class-validator` decorators) instead of one opaque string, with a nested `@ValidateNested()` property's field dot-joined (`"address.street"`):
+
+```ts
+new ValidationPipe({ exceptionFactory: kavoValidationExceptionFactory });
+```
+
+When a property fails more than one constraint sharing an identical message, that entry keeps it once rather than repeating it. This is opt-in — `@kavo/nest` never installs a `ValidationPipe` itself, so an app that keeps Nest's default `exceptionFactory` sees no change. See `examples/nest-typeorm/src/app.module.ts` for a working example.
+
 See [Reference/Errors](/reference/errors) for the complete code catalog and [Error handling](/internals/architecture/06-error-handling) for the underlying exception hierarchy and adapter-level error mapping.

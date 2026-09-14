@@ -1,10 +1,16 @@
 import type { KavoErrorCode } from "./kavo-exception-shape.js";
 
-/** One field-level query issue (`errors[]` extension). */
+/**
+ * One `errors[]` entry. Query-grammar issues (from `QueryValidationException`)
+ * carry a `code` naming their precise sub-code; issues from a source with no
+ * Kavo error code of its own (a framework-level body-validation failure,
+ * issue #437) omit it — the array stays homogeneous either way, one entry
+ * per offending field.
+ */
 export interface QueryIssueDto {
   /** The offending field or parameter as it appeared on the wire. */
   readonly field: string;
-  readonly code: KavoErrorCode;
+  readonly code?: KavoErrorCode;
   readonly detail: string;
 }
 

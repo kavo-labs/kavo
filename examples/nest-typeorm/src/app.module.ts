@@ -1,6 +1,6 @@
 import { Module, ValidationPipe, type DynamicModule } from "@nestjs/common";
 import { APP_PIPE } from "@nestjs/core";
-import { KavoModule } from "@kavo/nest";
+import { KavoModule, kavoValidationExceptionFactory } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
 import type { KavoAppContext, RealtimeTransport } from "@kavo/core";
 import type { DataSource } from "typeorm";
@@ -42,7 +42,11 @@ import { LandmarkController, RegionController, ZoneController } from "./nested-d
  * `emitDecoratorMetadata` — see e.g. `owner.controller.ts`'s `@Override()`'d
  * write methods for why every generated route's own body is exempt (Kavo's
  * DTOs are shapes, not validators — doc 04), and how each entity opts a
- * write route into validation.
+ * write route into validation. `exceptionFactory: kavoValidationExceptionFactory`
+ * (issue #437) is what turns a failing body into a structured `errors[]`
+ * problem-details response, one entry per field, instead of Nest's default
+ * flattened `message: string[]` — opt-in, since `@kavo/nest` never installs
+ * the pipe itself.
  */
 @Module({})
 export class AppModule {
@@ -95,7 +99,11 @@ export class AppModule {
       providers: [
         {
           provide: APP_PIPE,
-          useValue: new ValidationPipe({ whitelist: true, transform: true }),
+          useValue: new ValidationPipe({
+            whitelist: true,
+            transform: true,
+            exceptionFactory: kavoValidationExceptionFactory,
+          }),
         },
         OwnerWelcomeService,
       ],

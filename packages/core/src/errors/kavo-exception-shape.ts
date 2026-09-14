@@ -1,4 +1,5 @@
 import type { OperationId } from "../operations/operation.js";
+import type { QueryIssueDto } from "./problem-details.js";
 
 /**
  * Stable, string-based error code. Codes are API surface: the full catalog
@@ -32,6 +33,14 @@ export interface KavoExceptionShape {
   readonly messageParams: Readonly<Record<string, string | number>>;
   readonly detail: string;
   readonly context: ErrorContext;
+  /**
+   * Field-level issues that serialize into the problem-details `errors[]`
+   * extension (ADR-0009) — query-grammar violations, or a framework-level
+   * body-validation failure wrapped at the `@kavo/nest` boundary (issue
+   * #437). Declared on the shape itself, not on one leaf class, so
+   * `toProblemDetails` never needs an `instanceof` check to reach it.
+   */
+  readonly issues?: readonly QueryIssueDto[];
   /**
    * The original error when this wraps an adapter/driver failure — never
    * swallowed. Whether it leaks into responses is governed by the
