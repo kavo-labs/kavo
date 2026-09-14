@@ -189,6 +189,66 @@ describe("the bun-compat job", () => {
   });
 });
 
+/**
+ * `@kavo/nest`'s peer range spans NestJS v10/v11/v12, but `build`/`test`
+ * only ever install whichever major is pinned in devDependencies — one
+ * version, not all three. `nest-compat` is what actually installs each
+ * supported major and re-runs @kavo/nest's suite against it, so it sits
+ * outside `pnpm check` and outside the build/test assertions for the same
+ * reason `coverage` and `bun-compat` do: it reinstalls dependencies mid-job.
+ */
+describe("the nest-compat job", () => {
+  const nestCompat = jobSteps("nest-compat");
+
+  it("runs `pnpm run test:nest-compat`", () => {
+    expect(nestCompat).toContain("test:nest-compat");
+  });
+
+  it("generates the Prisma client first, like the test job", () => {
+    expect(nestCompat).toContain("generate");
+  });
+
+  it("stays out of `pnpm check`, so the local gate is not doubled", () => {
+    expect(gateSteps()).not.toContain("test:nest-compat");
+  });
+
+  it("is backed by a real script that runs @kavo/nest's own suite", () => {
+    const script = manifest.scripts?.["test:nest-compat"] ?? "";
+    expect(script).toContain("vitest run");
+    expect(script).toContain("packages/frameworks/nest");
+  });
+
+  it("matrixes over every NestJS major @kavo/nest's peer range declares support for", () => {
+    const body = new RegExp(`\\n  nest-compat:\\n([\\s\\S]*?)(?=\\n  \\w[\\w-]*:\\n|$)`).exec(workflow)?.[1];
+    expect(body, "ci.yml declares a `nest-compat` job").toBeDefined();
+
+    const matrix = /nest: \[([^\]]+)\]/.exec(body ?? "")?.[1] ?? "";
+    const matrixed = [...matrix.matchAll(/"(\d+)"/g)].map(([, major]) => major);
+
+    const nestPackage = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, "packages/frameworks/nest/package.json"), "utf8"),
+    ) as { peerDependencies?: Record<string, string | undefined> };
+    const peerRange = nestPackage.peerDependencies?.["@nestjs/core"] ?? "";
+    const declared = [...peerRange.matchAll(/\^(\d+)\.0\.0/g)].map(([, major]) => major);
+
+    // v10 is deliberately excluded from the matrix (see the job's own
+    // comment), so this only checks the matrix is not missing a major the
+    // package.json claims support for above v10, not that the two lists are
+    // identical.
+    for (const major of declared.filter((version) => version !== "10")) {
+      expect(matrixed, `@kavo/nest declares peer support for v${major} but nest-compat does not test it`).toContain(
+        major,
+      );
+    }
+  });
+
+  it("installs the matrixed NestJS version scoped to @kavo/nest only", () => {
+    const body = new RegExp(`\\n  nest-compat:\\n([\\s\\S]*?)(?=\\n  \\w[\\w-]*:\\n|$)`).exec(workflow)?.[1];
+    expect(body).toContain("pnpm --filter @kavo/nest add -D");
+    expect(body).toContain("@nestjs/common@^${{ matrix.nest }}");
+  });
+});
+
 describe("the README status badges point at real check runs", () => {
   it("filters on a check-run name ci.yml actually produces", () => {
     const badged = badgedCheckRunNames();
