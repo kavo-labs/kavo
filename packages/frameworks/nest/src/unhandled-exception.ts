@@ -1,14 +1,41 @@
 import { HttpException } from "@nestjs/common";
-import type { KavoExceptionShape } from "@kavo/core";
+import type { KavoExceptionShape, QueryIssueDto } from "@kavo/core";
 import { renderMessage } from "@kavo/core";
 
 /** `HttpException.getResponse()`'s shape when Nest built it from a string/object body. */
 interface HttpExceptionBody {
   readonly message?: unknown;
+  readonly fieldErrors?: unknown;
 }
 
 function isHttpExceptionBody(value: unknown): value is HttpExceptionBody {
   return typeof value === "object" && value !== null;
+}
+
+function isFieldIssue(value: unknown): value is QueryIssueDto {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { field?: unknown }).field === "string" &&
+    typeof (value as { detail?: unknown }).detail === "string"
+  );
+}
+
+/**
+ * Recovers `kavoValidationExceptionFactory`'s `fieldErrors` off an
+ * `HttpException`'s response body, so `toKavoExceptionShape` can surface it
+ * through `KavoExceptionShape.issues` the same way `QueryValidationException`
+ * does (issue #437). Structurally checked, never trusted on `instanceof` —
+ * the body reaches here as arbitrary JSON an app's own `HttpException` could
+ * shape however it likes, so a same-named key with the wrong shape is
+ * omitted entirely rather than surfaced malformed.
+ */
+function fieldErrorsFrom(exception: HttpException): readonly QueryIssueDto[] | undefined {
+  const response = exception.getResponse();
+  if (!isHttpExceptionBody(response) || !Array.isArray(response.fieldErrors) || response.fieldErrors.length === 0) {
+    return undefined;
+  }
+  return response.fieldErrors.every(isFieldIssue) ? response.fieldErrors : undefined;
 }
 
 /**
@@ -55,6 +82,7 @@ function messageFrom(exception: HttpException): string {
 export function toKavoExceptionShape(exception: unknown): KavoExceptionShape {
   if (exception instanceof HttpException) {
     const detail = messageFrom(exception);
+    const issues = fieldErrorsFrom(exception);
     return {
       code: "KAVO_HTTP_ERROR",
       // The catalog's status for this code is nominal (see its comment) —
@@ -66,6 +94,7 @@ export function toKavoExceptionShape(exception: unknown): KavoExceptionShape {
       messageParams: { detail },
       detail: renderMessage("KAVO_HTTP_ERROR", { detail }),
       context: {},
+      ...(issues !== undefined && { issues }),
     };
   }
 

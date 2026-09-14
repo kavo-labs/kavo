@@ -342,6 +342,22 @@ describe("toProblemDetails — RFC 9457 document (ADR-0009)", () => {
     expect(toProblemDetails(new ConflictException()).errors).toBeUndefined();
   });
 
+  it("emits errors[] off any KavoExceptionShape.issues, not just a QueryValidationException instance", () => {
+    // toKavoExceptionShape (@kavo/nest) builds a plain shape object, never a
+    // QueryValidationException, for a framework-level validation failure
+    // (issue #437) — the serializer must read `.issues` structurally.
+    const shape: KavoExceptionShape = {
+      code: "KAVO_HTTP_ERROR",
+      status: 400,
+      messageKey: "KAVO_HTTP_ERROR",
+      messageParams: {},
+      detail: "bad request",
+      context: {},
+      issues: [{ field: "amount", detail: "amount must be a positive number" }],
+    };
+    expect(toProblemDetails(shape).errors).toEqual(shape.issues);
+  });
+
   it("reports the correlation id as the instance URN, and omits it when absent", () => {
     const correlated = toProblemDetails(new NotFoundException({ context: { correlationId: "req-1" } }));
     expect(correlated.instance).toBe("urn:kavo:request:req-1");
