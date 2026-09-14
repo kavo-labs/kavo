@@ -38,6 +38,6 @@
   "devDependencies": {
     "better-sqlite3": "^13.0.3",
     "reflect-metadata": "^0.2.2",
-    "typeorm": "^1.1.0"
+    "typeorm": "^1.1.1"
   }
 }
