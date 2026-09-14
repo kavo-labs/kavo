@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.21.4](https://github.com/kavo-labs/kavo/compare/v0.21.3...v0.21.4) (2026-09-14)
+
+
+### Features
+
+* **core,nest:** structured per-field errors[] for validation failures ([8968857](https://github.com/kavo-labs/kavo/commit/89688570958b7bbf8f5addc3a87bc0135205edbf)), closes [#437](https://github.com/kavo-labs/kavo/issues/437)
+
+
+### CI
+
+* schedule Dependabot updates monthly ([c930a98](https://github.com/kavo-labs/kavo/commit/c930a988f1c9a30baa36713ba9a41676fedba60c))
+
 ## [0.21.3](https://github.com/kavo-labs/kavo/compare/v0.21.2...v0.21.3) (2026-09-14)
 
 
