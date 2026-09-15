@@ -14,7 +14,7 @@
     "@kavo/mikroorm": "workspace:*",
     "@kavo/nest": "workspace:*",
     "@mikro-orm/core": "^7.1.11",
-    "@mikro-orm/decorators": "^7.1.11",
+    "@mikro-orm/decorators": "^7.2.0",
     "@mikro-orm/postgresql": "^7.1.11",
     "@mikro-orm/sqlite": "^7.1.14",
     "@nestjs/common": "^12.0.1",
