@@ -232,8 +232,8 @@ importers:
         specifier: ^7.8.2
         version: 7.8.2
       typeorm:
-        specifier: ^1.1.0
-        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
+        specifier: ^1.1.1
+        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
     devDependencies:
       '@nestjs/testing':
         specifier: ^12.0.1
@@ -363,8 +363,8 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2
       typeorm:
-        specifier: ^1.1.0
-        version: 1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
+        specifier: ^1.1.1
+        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
 
   packages/protocols/graphql:
     dependencies:
@@ -2718,9 +2718,6 @@ packages:
   dataloader@2.2.3:
     resolution: {integrity: sha512-y2krtASINtPFS1rSDjacrFgn1dcUuoREVabwlOGOe4SdxenREqwjwjElAdwvbGM7kgZz9a3KVicWR7vcz8rnzA==}
 
-  dayjs@1.11.21:
-    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
-
   dayjs@1.11.23:
     resolution: {integrity: sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ==}
 
@@ -3776,6 +3773,10 @@ packages:
     resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
     engines: {node: '>=12'}
 
+  picomatch@4.0.7:
+    resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
+    engines: {node: '>=12'}
+
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
@@ -4303,8 +4304,8 @@ packages:
   typedarray@0.0.6:
     resolution: {integrity: sha512-/aCDEGatGvZ2BIk+HmLf4ifCJFwvKFNb9/JeZPMulfgFracn9QFcAf5GO8B/mweUjSoblS5In0cWhqpfs/5PQA==}
 
-  typeorm@1.1.0:
-    resolution: {integrity: sha512-iX/kvsV42/htCNAQUyElGW87E4Z12neZc6YUFBTEu0BnLiREYDNT5Wfw3wRqZw9vyOEC36zUBAY6Qvywoig06Q==}
+  typeorm@1.1.1:
+    resolution: {integrity: sha512-og9mG4Lwlvj6MfvYd8yRCzXy73gETtwgTKQ/ISLYvEOpJPy4IrjU/89HK4ZAFmRIbEg1hkIk04v8phTrxfgPmQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24.11.0}
     hasBin: true
     peerDependencies:
@@ -6890,8 +6891,6 @@ snapshots:
   dataloader@2.2.3:
     optional: true
 
-  dayjs@1.11.21: {}
-
   dayjs@1.11.23: {}
 
   debug@4.4.3:
@@ -7187,6 +7186,10 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.5):
     optionalDependencies:
       picomatch: 4.0.5
+
+  fdir@6.5.0(picomatch@4.0.7):
+    optionalDependencies:
+      picomatch: 4.0.7
 
   file-type@21.3.4:
     dependencies:
@@ -7979,6 +7982,8 @@ snapshots:
 
   picomatch@4.0.5: {}
 
+  picomatch@4.0.7: {}
+
   pkce-challenge@5.0.1: {}
 
   pkg-dir@4.2.0:
@@ -8556,8 +8561,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinyrainbow@3.1.1: {}
 
@@ -8616,11 +8621,11 @@ snapshots:
 
   typedarray@0.0.6: {}
 
-  typeorm@1.1.0(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0):
+  typeorm@1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0):
     dependencies:
       '@sqltools/formatter': 1.2.5
       ansis: 4.3.1
-      dayjs: 1.11.21
+      dayjs: 1.11.23
       debug: 4.4.3
       dedent: 1.7.2
       reflect-metadata: 0.2.2
