@@ -83,7 +83,9 @@ async function readBody(request: Request): Promise<unknown> {
  * generate static routes at all: every call walks each entity's operation
  * registry — the same one `createCrud` built and `@Kavo` would read — and
  * resolves the first enabled entry whose route matches the request's
- * method and remaining path segments.
+ * method and remaining path segments. See ADR-0054 for why this resolves
+ * at request time rather than once at load, and for the entity-key map as
+ * the registration mechanism a decorator would otherwise be.
  *
  * ```ts
  * // app/api/[...kavo]/route.ts
