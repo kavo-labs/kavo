@@ -207,6 +207,30 @@ describe("createKavoHandler", () => {
       expect(response.status).toBe(400);
       expect(response.headers.get("Content-Type")).toBe("application/problem+json");
     });
+
+    it("never parses a body for a bodyless write, even a malformed one (restoreOne/purgeOne)", async () => {
+      const restoreRow = await adapter.create({ title: "restore me" });
+      await call(handlers, "DELETE", ["todos", String(restoreRow.id)]);
+      const restoreRequest = new Request(`http://localhost/api/todos/${restoreRow.id}/restore`, {
+        method: "PATCH",
+        body: "{not json",
+      });
+      const restoreResponse = await handlers.PATCH(restoreRequest, {
+        params: Promise.resolve({ kavo: ["todos", String(restoreRow.id), "restore"] }),
+      });
+      expect(restoreResponse.status).toBe(200);
+
+      const purgeRow = await adapter.create({ title: "purge me" });
+      await call(handlers, "DELETE", ["todos", String(purgeRow.id)]);
+      const purgeRequest = new Request(`http://localhost/api/todos/${purgeRow.id}/purge`, {
+        method: "DELETE",
+        body: "{not json",
+      });
+      const purgeResponse = await handlers.DELETE(purgeRequest, {
+        params: Promise.resolve({ kavo: ["todos", String(purgeRow.id), "purge"] }),
+      });
+      expect(purgeResponse.status).toBe(204);
+    });
   });
 
   describe("custom-operation vs. standard-route precedence", () => {
