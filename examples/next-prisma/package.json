@@ -1,0 +1,29 @@
+{
+  "name": "@kavo/example-next-prisma",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kavo reference application over Next.js App Router + Prisma (Author/Book: standard CRUD, a custom operation, filtering/sorting/include, and an OpenAPI export route).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "generate": "prisma generate --schema prisma/schema.prisma && prisma db push --schema prisma/schema.prisma --accept-data-loss",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@kavo/core": "workspace:*",
+    "@kavo/next": "workspace:*",
+    "@kavo/prisma": "workspace:*",
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "better-sqlite3": "^13.0.3",
+    "next": "^15.5.4",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "prisma": "^7.10.0"
+  }
+}

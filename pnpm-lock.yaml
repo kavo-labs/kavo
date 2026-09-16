@@ -221,7 +221,7 @@ importers:
         version: 0.15.1
       mysql2:
         specifier: ^3.24.4
-        version: 3.24.4(@types/node@22.20.1)
+        version: 3.24.4(@types/node@26.2.0)
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -233,7 +233,7 @@ importers:
         version: 7.8.2
       typeorm:
         specifier: ^1.1.1
-        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@22.20.1))(pg@8.23.0)
+        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
     devDependencies:
       '@nestjs/testing':
         specifier: ^12.0.1
@@ -253,6 +253,43 @@ importers:
       supertest:
         specifier: ^7.2.2
         version: 7.2.2
+
+  examples/next-prisma:
+    dependencies:
+      '@kavo/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@kavo/next':
+        specifier: workspace:*
+        version: link:../../packages/frameworks/next
+      '@kavo/prisma':
+        specifier: workspace:*
+        version: link:../../packages/orms/prisma
+      '@prisma/adapter-better-sqlite3':
+        specifier: ^7.10.0
+        version: 7.10.0
+      '@prisma/client':
+        specifier: ^7.10.0
+        version: 7.10.0(prisma@7.10.0(@types/react@19.3.0)(better-sqlite3@13.0.3)(magicast@0.5.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3))(typescript@5.9.3)
+      better-sqlite3:
+        specifier: ^13.0.3
+        version: 13.0.3
+      next:
+        specifier: ^15.5.4
+        version: 15.5.25(@types/node@22.20.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: ^19.2.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.0
+        version: 19.3.0
+      prisma:
+        specifier: ^7.10.0
+        version: 7.10.0(@types/react@19.3.0)(better-sqlite3@13.0.3)(magicast@0.5.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@5.9.3)
 
   packages/core: {}
 
@@ -383,7 +420,7 @@ importers:
         version: 0.2.2
       typeorm:
         specifier: ^1.1.1
-        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@22.20.1))(pg@8.23.0)
+        version: 1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0)
 
   packages/protocols/graphql:
     dependencies:
@@ -9195,9 +9232,9 @@ snapshots:
       seq-queue: 0.0.5
       sqlstring: 2.3.3
 
-  mysql2@3.24.4(@types/node@22.20.1):
+  mysql2@3.24.4(@types/node@26.2.0):
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.2.0
       aws-ssl-profiles: 1.1.2
       generate-function: 2.3.1
       iconv-lite: 0.7.3
@@ -10190,7 +10227,7 @@ snapshots:
 
   typedarray@0.0.6: {}
 
-  typeorm@1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@22.20.1))(pg@8.23.0):
+  typeorm@1.1.1(better-sqlite3@13.0.3)(mongodb@7.5.0)(mysql2@3.24.4(@types/node@26.2.0))(pg@8.23.0):
     dependencies:
       '@sqltools/formatter': 1.2.5
       ansis: 4.3.1
@@ -10205,7 +10242,7 @@ snapshots:
     optionalDependencies:
       better-sqlite3: 13.0.3
       mongodb: 7.5.0
-      mysql2: 3.24.4(@types/node@22.20.1)
+      mysql2: 3.24.4(@types/node@26.2.0)
       pg: 8.23.0
     transitivePeerDependencies:
       - babel-plugin-macros

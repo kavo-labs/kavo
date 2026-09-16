@@ -10,13 +10,19 @@ import type { KavoHttpMethod } from "./route-metadata.js";
 
 /**
  * One entity's bound service — what `createCrud(Entity, config?, runtime?)`
- * returns. Keyed by the App Router segment that addresses it
- * (`{ users: usersCrud }` → `/api/<mount>/users/...`). `DefaultKavoService<object>`
- * is the same erased-generics shape `@kavo/nest` binds its own
- * `KAVO_SERVICE_PROPERTY` as — the entity type is not statically known at
- * this boundary either way.
+ * returns, still carrying its own entity's generic parameters (a real
+ * caller passes its actual `createCrud` results here, not an
+ * already-erased `DefaultKavoService<object>` — that shape is only how
+ * `@kavo/nest` stores an *already-bound* service internally). `engine` is
+ * genuinely invariant in `Entity` (`KavoEngine<Entity>.execute` both takes
+ * and returns `Entity`-shaped data), so accepting every entity's own
+ * `DefaultKavoService<Author>`/`DefaultKavoService<Book>`/… in one map
+ * needs the type parameter opened up here rather than fixed to `object`.
  */
-export type KavoHandlerEntities = Readonly<Record<string, DefaultKavoService<object>>>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- see doc comment above
+export type KavoHandlerEntities = Readonly<
+  Record<string, DefaultKavoService<any, any, any, any, any, any, any, any, any>>
+>;
 
 export interface KavoHandlerOptions {
   /**
@@ -28,9 +34,16 @@ export interface KavoHandlerOptions {
   readonly exposeInternals?: boolean;
 }
 
+/**
+ * `params` is always a `Promise` — Next.js 15's App Router route-handler
+ * type validator (`.next/types`) requires exactly this shape for a route
+ * file's exports to type-check under `next build`. Next.js 14 handed
+ * `params` synchronously instead; this package targets 15 only (see the
+ * `next` peerDependency range).
+ */
 export type KavoRouteHandler = (
   request: Request,
-  context: { params: Record<string, string | readonly string[]> | Promise<Record<string, string | readonly string[]>> },
+  context: { params: Promise<Record<string, string | readonly string[] | undefined>> },
 ) => Promise<Response>;
 
 export interface KavoRouteHandlers {

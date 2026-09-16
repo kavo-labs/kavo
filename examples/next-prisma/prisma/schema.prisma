@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+generator kavo {
+  provider = "kavo-prisma-generator"
+  output   = "../src/generated/kavo-metadata.ts"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Author {
+  id    Int    @id @default(autoincrement())
+  name  String
+  email String @unique
+  books Book[]
+}
+
+model Book {
+  id        Int      @id @default(autoincrement())
+  title     String
+  published Boolean  @default(false)
+  authorId  Int?
+  author    Author?  @relation(fields: [authorId], references: [id])
+}

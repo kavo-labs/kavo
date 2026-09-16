@@ -31,7 +31,7 @@
     "@kavo/core": "workspace:^"
   },
   "peerDependencies": {
-    "next": "^14.0.0 || ^15.0.0"
+    "next": "^15.0.0"
   },
   "peerDependenciesMeta": {
     "next": {

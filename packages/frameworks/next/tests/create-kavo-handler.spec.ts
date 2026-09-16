@@ -15,7 +15,7 @@ function call(
     headers: init.headers,
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
   });
-  return handlers[method](request, { params: { kavo: segments } });
+  return handlers[method](request, { params: Promise.resolve({ kavo: segments }) });
 }
 
 describe("createKavoHandler", () => {
@@ -125,7 +125,7 @@ describe("createKavoHandler", () => {
           method: "GET",
         },
       );
-      const response = await handlers.GET(request, { params: { kavo: ["todos"] } });
+      const response = await handlers.GET(request, { params: Promise.resolve({ kavo: ["todos"] }) });
       expect(response.status).toBe(200);
       await response.body?.cancel();
 
@@ -138,7 +138,7 @@ describe("createKavoHandler", () => {
 
     it("rejects a non-allowlisted filter field with a validation problem-details, not a 500", async () => {
       const request = new Request("http://localhost/api/todos?filter[nope][eq]=1", { method: "GET" });
-      const response = await handlers.GET(request, { params: { kavo: ["todos"] } });
+      const response = await handlers.GET(request, { params: Promise.resolve({ kavo: ["todos"] }) });
       expect(response.status).toBe(400);
       const body = (await response.json()) as { code: string };
       expect(body.code).toBe("KAVO_QUERY_INVALID");
