@@ -14,7 +14,6 @@
   "homepage": "https://github.com/kavo-labs/kavo/tree/main/packages/frameworks/next#readme",
   "type": "module",
   "sideEffects": false,
-  "private": true,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
