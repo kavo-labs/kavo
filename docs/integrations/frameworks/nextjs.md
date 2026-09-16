@@ -77,10 +77,6 @@ Every shape is derived from `EntityMetadata` and the entity's resolved config al
 
 ## Installing it
 
-::: warning
-`@kavo/next` hasn't had its first npm publish yet — the commands below describe the shape that publish will have, not something you can `pnpm add` today.
-:::
-
 `next` is an optional peerDependency — nothing in `@kavo/next` imports it at runtime, since route handlers only need the Fetch API's global `Request`/`Response`.
 
 ::: code-group
