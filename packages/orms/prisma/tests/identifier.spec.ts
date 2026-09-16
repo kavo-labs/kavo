@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "../prisma/generated/client/client.js";
 import { NotFoundException, type DefaultKavoService, type KavoInstance, type RepositoryAdapter } from "@kavo/core";
 import { createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
+import { testMetadata } from "./support/datamodel.js";
 
 /**
  * `identifier` config key (ADR-0052), `@kavo/prisma` round-trip: `…One`
@@ -43,7 +44,7 @@ let articles: DefaultKavoService<Article>;
 beforeAll(() => {
   client = newTestPrismaClient();
   kavo = createPrismaKavo(client as never, {
-    datamodel: Prisma.dmmf.datamodel,
+    metadata: testMetadata,
     entities: [Author, Book, Article],
     caseInsensitiveFilters: false,
   });
@@ -146,7 +147,7 @@ describe("identifier config key — @kavo/prisma (ADR-0052)", () => {
     } as never)) as Author;
 
     const writer = createInfrastructure(client as never, {
-      datamodel: Prisma.dmmf.datamodel,
+      metadata: testMetadata,
       entities: [Author, Book, Article],
       caseInsensitiveFilters: false,
     }).adapterFor(Author) as RepositoryAdapter<Author>;

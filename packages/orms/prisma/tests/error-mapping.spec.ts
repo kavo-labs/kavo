@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../prisma/generated/client/client.js";
 import type { ErrorContext } from "@kavo/core";
 import {
   ConflictException,

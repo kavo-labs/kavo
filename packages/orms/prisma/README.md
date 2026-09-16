@@ -21,8 +21,9 @@ name to the schema (`class Author {}` ↔ `model Author { … }`). See
 `docs/internals/adr/0017-prisma-marker-classes-and-entity-registry.md` for why.
 
 ```ts
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "./generated/prisma/client";
 import { createPrismaKavo } from "@kavo/prisma";
+import metadata from "./generated/kavo-metadata";
 
 class Author {
   id!: number;
@@ -36,7 +37,7 @@ class Book {
 
 const prisma = new PrismaClient();
 const kavo = createPrismaKavo(prisma, {
-  datamodel: Prisma.dmmf.datamodel,
+  metadata,
   entities: [Author, Book],
 });
 

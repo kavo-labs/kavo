@@ -12,4 +12,4 @@ export { translateFilter, type FilterTranslatorOptions, type PrismaWhere } from 
 export { PrismaRepositoryAdapter } from "./prisma-repository-adapter.js";
 export { createInfrastructure, createPrismaKavo, type PrismaInfrastructureOptions } from "./infrastructure.js";
 export { delegateName, type PrismaClientLike, type PrismaModelDelegate } from "./prisma-client-like.js";
-export type { PrismaDatamodel, PrismaEnum, PrismaField, PrismaModel } from "./datamodel.js";
+export type { PrismaEnum, PrismaField, PrismaMetadata, PrismaModel } from "./datamodel.js";

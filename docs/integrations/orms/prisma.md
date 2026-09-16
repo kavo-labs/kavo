@@ -30,7 +30,21 @@ bun add @kavo/core @kavo/nest @kavo/prisma
 
 :::
 
-`@kavo/prisma` expects `@prisma/client` (`^5.0.0 || ^6.0.0`) as a peer. Add it to the command above if your app doesn't already have it. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
+`@kavo/prisma` supports `@prisma/client` `^7.0.0`. Prisma 7 projects should use the `prisma-client` generator and a driver adapter. Add `@prisma/adapter-<driver>` for your database. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
+
+Add both generators to your Prisma schema:
+
+```prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+generator kavo {
+  provider = "kavo-prisma-generator"
+  output   = "../src/generated/kavo-metadata.ts"
+}
+```
 
 ## Zero-config wiring
 
@@ -62,17 +76,20 @@ export class BookController {}
 import { Module } from "@nestjs/common";
 import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/prisma";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "./generated/prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import metadata from "./generated/kavo-metadata";
 import { Book } from "./book.entity.js";
 import { BookController } from "./book.controller.js";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! });
+const prisma = new PrismaClient({ adapter });
 
 @Module({
   imports: [
     KavoModule.forRoot({
       infrastructure: createInfrastructure(prisma, {
-        datamodel: Prisma.dmmf.datamodel,
+        metadata,
         entities: [Book],
       }),
     }),
@@ -103,6 +120,6 @@ const prisma = new PrismaClient().$extends({
 });
 ```
 
-This is **invisible to Kavo entirely** — `@kavo/prisma` builds `FieldMetadata` from `Prisma.dmmf.datamodel`, which knows nothing about a client extension's `result` fields, so `displayTitle` produces no metadata entry at all (not an entry with an absent `derivedExpression` — no entry, period). It can never be named in `allowlists.filterable`/`sortable`/`selectable`; doing so is a bootstrap error the same way naming a nonexistent column would be. There is also no adapter-level hook here: `createInfrastructure`'s `PrismaClient` and your extended client are two different objects, and Kavo's generated routes query through the former.
+This is **invisible to Kavo entirely** — `kavo-prisma-generator` builds `FieldMetadata` from the Prisma schema, which knows nothing about a client extension's `result` fields, so `displayTitle` produces no metadata entry at all. It can never be named in `allowlists.filterable`/`sortable`/`selectable`; doing so is a bootstrap error the same way naming a nonexistent column would be. There is also no adapter-level hook here: the generated metadata is fixed at `prisma generate` time, and Kavo's generated routes query through the configured client.
 
 To actually surface an extension field over HTTP, reach for a **custom operation** that queries the extended client directly and returns its own shape (`dto.output`) — the extension's field never needs to pass through `@kavo/prisma`'s adapter at all. See [Virtual fields](/features/virtual-fields) for the full picture (including the other three ORMs, which _can_ push a derived field into `WHERE`/`ORDER BY`) and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.

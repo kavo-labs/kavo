@@ -26,18 +26,24 @@
   "files": [
     "dist"
   ],
+  "bin": {
+    "kavo-prisma-generator": "dist/generator.js"
+  },
   "scripts": {
     "build": "tsc -b",
-    "generate": "prisma generate --schema prisma/schema.prisma && prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss"
+    "generate": "pnpm run build && prisma generate --schema prisma/schema.prisma && prisma db push --schema prisma/schema.prisma --accept-data-loss"
   },
   "dependencies": {
-    "@kavo/core": "workspace:^"
+    "@kavo/core": "workspace:^",
+    "@prisma/generator-helper": "^7.10.0"
   },
   "peerDependencies": {
-    "@prisma/client": "^5.0.0 || ^6.0.0"
+    "@prisma/client": "^7.0.0"
   },
   "devDependencies": {
-    "@prisma/client": "^6.19.3",
-    "prisma": "^6.19.3"
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "better-sqlite3": "^13.0.3",
+    "prisma": "^7.10.0"
   }
 }

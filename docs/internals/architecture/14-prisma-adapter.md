@@ -2,7 +2,7 @@
 
 `@kavo/prisma` implements `RepositoryAdapter` (= `EntityReader` +
 `EntityWriter`) over a Prisma Client model delegate and feeds core's
-metadata seam from Prisma's DMMF. Core scope matches `@kavo/typeorm`
+metadata seam from a generated Prisma metadata module (ADR-0053). Core scope matches `@kavo/typeorm`
 (doc 09): CRUD with hard delete, filtering (incl. `NOT` and relation
 paths), sorting, pagination, optional counting, soft delete/restore/purge
 (doc 11), and relation loading (doc 12). `@prisma/client` is a
@@ -21,7 +21,7 @@ model, matched to Prisma's DMMF by name (`class Author {}` ↔
 target model name resolves back to its class through, since Prisma
 supplies no such registry either. Full rationale in ADR-0017.
 
-`buildEntityMetadata(datamodel, Entity, entities)` reads Prisma's DMMF
+`buildEntityMetadata(metadata, Entity, entities)` reads the generated Prisma metadata
 structurally (a locally-defined subset type, not an import from
 `@prisma/client` or `@prisma/generator-helper` — this keeps
 `@kavo/prisma`'s own build free of a `prisma generate` dependency): id
@@ -61,7 +61,7 @@ classified independently (`author.posts.title` wraps only the second),
 which is why the graph covers the whole datamodel rather than one entity:
 `EntityMetadata.relations` describes the queried entity alone, and the
 second hop belongs to another model. The graph is derived once from the
-DMMF at bootstrap (`buildRelationGraph`, called by `createInfrastructure`)
+metadata at bootstrap (`buildRelationGraph`, called by `createInfrastructure`)
 and passed as plain data, so `translateFilter` stays a pure function. A
 segment that resolves to no relation raises
 `KAVO_QUERY_UNSUPPORTED_PARAM` (400) rather than emitting a `where` the

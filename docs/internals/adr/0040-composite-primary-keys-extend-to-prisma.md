@@ -60,7 +60,7 @@ population and query/write logic:
   throws when `idFields.length !== 1` (`model.fields.filter(isId)`). A
   Prisma `@@id([...])` composite key does not set `isId` on its member
   fields at all — it surfaces as a separate `model.primaryKey: { name,
-fields: string[] }` DMMF property, which `PrismaDatamodel`
+fields: string[] }` metadata property, which `PrismaMetadata`
   (`packages/orms/prisma/src/datamodel.ts`) does not currently model and
   will need to.
 - The Prisma repository adapter's row-addressing methods need a composite
