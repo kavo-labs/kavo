@@ -13,7 +13,8 @@ only the wiring below differs.
 npm install @kavo/core @kavo/nest @kavo/prisma
 ```
 
-`@prisma/client` (`^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`) is a peer dependency.
+`@prisma/client` (`^7.0.0`) is a peer dependency. Prisma 7 projects should use
+the `prisma-client` generator and a database driver adapter.
 
 ## The one thing that is not like TypeORM: marker classes
 
@@ -62,17 +63,20 @@ for the full rationale.
 import { Module } from "@nestjs/common";
 import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/prisma";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "./generated/prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import metadata from "./generated/kavo-metadata";
 import { Book } from "./book.entity.js";
 import { BookController } from "./book.controller.js";
 
-const prisma = new PrismaClient();
+const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! });
+const prisma = new PrismaClient({ adapter });
 
 @Module({
   imports: [
     KavoModule.forRoot({
       infrastructure: createInfrastructure(prisma, {
-        datamodel: Prisma.dmmf.datamodel,
+        metadata,
         entities: [Book],
       }),
     }),
@@ -92,11 +96,11 @@ export class BookController {}
 
 ### `createInfrastructure(client, options)`
 
-| Option                   | Required | Meaning                                                                  |
-| ------------------------ | -------- | ------------------------------------------------------------------------ |
-| `datamodel`              | yes      | `Prisma.dmmf.datamodel` from your generated client — the metadata source |
-| `entities`               | yes      | **Every** marker class this Kavo root will use                           |
-| `caseInsensitiveFilters` | no       | Defaults to `true`; see below                                            |
+| Option                   | Required | Meaning                                                 |
+| ------------------------ | -------- | ------------------------------------------------------- |
+| `metadata`               | yes      | the generated module emitted by `kavo-prisma-generator` |
+| `entities`               | yes      | **Every** marker class this Kavo root will use          |
+| `caseInsensitiveFilters` | no       | Defaults to `true`; see below                           |
 
 `entities` must be complete, not just the models you decorate. It is the
 lookup table that resolves a relation on one model back to the target
@@ -115,7 +119,7 @@ that should have returned rows fails instead.
 
 ```ts
 createInfrastructure(prisma, {
-  datamodel: Prisma.dmmf.datamodel,
+  metadata,
   entities: [Book],
   caseInsensitiveFilters: false, // MySQL, SQLite, SQL Server
 });

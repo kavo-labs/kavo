@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "../prisma/generated/client/client.js";
 import {
   ConflictException,
   NotFoundException,
@@ -11,7 +11,7 @@ import {
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
-import { testDatamodel } from "./support/datamodel.js";
+import { testMetadata } from "./support/datamodel.js";
 
 // Marker classes: Prisma models have no runtime class of their own, so
 // these exist purely as the `ClassRef` identity `createCrud` needs,
@@ -42,7 +42,7 @@ let authors: DefaultKavoService<Author>;
 beforeAll(() => {
   client = newTestPrismaClient();
   kavo = createPrismaKavo(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Author, Book],
     caseInsensitiveFilters: false, // SQLite rejects Prisma's `mode: "insensitive"`
   });
@@ -73,7 +73,7 @@ async function seed(): Promise<void> {
 /** The adapter on its own, with no engine in front of it. */
 function authorAdapter() {
   return createInfrastructure(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Author, Book],
     caseInsensitiveFilters: false,
   }).adapterFor(Author);
@@ -99,7 +99,7 @@ function hardDeleteContext() {
 
 describe("metadata derivation seam", () => {
   it("derives fields, id, generated flags, and relations", () => {
-    const metadata = buildEntityMetadata(testDatamodel, Author, new Map([["Book", Book] as const]));
+    const metadata = buildEntityMetadata(testMetadata, Author, new Map([["Book", Book] as const]));
     expect(metadata.name).toBe("Author");
     expect(metadata.idField).toBe("id");
     const byName = Object.fromEntries(metadata.fields.map((f) => [f.name, f]));

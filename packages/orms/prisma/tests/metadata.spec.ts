@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ConfigurationException } from "@kavo/core";
-import { buildEntityMetadata, createInfrastructure, type PrismaDatamodel, type PrismaField } from "@kavo/prisma";
+import { buildEntityMetadata, createInfrastructure, type PrismaField, type PrismaMetadata } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
-import { testDatamodel } from "./support/datamodel.js";
+import { testMetadata } from "./support/datamodel.js";
 
 class Author {
   id!: number;
@@ -28,7 +28,7 @@ class NotAModel {}
 class Ghost {
   id!: number;
 }
-const ghostDatamodel: PrismaDatamodel = {
+const ghostMetadata: PrismaMetadata = {
   models: [
     {
       name: "Ghost",
@@ -49,10 +49,9 @@ const ghostDatamodel: PrismaDatamodel = {
 };
 
 /**
- * A synthetic DMMF scalar field. `Prisma.dmmf.datamodel` can only describe
- * what `prisma/schema.prisma` declares, and the fixture schema is on SQLite
- * — which has no scalar lists at all — so the shapes below are written by
- * hand rather than generated.
+ * A synthetic metadata scalar field. The fixture schema is on SQLite — which
+ * has no scalar lists at all — so the shapes below are written by hand rather
+ * than generated.
  */
 function scalar(name: string, type: string, overrides: Partial<PrismaField> = {}): PrismaField {
   return {
@@ -71,7 +70,7 @@ function scalar(name: string, type: string, overrides: Partial<PrismaField> = {}
 class Shapes {
   id!: number;
 }
-const shapesDatamodel: PrismaDatamodel = {
+const shapesMetadata: PrismaMetadata = {
   models: [
     {
       name: "Shapes",
@@ -90,7 +89,7 @@ const shapesDatamodel: PrismaDatamodel = {
 describe("buildEntityMetadata — scalar field shapes", () => {
   const fieldsByName = () =>
     Object.fromEntries(
-      buildEntityMetadata(shapesDatamodel, Shapes, new Map()).fields.map((field) => [field.name, field]),
+      buildEntityMetadata(shapesMetadata, Shapes, new Map()).fields.map((field) => [field.name, field]),
     );
 
   it("maps a Boolean column to kind 'boolean'", () => {
@@ -132,15 +131,15 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
   class Keyed {
     left!: number;
   }
-  const keyedDatamodel = (fields: readonly PrismaField[]): PrismaDatamodel => ({
+  const keyedMetadata = (fields: readonly PrismaField[]): PrismaMetadata => ({
     models: [{ name: "Keyed", fields }],
     enums: [],
   });
 
   it("throws ConfigurationException when the marker class name matches no Prisma model", () => {
-    expect(() => buildEntityMetadata(testDatamodel, NotAModel, new Map())).toThrow(ConfigurationException);
+    expect(() => buildEntityMetadata(testMetadata, NotAModel, new Map())).toThrow(ConfigurationException);
     try {
-      buildEntityMetadata(testDatamodel, NotAModel, new Map());
+      buildEntityMetadata(testMetadata, NotAModel, new Map());
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
@@ -154,7 +153,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
     // be said, not the first request that tries to read one.
     let thrown: unknown;
     try {
-      buildEntityMetadata(keyedDatamodel([scalar("left", "Int")]), Keyed, new Map());
+      buildEntityMetadata(keyedMetadata([scalar("left", "Int")]), Keyed, new Map());
     } catch (error) {
       thrown = error;
     }
@@ -169,7 +168,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
     let thrown: unknown;
     try {
       buildEntityMetadata(
-        keyedDatamodel([scalar("left", "Int", { isId: true }), scalar("right", "Int", { isId: true })]),
+        keyedMetadata([scalar("left", "Int", { isId: true }), scalar("right", "Int", { isId: true })]),
         Keyed,
         new Map(),
       );
@@ -183,7 +182,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
 
   it("throws ConfigurationException when a relation's target model wasn't registered in 'entities'", () => {
     // Book.author targets Author, but Author is deliberately left out of the registry.
-    const metadata = buildEntityMetadata(testDatamodel, Book, new Map([["Book", Book]]));
+    const metadata = buildEntityMetadata(testMetadata, Book, new Map([["Book", Book]]));
     const authorRelation = metadata.relations.find((relation) => relation.name === "author")!;
     expect(() => authorRelation.target()).toThrow(ConfigurationException);
     try {
@@ -199,7 +198,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
       ["Author", Author],
       ["Book", Book],
     ]);
-    const metadata = buildEntityMetadata(testDatamodel, Book, entities);
+    const metadata = buildEntityMetadata(testMetadata, Book, entities);
     const authorRelation = metadata.relations.find((relation) => relation.name === "author")!;
     expect(authorRelation.target()).toBe(Author);
   });
@@ -210,7 +209,7 @@ describe("createInfrastructure — adapter bootstrap error path", () => {
     const client = newTestPrismaClient();
     try {
       const infrastructure = createInfrastructure(client as never, {
-        datamodel: ghostDatamodel,
+        metadata: ghostMetadata,
         entities: [Ghost],
       });
       // Metadata resolution succeeds (Ghost matches ghostDatamodel); the real

@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdtempSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../../prisma/generated/client/client.js";
 import { SCRATCH_ROOT_ENV } from "./global-setup.js";
 
 /**

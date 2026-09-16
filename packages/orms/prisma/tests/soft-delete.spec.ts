@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "../prisma/generated/client/client.js";
 import {
   AlreadyDeletedException,
   ConfigurationException,
@@ -11,7 +11,7 @@ import {
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
-import { testDatamodel } from "./support/datamodel.js";
+import { testMetadata } from "./support/datamodel.js";
 
 /** Soft delete over a marker column named through config. */
 class Ticket {
@@ -52,7 +52,7 @@ let coupons: DefaultKavoService<Coupon>;
 beforeAll(() => {
   client = newTestPrismaClient();
   const kavo = createPrismaKavo(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Ticket, Invoice, Coupon],
     caseInsensitiveFilters: false,
   });
@@ -95,7 +95,7 @@ async function newTicket(reference = "T-1"): Promise<number> {
 /** The adapter on its own, so a caller can hand it a context `createCrud` refuses to build. */
 function invoiceAdapter() {
   return createInfrastructure(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Ticket, Invoice],
     caseInsensitiveFilters: false,
   }).adapterFor(Invoice);
@@ -107,7 +107,7 @@ function hardDeleteContext(operation: string) {
 
 describe("metadata seam — no auto-detected soft-delete column", () => {
   it("reports softDeleteField as null (Prisma has no @DeleteDateColumn equivalent)", () => {
-    expect(buildEntityMetadata(testDatamodel, Ticket, new Map()).softDeleteField).toBeNull();
+    expect(buildEntityMetadata(testMetadata, Ticket, new Map()).softDeleteField).toBeNull();
   });
 });
 

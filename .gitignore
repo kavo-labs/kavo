@@ -7,4 +7,6 @@ dist/
 .DS_Store
 .todo
 api.rest
+packages/orms/prisma/prisma/generated/
+packages/orms/prisma/template.db
 docs/.vitepress/cache

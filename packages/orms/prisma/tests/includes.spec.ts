@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "../prisma/generated/client/client.js";
 import type { KavoInstance, DefaultKavoService } from "@kavo/core";
 import { createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
-import { testDatamodel } from "./support/datamodel.js";
+import { testMetadata } from "./support/datamodel.js";
 
 class Blog {
   id!: number;
@@ -36,7 +36,7 @@ let nestedKeyBlogs: DefaultKavoService<Blog>;
 beforeAll(() => {
   client = newTestPrismaClient();
   kavo = createPrismaKavo(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Blog, Article, Note],
     caseInsensitiveFilters: false,
   });
@@ -52,7 +52,7 @@ beforeAll(() => {
   // A separate root instance so this Article config does not clobber the
   // one above in the shared catalog (issue #364).
   keyArticles = createPrismaKavo(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Blog, Article, Note],
     caseInsensitiveFilters: false,
   }).createCrud(Article, {
@@ -62,7 +62,7 @@ beforeAll(() => {
     relations: { blog: { read: { strategy: "key" } } },
   } as never) as DefaultKavoService<Article>;
   const nestedKavo = createPrismaKavo(client as never, {
-    datamodel: testDatamodel,
+    metadata: testMetadata,
     entities: [Blog, Article, Note],
     caseInsensitiveFilters: false,
   });

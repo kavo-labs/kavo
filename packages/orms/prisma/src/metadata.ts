@@ -1,6 +1,6 @@
 import type { ClassRef, EntityMetadata, FieldKind, FieldMetadata, RelationDescriptor } from "@kavo/core";
 import { ConfigurationException } from "@kavo/core";
-import type { PrismaDatamodel, PrismaField } from "./datamodel.js";
+import type { PrismaField, PrismaMetadata } from "./datamodel.js";
 
 /**
  * Prisma scalar type name → core's ORM-independent `FieldKind`. Unrecognized
@@ -64,12 +64,12 @@ function isGeneratedField(field: PrismaField): boolean {
  * `docs/internals/adr/0017-prisma-marker-classes-and-entity-registry.md`).
  */
 export function buildEntityMetadata<Entity extends object>(
-  datamodel: PrismaDatamodel,
+  metadata: PrismaMetadata,
   entity: ClassRef<Entity>,
   entities: ReadonlyMap<string, ClassRef>,
 ): EntityMetadata<Entity> {
   const modelName = entity.name;
-  const model = datamodel.models.find((candidate) => candidate.name === modelName);
+  const model = metadata.models.find((candidate) => candidate.name === modelName);
   if (model === undefined) {
     throw new ConfigurationException(
       modelName,
@@ -106,7 +106,7 @@ export function buildEntityMetadata<Entity extends object>(
       nullable: field.isList ? false : !field.isRequired,
       generated: isGeneratedField(field),
       ...(field.kind === "enum" && {
-        enumValues: (datamodel.enums.find((candidate) => candidate.name === field.type)?.values ?? []).map(
+        enumValues: (metadata.enums.find((candidate) => candidate.name === field.type)?.values ?? []).map(
           (value) => value.name,
         ),
       }),
@@ -153,9 +153,9 @@ export interface PrismaRelationEdge {
 export type PrismaRelationGraph = ReadonlyMap<string, ReadonlyMap<string, PrismaRelationEdge>>;
 
 /** Derive {@link PrismaRelationGraph} from Prisma's DMMF. */
-export function buildRelationGraph(datamodel: PrismaDatamodel): PrismaRelationGraph {
+export function buildRelationGraph(metadata: PrismaMetadata): PrismaRelationGraph {
   return new Map(
-    datamodel.models.map((model) => [
+    metadata.models.map((model) => [
       model.name,
       new Map(
         model.fields
