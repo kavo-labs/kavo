@@ -16,7 +16,7 @@
     "test:bun": "bun run vitest run",
     "test:coverage": "vitest run --config vitest.coverage.config.ts",
     "test:nest-compat": "vitest run packages/frameworks/nest",
-    "typecheck": "tsc -p tsconfig.tests.json && tsc -p packages/core/tsconfig.tests.json && tsc -p packages/orms/typeorm/tsconfig.tests.json && tsc -p packages/orms/prisma/tsconfig.tests.json && tsc -p packages/orms/mongoose/tsconfig.tests.json && tsc -p packages/orms/mikroorm/tsconfig.tests.json && tsc -p packages/realtime/sse/tsconfig.tests.json && tsc -p packages/frameworks/nest/tsconfig.tests.json && tsc -p packages/protocols/graphql/tsconfig.tests.json && tsc -p packages/protocols/mcp/tsconfig.tests.json && tsc -p examples/nest-typeorm/tsconfig.tests.json && tsc -p examples/nest-mongoose/tsconfig.tests.json && tsc -p examples/nest-mikroorm/tsconfig.tests.json",
+    "typecheck": "tsc -p tsconfig.tests.json && tsc -p packages/core/tsconfig.tests.json && tsc -p packages/orms/typeorm/tsconfig.tests.json && tsc -p packages/orms/prisma/tsconfig.tests.json && tsc -p packages/orms/mongoose/tsconfig.tests.json && tsc -p packages/orms/mikroorm/tsconfig.tests.json && tsc -p packages/realtime/sse/tsconfig.tests.json && tsc -p packages/frameworks/nest/tsconfig.tests.json && tsc -p packages/frameworks/next/tsconfig.tests.json && tsc -p packages/protocols/graphql/tsconfig.tests.json && tsc -p packages/protocols/mcp/tsconfig.tests.json && tsc -p examples/nest-typeorm/tsconfig.tests.json && tsc -p examples/nest-mongoose/tsconfig.tests.json && tsc -p examples/nest-mikroorm/tsconfig.tests.json",
     "lint": "oxlint packages examples tests .github/scripts",
     "prettify": "prettier --write .",
     "format:check": "prettier --check .",

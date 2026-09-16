@@ -33,6 +33,7 @@ export default defineConfig({
       "@kavo/mikroorm": new URL("./packages/orms/mikroorm/src/index.ts", import.meta.url).pathname,
       "@kavo/sse": new URL("./packages/realtime/sse/src/index.ts", import.meta.url).pathname,
       "@kavo/nest": new URL("./packages/frameworks/nest/src/index.ts", import.meta.url).pathname,
+      "@kavo/next": new URL("./packages/frameworks/next/src/index.ts", import.meta.url).pathname,
       "@kavo/graphql": new URL("./packages/protocols/graphql/src/index.ts", import.meta.url).pathname,
       "@kavo/mcp": new URL("./packages/protocols/mcp/src/index.ts", import.meta.url).pathname,
     },

@@ -1,0 +1,15 @@
+{
+  // Typecheck-only project for `tests/` — see packages/core/tsconfig.tests.json.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "paths": {
+      "@kavo/core": ["../../core/src/index.ts"],
+      "@kavo/next": ["./src/index.ts"]
+    }
+  },
+  "include": ["tests"]
+}
