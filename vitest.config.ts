@@ -33,6 +33,7 @@ export default defineConfig({
       "@kavo/mikroorm": new URL("./packages/orms/mikroorm/src/index.ts", import.meta.url).pathname,
       "@kavo/sse": new URL("./packages/realtime/sse/src/index.ts", import.meta.url).pathname,
       "@kavo/nest": new URL("./packages/frameworks/nest/src/index.ts", import.meta.url).pathname,
+      "@kavo/next": new URL("./packages/frameworks/next/src/index.ts", import.meta.url).pathname,
       "@kavo/graphql": new URL("./packages/protocols/graphql/src/index.ts", import.meta.url).pathname,
       "@kavo/mcp": new URL("./packages/protocols/mcp/src/index.ts", import.meta.url).pathname,
     },
@@ -44,7 +45,11 @@ export default defineConfig({
     testTimeout: 30_000,
     // @kavo/prisma's specs each get their own copy of the pushed SQLite
     // fixture, so parallel workers never contend for one file (issue #101).
+    // examples/next-prisma's specs do the same over its own fixture db.
     // Only the main process can clean those copies up — vitest kills workers.
-    globalSetup: ["./packages/orms/prisma/tests/support/global-setup.ts"],
+    globalSetup: [
+      "./packages/orms/prisma/tests/support/global-setup.ts",
+      "./examples/next-prisma/tests/support/global-setup.ts",
+    ],
   },
 });

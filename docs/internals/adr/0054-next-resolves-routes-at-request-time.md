@@ -1,0 +1,28 @@
+# ADR-0054 — `@kavo/next` resolves routes at request time, against an entity-key map
+
+**Status:** accepted
+
+## Context
+
+ADR-0016 already settled where a Next.js binding lives in the package graph: a `packages/frameworks/*` sibling of `@kavo/nest`, depending on `@kavo/core` only. What it left open is how such a binding generates routes at all, because `@kavo/nest`'s whole route-generation story (ADR-0006, ADR-0012) assumes something the App Router does not have: a decoration-time moment. `@Kavo(Entity)` builds the entity's operation registry and calls Nest's `@Get`/`@Post`/… decorators once, when the class is defined, so Nest's own router scan can see the resulting methods (ADR-0012). Next.js's App Router has no decorator, no DI container, and no class for a decorator to attach to — a route file's exports (`GET`, `POST`, …) are plain functions, fixed once the module loads, with no equivalent "decoration time" at which per-entity route shapes could be computed and baked into distinct exported handlers.
+
+A catch-all route (`app/api/[...kavo]/route.ts`) is the only shape the App Router offers for "one file serves many entities, many operations" — every request lands in the same handful of exported functions (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`), and whatever entity and operation it targets has to be figured out from the request itself.
+
+## Decision
+
+`createKavoHandler(entities)` takes a `Record<string, DefaultKavoService>` — one entry per entity, keyed by the path segment that addresses it — and returns one handler per HTTP method. Each handler resolves its target **per request**, not once at startup:
+
+1. The first path segment (from the App Router's own dynamic-segment `params`) looks up the entity in the map. A miss is a `404`.
+2. The entity's `engine.registry.all()` — the same operation registry `createCrud` built and `@Kavo` would read — is walked for the first enabled descriptor whose resolved route (`resolveRoute`, ADR-0007's `meta.routes` convention) matches the request's method and remaining path segments (`matchRoute`). No match is also a `404`, never a `405` — a route this entity never configured is indistinguishable, from the outside, from a route that does not exist.
+
+This makes route "generation" a pure function run on every request instead of a one-time side effect at class-definition time. That is a real cost — `registry.all()` and route resolution run per request rather than once — but the App Router leaves no earlier moment to do it in, and the registry itself is cheap to walk (a handful of entries, resolved from data already in memory).
+
+`@kavo/next` reads the exact same `meta.routes` convention `@kavo/nest` established (`OperationMetadata.routes`, ADR-0007's open metadata bag): both packages independently `declare module "@kavo/core"` to add the identical `routes?: KavoRouteOptions` field. An entity's custom-operation route configuration (`meta.routes: { method, path, ... }`) is one piece of config both bindings read identically — an app that configures a custom operation's route once gets the same dispatch whether it is served by `@Kavo` or by `createKavoHandler`.
+
+There is no manual-method-wins equivalent (ADR-0012's escape hatch for a hand-written controller method to suppress a generated route): with no class to override, a caller who wants a genuinely custom implementation for one path wins the way Next.js already resolves two routes that could match one request — a sibling, more specific route file (e.g. `app/api/books/[id]/publish/route.ts`) is matched by Next.js's own router before the `[...kavo]` catch-all ever runs, removing that path from the catch-all's reach entirely. Nothing on the Kavo side needs to know this happened.
+
+## Consequences
+
+- A route file's shape is fixed forever (`GET`/`POST`/`PUT`/`PATCH`/`DELETE` exports); nothing about `createKavoHandler`'s signature communicates what routes exist. A caller who wants an OpenAPI `paths` document, or any other static enumeration of routes, has to walk `engine.registry.all()` themselves — `resolveRoute`/`matchRoute` are exported from `@kavo/next` for exactly that reuse (`buildKavoSchemas` only emits `components.schemas`, deliberately leaving `paths` to the caller).
+- Because dispatch is a plain function over `Request`/`Response`, `createKavoHandler`'s output needs no App Router-specific type at all beyond the two-argument route-handler signature Next.js itself expects — the whole implementation is portable to any other host whose routing primitive is "one file, several HTTP-method exports, a `Request` in, a `Response` out" with no code changes to `@kavo/next` itself.
+- The entity-key map is the registration mechanism this binding gets in exchange for having no decorator: an entity absent from the map served by no route in that mount, and a caller wanting the entity reachable at a different key writes a different map, not a different config option on `createCrud`.

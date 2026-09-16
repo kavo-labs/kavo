@@ -1,0 +1,18 @@
+{
+  // Typecheck-only project for `tests/` — see packages/core/tsconfig.tests.json.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node"],
+    "paths": {
+      "@kavo/core": ["../../packages/core/src/index.ts"],
+      "@kavo/next": ["../../packages/frameworks/next/src/index.ts"],
+      "@kavo/prisma": ["../../packages/orms/prisma/src/index.ts"]
+    }
+  },
+  "include": ["tests", "src", "app"]
+}

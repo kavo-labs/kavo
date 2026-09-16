@@ -108,6 +108,7 @@ const config = defineConfig({
           { text: "Prisma", link: "/integrations/orms/prisma" },
           { text: "Mongoose", link: "/integrations/orms/mongoose" },
           { text: "MikroORM", link: "/integrations/orms/mikroorm" },
+          { text: "Next.js", link: "/integrations/frameworks/nextjs" },
         ],
       },
       { text: "Using the API", link: "/using-the-api" },
@@ -180,6 +181,10 @@ const config = defineConfig({
               { text: "GraphQL", link: "/integrations/protocols/graphql" },
               { text: "MCP", link: "/integrations/protocols/mcp" },
             ],
+          },
+          {
+            text: "Frameworks",
+            items: [{ text: "Next.js", link: "/integrations/frameworks/nextjs" }],
           },
         ],
       },

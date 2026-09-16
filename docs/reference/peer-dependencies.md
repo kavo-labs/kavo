@@ -19,12 +19,15 @@ The full peer dependency list for every Kavo package, with version ranges. See [
 
 ## Optional peers
 
-| Package         | Peer                        | Version                            | Needed for             |
-| --------------- | --------------------------- | ---------------------------------- | ---------------------- |
-| `@kavo/graphql` | `graphql`                   | `^17.0.0`                          | the GraphQL binding    |
-| `@kavo/mcp`     | `@modelcontextprotocol/sdk` | `^1.0.0`                           | the MCP binding        |
-| `@kavo/nest`    | `@nestjs/swagger`           | `^8.0.0 \|\| ^11.0.0 \|\| ^12.0.0` | generated OpenAPI docs |
-| `@kavo/nest`    | `graphql`                   | `^17.0.0`                          | the GraphQL controller |
-| `@kavo/nest`    | `@modelcontextprotocol/sdk` | `^1.0.0`                           | the MCP controller     |
+| Package         | Peer                        | Version                            | Needed for                                                                            |
+| --------------- | --------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------- |
+| `@kavo/graphql` | `graphql`                   | `^17.0.0`                          | the GraphQL binding                                                                   |
+| `@kavo/mcp`     | `@modelcontextprotocol/sdk` | `^1.0.0`                           | the MCP binding                                                                       |
+| `@kavo/nest`    | `@nestjs/swagger`           | `^8.0.0 \|\| ^11.0.0 \|\| ^12.0.0` | generated OpenAPI docs                                                                |
+| `@kavo/nest`    | `graphql`                   | `^17.0.0`                          | the GraphQL controller                                                                |
+| `@kavo/nest`    | `@modelcontextprotocol/sdk` | `^1.0.0`                           | the MCP controller                                                                    |
+| `@kavo/next`    | `next`                      | `^15.0.0`                          | none at runtime — App Router route handlers only need the global `Request`/`Response` |
 
 `@kavo/nest` declares `graphql` and the MCP SDK optional, and so do `@kavo/graphql` and `@kavo/mcp` themselves. Both sides agree, so a REST-only install pulls in neither package. You add `graphql` or the MCP SDK yourself only when you use that protocol. See [GraphQL](/integrations/protocols/graphql#installing-it) and [MCP](/integrations/protocols/mcp#installing-it) for the install commands.
+
+`@kavo/next` declares `next` optional for the same reason: nothing in the package imports it at runtime, so it's there purely to document the App Router route-handler contract `@kavo/next` targets.

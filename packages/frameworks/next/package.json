@@ -1,0 +1,44 @@
+{
+  "name": "@kavo/next",
+  "version": "0.1.0",
+  "description": "Kavo Next.js App Router binding — createKavoHandler, registry-driven catch-all routing, problem-details error mapping.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kavo-labs/kavo.git",
+    "directory": "packages/frameworks/next"
+  },
+  "homepage": "https://github.com/kavo-labs/kavo/tree/main/packages/frameworks/next#readme",
+  "type": "module",
+  "sideEffects": false,
+  "private": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@kavo/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "next": "^15.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "next": "^15.5.4"
+  }
+}
