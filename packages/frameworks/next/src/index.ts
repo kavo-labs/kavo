@@ -28,3 +28,5 @@ export { parseEntityTags, readPreconditions } from "./preconditions.js";
 export { toResponse } from "./kavo-response.js";
 export { toErrorResponse, toKavoExceptionShape } from "./error-response.js";
 export type { KavoHttpMethod, KavoRouteOptions } from "./route-metadata.js";
+export { buildKavoSchemas, type KavoOpenApiComponents } from "./openapi/build-kavo-schemas.js";
+export type { JsonSchema } from "./openapi/json-schema.js";
