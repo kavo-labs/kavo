@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createKavoHandler, type KavoRouteHandlers } from "@kavo/next";
 import type { Todo } from "./support/fake-infrastructure.js";
-import { buildTodoCrud } from "./support/todo-crud.js";
+import { buildTodoCrud, buildTodoCrudWithCollidingCustomOp } from "./support/todo-crud.js";
 
 function call(
   handlers: KavoRouteHandlers,
@@ -180,6 +180,50 @@ describe("createKavoHandler", () => {
       expect(response.status).toBe(412);
       const body = (await response.json()) as { code: string };
       expect(body.code).toBe("KAVO_PRECONDITION_FAILED");
+    });
+
+    it("answers a matching If-None-Match with a bodyless 304", async () => {
+      const row = await adapter.create({ title: "cached" });
+      const first = await call(handlers, "GET", ["todos", String(row.id)]);
+      const etag = first.headers.get("ETag");
+      expect(etag).not.toBeNull();
+
+      const second = await call(handlers, "GET", ["todos", String(row.id)], {
+        headers: { "If-None-Match": etag as string },
+      });
+      expect(second.status).toBe(304);
+      expect(second.headers.get("ETag")).toBe(etag);
+      expect(await second.text()).toBe("");
+    });
+  });
+
+  describe("request body parsing", () => {
+    it("answers malformed JSON with a 400, not a 500", async () => {
+      const request = new Request("http://localhost/api/todos", {
+        method: "POST",
+        body: "{not json",
+      });
+      const response = await handlers.POST(request, { params: Promise.resolve({ kavo: ["todos"] }) });
+      expect(response.status).toBe(400);
+      expect(response.headers.get("Content-Type")).toBe("application/problem+json");
+    });
+  });
+
+  describe("custom-operation vs. standard-route precedence", () => {
+    it("a custom operation registered ahead of the standard table wins a route collision", async () => {
+      // Registration order is route-generation order (ADR-0012): a custom
+      // operation is registered before the standard eight
+      // (createOperationRegistry), so a custom route configured to collide
+      // with a standard one — same method, same path — is matched first by
+      // the same registry.all() iteration order @kavo/nest's route
+      // generator relies on for the identical guarantee.
+      const built = buildTodoCrudWithCollidingCustomOp();
+      const collidingHandlers = createKavoHandler({ todos: built.service });
+      const row = await built.adapter.create({ title: "original" });
+      const response = await call(collidingHandlers, "GET", ["todos", String(row.id)]);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { title: string };
+      expect(body.title).toBe("custom-operation-won");
     });
   });
 });

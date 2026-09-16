@@ -1,4 +1,10 @@
-import type { EntityMetadata, KavoEngine, RelationDescriptor, ResolvedEntityConfig } from "@kavo/core";
+import type {
+  EntityMetadata,
+  KavoEngine,
+  RelationDescriptor,
+  ResolvedEntityConfig,
+  ResolvedSearchConfig,
+} from "@kavo/core";
 import { associationBodySchema, fieldSchema, filterOperatorsSchema } from "./field-schema.js";
 import { paginationSlotSchema } from "./pagination-schema.js";
 import type { JsonSchema } from "./json-schema.js";
@@ -37,7 +43,8 @@ export function buildEntitySchemas(entityName: string, engine: KavoEngine<object
   const sort = sortSchema(sortable);
   const filterableFields = [...config.filter.fields] as readonly string[];
   const filter = filterSchema(entityName, filterableFields, fieldsByName);
-  const query = querySchema(entityName, includable.length > 0);
+  const selectableFields = [...config.select.fields] as readonly string[];
+  const query = querySchema(entityName, includable.length > 0, selectableFields, config.search);
   const create = writeSchema(entityName, "Create", metadata, config, { partial: false });
   const update = writeSchema(entityName, "Update", metadata, config, { partial: false });
   const patch = writeSchema(entityName, "Patch", metadata, config, { partial: true });
@@ -168,15 +175,34 @@ function filterSchema(
   };
 }
 
-function querySchema(entityName: string, hasIncludable: boolean): JsonSchema {
+function querySchema(
+  entityName: string,
+  hasIncludable: boolean,
+  selectable: readonly string[],
+  search: ResolvedSearchConfig<object> | false,
+): JsonSchema {
   const properties: Record<string, JsonSchema> = {
     filter: { $ref: `#/components/schemas/${entityName}Filter` },
     sort: { $ref: `#/components/schemas/${entityName}Sort` },
     pagination: { $ref: `#/components/schemas/${entityName}Pagination` },
-    select: { type: "array", items: { type: "string" } },
+    select: {
+      type: "array",
+      items: { type: "string", enum: [...selectable] },
+      description: "Sparse fieldset for the root resource, as passed to `select=` (comma-separated).",
+    },
   };
   if (hasIncludable) {
     properties.include = { $ref: `#/components/schemas/${entityName}Include` };
+  }
+  if (search !== false) {
+    properties.search = {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        mode: { type: "string", enum: ["substring", "words"] },
+        fields: { type: "array", items: { type: "string", enum: [...search.fields] } },
+      },
+    };
   }
   return {
     type: "object",

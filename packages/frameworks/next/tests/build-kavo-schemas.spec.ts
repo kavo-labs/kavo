@@ -51,6 +51,18 @@ describe("buildKavoSchemas", () => {
     expect(list.properties.meta).toEqual({ $ref: "#/components/schemas/TodoListMeta" });
   });
 
+  it("TodoQuery includes search when the entity configures it, and constrains select to the allowlist", () => {
+    const { service } = buildTodoCrud();
+    const { schemas } = buildKavoSchemas({ todos: service });
+    const query = schemas.TodoQuery as {
+      properties: { search?: { properties: Record<string, unknown> }; select: { items: { enum: string[] } } };
+    };
+    expect(query.properties.search).toBeDefined();
+    expect(query.properties.search?.properties).toHaveProperty("query");
+    expect(query.properties.search?.properties).toHaveProperty("fields");
+    expect(query.properties.select.items.enum).toContain("title");
+  });
+
   it("TodoFilter documents the configured filterable fields with their operator map", () => {
     const { service } = buildTodoCrud();
     const { schemas } = buildKavoSchemas({ todos: service });

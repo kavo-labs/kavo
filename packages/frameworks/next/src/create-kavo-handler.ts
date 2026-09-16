@@ -59,6 +59,27 @@ const NOT_FOUND = new Response(JSON.stringify({ title: "Not Found", status: 404 
   headers: { "Content-Type": "application/problem+json" },
 });
 
+/**
+ * Malformed JSON in the request body — a client input error, not the
+ * `KAVO_UNEXPECTED_ERROR`/500 an uncaught `SyntaxError` would otherwise
+ * become inside the outer `catch`. `@kavo/nest` never needs this: a
+ * body-parser middleware already rejects an unparseable body with a 400
+ * before any Kavo code runs. There is no such middleware layer here, so
+ * `readBody`'s own `JSON.parse` failure is the one place this package has
+ * to answer it itself, ahead of the engine ever seeing the request.
+ */
+function badRequestBody(): Response {
+  return new Response(
+    JSON.stringify({
+      title: "Bad Request",
+      status: 400,
+      detail: "The request body is not valid JSON.",
+      code: "KAVO_NEXT_INVALID_BODY",
+    }),
+    { status: 400, headers: { "Content-Type": "application/problem+json" } },
+  );
+}
+
 async function resolveSegments(context: Parameters<KavoRouteHandler>[1]): Promise<readonly string[]> {
   const params = await context.params;
   for (const value of Object.values(params)) {
@@ -147,7 +168,17 @@ export function createKavoHandler(entities: KavoHandlerEntities, options: KavoHa
       }
 
       const bodylessWrite = BODYLESS_WRITES.has(matched.operation as never);
-      const body = method === "GET" || method === "DELETE" || bodylessWrite ? null : await readBody(request);
+      let body: unknown = null;
+      if (method !== "GET" && method !== "DELETE" && !bodylessWrite) {
+        try {
+          body = await readBody(request);
+        } catch (error) {
+          if (error instanceof SyntaxError) {
+            return badRequestBody();
+          }
+          throw error;
+        }
+      }
       const url = new URL(request.url);
       const query = matchedKind === "read" ? new WireQuery(parseWireParams(url.searchParams)) : null;
       const preconditions: RequestPreconditions | null = readPreconditions(request.headers);

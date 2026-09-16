@@ -6,8 +6,9 @@
  * dispatch through each entity's operation registry at request time — the
  * same registry `createCrud` built and `@kavo/nest`'s `@Kavo` would read,
  * since the App Router has no decorator/DI container to generate static
- * routes at all (ADR-0016; the sibling package doc explains why this
- * depends only on `@kavo/core`, never on `@kavo/nest`). This package
+ * routes at all (ADR-0054 explains the request-time dispatch design; this
+ * package's `packages/frameworks/*` position, depending only on
+ * `@kavo/core` and never `@kavo/nest`, is ADR-0016). This package
  * augments core's `OperationMetadata` with the same `routes` key
  * `@kavo/nest` does (ADR-0007) — the two bindings read one configuration
  * convention. `next` is an optional peerDependency: nothing here imports
