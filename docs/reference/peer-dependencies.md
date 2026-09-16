@@ -5,6 +5,7 @@ The full peer dependency list for every Kavo package, with version ranges. See [
 ## Required peers
 
 <<<<<<< HEAD
+
 | Package          | Peer                                     | Version                             |
 | ---------------- | ---------------------------------------- | ----------------------------------- |
 | `@kavo/core`     | none                                     |                                     |
@@ -23,7 +24,8 @@ The full peer dependency list for every Kavo package, with version ranges. See [
 | `@kavo/prisma`   | `@prisma/client`                         | `^7.0.0`                            |
 | `@kavo/mongoose` | `mongoose`                               | `^7.0.0 \|\| ^8.0.0`                |
 | `@kavo/mikroorm` | `@mikro-orm/core`, plus your DB's driver | `^7.0.0`                            |
->>>>>>> 2f46624 (feat(prisma): adopt generated metadata for Prisma 7)
+
+> > > > > > > 2f46624 (feat(prisma): adopt generated metadata for Prisma 7)
 
 `@kavo/core` has no peers at all. It has zero runtime dependencies.
 
