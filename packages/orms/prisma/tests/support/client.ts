@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdtempSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient } from "@prisma/client";
 import { SCRATCH_ROOT_ENV } from "./global-setup.js";
 
@@ -77,5 +78,6 @@ export function provisionTestDatabase(templatePath: string = TEMPLATE_DATABASE):
  * `database-isolation.spec.ts` builds a database with an unfinished WAL.
  */
 export function newTestPrismaClient(databasePath: string = provisionTestDatabase()): PrismaClient {
-  return new PrismaClient({ datasourceUrl: `file:${databasePath}` });
+  const adapter = new PrismaBetterSqlite3({ url: `file:${databasePath}` });
+  return new PrismaClient({ adapter });
 }

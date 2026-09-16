@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { type PrismaClient } from "@prisma/client";
 import { QueryValidationException, type DefaultKavoService, type ListMetaDto, type ListResultDto } from "@kavo/core";
 import { createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
+import { testDatamodel } from "./support/datamodel.js";
 
 /**
  * Keyset pagination against a real Prisma client (ADR-0021). Prisma has a
@@ -39,7 +40,7 @@ beforeAll(() => {
   const kavo = createPrismaKavo(
     client as never,
     {
-      datamodel: Prisma.dmmf.datamodel,
+      datamodel: testDatamodel,
       entities: [Post, Comment],
       caseInsensitiveFilters: false,
       defaults: {

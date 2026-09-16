@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { Prisma } from "@prisma/client";
 import { ConfigurationException } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, type PrismaDatamodel, type PrismaField } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
+import { testDatamodel } from "./support/datamodel.js";
 
 class Author {
   id!: number;
@@ -138,9 +138,9 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
   });
 
   it("throws ConfigurationException when the marker class name matches no Prisma model", () => {
-    expect(() => buildEntityMetadata(Prisma.dmmf.datamodel, NotAModel, new Map())).toThrow(ConfigurationException);
+    expect(() => buildEntityMetadata(testDatamodel, NotAModel, new Map())).toThrow(ConfigurationException);
     try {
-      buildEntityMetadata(Prisma.dmmf.datamodel, NotAModel, new Map());
+      buildEntityMetadata(testDatamodel, NotAModel, new Map());
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
@@ -183,7 +183,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
 
   it("throws ConfigurationException when a relation's target model wasn't registered in 'entities'", () => {
     // Book.author targets Author, but Author is deliberately left out of the registry.
-    const metadata = buildEntityMetadata(Prisma.dmmf.datamodel, Book, new Map([["Book", Book]]));
+    const metadata = buildEntityMetadata(testDatamodel, Book, new Map([["Book", Book]]));
     const authorRelation = metadata.relations.find((relation) => relation.name === "author")!;
     expect(() => authorRelation.target()).toThrow(ConfigurationException);
     try {
@@ -199,7 +199,7 @@ describe("buildEntityMetadata — bootstrap error paths", () => {
       ["Author", Author],
       ["Book", Book],
     ]);
-    const metadata = buildEntityMetadata(Prisma.dmmf.datamodel, Book, entities);
+    const metadata = buildEntityMetadata(testDatamodel, Book, entities);
     const authorRelation = metadata.relations.find((relation) => relation.name === "author")!;
     expect(authorRelation.target()).toBe(Author);
   });

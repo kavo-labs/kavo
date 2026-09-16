@@ -30,7 +30,7 @@ bun add @kavo/core @kavo/nest @kavo/prisma
 
 :::
 
-`@kavo/prisma` expects `@prisma/client` (`^5.0.0 || ^6.0.0`) as a peer. Add it to the command above if your app doesn't already have it. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
+`@kavo/prisma` expects `@prisma/client` (`^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`) as a peer. Add it to the command above if your app doesn't already have it. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
 
 ## Zero-config wiring
 

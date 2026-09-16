@@ -28,16 +28,19 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "generate": "prisma generate --schema prisma/schema.prisma && prisma db push --schema prisma/schema.prisma --skip-generate --accept-data-loss"
+    "generate": "prisma generate --schema prisma/schema.prisma && prisma db push --schema prisma/schema.prisma --accept-data-loss"
   },
   "dependencies": {
     "@kavo/core": "workspace:^"
   },
   "peerDependencies": {
-    "@prisma/client": "^5.0.0 || ^6.0.0"
+    "@prisma/client": "^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0"
   },
   "devDependencies": {
-    "@prisma/client": "^6.19.3",
-    "prisma": "^6.19.3"
+    "@prisma/adapter-better-sqlite3": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@prisma/internals": "^7.10.0",
+    "better-sqlite3": "^13.0.3",
+    "prisma": "^7.10.0"
   }
 }

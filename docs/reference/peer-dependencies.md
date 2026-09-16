@@ -11,7 +11,7 @@ The full peer dependency list for every Kavo package, with version ranges. See [
 | `@kavo/nest`     | `reflect-metadata`                       | `^0.1.13 \|\| ^0.2.0`               |
 | `@kavo/nest`     | `rxjs`                                   | `^7.8.0`                            |
 | `@kavo/typeorm`  | `typeorm`                                | `^0.3.20 \|\| ^1.0.0`               |
-| `@kavo/prisma`   | `@prisma/client`                         | `^5.0.0 \|\| ^6.0.0`                |
+| `@kavo/prisma`   | `@prisma/client`                         | `^5.0.0 \|\| ^6.0.0 \|\| ^7.0.0 \|\| ^8.0.0` |
 | `@kavo/mongoose` | `mongoose`                               | `^7.0.0 \|\| ^8.0.0`                |
 | `@kavo/mikroorm` | `@mikro-orm/core`, plus your DB's driver | `^7.0.0`                            |
 

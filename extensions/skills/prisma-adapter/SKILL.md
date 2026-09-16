@@ -13,7 +13,7 @@ only the wiring below differs.
 npm install @kavo/core @kavo/nest @kavo/prisma
 ```
 
-`@prisma/client` (`^5.0.0 || ^6.0.0`) is a peer dependency.
+`@prisma/client` (`^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0`) is a peer dependency.
 
 ## The one thing that is not like TypeORM: marker classes
 
