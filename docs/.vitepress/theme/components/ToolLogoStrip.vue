@@ -151,7 +151,9 @@ const groups = [
   font-weight: 500;
   letter-spacing: -0.005em;
   opacity: 0.6;
-  transition: opacity 0.15s, background-color 0.15s;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s;
 }
 
 .tool-chip:hover {
