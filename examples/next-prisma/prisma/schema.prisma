@@ -4,7 +4,13 @@ generator client {
 }
 
 generator kavo {
-  provider = "kavo-prisma-generator"
+  // Not the published `kavo-prisma-generator` bin name: pnpm only creates
+  // that bin symlink at install time, and packages/orms/prisma/dist doesn't
+  // exist yet on a fresh checkout's first install — the symlink never gets
+  // created, and this generator fails with "command not found" in CI. The
+  // direct path to the built entrypoint sidesteps the symlink entirely, the
+  // same way packages/orms/prisma's own test-fixture schema does.
+  provider = "node ../../packages/orms/prisma/dist/generator.js"
   output   = "../src/generated/kavo-metadata.ts"
 }
 
