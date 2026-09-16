@@ -19,9 +19,9 @@ describe("parseWireParams", () => {
   });
 
   it("appends [] to a repeated bracketed key not already marked as one", () => {
-    const params = new URLSearchParams("include[]=list&include[]=tags");
+    const params = new URLSearchParams("filter[status][in]=a&filter[status][in]=b");
     expect(parseWireParams(params)).toEqual({
-      "include[]": ["list", "tags"],
+      "filter[status][in][]": ["a", "b"],
     });
   });
 

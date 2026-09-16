@@ -249,5 +249,49 @@ describe("createKavoHandler", () => {
       const body = (await response.json()) as { title: string };
       expect(body.title).toBe("custom-operation-won");
     });
+
+    it("skips a disabled registry entry while resolving a route (404, never a match)", async () => {
+      // restoreOne/purgeOne are absent from this fixture's operations
+      // config, so they're disabled — the loop walks past them via
+      // `!descriptor.enabled` on every request, not just this one.
+      const built = buildTodoCrudWithCollidingCustomOp();
+      const handlers = createKavoHandler({ todos: built.service });
+      const response = await call(handlers, "PATCH", ["todos", "1", "restore"]);
+      expect(response.status).toBe(404);
+    });
+  });
+
+  describe("edge cases in request-shape resolution", () => {
+    it("answers 404 when the App Router hands over no dynamic segments at all", async () => {
+      const request = new Request("http://localhost/api", { method: "GET" });
+      const response = await handlers.GET(request, { params: Promise.resolve({}) });
+      expect(response.status).toBe(404);
+    });
+
+    it("skips a non-array param on the way to the catch-all's own array segment", async () => {
+      const row = await adapter.create({ title: "found despite a sibling scalar param" });
+      const request = new Request(`http://localhost/api/todos/${row.id}`, { method: "GET" });
+      const response = await handlers.GET(request, {
+        params: Promise.resolve({ locale: "en", kavo: ["todos", String(row.id)] }),
+      });
+      expect(response.status).toBe(200);
+    });
+
+    it("answers 500 (not a body-parsing 400) when reading the body itself fails for a reason other than malformed JSON", async () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.error(new Error("stream boom"));
+        },
+      });
+      const request = new Request("http://localhost/api/todos", {
+        method: "POST",
+        body: stream,
+        duplex: "half",
+      });
+      const response = await handlers.POST(request, { params: Promise.resolve({ kavo: ["todos"] }) });
+      expect(response.status).toBe(500);
+      const body = (await response.json()) as { code: string };
+      expect(body.code).toBe("KAVO_UNEXPECTED_ERROR");
+    });
   });
 });
