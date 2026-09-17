@@ -92,8 +92,11 @@ with, and the framework or protocol binding(s) you expose it through.
 | [`@kavo/graphql`](packages/protocols/graphql) | Host-agnostic GraphQL schema binding              |
 | [`@kavo/mcp`](packages/protocols/mcp)         | Host-agnostic MCP binding — entities as MCP tools |
 
-`@kavo/sse` (`packages/realtime/sse`) adds a plain HTTP `text/event-stream`
-realtime transport, usable from `@kavo/nest` with no extra peer dependency.
+**Realtime** — transports for pushing changes to clients:
+
+| Package                              | Role                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| [`@kavo/sse`](packages/realtime/sse) | Plain HTTP `text/event-stream` transport, usable from `@kavo/nest` with no extra peer dependency |
 
 ## Contributing
 
