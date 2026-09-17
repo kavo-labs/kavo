@@ -45,6 +45,7 @@ jobs:
         packages/protocols/graphql
         packages/protocols/mcp
         packages/frameworks/nest
+        packages/frameworks/next
     steps:
       - uses: actions/checkout@v7
 

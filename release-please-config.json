@@ -20,7 +20,8 @@
         { "type": "json", "path": "packages/realtime/sse/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/protocols/graphql/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/protocols/mcp/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" }
+        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/frameworks/next/package.json", "jsonpath": "$.version" }
       ]
     }
   },
