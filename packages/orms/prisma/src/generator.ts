@@ -64,7 +64,9 @@ export function generatedModule(metadata: PrismaMetadata): string {
     .map(
       (prismaEnum) =>
         `export type ${prismaEnum.name} = ${
-          prismaEnum.values.length > 0 ? prismaEnum.values.map((value) => JSON.stringify(value.name)).join(" | ") : "never"
+          prismaEnum.values.length > 0
+            ? prismaEnum.values.map((value) => JSON.stringify(value.name)).join(" | ")
+            : "never"
         };`,
     )
     .join("\n");
