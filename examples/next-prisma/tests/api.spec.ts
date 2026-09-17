@@ -90,7 +90,7 @@ describe("next-prisma example app", () => {
     expect(response.headers.get("Content-Type")).toBe("application/problem+json");
   });
 
-  it("rejects a create body that fails the entity's own Zod schema (EntityConfig.validate) with a 400", async () => {
+  it("rejects a create body that fails the entity's own Zod schema (EntityConfig.schema) with a 400", async () => {
     const { authors, books } = buildTestApp();
     const handlers = createKavoHandler({ authors, books });
 
@@ -102,7 +102,7 @@ describe("next-prisma example app", () => {
     expect(body.errors.map((issue) => issue.path)).toEqual(expect.arrayContaining([["name"], ["email"]]));
   });
 
-  it("still creates a valid entity once its EntityConfig.validate schema passes", async () => {
+  it("still creates a valid entity once its EntityConfig.schema value passes", async () => {
     const { authors, books } = buildTestApp();
     const handlers = createKavoHandler({ authors, books });
 

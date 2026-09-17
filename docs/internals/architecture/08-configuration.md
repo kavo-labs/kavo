@@ -61,14 +61,14 @@ without disabling `etag` at that scope; `ttl: 0` is rejected at bootstrap
 rather than treated as off.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`validate`, `allowed`, `computed`, `relations`, `operations`); only the
+`schema`, `allowed`, `computed`, `relations`, `operations`); only the
 settings subset participates in the merge. `computed` carries functions, so
 like `dto` it is entity-scope-only and never merges through the chain — see
 [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
-`validate` (`create`/`update`/`patch`, one [Standard Schema](https://standardschema.dev)-shaped
+`schema` (`create`/`update`/`patch`, one [Standard Schema](https://standardschema.dev)-shaped
 schema each) is the same shape of exception, for the same reason `dto` is:
 `resolveEntityConfig` bootstrap-checks each configured slot and stores it
-unresolved on `ResolvedEntityConfig.validate`, but core never calls one
+unresolved on `ResolvedEntityConfig.schema`, but core never calls one
 itself — `@kavo/next`'s `createKavoHandler` is what actually runs a schema,
 at dispatch time (ADR-0056). There is no global default and no per-call
 override.

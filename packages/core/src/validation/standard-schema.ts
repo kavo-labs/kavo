@@ -1,5 +1,5 @@
 /**
- * The Standard Schema V1 contract (https://standardschema.dev). `EntityConfig.validate`
+ * The Standard Schema V1 contract (https://standardschema.dev). `EntityConfig.schema`
  * (`entity-config.ts`) accepts anything implementing this shape — Zod 4+,
  * Valibot, ArkType, and others all do — rather than any one validation
  * library's own type, so this stays the only validation-adjacent type core

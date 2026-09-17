@@ -49,13 +49,13 @@ export function buildTodoCrud(): { service: DefaultKavoService<object>; adapter:
 }
 
 /**
- * Same shape as {@link buildTodoCrud}, but with `EntityConfig.validate`
+ * Same shape as {@link buildTodoCrud}, but with `EntityConfig.schema`
  * set to whatever the caller passes — for `createKavoHandler`'s
- * `EntityConfig.validate` dispatch tests (ADR-0056), which need a schema
+ * `EntityConfig.schema` dispatch tests (ADR-0056), which need a schema
  * registered on the entity itself rather than on `buildTodoCrud`'s fixed
  * config.
  */
-export function buildTodoCrudWithValidate(validate: {
+export function buildTodoCrudWithSchema(schema: {
   readonly create?: unknown;
   readonly update?: unknown;
   readonly patch?: unknown;
@@ -65,7 +65,7 @@ export function buildTodoCrudWithValidate(validate: {
     Todo,
     {
       delete: { strategy: "soft" },
-      validate,
+      schema,
       operations: {
         createOne: true,
         findOne: true,

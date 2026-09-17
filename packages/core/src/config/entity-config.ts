@@ -769,8 +769,9 @@ export interface EntityConfig<
    * A [Standard Schema](https://standardschema.dev)-shaped validator per
    * write slot — `create`/`update`/`patch`, the same three `dto` write
    * slots use — checked against a request body before it reaches a
-   * handler (ADR-0056). Structural entity-scope config like `dto`: this
-   * key is resolved directly onto `ResolvedEntityConfig.validate`, never
+   * handler (ADR-0056, the first concrete slice of the `schema` key
+   * ADR-0055 anticipates). Structural entity-scope config like `dto`: this
+   * key is resolved directly onto `ResolvedEntityConfig.schema`, never
    * merged through `mergeSettings`, and core itself never calls a
    * registered schema's `validate()` — the same way `dto`'s classes are
    * types core resolves but never instantiates. `@kavo/next`'s
@@ -780,7 +781,7 @@ export interface EntityConfig<
    * here). Any library implementing the Standard Schema protocol works —
    * Zod 4+, Valibot, ArkType — and `@kavo/core` imports none of them.
    */
-  readonly validate?: {
+  readonly schema?: {
     readonly create?: StandardSchemaV1;
     readonly update?: StandardSchemaV1;
     readonly patch?: StandardSchemaV1;

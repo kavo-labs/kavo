@@ -1,6 +1,6 @@
-# ADR-0055 — `@kavo/next` validates a write body through a plain function hook, not a decorator
+# ADR-0057 — `@kavo/next` validates a write body through a plain function hook, not a decorator
 
-**Status:** superseded by [ADR-0056](/internals/adr/0056-validate-config-key-and-standard-schema)
+**Status:** superseded by [ADR-0056](/internals/adr/0056-schema-config-key-and-standard-schema)
 
 ## Context
 

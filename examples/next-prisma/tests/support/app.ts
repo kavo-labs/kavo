@@ -26,14 +26,14 @@ export function buildTestApp() {
     filter: { fields: ["id", "name", "email"] },
     sort: { fields: ["id", "name"] },
     include: { fields: ["books"] },
-    validate: { create: createAuthorSchema, update: updateAuthorSchema, patch: patchAuthorSchema },
+    schema: { create: createAuthorSchema, update: updateAuthorSchema, patch: patchAuthorSchema },
   });
 
   const books = kavo.createCrud<Book>(Book, {
     filter: { fields: ["id", "title", "published", "authorId"] },
     sort: { fields: ["id", "title"] },
     include: { fields: ["author"] },
-    validate: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
+    schema: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
     operations: {
       createOne: true,
       findOne: true,

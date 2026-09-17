@@ -123,11 +123,11 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
   /**
-   * `EntityConfig.validate`, bootstrap-checked and passed through
+   * `EntityConfig.schema`, bootstrap-checked and passed through
    * unresolved (ADR-0056) — an omitted slot stays `undefined` rather than
    * a placeholder, since core never calls one of these itself.
    */
-  readonly validate: {
+  readonly schema: {
     readonly create?: StandardSchemaV1;
     readonly update?: StandardSchemaV1;
     readonly patch?: StandardSchemaV1;

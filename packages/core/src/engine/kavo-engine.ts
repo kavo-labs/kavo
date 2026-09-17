@@ -969,7 +969,7 @@ export class KavoEngine<Entity extends object> {
       // Structural, like `dto` above (ADR-0056): resolved once at
       // bootstrap, and core never calls one of these itself, so there is
       // nothing for a per-call override to narrow or widen.
-      validate: config.validate,
+      schema: config.schema,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.

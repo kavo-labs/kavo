@@ -14,7 +14,7 @@ export const books = kavo.createCrud<Book>(Book, {
   filter: { fields: ["id", "title", "published", "authorId"] },
   sort: { fields: ["id", "title"] },
   include: { fields: ["author"] },
-  validate: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
+  schema: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
   operations: {
     createOne: true,
     findOne: true,

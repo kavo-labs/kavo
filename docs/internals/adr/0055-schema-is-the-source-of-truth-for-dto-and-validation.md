@@ -145,3 +145,10 @@ optional, not a precondition for docs to exist.
 - `@kavo/graphql` and `@kavo/mcp` both read DTO metadata off `createCrud`
   today and are not addressed by this ADR — their migration is separate
   follow-up work.
+- **[ADR-0056](/internals/adr/0056-schema-config-key-and-standard-schema)
+  lands the first concrete `schema` slot** — `@kavo/next` input validation
+  via Standard Schema — independently of this ADR's structural
+  `KavoSchema`/`safeParse` contract. Both ADRs contribute to the same
+  `EntityConfig.schema` key; reconciling the two contracts (whether core's
+  eventual `schema` machinery adopts Standard Schema outright) is follow-up
+  work tracked alongside #466/#467, not decided by either ADR alone.

@@ -189,7 +189,7 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
     identifierField,
-    validate: resolveValidateConfig(entityName, entityConfig?.validate),
+    schema: resolveSchemaConfig(entityName, entityConfig?.schema),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
@@ -211,27 +211,27 @@ export function resolveEntityConfig<Entity extends object>(
 }
 
 /**
- * Resolve `EntityConfig.validate`: bootstrap-check that each configured
+ * Resolve `EntityConfig.schema`: bootstrap-check that each configured
  * slot is actually Standard-Schema-shaped (ADR-0056) — catching a plain
  * object or the wrong library's schema here, once, rather than at every
  * request `@kavo/next` would otherwise fail to call `["~standard"]` on.
  * Core never calls `validate()` itself; this is the same "resolved but
  * unexecuted" treatment `dto`'s classes get.
  */
-function resolveValidateConfig<Entity extends object>(
+function resolveSchemaConfig<Entity extends object>(
   entityName: string,
-  validateConfig:
+  schemaConfig:
     | { readonly create?: StandardSchemaV1; readonly update?: StandardSchemaV1; readonly patch?: StandardSchemaV1 }
     | undefined,
-): ResolvedEntityConfig<Entity>["validate"] {
+): ResolvedEntityConfig<Entity>["schema"] {
   const slots = ["create", "update", "patch"] as const;
   const resolved: { create?: StandardSchemaV1; update?: StandardSchemaV1; patch?: StandardSchemaV1 } = {};
   for (const slot of slots) {
-    const schema = validateConfig?.[slot];
+    const schema = schemaConfig?.[slot];
     if (schema === undefined) {
       continue;
     }
-    const scope = `validate.${slot}`;
+    const scope = `schema.${slot}`;
     if (typeof schema !== "object" || schema === null || typeof schema["~standard"]?.validate !== "function") {
       throw new ConfigurationException(
         entityName,

@@ -6,7 +6,7 @@ import {
   buildTodoCrud,
   buildTodoCrudOnInstance,
   buildTodoCrudWithCollidingCustomOp,
-  buildTodoCrudWithValidate,
+  buildTodoCrudWithSchema,
 } from "./support/todo-crud.js";
 
 /** A minimal Standard Schema for tests — no `zod` dependency in this package. */
@@ -308,7 +308,7 @@ describe("createKavoHandler", () => {
     });
   });
 
-  describe("EntityConfig.validate (ADR-0056)", () => {
+  describe("EntityConfig.schema (ADR-0056)", () => {
     const rejectEmptyTitle = fakeSchema((body) => {
       const title = (body as { title?: unknown } | null)?.title;
       if (typeof title === "string" && title.length > 0) {
@@ -318,7 +318,7 @@ describe("createKavoHandler", () => {
     });
 
     it("rejects a body its create schema fails with a 400 problem-details response", async () => {
-      const built = buildTodoCrudWithValidate({ create: rejectEmptyTitle });
+      const built = buildTodoCrudWithSchema({ create: rejectEmptyTitle });
       const validated = createKavoHandler({ todos: built.service });
 
       const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
@@ -337,7 +337,7 @@ describe("createKavoHandler", () => {
       const pathSegmentIssue = fakeSchema(() => ({
         issues: [{ path: [{ key: "title" }], message: "nested via a PathSegment object" }],
       }));
-      const built = buildTodoCrudWithValidate({ create: pathSegmentIssue });
+      const built = buildTodoCrudWithSchema({ create: pathSegmentIssue });
       const validated = createKavoHandler({ todos: built.service });
 
       const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
@@ -348,7 +348,7 @@ describe("createKavoHandler", () => {
 
     it("defaults an issue with no path at all to an empty path array", async () => {
       const rootIssue = fakeSchema(() => ({ issues: [{ message: "the whole body is wrong" }] }));
-      const built = buildTodoCrudWithValidate({ create: rootIssue });
+      const built = buildTodoCrudWithSchema({ create: rootIssue });
       const validated = createKavoHandler({ todos: built.service });
 
       const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
@@ -362,7 +362,7 @@ describe("createKavoHandler", () => {
         const { title, ...rest } = body as { title: string };
         return { value: { ...rest, title: title.toUpperCase() } };
       });
-      const built = buildTodoCrudWithValidate({ create: upperCaseTitle });
+      const built = buildTodoCrudWithSchema({ create: upperCaseTitle });
       const validated = createKavoHandler({ todos: built.service });
 
       const response = await call(validated, "POST", ["todos"], { body: { title: "buy milk" } });
@@ -378,7 +378,7 @@ describe("createKavoHandler", () => {
           seenSlots.push(slot);
           return { value: body };
         });
-      const built = buildTodoCrudWithValidate({
+      const built = buildTodoCrudWithSchema({
         create: record("create"),
         update: record("update"),
         patch: record("patch"),
@@ -393,7 +393,7 @@ describe("createKavoHandler", () => {
       expect(seenSlots).toEqual(["create", "update", "patch"]);
     });
 
-    it("leaves an entity with no registered validate schema dispatching unvalidated", async () => {
+    it("leaves an entity with no registered schema dispatching unvalidated", async () => {
       const built = buildTodoCrud();
       const validated = createKavoHandler({ todos: built.service });
 
@@ -407,7 +407,7 @@ describe("createKavoHandler", () => {
         calls++;
         return { value: body };
       });
-      const built = buildTodoCrudWithValidate({ create: countCalls });
+      const built = buildTodoCrudWithSchema({ create: countCalls });
       const validated = createKavoHandler({ todos: built.service });
 
       const created = await call(validated, "POST", ["todos"], { body: { title: "a" } });
@@ -424,7 +424,7 @@ describe("createKavoHandler", () => {
         await Promise.resolve();
         return { value: body };
       });
-      const built = buildTodoCrudWithValidate({ create: asyncSchema });
+      const built = buildTodoCrudWithSchema({ create: asyncSchema });
       const validated = createKavoHandler({ todos: built.service });
 
       const response = await call(validated, "POST", ["todos"], { body: { title: "async" } });

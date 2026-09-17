@@ -6,5 +6,5 @@ export const authors = kavo.createCrud<Author>(Author, {
   filter: { fields: ["id", "name", "email"] },
   sort: { fields: ["id", "name"] },
   include: { fields: ["books"] },
-  validate: { create: createAuthorSchema, update: updateAuthorSchema, patch: patchAuthorSchema },
+  schema: { create: createAuthorSchema, update: updateAuthorSchema, patch: patchAuthorSchema },
 });

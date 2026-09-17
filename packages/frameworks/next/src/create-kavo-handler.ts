@@ -82,8 +82,8 @@ function badRequestBody(): Response {
 
 /**
  * Distinct from `badRequestBody()`'s `KAVO_NEXT_INVALID_BODY`: this is
- * well-formed JSON that an `EntityConfig.validate` schema rejected on
- * shape, not a `JSON.parse` failure — a different client mistake with a
+ * well-formed JSON that an `EntityConfig.schema` slot rejected on shape,
+ * not a `JSON.parse` failure — a different client mistake with a
  * different fix, so it gets a different code.
  */
 function bodyValidationFailed(entityKey: string, issues: readonly StandardSchemaV1.Issue[]): Response {
@@ -103,7 +103,7 @@ function bodyValidationFailed(entityKey: string, issues: readonly StandardSchema
 }
 
 /**
- * The write slot an `EntityConfig.validate` schema is registered under —
+ * The write slot an `EntityConfig.schema` value is registered under —
  * the same three slots `dto.create`/`update`/`patch` uses. A custom write
  * operation (no slot of its own) dispatches unvalidated, exactly as it
  * would with no `dto` class registered for it either.
@@ -214,7 +214,7 @@ function isKavoInstance(value: KavoHandlerEntities | KavoInstance): value is Kav
  * `app/api/users/[id]/activate/route.ts`) is matched by Next.js before this
  * catch-all ever runs.
  *
- * A write body is validated against `EntityConfig.validate.create`/
+ * A write body is validated against `EntityConfig.schema.create`/
  * `update`/`patch` (ADR-0056) when the entity registered one — declared on
  * `createCrud` itself, not here, so this function needs no validation
  * option of its own.
@@ -276,7 +276,7 @@ function createKavoHandlerFromEntities(entities: KavoHandlerEntities, options: K
           throw error;
         }
         const slot = validateSlotFor(matched.operation);
-        const schema = slot === null ? undefined : service.engine.config.validate[slot];
+        const schema = slot === null ? undefined : service.engine.config.schema[slot];
         if (schema !== undefined) {
           const result = await schema["~standard"].validate(body);
           if (result.issues !== undefined) {
