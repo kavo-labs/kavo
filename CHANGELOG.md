@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/kavo-labs/kavo/compare/v0.22.1...v0.22.2) (2026-09-17)
+
+
+### CI
+
+* split npm publish into per-package jobs by dependency tier ([51b3ad2](https://github.com/kavo-labs/kavo/commit/51b3ad22c85a5f4a37899eddc9b6575d1b3af32b))
+
 ## [0.22.1](https://github.com/kavo-labs/kavo/compare/v0.22.0...v0.22.1) (2026-09-17)
 
 
