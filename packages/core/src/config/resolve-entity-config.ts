@@ -39,6 +39,7 @@ import type { DtoClass, WriteApply, WriteFieldsConfig } from "../dto/dto.js";
 import { dtoShapeKeys } from "../dto/dto-shape.js";
 import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
 import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
+import { DefaultSchemaResolver } from "../dto/entity-schema.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
 import { ConfigurationException } from "../errors/exceptions.js";
@@ -194,6 +195,7 @@ export function resolveEntityConfig<Entity extends object>(
       create: createFields === undefined ? undefined : ({ fields: createFields } as WriteFieldsConfig<Entity>),
       update: updateFields === undefined ? undefined : ({ fields: updateFields } as WriteFieldsConfig<Entity>),
     }),
+    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema),
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).

@@ -1,7 +1,8 @@
 import type { EntityId } from "../types/entity-id.js";
 import type { ListResultDto } from "../dto/list-result.js";
 import type { StandardOperationId } from "../operations/operation.js";
-import type { DtoInputOf, DtoOutputOf, OperationEntryOf } from "../dto/dto.js";
+import type { OperationEntryOf } from "../dto/dto.js";
+import type { SchemaInputOf, SchemaOutputOf } from "../dto/entity-schema.js";
 
 /**
  * The typed surface for a **custom** operation (issue #145) — everything
@@ -9,7 +10,7 @@ import type { DtoInputOf, DtoOutputOf, OperationEntryOf } from "../dto/dto.js";
  * static shape the eight named methods have.
  *
  * Every type here reads the `Ops` literal `EntityConfig.operations` was
- * inferred from, the same source `DtoInputOf`/`DtoOutputOf`/`DtoQueryOf`
+ * inferred from, the same source `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`
  * (`dto/dto.ts`) already read for the standard eight. Where those fall back
  * to an entity-wide DTO generic, these fall back to the **registered
  * handler's own signature**: a custom operation has no entity-wide slot of
@@ -67,7 +68,7 @@ export type CustomOperationId<Ops> = [DeclaredCustomIds<Ops>] extends [never] ? 
  * handler declares — unwrapped from the `{ id, body }` pair the engine
  * hands an id-addressed operation, since `id` is passed separately here.
  */
-export type CustomOperationBody<Ops, Id extends string> = DtoInputOf<
+export type CustomOperationBody<Ops, Id extends string> = SchemaInputOf<
   Ops,
   Id,
   HandlerInputOf<Ops, Id> extends { readonly id: unknown; readonly body: infer Body } ? Body : HandlerInputOf<Ops, Id>
@@ -81,8 +82,8 @@ export type CustomOperationBody<Ops, Id extends string> = DtoInputOf<
  */
 export type CustomOperationResult<Ops, Id extends string> =
   OperationEntryOf<Ops, Id> extends { readonly cardinality: "many" }
-    ? ListResultDto<DtoOutputOf<Ops, Id, RowOf<HandlerOutputOf<Ops, Id>>>>
-    : DtoOutputOf<Ops, Id, HandlerOutputOf<Ops, Id>>;
+    ? ListResultDto<SchemaOutputOf<Ops, Id, RowOf<HandlerOutputOf<Ops, Id>>>>
+    : SchemaOutputOf<Ops, Id, HandlerOutputOf<Ops, Id>>;
 
 /**
  * The request half of a `run` call — the members of `KavoRequest` a caller

@@ -70,3 +70,25 @@ The six slots above are entity-wide: every operation that reads `create` reads t
 ```
 
 Fallback order per field: `operations.<id>.dto.<field>` → the entity's root `dto.<slot>` → the entity-derived default. Which fields apply depends on the operation: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne`. See [Guides/Configuration/Entity config](/guides/configuration/entity-config#dto) and [Operations](/guides/configuration/operations#operations) for the field-by-field mechanics, and [DTO system](/internals/architecture/04-dto-system) for the full derivation and fallback rules.
+
+## Migrating to `schema` (ADR-0055)
+
+A `schema` key is landing alongside `dto`, per slot and split by direction rather than one flat map:
+
+```ts
+@Kavo(Book, {
+  schema: {
+    input: { create: CreateBookSchema, update: UpdateBookSchema },
+    output: { item: BookItemSchema, list: BookListSchema },
+  },
+})
+```
+
+Where `dto` is a plain class narrowed by its runtime key set, `schema.input.<slot>`/`schema.output.<slot>` is any object satisfying the structural `KavoSchema<Output>` contract — one `safeParse(input): SchemaParseResult<Output>` method, the same shape a Zod schema already has, with no `zod` dependency in `@kavo/core` itself (ADR-0005). Two differences follow from that:
+
+- **`schema.input` actually validates.** `dto` never rejects a body — v6 has no validation subsystem attached to it. A `schema.input.<slot>` does: the engine runs `safeParse` on the deserialized body and raises `SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) on failure, with one `errors[]` entry per issue. On success, the schema's own `data` replaces the deserialized body — so a schema that transforms its input (trims a string, defaults a field) has that transformation take effect.
+- **`schema.output` narrows/shapes, but is never re-validated.** Applied after the ordinary `dto`/field-selection projection, the same role `dto.item`/`dto.list`'s field set plays — but a `safeParse` failure here falls back to the already-projected value rather than rejecting a response Kavo itself produced.
+
+Per-operation overrides follow the same shape at `operations.<id>.schema.<field>`, with the same fallback chain `dto` has: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the corresponding `dto` override → the entity-derived default. Where both `schema` and `dto` are configured for the same slot, `schema` wins.
+
+`dto` is not removed by this — see ADR-0055 and issue #466 for why (in short: `@kavo/nest`'s OpenAPI generation and route/body-validation wiring still resolve DTOs directly off `@kavo/core`'s `dto` exports, and migrating those is separate follow-up work). Until that lands, prefer `schema` for entities that need real input validation and keep `dto` for shape/serialization-only slots; the two coexist per slot without conflict.

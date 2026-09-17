@@ -3,6 +3,7 @@ import type { OperationCardinality, OperationId, OperationKind, StandardOperatio
 import type { OperationHandler } from "./operation-handler.js";
 import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
+import type { KavoSchema } from "../dto/kavo-schema.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
 /**
@@ -193,6 +194,47 @@ function resolveDtoOverride(
 }
 
 /**
+ * Validates one entry's `operations.<id>.schema` against the fields that
+ * operation actually has, and returns the three descriptor fields it
+ * resolves to (`null` for an unset or inapplicable field) — the
+ * `schema`-typed sibling of `resolveDtoOverride` above, since
+ * `OperationSchemaOverride` (unlike `OperationDtoOverride`) is not narrowed
+ * per operation id at the type level.
+ */
+function resolveSchemaOverride(
+  entityName: string,
+  id: OperationId,
+  allowed: readonly DtoOverrideField[],
+  settings: { readonly schema?: unknown } | undefined,
+): {
+  schemaInput: KavoSchema<unknown> | null;
+  schemaOutput: KavoSchema<unknown> | null;
+  schemaQuery: KavoSchema<unknown> | null;
+} {
+  const schema = settings?.schema as Readonly<Partial<Record<DtoOverrideField, KavoSchema<unknown>>>> | undefined;
+  const resolved: Record<DtoOverrideField, KavoSchema<unknown> | null> = { input: null, output: null, query: null };
+  if (schema === undefined) {
+    return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
+  }
+  for (const field of Object.keys(schema) as DtoOverrideField[]) {
+    if (schema[field] === undefined) {
+      continue;
+    }
+    if (!allowed.includes(field)) {
+      throw new ConfigurationException(
+        entityName,
+        `operations.${id}.schema.${field}`,
+        allowed.length === 0
+          ? `'${id}' has a void result and no query, so a 'schema.${field}' override has nothing to narrow — remove it`
+          : `'${id}' has no '${field}' position — it only supports ${allowed.map((f) => `'${f}'`).join(", ")}`,
+      );
+    }
+    resolved[field] = schema[field] as KavoSchema<unknown>;
+  }
+  return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
+}
+
+/**
  * Marks a placeholder handler as unbound, so `isUnboundOperationHandler` can
  * tell it apart from a real implementation without knowing anything about
  * how it got there — inspection-only mode (below) and a handler-less custom
@@ -348,6 +390,7 @@ export function createOperationRegistry<Entity extends object>(
         : isListed
       : (globalOperations?.[id] ?? byDefault);
     const dtoOverride = resolveDtoOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
+    const schemaOverride = resolveSchemaOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     registry.register({
       id,
       kind: shape.kind,
@@ -358,6 +401,7 @@ export function createOperationRegistry<Entity extends object>(
         handlers?.(id) ??
         (unboundHandler(id, entityName ?? "entity") as unknown as OperationHandler<Entity>),
       ...dtoOverride,
+      ...schemaOverride,
       meta: settings?.meta ?? {},
     });
   }
@@ -452,6 +496,7 @@ function registerCustomOperation<Entity extends object>(
     enabled: custom.enabled ?? true,
     handler,
     ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
+    ...resolveSchemaOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     meta: custom.meta ?? {},
     ...(custom.realtimeEvent !== undefined ? { realtimeEvent: custom.realtimeEvent } : {}),
   });

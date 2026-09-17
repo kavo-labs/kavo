@@ -1,6 +1,7 @@
 import type { OperationCardinality, OperationId, OperationKind } from "./operation.js";
 import type { OperationHandler, OperationMetadata } from "./operation-handler.js";
 import type { DtoClass } from "../dto/dto.js";
+import type { KavoSchema } from "../dto/kavo-schema.js";
 import type { RealtimeEventId } from "../realtime/realtime-event.js";
 
 /** One registered operation: the unit the engine dispatches through. */
@@ -21,6 +22,14 @@ export interface OperationDescriptor<Entity = unknown, Input = unknown, Output =
   readonly output: DtoClass | null;
   /** Explicit query DTO; `null`/absent = the slot default. Typing only — see doc 04 §8. */
   readonly query?: DtoClass | null;
+  /**
+   * ADR-0055's `schema`-typed siblings of `input`/`output`/`query` above —
+   * an explicit per-operation `schema` override, or `null` for the slot
+   * default (`config.schema.resolveInput`/`resolveOutput`).
+   */
+  readonly schemaInput?: KavoSchema<unknown> | null;
+  readonly schemaOutput?: KavoSchema<unknown> | null;
+  readonly schemaQuery?: KavoSchema<unknown> | null;
   readonly meta: OperationMetadata;
   /**
    * The realtime event a **custom** operation's write publishes as (issue

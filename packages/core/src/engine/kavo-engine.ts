@@ -2,6 +2,8 @@ import type { KavoAppContext, KavoContext } from "../context/kavo-context.js";
 import type { KavoRequest } from "../context/kavo-request.js";
 import type { KavoResponse } from "../context/kavo-response.js";
 import type { DtoClass, DtoSlot } from "../dto/dto.js";
+import type { KavoSchema } from "../dto/kavo-schema.js";
+import type { SchemaInputSlot } from "../dto/entity-schema.js";
 import type { ListMetaDto } from "../dto/list-result.js";
 import type { Deserializer, Serializer } from "../serialization/serializer.js";
 import type { EntityId } from "../types/entity-id.js";
@@ -29,7 +31,9 @@ import {
   PreconditionFailedException,
   PreconditionUnsupportedException,
   QueryValidationException,
+  SchemaValidationException,
 } from "../errors/exceptions.js";
+import type { QueryIssueDto } from "../errors/problem-details.js";
 import type { Policy, WhenParams } from "../policy/kavo-policy.js";
 import type { ApplyArgs, ResolvedApply } from "../policy/kavo-apply.js";
 import type { FilterExpression } from "../query/filter.js";
@@ -268,7 +272,10 @@ export class KavoEngine<Entity extends object> {
     // include tree that has already been built.
     const serverApply =
       descriptor.kind === "read" ? await this.resolveReadApply(descriptor, request, configView, correlationId) : null;
-    const query = descriptor.kind === "read" ? this.normalizeQuery(request, configView, serverApply) : null;
+    const query =
+      descriptor.kind === "read"
+        ? this.normalizeQuery(request, descriptor, configView, serverApply, correlationId)
+        : null;
     const context = createKavoContext<Entity>({
       operation: descriptor.id,
       config: configView,
@@ -793,6 +800,22 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
+   * `schema.output.<slot>`'s narrowing (ADR-0055): `safeParse`s the
+   * already-projected value and, on success, replaces it with the schema's
+   * own `data`. Never re-validated on the way out — a failure falls back to
+   * the value already projected rather than rejecting something Kavo itself
+   * produced (nothing about it needs rejecting, per ADR-0055's validation-
+   * timing decision).
+   */
+  private applyOutputSchema<T>(schema: KavoSchema<unknown> | null, value: T): T {
+    if (schema === null) {
+      return value;
+    }
+    const result = schema.safeParse(value);
+    return result.success ? (result.data as T) : value;
+  }
+
+  /**
    * `If-Match`: reject the write when the target's current ETag is not one
    * the client named.
    *
@@ -921,10 +944,13 @@ export class KavoEngine<Entity extends object> {
     // (descriptor override first): "what `findOne` on that id ... would
     // return" (ADR-0020) means the representation `findOne`'s own
     // registry entry actually serves, not the entity's root `item` slot.
+    const findOneDescriptor = registry.get("findOne");
     const itemDto =
-      (registry.get("findOne")?.output as DtoClass<object> | null) ??
+      (findOneDescriptor?.output as DtoClass<object> | null) ??
       (config.dto.resolve("item", "findOne") as DtoClass<object> | null);
-    return computeEtag(serializer.serializeItem(entity, itemDto, context));
+    const itemSchema = findOneDescriptor?.schemaOutput ?? config.schema.resolveOutput("item", "findOne");
+    const item = this.applyOutputSchema(itemSchema, serializer.serializeItem(entity, itemDto, context));
+    return computeEtag(item);
   }
 
   private configViewFor(request: KavoRequest<Entity>): ResolvedEntityConfig<Entity> {
@@ -966,6 +992,7 @@ export class KavoEngine<Entity extends object> {
       // every operation's settings `Allowed` union, so it never varies here.
       identifierField: config.identifierField,
       dto: config.dto,
+      schema: config.schema,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.
@@ -990,19 +1017,39 @@ export class KavoEngine<Entity extends object> {
 
   private normalizeQuery(
     request: KavoRequest<Entity>,
+    descriptor: OperationDescriptor<Entity>,
     config: ResolvedEntityConfig<Entity>,
     serverApply: ResolvedApply<Entity> | null,
+    correlationId: string,
   ): NormalizedQueryContext<Entity> {
     const { normalizer } = this.deps;
     const query = request.query;
-    if (query instanceof WireQuery) {
-      return normalizer.normalizeWire(query.params, config, serverApply ?? undefined);
+    const normalized =
+      query instanceof WireQuery
+        ? normalizer.normalizeWire(query.params, config, serverApply ?? undefined)
+        : normalizer.normalizeInput(
+            (query as QueryContext<Entity> | null) ?? undefined,
+            config,
+            serverApply ?? undefined,
+          );
+    // ADR-0055: `schema.input.query` validates (never reshapes — the rest of
+    // the pipeline owns `NormalizedQueryContext`'s actual shape) the
+    // normalized query. A `safeParse` failure raises `SchemaValidationException`
+    // the same way a body's does.
+    const schema = descriptor.schemaQuery ?? config.schema.resolveInput("query", descriptor.id);
+    if (schema !== null) {
+      const result = schema.safeParse(normalized);
+      if (!result.success) {
+        throw new SchemaValidationException(
+          result.error.issues.map((issue): QueryIssueDto => ({
+            field: issue.path.length === 0 ? "(root)" : issue.path.map(String).join("."),
+            detail: issue.message,
+          })),
+          { context: { entityName: config.entityName, operation: descriptor.id, correlationId } },
+        );
+      }
     }
-    return normalizer.normalizeInput(
-      (query as QueryContext<Entity> | null) ?? undefined,
-      config,
-      serverApply ?? undefined,
-    );
+    return normalized;
   }
 
   /**
@@ -1102,11 +1149,14 @@ export class KavoEngine<Entity extends object> {
     descriptor: OperationDescriptor<Entity>,
     context: KavoContext<Entity>,
   ): unknown {
-    const { deserializer, config } = this.deps;
+    const { config } = this.deps;
     // A custom id is simply absent from the table; the cast narrows for the
     // lookup and `noUncheckedIndexedAccess` keeps the miss visible.
     const slot = INPUT_SLOTS[descriptor.id as StandardOperationId];
     const dto = descriptor.input ?? (slot !== undefined ? config.dto.resolve(slot, descriptor.id) : null);
+    const schema =
+      descriptor.schemaInput ??
+      (slot !== undefined ? config.schema.resolveInput(slot as SchemaInputSlot, descriptor.id) : null);
 
     switch (descriptor.id) {
       case "findOne":
@@ -1119,10 +1169,10 @@ export class KavoEngine<Entity extends object> {
       case "updateOne":
         return {
           id: this.coerceId(request.id),
-          data: deserializer.deserialize(request.body, dto, context),
+          data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context),
         };
       case "patchOne":
-        return this.resolvePatchOneInput(request, dto, context);
+        return this.resolvePatchOneInput(request, dto, schema, descriptor, context);
       default: {
         // A custom read (issue #145) follows the same rule the two standard
         // reads above do: no request body exists to deserialize, so the
@@ -1159,10 +1209,49 @@ export class KavoEngine<Entity extends object> {
         // createOne, and every custom write: the deserialized body, plus
         // the request id when one is present. createOne never carries an
         // id, so this falls through to the body alone there.
-        const body = deserializer.deserialize(request.body, dto, context);
+        const body = this.deserializeWithSchema(request.body, dto, schema, descriptor, context);
         return request.id === null ? body : { id: this.coerceId(request.id), body };
       }
     }
+  }
+
+  /**
+   * Runs the ordinary deserializer, then — when an input schema is
+   * configured for this operation (`descriptor.schemaInput`, else
+   * `config.schema.resolveInput`) — `schema.safeParse`s the result
+   * (ADR-0055). On success the schema's own `data` replaces the
+   * deserializer's output (the schema is the source of truth for shape
+   * where one is configured); on failure raises `SchemaValidationException`
+   * with one `errors[]` entry per `SchemaIssue`, before the query/handler
+   * stages ever see the payload. Running the schema over the deserializer's
+   * output — rather than the raw wire body — keeps relation-association
+   * (`{ owner: { id } }`), the writable-field allowlist, and
+   * `create.default`/`update.default` all in effect regardless of whether a
+   * schema is configured; the schema only judges (and reshapes) what those
+   * already produced.
+   */
+  private deserializeWithSchema(
+    raw: unknown,
+    dto: DtoClass<object> | null,
+    schema: KavoSchema<unknown> | null,
+    descriptor: OperationDescriptor<Entity>,
+    context: KavoContext<Entity>,
+  ): unknown {
+    const candidate = this.deps.deserializer.deserialize(raw, dto, context);
+    if (schema === null) {
+      return candidate;
+    }
+    const result = schema.safeParse(candidate);
+    if (result.success) {
+      return result.data;
+    }
+    throw new SchemaValidationException(
+      result.error.issues.map((issue): QueryIssueDto => ({
+        field: issue.path.length === 0 ? "(root)" : issue.path.map(String).join("."),
+        detail: issue.message,
+      })),
+      { context: { entityName: context.entityName, operation: descriptor.id, correlationId: context.correlationId } },
+    );
   }
 
   /**
@@ -1182,16 +1271,17 @@ export class KavoEngine<Entity extends object> {
   private resolvePatchOneInput(
     request: KavoRequest<Entity>,
     dto: DtoClass<object> | null,
+    schema: KavoSchema<unknown> | null,
+    descriptor: OperationDescriptor<Entity>,
     context: KavoContext<Entity>,
   ): unknown {
-    const { deserializer } = this.deps;
     const id = this.coerceId(request.id);
     // Cheapest check first: the overwhelmingly common object-body case
     // short-circuits here without ever touching `context.config.relations`
     // (`.all()` allocates a fresh array per call) — the relation scan below
     // only runs for the rare array-body request.
     if (!Array.isArray(request.body)) {
-      return { id, data: deserializer.deserialize(request.body, dto, context) };
+      return { id, data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context) };
     }
     // Since issue #404 the strategy is per-relation only (there is no
     // entity-level `arrayMutation` default left to consult): an array
@@ -1203,7 +1293,7 @@ export class KavoEngine<Entity extends object> {
     // writable field, not just that relation.
     const jsonPatchRelations = context.config.relations.all().filter((relation) => relation.write === "jsonPatch");
     if (jsonPatchRelations.length === 0) {
-      return { id, data: deserializer.deserialize(request.body, dto, context) };
+      return { id, data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context) };
     }
 
     const writeOptedRelations = new Set(jsonPatchRelations.map((relation) => relation.name));
@@ -1214,7 +1304,7 @@ export class KavoEngine<Entity extends object> {
       operation: context.operation,
       correlationId: context.correlationId,
     });
-    const data = deserializer.deserialize(parsed.fields, dto, context);
+    const data = this.deserializeWithSchema(parsed.fields, dto, schema, descriptor, context);
     const relationEntries = Object.entries(parsed.relations);
     if (relationEntries.length === 0) {
       return { id, data };
@@ -1442,6 +1532,7 @@ export class KavoEngine<Entity extends object> {
     if (descriptor.cardinality === "many") {
       const listResult = result as FindManyResult<Entity>;
       const listDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("list", descriptor.id);
+      const listSchema = descriptor.schemaOutput ?? config.schema.resolveOutput("list", descriptor.id);
       const pagination: Pagination<Entity> = context.query?.pagination ?? { limit: 0, offset: 0 };
       const listMeta = this.listMeta(listResult, context);
       const items = serializer.serializeList(listResult.entities, listDto, context);
@@ -1456,11 +1547,17 @@ export class KavoEngine<Entity extends object> {
         context,
         "list",
       );
+      // ADR-0055: `schema.output.list` narrows/shapes each row the way
+      // `dto.list`'s field set did — applied after projection, never
+      // re-validated (a `safeParse` failure here falls back to the
+      // already-projected row rather than rejecting a value Kavo itself
+      // produced).
+      const shapedItems = listSchema === null ? items : items.map((item) => this.applyOutputSchema(listSchema, item));
       return {
         operation: descriptor.id,
         item: null,
         list: {
-          items,
+          items: shapedItems,
           limit: pagination.limit,
           // A keyset page has no absolute position in the match set, and
           // `offset` is a non-nullable envelope field, so cursor pages report
@@ -1493,15 +1590,18 @@ export class KavoEngine<Entity extends object> {
     }
 
     const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
+    const itemSchema = descriptor.schemaOutput ?? config.schema.resolveOutput("item", descriptor.id);
     const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
     const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
     validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
+    // ADR-0055: `schema.output.item`'s narrowing, same as the list branch above.
+    const shapedItem = this.applyOutputSchema(itemSchema, item);
     // `context.config` is the per-call view, so `cache.etag` honors an
     // override at any scope down to this one request.
-    const etag = isEtagEnabled(context.config.settings.cache) ? await computeEtag(item) : null;
+    const etag = isEtagEnabled(context.config.settings.cache) ? await computeEtag(shapedItem) : null;
     return {
       operation: descriptor.id,
-      item,
+      item: shapedItem,
       list: null,
       etag,
       // `If-None-Match` is a cache-revalidation question, so it is only
