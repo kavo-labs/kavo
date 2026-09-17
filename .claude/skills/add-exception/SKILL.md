@@ -23,7 +23,8 @@ its own payload shape, or callers need to `instanceof`/catch it distinctly.
 1. **The class** — a new leaf under `KavoException`
    (`packages/core/src/errors/`), named `*Exception`. It implements the
    `KavoExceptionShape` contract; downstream layers (including `@kavo/nest`'s
-   filter) program against that shape, never the concrete class, so don't
+   filter and `@kavo/next`'s `toErrorResponse`) program against that shape,
+   never the concrete class, so don't
    add fields the base contract can't express without extending the contract
    itself.
 2. **The catalog entry** — `ERROR_CATALOG` gets one row: a stable
@@ -50,11 +51,11 @@ its own payload shape, or callers need to `instanceof`/catch it distinctly.
 
 ## What you don't touch
 
-`toProblemDetails` and the `@kavo/nest` filter are generic over the
-`KavoExceptionShape` contract — a new leaf needs no changes there. If adding your
-exception seems to require touching the serializer or the filter, the new
-class is missing something the contract already provides; fix the class, not
-the generic machinery.
+`toProblemDetails`, the `@kavo/nest` filter, and `@kavo/next`'s
+`toErrorResponse` are all generic over the `KavoExceptionShape` contract — a
+new leaf needs no changes in any of them. If adding your exception seems to
+require touching one of these, the new class is missing something the
+contract already provides; fix the class, not the generic machinery.
 
 ## Tests
 

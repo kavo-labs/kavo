@@ -164,7 +164,11 @@ meta: {
 4. **`packages/frameworks/nest`** — usually **nothing**. Route generation reads
    the registry, so a new enabled entry with `meta.routes` becomes a route with
    no generator changes. Touching the generator is a signal you special-cased.
-5. **`packages/protocols/graphql` / `packages/protocols/mcp`** — **nothing**.
+5. **`packages/frameworks/next`** — also usually **nothing**. `createKavoHandler`
+   resolves a request against the same registry and the same `meta.routes`
+   convention at request time (ADR-0054), so a new enabled entry is reachable
+   through the catch-all route with no changes to the binding itself.
+6. **`packages/protocols/graphql` / `packages/protocols/mcp`** — **nothing**.
    Both bindings are registry-driven too (ADR-0006), so a custom operation
    surfaces automatically as a GraphQL field and an MCP tool (issue #423). No
    per-operation work there; just know the new operation is now exposed on those

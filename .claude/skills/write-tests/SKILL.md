@@ -1,6 +1,6 @@
 ---
 name: write-tests
-description: How to write tests for the Kavo monorepo — file placement, Vitest/SWC setup, fixtures, and the cases every change must pin down. Use when adding or updating tests in packages/core, packages/orms/typeorm, or packages/frameworks/nest.
+description: How to write tests for the Kavo monorepo — file placement, Vitest/SWC setup, fixtures, and the cases every change must pin down. Use when adding or updating tests in packages/core, packages/orms/*, or packages/frameworks/*.
 ---
 
 # Writing tests for Kavo
