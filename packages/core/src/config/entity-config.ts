@@ -5,6 +5,7 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
+import type { EntitySchemaMap, OperationSchemaOverride } from "../dto/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
@@ -431,6 +432,18 @@ export type OperationConfig<
    */
   readonly dto?: DtoOverride;
   /**
+   * ADR-0055's `schema`-typed sibling of `dto` above: overrides the
+   * entity's root `schema.input.<slot>`/`schema.output.<slot>` for this
+   * operation only. Not narrowed per operation id via `Pick` the way
+   * `DtoOverride` is — every field is optional here regardless of id —
+   * because which fields apply is enforced at bootstrap
+   * (`resolveSchemaOverride`, `default-operation-registry.ts`) rather than
+   * at the type level. Fallback order: this field → the entity's root
+   * `schema.input.<slot>`/`schema.output.<slot>` → the corresponding `dto`
+   * override → entity-derived default.
+   */
+  readonly schema?: OperationSchemaOverride;
+  /**
    * Authorization for this operation (ADR-0037). Nearest scope wins,
    * wholesale: this overrides the entity's own `EntityConfig.policy`, which
    * overrides the root `GlobalConfig.policy` (`createKavo({ policy })`).
@@ -592,6 +605,8 @@ export type CustomOperationConfig<
    * slot — so this is the only way to give it a shape of its own.
    */
   readonly dto?: OperationDtoOverride;
+  /** ADR-0055's `schema`-typed sibling of `dto` above — see `OperationConfig.schema`'s doc comment. */
+  readonly schema?: OperationSchemaOverride;
   /**
    * Which realtime event this operation's write publishes as (issue #175).
    * The standard eight derive theirs from a fixed vocabulary
@@ -764,6 +779,16 @@ export interface EntityConfig<
    * keeping this map DTO-class-only for the two write slots.
    */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  /**
+   * ADR-0055's `schema`-typed sibling of `dto` above: a per-slot,
+   * input/output-split map of `KavoSchema` validators, which additionally
+   * drives input validation (`schema.input.<slot>.safeParse`, raising
+   * `SchemaValidationException` on failure) and narrows/shapes the response
+   * at `schema.output.<slot>`. Landed alongside `dto` rather than replacing
+   * it (see `entity-schema.ts`'s module doc) — where both are configured
+   * for the same slot, `schema` wins.
+   */
+  readonly schema?: EntitySchemaMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**
    * What `createOne` (and `createMany`, once #137 lands) may write. A
    * `{ fields: [...] }` allowlist (the shorthand `dto.patch`/`dto.item`/

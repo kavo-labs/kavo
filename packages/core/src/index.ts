@@ -69,6 +69,21 @@ export { shorthandFieldsOf } from "./dto/dto-fields-shorthand.js";
 export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./dto/kavo-schema.js";
 export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 
+// ── Schema (ADR-0055) ────────────────────────────────────────────────
+// Landed additively alongside the DTO system above — see
+// `dto/entity-schema.ts`'s module doc for why `dto` is not yet removed.
+export type {
+  EntitySchemaMap,
+  OperationSchemaOverride,
+  SchemaInputOf,
+  SchemaInputSlot,
+  SchemaOutputOf,
+  SchemaOutputSlot,
+  SchemaQueryOf,
+  SchemaResolver,
+} from "./dto/entity-schema.js";
+export { DefaultSchemaResolver } from "./dto/entity-schema.js";
+
 // ── Errors ────────────────────────────────────────────────────────────
 export type { KavoErrorCode, KavoExceptionShape, ErrorContext, ErrorHandler } from "./errors/kavo-exception-shape.js";
 export type { ProblemDetailsDto, QueryIssueDto } from "./errors/problem-details.js";
