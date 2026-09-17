@@ -333,6 +333,19 @@ describe("createKavoHandler", () => {
       expect(built.adapter.rows).toHaveLength(0);
     });
 
+    it("stringifies a Standard Schema PathSegment object, not just a bare string/number path entry", async () => {
+      const pathSegmentIssue = fakeSchema(() => ({
+        issues: [{ path: [{ key: "title" }], message: "nested via a PathSegment object" }],
+      }));
+      const built = buildTodoCrudWithValidate({ create: pathSegmentIssue });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
+      expect(response.status).toBe(400);
+      const responseBody = (await response.json()) as { errors: { path: string[]; message: string }[] };
+      expect(responseBody.errors).toEqual([{ path: ["title"], message: "nested via a PathSegment object" }]);
+    });
+
     it("dispatches the schema's (possibly transformed) value, not the raw body", async () => {
       const upperCaseTitle = fakeSchema((body) => {
         const { title, ...rest } = body as { title: string };
