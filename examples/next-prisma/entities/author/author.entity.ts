@@ -1,4 +1,4 @@
-import type { Book } from "./book.entity";
+import type { Book } from "../book/book.entity";
 
 // Marker class: an empty class whose name matches the Prisma model, giving
 // `createCrud` a stable identity to key off (ADR-0017). Prisma generates no

@@ -1,5 +1,6 @@
 import { buildKavoSchemas } from "@kavo/next";
-import { authors, books } from "../../../src/kavo";
+import { authors } from "../../../entities/author/author.service";
+import { books } from "../../../entities/book/book.service";
 
 export function GET(): Response {
   const { schemas } = buildKavoSchemas({ authors, books });

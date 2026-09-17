@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "../../src/generated/prisma/client";
+import { PrismaClient } from "../../generated/prisma/client";
 import { SCRATCH_ROOT_ENV } from "./global-setup.js";
 
 /** The SQLite file `pnpm generate` (`prisma db push`) builds — never opened directly, only copied. */

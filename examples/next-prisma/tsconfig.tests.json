@@ -14,5 +14,5 @@
       "@kavo/prisma": ["../../packages/orms/prisma/src/index.ts"]
     }
   },
-  "include": ["tests", "src", "app"]
+  "include": ["tests", "entities", "lib", "app", "generated"]
 }
