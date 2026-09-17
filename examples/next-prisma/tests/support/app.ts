@@ -1,8 +1,6 @@
 import { NotFoundException, createKavo } from "@kavo/core";
 import { createInfrastructure } from "@kavo/prisma";
-import metadata from "../../generated/kavo-metadata";
-import { Author } from "../../entities/author/author.entity";
-import { Book } from "../../entities/book/book.entity";
+import metadata, { entities, Author, Book } from "../../generated/kavo-metadata";
 import { newTestPrismaClient } from "./db";
 
 /**
@@ -17,7 +15,7 @@ export function buildTestApp() {
   const kavo = createKavo({
     infrastructure: createInfrastructure(prisma as never, {
       metadata,
-      entities: [Author, Book],
+      entities,
       caseInsensitiveFilters: false,
     }),
   });
