@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.22.0](https://github.com/kavo-labs/kavo/compare/v0.21.4...v0.22.0) (2026-09-17)
+
+
+### Features
+
+* **docs:** add Next.js icon to landing page tool strip ([ca9ff10](https://github.com/kavo-labs/kavo/commit/ca9ff103e7938e360869675677d9cb6eb968b40c))
+* **docs:** group landing page tool icons by category, add MCP icon ([b3cdcd7](https://github.com/kavo-labs/kavo/commit/b3cdcd7f5c8b4b8fe4705e6936cfd03425c9a2f8))
+* **next:** add @kavo/next — App Router binding for the Next.js catch-all route ([#449](https://github.com/kavo-labs/kavo/issues/449)) ([9086d2b](https://github.com/kavo-labs/kavo/commit/9086d2b5a1cbaf0fe46a3fc272bfe4cbe7257e61))
+* **prisma:** support Prisma 7 with generated metadata ([d5e6f8c](https://github.com/kavo-labs/kavo/commit/d5e6f8c6ad05611321567d0dc3769114618449f9))
+
+
+### Bug Fixes
+
+* **docs:** remove unresolved merge conflict markers in peer-dependencies ([33cd80b](https://github.com/kavo-labs/kavo/commit/33cd80b9683f084046fa0528039da8728ff5e6b1))
+* remove private flag from package.json ([d0d60e2](https://github.com/kavo-labs/kavo/commit/d0d60e2295103dadea0328a5483274b109378713))
+* wire @kavo/next into the release and publish pipeline ([c668e3c](https://github.com/kavo-labs/kavo/commit/c668e3c3e384afa9abf5cf8cb56d07493abb3bfa))
+
+
+### Documentation
+
+* **next:** remove npm publish warning from installation instructions ([66c56dd](https://github.com/kavo-labs/kavo/commit/66c56dd8fbdeb91dba30e9d5f93c9b2b156ad248))
+* restructure README packages section and drop non-npm install instructions ([761fcd3](https://github.com/kavo-labs/kavo/commit/761fcd336f04c5cc7344e9494682a4c011f03f24))
+
+
+### Chores
+
+* release ([78754a5](https://github.com/kavo-labs/kavo/commit/78754a51268eee4f81a11c47dee79e829aba4976))
+
 ## [0.21.4](https://github.com/kavo-labs/kavo/compare/v0.21.3...v0.21.4) (2026-09-14)
 
 
