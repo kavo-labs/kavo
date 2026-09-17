@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createKavoHandler, type KavoRouteHandlers } from "@kavo/next";
 import type { Todo } from "./support/fake-infrastructure.js";
-import { buildTodoCrud, buildTodoCrudWithCollidingCustomOp } from "./support/todo-crud.js";
+import { buildTodoCrud, buildTodoCrudOnInstance, buildTodoCrudWithCollidingCustomOp } from "./support/todo-crud.js";
 
 function call(
   handlers: KavoRouteHandlers,
@@ -292,6 +292,37 @@ describe("createKavoHandler", () => {
       expect(response.status).toBe(500);
       const body = (await response.json()) as { code: string };
       expect(body.code).toBe("KAVO_UNEXPECTED_ERROR");
+    });
+  });
+
+  describe("auto-discovery from a KavoInstance", () => {
+    it("serves every entity registered on the root, keyed by lowercase-first entityName", async () => {
+      const built = buildTodoCrudOnInstance();
+      const autoHandlers = createKavoHandler(built.instance);
+      const created = await call(autoHandlers, "POST", ["todo"], { body: { title: "auto-discovered" } });
+      expect(created.status).toBe(201);
+      expect(built.adapter.rows).toHaveLength(1);
+
+      const found = await call(autoHandlers, "GET", ["todo", String(built.adapter.rows[0]!.id)]);
+      expect(found.status).toBe(200);
+      expect(await found.json()).toMatchObject({ title: "auto-discovered" });
+    });
+
+    it("404s an unregistered key the way the explicit-map form does", async () => {
+      const built = buildTodoCrudOnInstance();
+      const autoHandlers = createKavoHandler(built.instance);
+      const response = await call(autoHandlers, "GET", ["nonexistent"]);
+      expect(response.status).toBe(404);
+    });
+
+    it("leaves the explicit Record<string, DefaultKavoService> form unaffected", async () => {
+      const built = buildTodoCrudOnInstance();
+      const explicitHandlers = createKavoHandler({ todos: built.service });
+      const response = await call(explicitHandlers, "GET", ["todos"]);
+      expect(response.status).toBe(200);
+      // The auto-discovery key ("todo") is not registered by the explicit map.
+      const autoKeyResponse = await call(explicitHandlers, "GET", ["todo"]);
+      expect(autoKeyResponse.status).toBe(404);
     });
   });
 });

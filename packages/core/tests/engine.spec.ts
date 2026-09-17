@@ -217,6 +217,14 @@ describe("KavoEngine pipeline", () => {
     const dump = kavo.describe("User");
     expect(dump).toMatchObject({ entityName: "User" });
   });
+
+  it("enumerates every DefaultKavoService produced by createCrud through kavo.services()", () => {
+    const { kavo, crud } = makeCrud();
+    const services = kavo.services();
+    expect(services).toHaveLength(1);
+    expect(services[0]).toBe(crud);
+    expect(services[0]?.engine.config.entityName).toBe("User");
+  });
 });
 
 describe("KavoEngine — per-operation DTO override (issue #131)", () => {

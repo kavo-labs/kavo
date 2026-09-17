@@ -94,6 +94,17 @@ export interface KavoInstance {
 
   /** Debug dump: resolved configuration for one registered entity. */
   describe(entityName: string): Record<string, unknown> | undefined;
+
+  /**
+   * Every `DefaultKavoService` this root's `createCrud` has produced so
+   * far, in call order — the enumeration a framework binding with no
+   * decoration-time hook (e.g. `@kavo/next`'s `createKavoHandler`) needs to
+   * auto-discover entities instead of demanding a hand-built map. This is
+   * read-only reflection over what `createCrud` already built; it opens no
+   * second way to register an entity.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- type-erased, like KavoHandlerEntities
+  services(): readonly DefaultKavoService<any, any, any, any, any, any, any, any, any>[];
 }
 
 /**
@@ -106,6 +117,8 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
   const cacheStore = options.cacheStore ?? createMemoryCacheStore();
   validateCacheStore(cacheStore);
   const registered = new Map<string, Record<string, unknown>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- type-erased, like KavoHandlerEntities
+  const services: DefaultKavoService<any, any, any, any, any, any, any, any, any>[] = [];
   // The cross-entity view nested includes resolve against.
   // Entities that never go through `createCrud` are derived from
   // infrastructure metadata on demand, so a relation can point at one.
@@ -274,11 +287,17 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
           registry.all().map((descriptor) => descriptor.id),
         ),
       );
-      return new DefaultKavoService(engine) as never;
+      const service = new DefaultKavoService(engine) as never;
+      services.push(service);
+      return service;
     },
 
     describe(entityName) {
       return registered.get(entityName);
+    },
+
+    services() {
+      return services;
     },
   };
 }

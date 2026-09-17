@@ -1,6 +1,6 @@
-import { createCrud, type DefaultKavoService } from "@kavo/core";
+import { createCrud, createKavo, type DefaultKavoService, type KavoInstance } from "@kavo/core";
 import "../../src/route-metadata.js";
-import { InMemoryTodoAdapter, Todo, todoMetadata } from "./fake-infrastructure.js";
+import { fakeInfrastructure, InMemoryTodoAdapter, Todo, todoMetadata } from "./fake-infrastructure.js";
 
 /**
  * A bound `Todo` service wired for route-dispatch tests: standard CRUD,
@@ -46,6 +46,26 @@ export function buildTodoCrud(): { service: DefaultKavoService<object>; adapter:
     { metadata: todoMetadata, adapter },
   ) as unknown as DefaultKavoService<object>;
   return { service, adapter };
+}
+
+/**
+ * A `Todo` service registered against a real `KavoInstance` root (rather
+ * than the bare-`createCrud` sugar `buildTodoCrud` uses), for the
+ * `createKavoHandler(instance)` auto-discovery form — `instance` is what a
+ * test hands to `createKavoHandler` directly, `service`/`adapter` are for
+ * asserting against the same registration `instance.services()` sees.
+ */
+export function buildTodoCrudOnInstance(): {
+  instance: KavoInstance;
+  service: DefaultKavoService<object>;
+  adapter: InMemoryTodoAdapter;
+} {
+  const adapter = new InMemoryTodoAdapter();
+  const instance = createKavo({ infrastructure: fakeInfrastructure(adapter) });
+  const service = instance.createCrud(Todo, {
+    delete: { strategy: "soft" },
+  } as never) as unknown as DefaultKavoService<object>;
+  return { instance, service, adapter };
 }
 
 /**

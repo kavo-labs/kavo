@@ -50,6 +50,20 @@ plain functions over the Fetch API's `Request`/`Response`.
    `500`, never a bare `405` (see [ADR-0054](../../../docs/internals/adr/0054-next-resolves-routes-at-request-time.md)
    for why resolution happens at request time).
 
+   Instead of re-listing every entity in a map, `createKavoHandler` also
+   accepts the root `KavoInstance` directly and auto-builds the map from
+   every `createCrud` call made against it:
+
+   ```ts
+   export const { GET, POST, PUT, PATCH, DELETE } = createKavoHandler(kavo);
+   ```
+
+   The key is `entityName` with only its first character lowercased
+   (`User` → `user`) — no pluralization, since guessing a plural would
+   just relocate the surprise. Want a different key? Use the explicit map
+   instead; both forms dispatch identically and the explicit form is
+   unaffected (see ADR-0054's amendment, issue #457).
+
 3. **Optionally export OpenAPI schemas** — `buildKavoSchemas` is the
    `@kavo/next` equivalent of `@kavo/nest`'s `registerKavoSchemas`, built
    without `@nestjs/swagger`:
