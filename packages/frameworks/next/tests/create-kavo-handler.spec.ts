@@ -1,7 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createKavoHandler, type KavoRouteHandlers } from "@kavo/next";
+import type { StandardSchemaV1 } from "@kavo/core";
 import type { Todo } from "./support/fake-infrastructure.js";
-import { buildTodoCrud, buildTodoCrudOnInstance, buildTodoCrudWithCollidingCustomOp } from "./support/todo-crud.js";
+import {
+  buildTodoCrud,
+  buildTodoCrudOnInstance,
+  buildTodoCrudWithCollidingCustomOp,
+  buildTodoCrudWithValidate,
+} from "./support/todo-crud.js";
+
+/** A minimal Standard Schema for tests — no `zod` dependency in this package. */
+function fakeSchema(
+  check: (value: unknown) => StandardSchemaV1.Result<unknown> | Promise<StandardSchemaV1.Result<unknown>>,
+): StandardSchemaV1 {
+  return { "~standard": { version: 1, vendor: "test", validate: check } };
+}
 
 function call(
   handlers: KavoRouteHandlers,
@@ -292,6 +305,106 @@ describe("createKavoHandler", () => {
       expect(response.status).toBe(500);
       const body = (await response.json()) as { code: string };
       expect(body.code).toBe("KAVO_UNEXPECTED_ERROR");
+    });
+  });
+
+  describe("EntityConfig.validate (ADR-0056)", () => {
+    const rejectEmptyTitle = fakeSchema((body) => {
+      const title = (body as { title?: unknown } | null)?.title;
+      if (typeof title === "string" && title.length > 0) {
+        return { value: body };
+      }
+      return { issues: [{ path: ["title"], message: "title must be a non-empty string" }] };
+    });
+
+    it("rejects a body its create schema fails with a 400 problem-details response", async () => {
+      const built = buildTodoCrudWithValidate({ create: rejectEmptyTitle });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
+      expect(response.status).toBe(400);
+      expect(response.headers.get("Content-Type")).toBe("application/problem+json");
+      const responseBody = (await response.json()) as {
+        code: string;
+        errors: { path: string[]; message: string }[];
+      };
+      expect(responseBody.code).toBe("KAVO_NEXT_BODY_VALIDATION_FAILED");
+      expect(responseBody.errors).toEqual([{ path: ["title"], message: "title must be a non-empty string" }]);
+      expect(built.adapter.rows).toHaveLength(0);
+    });
+
+    it("dispatches the schema's (possibly transformed) value, not the raw body", async () => {
+      const upperCaseTitle = fakeSchema((body) => {
+        const { title, ...rest } = body as { title: string };
+        return { value: { ...rest, title: title.toUpperCase() } };
+      });
+      const built = buildTodoCrudWithValidate({ create: upperCaseTitle });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "buy milk" } });
+      expect(response.status).toBe(201);
+      const created = (await response.json()) as { title: string };
+      expect(created.title).toBe("BUY MILK");
+    });
+
+    it("resolves the schema by write slot — create/update/patch dispatch to their own schema", async () => {
+      const seenSlots: string[] = [];
+      const record = (slot: string) =>
+        fakeSchema((body) => {
+          seenSlots.push(slot);
+          return { value: body };
+        });
+      const built = buildTodoCrudWithValidate({
+        create: record("create"),
+        update: record("update"),
+        patch: record("patch"),
+      });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const created = await call(validated, "POST", ["todos"], { body: { title: "a" } });
+      const row = (await created.json()) as { id: number };
+      await call(validated, "PUT", ["todos", String(row.id)], { body: { title: "b", done: false, priority: 0 } });
+      await call(validated, "PATCH", ["todos", String(row.id)], { body: { done: true } });
+
+      expect(seenSlots).toEqual(["create", "update", "patch"]);
+    });
+
+    it("leaves an entity with no registered validate schema dispatching unvalidated", async () => {
+      const built = buildTodoCrud();
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "unvalidated" } });
+      expect(response.status).toBe(201);
+    });
+
+    it("never runs the schema for GET, DELETE, or a bodyless write", async () => {
+      let calls = 0;
+      const countCalls = fakeSchema((body) => {
+        calls++;
+        return { value: body };
+      });
+      const built = buildTodoCrudWithValidate({ create: countCalls });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const created = await call(validated, "POST", ["todos"], { body: { title: "a" } });
+      const row = (await created.json()) as { id: number };
+      expect(calls).toBe(1);
+
+      await call(validated, "GET", ["todos", String(row.id)]);
+      await call(validated, "DELETE", ["todos", String(row.id)]);
+      expect(calls).toBe(1);
+    });
+
+    it("awaits an async schema's validate() result", async () => {
+      const asyncSchema = fakeSchema(async (body) => {
+        await Promise.resolve();
+        return { value: body };
+      });
+      const built = buildTodoCrudWithValidate({ create: asyncSchema });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "async" } });
+      expect(response.status).toBe(201);
     });
   });
 

@@ -1,4 +1,4 @@
-import type { DefaultKavoService, KavoInstance, KavoRequest, RequestPreconditions } from "@kavo/core";
+import type { DefaultKavoService, KavoInstance, KavoRequest, RequestPreconditions, StandardSchemaV1 } from "@kavo/core";
 import { WireQuery } from "@kavo/core";
 import { toErrorResponse } from "./error-response.js";
 import { matchRoute } from "./match-route.js";
@@ -78,6 +78,47 @@ function badRequestBody(): Response {
     }),
     { status: 400, headers: { "Content-Type": "application/problem+json" } },
   );
+}
+
+/**
+ * Distinct from `badRequestBody()`'s `KAVO_NEXT_INVALID_BODY`: this is
+ * well-formed JSON that an `EntityConfig.validate` schema rejected on
+ * shape, not a `JSON.parse` failure — a different client mistake with a
+ * different fix, so it gets a different code.
+ */
+function bodyValidationFailed(entityKey: string, issues: readonly StandardSchemaV1.Issue[]): Response {
+  return new Response(
+    JSON.stringify({
+      title: "Bad Request",
+      status: 400,
+      detail: `The request body for '${entityKey}' failed validation.`,
+      code: "KAVO_NEXT_BODY_VALIDATION_FAILED",
+      errors: issues.map((issue) => ({
+        path: (issue.path ?? []).map((segment) => String(typeof segment === "object" ? segment.key : segment)),
+        message: issue.message,
+      })),
+    }),
+    { status: 400, headers: { "Content-Type": "application/problem+json" } },
+  );
+}
+
+/**
+ * The write slot an `EntityConfig.validate` schema is registered under —
+ * the same three slots `dto.create`/`update`/`patch` uses. A custom write
+ * operation (no slot of its own) dispatches unvalidated, exactly as it
+ * would with no `dto` class registered for it either.
+ */
+function validateSlotFor(operation: string): "create" | "update" | "patch" | null {
+  switch (operation) {
+    case "createOne":
+      return "create";
+    case "updateOne":
+      return "update";
+    case "patchOne":
+      return "patch";
+    default:
+      return null;
+  }
 }
 
 async function resolveSegments(context: Parameters<KavoRouteHandler>[1]): Promise<readonly string[]> {
@@ -172,6 +213,11 @@ function isKavoInstance(value: KavoHandlerEntities | KavoInstance): value is Kav
  * instead — a sibling, more specific route file (e.g.
  * `app/api/users/[id]/activate/route.ts`) is matched by Next.js before this
  * catch-all ever runs.
+ *
+ * A write body is validated against `EntityConfig.validate.create`/
+ * `update`/`patch` (ADR-0056) when the entity registered one — declared on
+ * `createCrud` itself, not here, so this function needs no validation
+ * option of its own.
  */
 export function createKavoHandler(
   entities: KavoHandlerEntities | KavoInstance,
@@ -228,6 +274,15 @@ function createKavoHandlerFromEntities(entities: KavoHandlerEntities, options: K
             return badRequestBody();
           }
           throw error;
+        }
+        const slot = validateSlotFor(matched.operation);
+        const schema = slot === null ? undefined : service.engine.config.validate[slot];
+        if (schema !== undefined) {
+          const result = await schema["~standard"].validate(body);
+          if (result.issues !== undefined) {
+            return bodyValidationFailed(entityKey, result.issues);
+          }
+          body = result.value;
         }
       }
       const url = new URL(request.url);

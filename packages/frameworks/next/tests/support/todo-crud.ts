@@ -49,6 +49,38 @@ export function buildTodoCrud(): { service: DefaultKavoService<object>; adapter:
 }
 
 /**
+ * Same shape as {@link buildTodoCrud}, but with `EntityConfig.validate`
+ * set to whatever the caller passes — for `createKavoHandler`'s
+ * `EntityConfig.validate` dispatch tests (ADR-0056), which need a schema
+ * registered on the entity itself rather than on `buildTodoCrud`'s fixed
+ * config.
+ */
+export function buildTodoCrudWithValidate(validate: {
+  readonly create?: unknown;
+  readonly update?: unknown;
+  readonly patch?: unknown;
+}): { service: DefaultKavoService<object>; adapter: InMemoryTodoAdapter } {
+  const adapter = new InMemoryTodoAdapter();
+  const service = createCrud(
+    Todo,
+    {
+      delete: { strategy: "soft" },
+      validate,
+      operations: {
+        createOne: true,
+        findOne: true,
+        findMany: true,
+        updateOne: true,
+        patchOne: true,
+        deleteOne: true,
+      },
+    } as never,
+    { metadata: todoMetadata, adapter },
+  ) as unknown as DefaultKavoService<object>;
+  return { service, adapter };
+}
+
+/**
  * A `Todo` service registered against a real `KavoInstance` root (rather
  * than the bare-`createCrud` sugar `buildTodoCrud` uses), for the
  * `createKavoHandler(instance)` auto-discovery form — `instance` is what a
