@@ -19,6 +19,7 @@ import {
   PatchNoChangesException,
   PersistenceException,
   QueryValidationException,
+  SchemaValidationException,
   TransactionException,
   UnresolvedRelationException,
   renderMessage,
@@ -51,6 +52,7 @@ const CATALOG: Readonly<Record<CatalogedErrorCode, { status: number; title: stri
   KAVO_JSON_PATCH_TARGET_NOT_FOUND: { status: 404, title: "JSON Patch target not found" },
   KAVO_ARRAY_MUTATION_MEMBER_NOT_FOUND: { status: 404, title: "Array-mutation member not found" },
   KAVO_PATCH_NO_CHANGES: { status: 400, title: "Patch has no changes" },
+  KAVO_SCHEMA_INVALID: { status: 400, title: "Invalid request body" },
   KAVO_ALREADY_DELETED: { status: 409, title: "Already deleted" },
   KAVO_NOT_DELETED: { status: 409, title: "Not deleted" },
   KAVO_PRECONDITION_FAILED: { status: 412, title: "Precondition failed" },
@@ -162,6 +164,7 @@ describe("exception hierarchy", () => {
     { exception: new PersistenceException(), code: "KAVO_PERSISTENCE_FAILED", status: 500 },
     { exception: new TransactionException(), code: "KAVO_TRANSACTION_FAILED", status: 500 },
     { exception: new QueryValidationException([]), code: "KAVO_QUERY_INVALID", status: 400 },
+    { exception: new SchemaValidationException([]), code: "KAVO_SCHEMA_INVALID", status: 400 },
     { exception: new ConfigurationException("User", "operations.x", "why"), code: "KAVO_CONFIG_INVALID", status: 500 },
     {
       exception: new PaginationNotAdvancingException("User"),
@@ -231,6 +234,39 @@ describe("exception hierarchy", () => {
     const exception = QueryValidationException.single(issue);
     expect(exception).toBeInstanceOf(QueryValidationException);
     expect(exception.issues).toEqual([issue]);
+  });
+
+  it("carries field-level issues on SchemaValidationException under the aggregate code", () => {
+    const issues: QueryIssueDto[] = [{ field: "address.zip", detail: "Required" }];
+    const exception = new SchemaValidationException(issues);
+    expect(exception.code).toBe("KAVO_SCHEMA_INVALID");
+    expect(exception.issues).toEqual(issues);
+  });
+
+  it("wraps the single-issue case into the same issues array (SchemaValidationException)", () => {
+    const issue: QueryIssueDto = { field: "email", detail: "Invalid email" };
+    const exception = SchemaValidationException.single(issue);
+    expect(exception).toBeInstanceOf(SchemaValidationException);
+    expect(exception.issues).toEqual([issue]);
+  });
+
+  it("carries explicit options through SchemaValidationException, not just the default-empty branch", () => {
+    const context = { entityName: "User", operation: "createOne" };
+    const cause = new Error("parse failed");
+    const exception = new SchemaValidationException([{ field: "email", detail: "Invalid email" }], {
+      context,
+      cause,
+      messageParams: { entity: "User" },
+    });
+    expect(exception.context).toEqual(context);
+    expect(exception.cause).toBe(cause);
+    expect(exception.messageParams).toEqual({ entity: "User" });
+  });
+
+  it("threads explicit options through SchemaValidationException.single too", () => {
+    const context = { entityName: "User", operation: "createOne" };
+    const exception = SchemaValidationException.single({ field: "email", detail: "Invalid email" }, { context });
+    expect(exception.context).toEqual(context);
   });
 
   it("marks a transaction retryable only when told so", () => {
