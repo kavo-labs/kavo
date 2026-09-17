@@ -1,6 +1,6 @@
 import { Module, ValidationPipe, type DynamicModule } from "@nestjs/common";
 import { APP_PIPE } from "@nestjs/core";
-import { KavoModule, kavoValidationExceptionFactory } from "@kavo/nest";
+import { KavoModule } from "@kavo/nest";
 import { createInfrastructure } from "@kavo/typeorm";
 import type { KavoAppContext, RealtimeTransport } from "@kavo/core";
 import type { DataSource } from "typeorm";
@@ -15,6 +15,7 @@ import { AddressController } from "./address/address.controller.js";
 import { PetTagController } from "./pet-tag/pet-tag.controller.js";
 import { OwnerSettingController } from "./owner-setting/owner-setting.controller.js";
 import { LandmarkController, RegionController, ZoneController } from "./nested-demo/nested-demo.controllers.js";
+import { appValidationExceptionFactory } from "./common/validation-exception-factory.js";
 
 /**
  * Reference wiring: the app hands `@kavo/nest` its infrastructure (here
@@ -42,11 +43,13 @@ import { LandmarkController, RegionController, ZoneController } from "./nested-d
  * `emitDecoratorMetadata` — see e.g. `owner.controller.ts`'s `@Override()`'d
  * write methods for why every generated route's own body is exempt (Kavo's
  * DTOs are shapes, not validators — doc 04), and how each entity opts a
- * write route into validation. `exceptionFactory: kavoValidationExceptionFactory`
- * (issue #437) is what turns a failing body into a structured `errors[]`
- * problem-details response, one entry per field, instead of Nest's default
- * flattened `message: string[]` — opt-in, since `@kavo/nest` never installs
- * the pipe itself.
+ * write route into validation. `exceptionFactory: appValidationExceptionFactory`
+ * (`common/validation-exception-factory.ts`, issue #437) is what turns a
+ * failing body into a structured `errors[]` problem-details response, one
+ * entry per field, instead of Nest's default flattened `message: string[]`
+ * — this app's own choice, not something `@kavo/nest` bundles or installs
+ * itself (issue #467: schema-driven validation, ADR-0055, is Kavo's own
+ * opinion on write-body validation now; class-validator here is this app's).
  */
 @Module({})
 export class AppModule {
@@ -102,7 +105,7 @@ export class AppModule {
           useValue: new ValidationPipe({
             whitelist: true,
             transform: true,
-            exceptionFactory: kavoValidationExceptionFactory,
+            exceptionFactory: appValidationExceptionFactory,
           }),
         },
         OwnerWelcomeService,

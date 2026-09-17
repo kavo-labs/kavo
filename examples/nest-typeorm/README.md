@@ -17,20 +17,21 @@ Every entity but `Dog` also validates its write bodies with `class-validator`
 own (see `docs/internals/architecture/04-dto-system.md`), so this app's own
 `ValidationPipe` (`app.module.ts`) plus each entity's registered
 `dto.create`/`update`/`patch` class is what a validation layer looks like
-bolted onto Kavo from application code, with no framework changes. That
-pipe's `exceptionFactory: kavoValidationExceptionFactory` (issue #437) is
-what turns a failing body into a structured, per-field `errors[]` on the
-problem-details response instead of a single flattened `detail` string.
-`Owner`
-and `Cat` additionally `@Override()` their `createOne`/`updateOne`/`patchOne`
-(see `owner.controller.ts`) to give the body a concrete compile-time type
-inside the method — since issue #281, that override is no longer required
-for the validation itself, which now also runs on a generated route.
-`Dog` is left unvalidated on purpose, as the contrast: it registers no
-`dto.create`/`update`/`patch` _and_ carries no `class-validator` decorators
-of its own, so issue #283's entity-class fallback (`@kavo/nest` falls an
-unregistered write slot back to the entity class, but only when the entity
-itself is `class-validator`-decorated) has nothing to fall back to either.
+bolted onto Kavo from application code, with no framework changes — a plain
+Nest pattern, not something `@kavo/nest` has an opinion about (schema-driven
+validation, ADR-0055, is Kavo's own opinion on write-body validation now;
+`@kavo/nest` bundles no class-validator helper of its own, issue #467). That
+pipe's `exceptionFactory: appValidationExceptionFactory`
+(`common/validation-exception-factory.ts`, issue #437) is what turns a
+failing body into a structured, per-field `errors[]` on the problem-details
+response instead of a single flattened `detail` string. `Owner` and `Cat`
+additionally `@Override()` their `createOne`/`updateOne`/`patchOne` (see
+`owner.controller.ts`) to give the body a concrete compile-time type inside
+the method — since issue #281, that override is no longer required for the
+validation itself, which now also runs on a generated route. `Dog` is left
+unvalidated on purpose, as the contrast: it registers no
+`dto.create`/`update`/`patch`, so there is no decorated class for the
+`ValidationPipe` to resolve a metatype against.
 
 ## SQLite (default)
 
