@@ -186,3 +186,13 @@ A single entity-default authorization function (ADR-0037), not a per-operation m
 | `operations.<customId>`   | `{ handler?, kind?, cardinality?, dto?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
 
 `dto.create`/`dto.update` accept a registered class only — their writable-field list is the top-level `create`/`update` keys above (issue #388). `patch`/`item`/`list` additionally accept the inline `{ fields }` shorthand (issue #386). A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
+
+### validate
+
+| Key               | Type                                                 | Default |
+| ----------------- | ---------------------------------------------------- | ------- |
+| `validate.create` | [Standard Schema](https://standardschema.dev)-shaped | unset   |
+| `validate.update` | Standard-Schema-shaped                               | unset   |
+| `validate.patch`  | Standard-Schema-shaped                               | unset   |
+
+The same three write slots `dto` has, but never conflated with it (ADR-0056): `dto.create` names a response/response-shape class, `validate.create` names a schema to check the body against. Any library implementing Standard Schema (Zod 4+, Valibot, ArkType) works with no adapter — `@kavo/core` bootstrap-checks each configured slot is Standard-Schema-shaped and stores it unresolved, but never calls one itself. `@kavo/next`'s `createKavoHandler` is what runs it, at dispatch time; `@kavo/nest` needs no equivalent, since NestJS's own `ValidationPipe` already reads a registered `dto` class. No global default, no per-operation or per-call override. See [Next.js integration](/integrations/frameworks/nextjs#validating-a-write-body).

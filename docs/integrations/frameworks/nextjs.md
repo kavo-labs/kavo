@@ -46,6 +46,29 @@ export const { GET, POST, PUT, PATCH, DELETE } = createKavoHandler(kavo);
 
 The URL key is derived from each entity's `entityName` with only its first character lowercased — `User` → `user`, `Project` → `project` — and nothing else; there's no pluralization, since English plurals are irregular enough (`Category` → `Categories`) that guessing one would just move the surprise rather than remove it. If you want a different key (`users` instead of `user`, or a name that doesn't match `entityName` at all), pass the explicit `Record<string, DefaultKavoService>` map instead — both forms dispatch identically, and the explicit form keeps working exactly as it did before. See [ADR-0054](/internals/adr/0054-next-resolves-routes-at-request-time)'s amendment for the full rationale.
 
+## Validating a write body
+
+`@kavo/nest` never built its own validation system — it just lets NestJS's `ValidationPipe` run whatever a registered `dto.create`/`update`/`patch` class is decorated with. `@kavo/next` has no decorator/DI container to hang an equivalent trick off of, so validation is a config key instead: `EntityConfig.validate`, declared on `createCrud` itself, next to `filter`/`sort`/`dto` — not on `createKavoHandler` ([ADR-0056](/internals/adr/0056-validate-config-key-and-standard-schema)).
+
+```ts
+// kavo.ts
+import { z } from "zod";
+
+const createUserSchema = z.object({ email: z.string().email(), name: z.string().min(1) });
+
+export const users = kavo.createCrud(User, {
+  validate: { create: createUserSchema },
+  filter: { fields: ["id", "email"] },
+});
+```
+
+```ts
+// app/api/[...kavo]/route.ts
+export const { GET, POST, PUT, PATCH, DELETE } = createKavoHandler(kavo);
+```
+
+Any schema implementing the [Standard Schema](https://standardschema.dev) protocol works here with no adapter — Zod 4+, Valibot, and ArkType all do. `@kavo/core` resolves `validate.create`/`update`/`patch` at bootstrap (bootstrap-checking each slot is actually Standard-Schema-shaped) but never calls one itself; `createKavoHandler` is what runs `schema['~standard'].validate(body)`, right after reading the body and before dispatching to the engine, mapping the resolved operation id to a slot (`createOne`→`create`, `updateOne`→`update`, `patchOne`→`patch`; a custom write with no slot dispatches unvalidated). A result with `issues` short-circuits a `400` problem-details response (`KAVO_NEXT_BODY_VALIDATION_FAILED`, an `errors[]` extension of `{path, message}`); a result with `value` dispatches that value — not the raw body — so a schema that also normalizes or fills in defaults is honored. An entity with no `validate` slot for the resolved operation dispatches unvalidated, exactly as it did before this key existed. `@kavo/core` and `@kavo/next` import nothing from `zod`, `valibot`, or any other validation library. See [examples/next-prisma](https://github.com/kavo-labs/kavo/tree/main/examples/next-prisma) for this wired end-to-end.
+
 ## Custom operations
 
 A [custom operation](/core/custom-operations) dispatches exactly like the standard eight — same registry, same `meta.routes` convention:
