@@ -276,6 +276,83 @@ describe("custom operations reach MCP (issue #153)", () => {
     expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ id: 1, done: true });
   });
 
+  it("adds a tool for a custom write taking id and body when dto.input is also declared", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "write tests", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          renameOne: {
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                const { id, body } = input as { id: number; body: { title: string } };
+                return context.repository.update(id, { title: body.title }, context);
+              },
+            },
+            dto: { input: Todo, output: Todo },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const tool = find(bindings, "todo.renameOne");
+    expect(tool.tool.inputSchema).toMatchObject({
+      properties: expect.objectContaining({ id: { type: ["string", "number"] } }),
+      required: ["id"],
+    });
+
+    const result = await tool.handler({ id: 1, title: "renamed" });
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ id: 1, title: "renamed" });
+  });
+
+  it("adds a tool for a cardinality-'many' custom write taking a body when schema.input is declared (issue #467)", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "a", done: false }, { id: 2, title: "b", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          markManyDone: {
+            kind: "write",
+            cardinality: "many",
+            handler: {
+              async execute(input: unknown) {
+                const { parsed } = input as { parsed: boolean };
+                if (parsed) {
+                  for (const row of adapter.rows) {
+                    row.done = true;
+                  }
+                }
+                return { entities: adapter.rows, total: adapter.rows.length };
+              },
+            },
+            dto: { output: Todo },
+            schema: {
+              // Reshapes the raw args into a distinguishable `{ parsed: true }`
+              // — proves `execute` receives `schema.safeParse`'s own `data`,
+              // not the raw MCP tool args passed straight through.
+              input: { safeParse: () => ({ success: true as const, data: { parsed: true } }) },
+            },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const tool = find(bindings, "todo.markManyDone");
+    expect(tool.tool.inputSchema).toEqual({ type: "object" });
+
+    const result = await tool.handler({ note: "go" });
+    expect(result.isError).toBeUndefined();
+    expect(adapter.rows.every((row) => row.done)).toBe(true);
+  });
+
   it("adds a tool for a custom read, taking id only (no declared dto.input)", async () => {
     const adapter = new InMemoryTodoAdapter();
     adapter.rows.push({ id: 1, title: "peek", done: false });

@@ -65,6 +65,16 @@ describe("EntityConfig.schema (ADR-0055)", () => {
     await expect(crud.createOne({ ...ADA, name: "" } as never)).rejects.toBeInstanceOf(SchemaValidationException);
   });
 
+  it("names a root-level SchemaIssue (empty path) '(root)' rather than an empty field", async () => {
+    const rootFailingSchema: KavoSchema<CreateUserInput> = {
+      safeParse: () => ({ success: false, error: { issues: [{ path: [], message: "body must be an object" }] } }),
+    };
+    const { crud } = makeCrud({ schema: { input: { create: rootFailingSchema } } });
+    await expect(crud.createOne(ADA as never)).rejects.toMatchObject({
+      issues: [{ field: "(root)", detail: "body must be an object" }],
+    });
+  });
+
   it("schema.output.item narrows/shapes the response independently of dto", async () => {
     const { crud } = makeCrud({ schema: { output: { item: dropEmailSchema<Partial<User>>() } } });
     const created = await crud.createOne(ADA as never);
