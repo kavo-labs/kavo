@@ -1,6 +1,6 @@
 {
   "name": "@kavo/next",
-  "version": "0.22.2",
+  "version": "0.22.3",
   "description": "Kavo Next.js App Router binding — createKavoHandler, registry-driven catch-all routing, problem-details error mapping.",
   "license": "MIT",
   "engines": {
