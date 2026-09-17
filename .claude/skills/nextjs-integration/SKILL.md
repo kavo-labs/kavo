@@ -61,7 +61,12 @@ plain functions over the Fetch API's `Request`/`Response`.
 
    export function GET() {
      const { schemas } = buildKavoSchemas({ users, projects });
-     return Response.json({ openapi: "3.1.0", info: { title: "My API", version: "1.0.0" }, paths: {}, components: { schemas } });
+     return Response.json({
+       openapi: "3.1.0",
+       info: { title: "My API", version: "1.0.0" },
+       paths: {},
+       components: { schemas },
+     });
    }
    ```
 
