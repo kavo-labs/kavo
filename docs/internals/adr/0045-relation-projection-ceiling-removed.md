@@ -1,29 +1,17 @@
-# ADR-0045 — `allowed.selectable` takes root paths only; the relation-dotted ceiling is removed
+# ADR-0045 — `allowed.selectable` takes root paths only
 
-**Status:** accepted — supersedes [ADR-0044](/internals/adr/0044-relation-projection-ceiling-from-selectable), which is fully reverted; restores [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection) decision 4 to full force.
+**Status:** accepted — restores [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection) decision 4 to full force.
 
 ## Context
 
-ADR-0044 gave `allowed.selectable` a second meaning: a relation-dotted
-entry in the array form (`selectable: ["id", "title", "dictionary.id"]`)
-was a per-relation _projection ceiling_ on an included relation, resolved
-from the parent entity's config and intersected with the relation target's
-own `selectable`.
-
-One config key carrying two unrelated jobs — a root-resource field
-allowlist _and_ a cross-entity projection cap — is the cost ADR-0044
-accepted for reusing a spelling that already type-checked. In practice the
-overload is the problem: `selectable` no longer reads as "what a request
-may name in `select=`", the resolved list had to be filtered before use,
-and `ResolvedEntityConfig` grew a `relationProjection` member that three
-packages threaded through.
-
-The same restriction is already expressible without the overload:
-configure the **target** entity's own `allowed.selectable` (it governs
-every include of that entity, ADR-0026 decision 4), or don't make the
-relation `includable` at all. The one capability ADR-0044 added over that
-baseline — capping a relation from the _parent_ side, per relation, even
-for an unregistered target — is not worth a permanently overloaded key.
+`allowed.selectable` governs one thing only: which of this entity's own
+column names and declared computed-field names a request may name in
+`select=`. An included relation's projection is governed wholly by the
+**target** entity's own `allowed.selectable` (ADR-0026 decision 4) — a
+relation-dotted entry on the parent (`selectable: ["id", "dictionary.id"]`)
+is not a second, cross-entity meaning for the same key. To restrict what an
+included relation exposes, configure the target entity's own
+`allowed.selectable`, or don't make the relation `includable` at all.
 
 ## Decision
 
@@ -64,24 +52,13 @@ the array and the `{ exclude }` form.**
   `select[<relation>]` query parameter carries no `Restricted to:`
   description.
 
-This is the third state of this surface, not a return to the first:
-
-| State    | A relation-dotted `selectable` entry                       |
-| -------- | ---------------------------------------------------------- |
-| pre-0044 | boots, silently inert (type-checks, dropped at resolution) |
-| ADR-0044 | some shapes throw at bootstrap; a valid one is a ceiling   |
-| ADR-0045 | every relation-dotted entry throws at bootstrap            |
-
 ## Consequences
 
-**Breaking change**, scoped to configs that carried a relation-dotted
-`selectable` entry — every such config now throws at bootstrap instead of
-either silently ignoring the entry (pre-0044) or enforcing it as a ceiling
-(ADR-0044). Migration: drop the entry, or restrict the relation's shape on
-the **target** entity's own `allowed.selectable`. Pre-1.0, `feat!` /
-minor bump, changelog note.
+**A relation-dotted `selectable` entry always throws at bootstrap.** A
+config that names one must drop the entry, or restrict the relation's
+shape on the **target** entity's own `allowed.selectable` instead.
 
-**A parent can no longer narrow an included relation from its own side.**
+**A parent cannot narrow an included relation from its own side.**
 An included relation's projection is governed wholly by the target
 entity's own `selectable` (or its derived all-columns default). This is
 the accepted tradeoff — see Context. An unregistered relation target,
@@ -106,13 +83,11 @@ item schema) — there is no longer an inline-object branch for a
 parent-ceilinged relation. `select[<relation>]` loses its per-entity
 `Restricted to:` description.
 
-**ADR-0026 decision 4 is restored to full force.** "A relation is
-projected by its own target's `selectable`, never the root's" holds with
-no exception. ADR-0044's amendment to it is withdrawn.
+**ADR-0026 decision 4 holds with no exception.** A relation is projected
+by its own target's `selectable`, never the root's.
 
 ## References
 
-- ADR-0044, fully reverted by this decision.
 - ADR-0026 (`allowed.selectable` narrows the response projection),
   whose decision 4 this restores.
 - ADR-0028 (includable relations live on `allowed`), for the

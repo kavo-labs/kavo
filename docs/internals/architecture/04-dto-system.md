@@ -42,15 +42,14 @@ The metadata seam (`EntityMetadata`, doc 09 §1) supplies the field list
 the defaults derive from:
 
 - **Readable projection** (`item`/`list` default): every scalar column,
-  plus every computed field the entity declares (§7), **intersected with
+  plus every derived field the entity declares (§7), **intersected with
   `allowed.selectable` when that key is configured explicitly**
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
   which is how a column is kept out of every response without registering a
   DTO at all. Relation properties
   are excluded unless the request includes them deliberately; a class
-  getter or method never appears on its own — it is not a column, and an
-  entity-class getter that seems to work is an accident of the ORM handing
-  the engine class instances ([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
+  getter or method never appears on its own unless the adapter reports it
+  as a derived field (§7) — it is not a column.
   A registered DTO wins outright over the allowlist rather than
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
@@ -132,50 +131,23 @@ from the **target entity's own registered `item`/`list` DTOs** when that
 entity has a Kavo config, else its entity-derived default. There is no
 per-include DTO slot — the related resource owns its own contract.
 
-## 7. Computed fields
+## 7. Derived fields
 
-A field with no backing column is declared on the entity config, not
-faked through a DTO class:
+A field with no backing column is declared on the **ORM** side — a
+`@VirtualColumn` (TypeORM), `@Formula` (MikroORM), a client extension
+field (Prisma), or a schema virtual (Mongoose) — not on the Kavo config.
+The adapter reports it to core as an ordinary `FieldMetadata` entry
+carrying a `derivedExpression` marker; core treats it exactly like a
+column wherever the adapter can make that true (`allowed.selectable`,
+and — on TypeORM/MikroORM only — `filterable`/`sortable`). See
+[ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for
+the full design, including per-adapter differences and why a derived
+value cannot vary by caller.
 
-```ts
-createCrud(User, {
-  computed: {
-    fullName: { resolve: (user) => [user.firstName, user.lastName].filter(Boolean).join(" ") },
-  },
-});
-```
-
-`DefaultSerializer` **evaluates** a computed key by calling `resolve`,
-never by reading it off the row — which is what makes it behave the same
-over a TypeORM class instance and a Prisma/Mongoose plain object, and why
-no ORM adapter is involved at all. It evaluates it even when the row
-_does_ carry that key (a class getter, or a column outside the metadata
-seam): resolving beats reading, or the feature would collapse back into
-the accident it replaced. `resolve` also receives the request's
-`KavoContext`, so a field may vary by `context.app`; it is synchronous by
-design, because it runs once per served item — and must be **total**, not
-just pure, because one throwing row fails the entire list response
-([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)).
-
-The rules, all governed by
-[ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated):
-
-| Aspect                  | Behavior                                                                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Default projection      | Included in `item`/`list` automatically — unless an explicit `allowed.selectable` omits it (ADR-0026)                            |
-| Explicit DTO            | Narrows it like any other field (omit it to hide it; name it to keep it, still evaluated)                                        |
-| `selectable`            | Joined by default, so `select=fullName` works; `selectable: false` opts out                                                      |
-| `filterable`/`sortable` | **Never** — naming one is a bootstrap `ConfigurationException`, and a type error besides                                         |
-| Write payloads          | Never writable — a `create`/`update`/`patch` DTO naming one is a bootstrap error, and the deserializer strips the key regardless |
-| Precedence chain        | Outside it: structural entity config like `dto`, resolved once at `createCrud`                                                   |
-
-The serialization order of §5 is unchanged: a computed field is subject to
-"selection narrows, never widens" exactly like a column.
-
-A computed field declared on a **relation target** resolves when that
-relation is included — the serializer reads the included node's projection
-from the target's own resolved config through the `EntityCatalog` (§6), so
-this composes with no extra machinery.
+A derived field declared on a **relation target** resolves when that
+relation is included — the serializer reads the included node's
+projection from the target's own resolved config through the
+`EntityCatalog` (§6), so this composes with no extra machinery.
 
 Static typing of the response is unaffected: the entity-derived `ItemDto`
 does not grow the key, and neither does the generated OpenAPI response

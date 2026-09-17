@@ -1,30 +1,19 @@
 # ADR-0050 — Derived fields come from ORM metadata; core stays expression-agnostic
 
-**Status:** accepted
-
-Supersedes [ADR-0019](0019-computed-fields-are-serializer-evaluated.md).
+**Status:** accepted — supersedes [ADR-0019](0019-computed-fields-are-serializer-evaluated.md).
 
 ## Context
 
-ADR-0019's `computed` feature made a virtual field first-class by
-evaluating a `resolve(entity, context)` function at response mapping —
-deliberately never filterable, sortable, or writable, because it had no
-column behind it. That design bought ORM-independence at the cost of the
-database: every supported ORM already has its own virtual/generated-column
-mechanism (`@VirtualColumn` in TypeORM, `@Formula` in MikroORM, a client
-extension in Prisma, a schema virtual in Mongoose), and two of them
-(TypeORM, MikroORM) expose the derived expression as real SQL — schema
-metadata Kavo could read and push down to `WHERE`/`ORDER BY`, the same way
-an ordinary column already is.
-
-Keeping `computed` and adding this SQL-pushdown case alongside it would
-leave two competing mechanisms for the same concept: a JS resolver for
-some fields, an ORM expression for others, on the same entity, with
-different allowlist rules for each. That is the kind of split complexity
-ADR-0019 itself existed to keep out of the response path. The cleaner cut
-is to retire the resolver entirely and let the ORM own the definition —
-core reads whatever expression the adapter reports and treats it exactly
-like a column wherever the adapter can make that true.
+Every supported ORM already has its own virtual/generated-column mechanism
+(`@VirtualColumn` in TypeORM, `@Formula` in MikroORM, a client extension in
+Prisma, a schema virtual in Mongoose), and two of them (TypeORM, MikroORM)
+expose the derived expression as real SQL — schema metadata Kavo can read
+and push down to `WHERE`/`ORDER BY`, the same way an ordinary column
+already is. A field with no backing column should be declared once, on the
+ORM side, and core should read whatever expression the adapter reports and
+treat it exactly like a column wherever the adapter can make that true —
+rather than maintaining a separate, Kavo-native resolver mechanism with its
+own allowlist rules alongside the ORM's own.
 
 ## Decision
 

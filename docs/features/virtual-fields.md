@@ -202,12 +202,13 @@ GET /posts?filter[commentCount][gt]=10
 | `@kavo/prisma` (client extension `result` field) | ✅ (via a registered DTO or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
 | `@kavo/mongoose` (`schema.virtual`)              | ✅ (via a registered DTO or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
 
-## What changed from `computed` (ADR-0019)
+## Caller-varying values
 
-Prior to issue #373, a virtual field was declared through `@Kavo(Entity, { computed: { name: { resolve } } })` — a JavaScript function evaluated per served row, response-only by construction. That feature is **removed**, not deprecated: `computed`, `ComputedFieldDescriptor`, and `ComputedFieldMap` no longer exist. Migrate a `computed` declaration by moving its logic into the ORM:
+A virtual field's expression is evaluated by the database once per row —
+nothing about it can vary by the request reading the row. A value that
+needs to vary by caller (`context.app`) has no place in `allowed`/ORM
+metadata at all; reach for a custom operation, an explicit `item`/`list`
+DTO computed in application code, or a policy instead.
 
-- A pure, column-derived value (`fullName`, `displayTitle`) → a `@VirtualColumn`/`@Formula`/client-extension field/schema virtual, per your ORM, as above.
-- A value that needs to be filtered or sorted → the same, on TypeORM or MikroORM only.
-- **A value that varied by caller** (`context.app`) has no replacement. An ORM-derived expression is evaluated by the database once per row; nothing about it can vary by the request reading the row. Reach for a custom operation, an explicit `item`/`list` DTO computed in application code, or a policy instead.
-
-See [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the full design and [ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated) for the superseded original.
+See [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata)
+for the full design.
