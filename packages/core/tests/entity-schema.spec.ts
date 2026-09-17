@@ -129,4 +129,35 @@ describe("EntityConfig.schema (ADR-0055)", () => {
     const created = await crud.createOne(ADA as never);
     expect(created).toMatchObject({ name: "Ada" });
   });
+
+  it("schema.input as a single KavoSchema applies it to create, update, and patch alike", async () => {
+    const { crud } = makeCrud({ schema: { input: requireNameSchema<CreateUserInput>() } });
+    const created = await crud.createOne(ADA as never);
+    expect(created).toMatchObject({ name: "Ada (validated)" });
+
+    const updated = await crud.updateOne(created.id, { ...ADA, name: "Grace" } as never);
+    expect(updated).toMatchObject({ name: "Grace (validated)" });
+
+    const patched = await crud.patchOne(created.id, { name: "Hedy" } as never);
+    expect(patched).toMatchObject({ name: "Hedy (validated)" });
+  });
+
+  it("schema.output as a single KavoSchema applies it to item and list alike", async () => {
+    const { crud } = makeCrud({ schema: { output: dropEmailSchema<Partial<User>>() } });
+    const created = await crud.createOne(ADA as never);
+    expect(created).not.toHaveProperty("email");
+    const list = await crud.findMany();
+    for (const item of list.items) {
+      expect(item).not.toHaveProperty("email");
+    }
+  });
+
+  it("a top-level schema as a single KavoSchema applies to input (create/update/patch) and output (item/list) at once", async () => {
+    const { crud } = makeCrud({ schema: requireNameSchema<CreateUserInput>() });
+    const created = await crud.createOne(ADA as never);
+    // Both `schema.input.create` and `schema.output.item` are the same
+    // schema instance here — the input side stamps the stored value once,
+    // the output side stamps the response a second time.
+    expect(created).toMatchObject({ name: "Ada (validated) (validated)" });
+  });
 });

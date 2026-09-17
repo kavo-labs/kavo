@@ -5,7 +5,7 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
-import type { EntitySchemaMap, OperationSchemaOverride } from "../dto/entity-schema.js";
+import type { EntitySchema, OperationSchemaOverride } from "../dto/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";
@@ -788,7 +788,7 @@ export interface EntityConfig<
    * it (see `entity-schema.ts`'s module doc) — where both are configured
    * for the same slot, `schema` wins.
    */
-  readonly schema?: EntitySchemaMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  readonly schema?: EntitySchema<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**
    * What `createOne` (and `createMany`, once #137 lands) may write. A
    * `{ fields: [...] }` allowlist (the shorthand `dto.patch`/`dto.item`/

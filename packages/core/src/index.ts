@@ -73,10 +73,13 @@ export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 // Landed additively alongside the DTO system above — see
 // `dto/entity-schema.ts`'s module doc for why `dto` is not yet removed.
 export type {
+  EntitySchema,
   EntitySchemaMap,
   OperationSchemaOverride,
+  SchemaInputMap,
   SchemaInputOf,
   SchemaInputSlot,
+  SchemaOutputMap,
   SchemaOutputOf,
   SchemaOutputSlot,
   SchemaQueryOf,

@@ -91,4 +91,18 @@ Where `dto` is a plain class narrowed by its runtime key set, `schema.input.<slo
 
 Per-operation overrides follow the same shape at `operations.<id>.schema.<field>`, with the same fallback chain `dto` has: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the corresponding `dto` override → the entity-derived default. Where both `schema` and `dto` are configured for the same slot, `schema` wins.
 
+`schema.input`, `schema.output`, and `schema` itself each also accept a single schema in place of their per-slot map, as shorthand for applying one schema everywhere that side reads from:
+
+```ts
+@Kavo(Book, {
+  schema: { input: CreateBookSchema }, // same as { create, update, patch: CreateBookSchema }
+})
+
+@Kavo(Book, {
+  schema: CreateBookSchema, // same as { input: CreateBookSchema, output: CreateBookSchema }
+})
+```
+
+`schema.input`'s shorthand never reaches `query` — it has its own shape and no natural single-schema reading. A shorthand `schema.output`/top-level `schema` is typed against the input side's output type only: a failing `schema.output` safely falls back to the already-projected value rather than rejecting, so a create schema narrower than the full entity still works as the output shorthand too.
+
 `dto` is not removed by this — see ADR-0055 and issue #466 for why. `@kavo/nest`'s OpenAPI generation (`registerKavoSchemas`) and `@kavo/graphql`/`@kavo/mcp` have migrated onto `schema` (issue #467): a configured `schema.input.<slot>`/`schema.output.<slot>` is documented/typed ahead of `dto`, with `dto` and then the entity's own ORM metadata as the fallback chain when no `schema` is configured for a slot. OpenAPI generation specifically needs a schema that opts into an optional `toJSONSchema(): object` method (`KavoSchema`, `kavo-schema.ts`) — `.safeParse` alone gives `registerKavoSchemas` nothing to introspect; a schema with no `toJSONSchema` still validates and narrows at runtime, but is documented from the `dto`/ORM-metadata fallback instead. `@kavo/nest` also no longer bundles a `class-validator` exception factory or an entity-class validation fallback of its own (issue #283/#437) — `schema` is Kavo's own answer to write-body validation now, so a `class-validator`-backed `ValidationPipe` is entirely an app's own choice (see `examples/nest-typeorm/src/common/validation-exception-factory.ts`). Prefer `schema` for entities that need real input validation and OpenAPI-documented shapes; keep `dto` where you only need shape/serialization narrowing with no validation or docs generation attached — the two coexist per slot without conflict.

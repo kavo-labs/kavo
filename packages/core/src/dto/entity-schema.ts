@@ -21,6 +21,33 @@ export type SchemaInputSlot = "create" | "update" | "patch" | "query";
 export type SchemaOutputSlot = "item" | "list";
 
 /**
+ * `schema.input`'s shorthand: a single {@link KavoSchema} in place of the
+ * per-slot map, applied to `create`/`update`/`patch` alike (never `query`,
+ * which has its own shape and no natural single-schema reading). Equivalent
+ * to writing `{ create: X, update: X, patch: X }` by hand.
+ */
+export type SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut> =
+  | KavoSchema<CreateOut>
+  | {
+      readonly create?: KavoSchema<CreateOut>;
+      readonly update?: KavoSchema<UpdateOut>;
+      readonly patch?: KavoSchema<PatchOut>;
+      readonly query?: KavoSchema<QueryOut>;
+    };
+
+/**
+ * `schema.output`'s shorthand: a single {@link KavoSchema} in place of the
+ * per-slot map, applied to `item`/`list` alike. Equivalent to writing
+ * `{ item: X, list: X }` by hand.
+ */
+export type SchemaOutputMap<ItemOut, ListOut> =
+  | KavoSchema<ItemOut>
+  | {
+      readonly item?: KavoSchema<ItemOut>;
+      readonly list?: KavoSchema<ListOut>;
+    };
+
+/**
  * Per-entity schema registration — the `schema` key of `createCrud`'s
  * config. Mirrors `dto`'s slot convention exactly (ADR-0055's own
  * decision), split into `input`/`output` rather than one flat map: `input`
@@ -28,6 +55,11 @@ export type SchemaOutputSlot = "item" | "list";
  * mapping at serialization — the two never run at the same pipeline stage,
  * so keeping them apart avoids a single map whose keys mean different
  * things depending on which slot you're looking at.
+ *
+ * Both `input` and `output` accept a single {@link KavoSchema} as shorthand
+ * for their whole per-slot map (`SchemaInputMap`/`SchemaOutputMap`), and
+ * `EntitySchema` below additionally accepts a single `KavoSchema` in place
+ * of this whole map, applied to every slot on both sides at once.
  */
 export interface EntitySchemaMap<
   Entity,
@@ -38,16 +70,35 @@ export interface EntitySchemaMap<
   ItemOut = Entity,
   ListOut = ItemOut,
 > {
-  readonly input?: {
-    readonly create?: KavoSchema<CreateOut>;
-    readonly update?: KavoSchema<UpdateOut>;
-    readonly patch?: KavoSchema<PatchOut>;
-    readonly query?: KavoSchema<QueryOut>;
-  };
-  readonly output?: {
-    readonly item?: KavoSchema<ItemOut>;
-    readonly list?: KavoSchema<ListOut>;
-  };
+  readonly input?: SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut>;
+  readonly output?: SchemaOutputMap<ItemOut, ListOut>;
+}
+
+/**
+ * `createCrud`'s `schema` key itself: `EntitySchemaMap`'s `input`/`output`
+ * split, or a single {@link KavoSchema} as shorthand for
+ * `{ input: X, output: X }` — one schema applied to `create`/`update`/
+ * `patch` on the way in and `item`/`list` on the way out. Typed against
+ * `CreateOut` only: the input leg is where a mismatched shape is actually
+ * rejected (`SchemaValidationException`), while a failing `schema.output`
+ * safely falls back to the already-projected value (`DefaultSchemaResolver`
+ * below) — so requiring the same schema's output to also satisfy `ItemOut`
+ * would reject shorthand usages (e.g. a create schema narrower than the
+ * full entity) that work fine at runtime.
+ */
+export type EntitySchema<
+  Entity,
+  CreateOut = EntityInput<Entity>,
+  UpdateOut = EntityInput<Entity>,
+  PatchOut = Partial<UpdateOut>,
+  QueryOut = QueryContext<Entity>,
+  ItemOut = Entity,
+  ListOut = ItemOut,
+> = KavoSchema<CreateOut> | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
+
+/** Structural check: a `KavoSchema` shorthand has `safeParse`, a per-slot map does not. */
+function isKavoSchema(value: unknown): value is KavoSchema<unknown> {
+  return typeof value === "object" && value !== null && typeof (value as KavoSchema<unknown>).safeParse === "function";
 }
 
 /**
@@ -70,9 +121,12 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
   private readonly input: Readonly<Record<SchemaInputSlot, KavoSchema<unknown> | null>>;
   private readonly output: Readonly<Record<SchemaOutputSlot, KavoSchema<unknown> | null>>;
 
-  constructor(schema?: EntitySchemaMap<Entity>) {
-    const input = schema?.input ?? {};
-    const output = schema?.output ?? {};
+  constructor(schema?: EntitySchema<Entity>) {
+    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isKavoSchema(schema)
+      ? { input: schema, output: schema }
+      : (schema ?? {});
+    const input = isKavoSchema(map.input) ? { create: map.input, update: map.input, patch: map.input } : (map.input ?? {});
+    const output = isKavoSchema(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
     this.input = Object.freeze({
       create: input.create ?? null,
       update: input.update ?? null,
