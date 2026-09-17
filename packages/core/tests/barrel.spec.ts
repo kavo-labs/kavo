@@ -253,6 +253,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "StandardHandlerFactory",
   "StandardOperationId",
   "StandardOperationsConfig",
+  "StandardSchemaV1",
   "StateKey",
   "TransactionContext",
   "TransactionException",

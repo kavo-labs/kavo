@@ -122,6 +122,7 @@ export type {
   ResolvedSearchConfig,
   ResolvedIncludeConfig,
 } from "./config/resolved-entity-config.js";
+export type { StandardSchemaV1 } from "./validation/standard-schema.js";
 
 // ── Policy (ADR-0037) ─────────────────────────────────────────────────
 export { type Policy, type PolicyArgs, type WhenParams } from "./policy/kavo-policy.js";

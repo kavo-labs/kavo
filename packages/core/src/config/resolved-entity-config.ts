@@ -12,6 +12,7 @@ import type { RelationRegistry } from "../relations/relation-registry.js";
 import type { ResolvedSoftDelete } from "../persistence/soft-delete.js";
 import type { RealtimeTransport } from "../realtime/realtime-transport.js";
 import type { CacheStore } from "../caching/cache-store.js";
+import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 
 /** `EntityConfig.filter` after bootstrap resolution — complete, never optional (issue #386). */
 export interface ResolvedFilterConfig<Entity = unknown> {
@@ -121,6 +122,16 @@ export interface ResolvedEntityConfig<Entity = unknown> {
   readonly identifierField: string;
   /** Bootstrap-cached DTO resolution. */
   readonly dto: DtoResolver<Entity>;
+  /**
+   * `EntityConfig.validate`, bootstrap-checked and passed through
+   * unresolved (ADR-0056) — an omitted slot stays `undefined` rather than
+   * a placeholder, since core never calls one of these itself.
+   */
+  readonly validate: {
+    readonly create?: StandardSchemaV1;
+    readonly update?: StandardSchemaV1;
+    readonly patch?: StandardSchemaV1;
+  };
   /** Relation edges of this entity. */
   readonly relations: RelationRegistry<Entity>;
   /**

@@ -159,6 +159,43 @@ describe("resolveEntityConfig — sort/select/include defaults", () => {
   });
 });
 
+describe("resolveEntityConfig — validate (ADR-0056)", () => {
+  const standardSchema = {
+    "~standard": { version: 1 as const, vendor: "test", validate: (value: unknown) => ({ value }) },
+  };
+
+  it("defaults every slot to undefined when unconfigured", () => {
+    const config = resolveEntityConfig(userMetadata, undefined, undefined);
+    expect(config.validate).toEqual({});
+  });
+
+  it("passes a Standard-Schema-shaped value straight through, unresolved, per slot", () => {
+    const config = resolveEntityConfig(
+      userMetadata,
+      { validate: { create: standardSchema, update: standardSchema, patch: standardSchema } },
+      undefined,
+    );
+    expect(config.validate.create).toBe(standardSchema);
+    expect(config.validate.update).toBe(standardSchema);
+    expect(config.validate.patch).toBe(standardSchema);
+  });
+
+  it("rejects a create/update/patch value with no '~standard' validate function", () => {
+    for (const slot of ["create", "update", "patch"] as const) {
+      const error = rejectedEntityConfig({ validate: { [slot]: { not: "a schema" } } });
+      expect(error.code).toBe("KAVO_CONFIG_INVALID");
+      expect(error.messageParams).toMatchObject({ entity: "User", path: `validate.${slot}` });
+    }
+  });
+
+  it("rejects null and non-object values the same way", () => {
+    for (const value of [null, "schema", 42]) {
+      const error = rejectedEntityConfig({ validate: { create: value } });
+      expect(error.messageParams).toMatchObject({ path: "validate.create" });
+    }
+  });
+});
+
 describe("resolveEntityConfig — search", () => {
   it("defaults to disabled (false)", () => {
     const config = resolveEntityConfig(userMetadata, undefined, undefined);

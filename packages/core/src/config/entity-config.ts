@@ -12,6 +12,7 @@ import type { Policy } from "../policy/kavo-policy.js";
 import type { RealtimeEventId } from "../realtime/realtime-event.js";
 import type { FilterApply, IncludeApply, SelectApply, SortApply } from "../policy/kavo-apply.js";
 import type { FilterExpression, FilterOperatorToken } from "../query/filter.js";
+import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 
 /**
  * One allowlist key's raw configuration: either the explicit set of paths
@@ -764,6 +765,26 @@ export interface EntityConfig<
    * keeping this map DTO-class-only for the two write slots.
    */
   readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
+  /**
+   * A [Standard Schema](https://standardschema.dev)-shaped validator per
+   * write slot — `create`/`update`/`patch`, the same three `dto` write
+   * slots use — checked against a request body before it reaches a
+   * handler (ADR-0056). Structural entity-scope config like `dto`: this
+   * key is resolved directly onto `ResolvedEntityConfig.validate`, never
+   * merged through `mergeSettings`, and core itself never calls a
+   * registered schema's `validate()` — the same way `dto`'s classes are
+   * types core resolves but never instantiates. `@kavo/next`'s
+   * `createKavoHandler` is what actually runs one, at dispatch time, since
+   * it has no decoration-time step to attach to the way `@kavo/nest` does
+   * (which keeps using NestJS's own `ValidationPipe` and needs nothing
+   * here). Any library implementing the Standard Schema protocol works —
+   * Zod 4+, Valibot, ArkType — and `@kavo/core` imports none of them.
+   */
+  readonly validate?: {
+    readonly create?: StandardSchemaV1;
+    readonly update?: StandardSchemaV1;
+    readonly patch?: StandardSchemaV1;
+  };
   /**
    * What `createOne` (and `createMany`, once #137 lands) may write. A
    * `{ fields: [...] }` allowlist (the shorthand `dto.patch`/`dto.item`/

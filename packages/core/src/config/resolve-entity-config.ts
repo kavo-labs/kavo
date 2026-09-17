@@ -42,6 +42,7 @@ import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
 import { ConfigurationException } from "../errors/exceptions.js";
+import type { StandardSchemaV1 } from "../validation/standard-schema.js";
 
 /**
  * Top-level settings keys — the subset of an `EntityConfig` that merges.
@@ -188,6 +189,7 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
     identifierField,
+    validate: resolveValidateConfig(entityName, entityConfig?.validate),
     dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
@@ -205,6 +207,40 @@ export function resolveEntityConfig<Entity extends object>(
     createApply,
     updateApply,
   };
+  return Object.freeze(resolved);
+}
+
+/**
+ * Resolve `EntityConfig.validate`: bootstrap-check that each configured
+ * slot is actually Standard-Schema-shaped (ADR-0056) — catching a plain
+ * object or the wrong library's schema here, once, rather than at every
+ * request `@kavo/next` would otherwise fail to call `["~standard"]` on.
+ * Core never calls `validate()` itself; this is the same "resolved but
+ * unexecuted" treatment `dto`'s classes get.
+ */
+function resolveValidateConfig<Entity extends object>(
+  entityName: string,
+  validateConfig:
+    | { readonly create?: StandardSchemaV1; readonly update?: StandardSchemaV1; readonly patch?: StandardSchemaV1 }
+    | undefined,
+): ResolvedEntityConfig<Entity>["validate"] {
+  const slots = ["create", "update", "patch"] as const;
+  const resolved: { create?: StandardSchemaV1; update?: StandardSchemaV1; patch?: StandardSchemaV1 } = {};
+  for (const slot of slots) {
+    const schema = validateConfig?.[slot];
+    if (schema === undefined) {
+      continue;
+    }
+    const scope = `validate.${slot}`;
+    if (typeof schema !== "object" || schema === null || typeof schema["~standard"]?.validate !== "function") {
+      throw new ConfigurationException(
+        entityName,
+        scope,
+        `'${scope}' must implement the Standard Schema contract (https://standardschema.dev) — got '${typeof schema}'.`,
+      );
+    }
+    resolved[slot] = schema;
+  }
   return Object.freeze(resolved);
 }
 

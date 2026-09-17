@@ -966,6 +966,10 @@ export class KavoEngine<Entity extends object> {
       // every operation's settings `Allowed` union, so it never varies here.
       identifierField: config.identifierField,
       dto: config.dto,
+      // Structural, like `dto` above (ADR-0056): resolved once at
+      // bootstrap, and core never calls one of these itself, so there is
+      // nothing for a per-call override to narrow or widen.
+      validate: config.validate,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
       // not per call.
