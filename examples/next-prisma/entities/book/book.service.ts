@@ -1,32 +1,6 @@
 import { NotFoundException } from "@kavo/core";
-import { createPrismaKavo } from "@kavo/prisma";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "./generated/prisma/client";
-import metadata from "./generated/kavo-metadata";
-import { Author } from "./author.entity";
+import { kavo } from "../../lib/kavo";
 import { Book } from "./book.entity";
-
-const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL ?? "file:./dev.db" });
-const prisma = new PrismaClient({ adapter });
-
-const kavo = createPrismaKavo(prisma as never, {
-  metadata,
-  entities: [Author, Book],
-  // SQLite rejects Prisma's `mode: "insensitive"` string-filter argument.
-  caseInsensitiveFilters: false,
-});
-
-/**
- * The app's only `@kavo/next` import point, mirroring `examples/nest-*`'s
- * `app.module.ts` role: every entity's `createCrud` call lives here, and
- * `app/api/[...kavo]/route.ts` and `app/api/openapi.json/route.ts` both
- * import the resulting services rather than building their own.
- */
-export const authors = kavo.createCrud<Author>(Author, {
-  filter: { fields: ["id", "name", "email"] },
-  sort: { fields: ["id", "name"] },
-  include: { fields: ["books"] },
-});
 
 /**
  * `publishOne` is a custom operation (docs/core/custom-operations.md): its

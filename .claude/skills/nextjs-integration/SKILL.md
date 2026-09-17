@@ -113,8 +113,8 @@ by Next.js before `[...kavo]` ever runs — no Kavo-side config needed.
 - **Minifier-renamed marker classes** — a production build's minifier can
   rename JS classes, which breaks an ORM adapter's marker-class name matching
   (`@kavo/prisma`'s, in particular) unless each marker's runtime `.name` is
-  pinned explicitly. See `examples/next-prisma/src/author.entity.ts` for the
-  one-line fix.
+  pinned explicitly. See `examples/next-prisma/entities/author/author.entity.ts`
+  for the one-line fix.
 - **Not yet supported**: bulk (`*Many`) operation dispatch through this
   binding (arrives once engine/registry support lands — it's a config change
   on the entity, not a `@kavo/next` change); SSE, GraphQL, and MCP glue for

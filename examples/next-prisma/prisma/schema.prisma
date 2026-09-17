@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  output   = "../generated/prisma"
 }
 
 generator kavo {
@@ -11,7 +11,7 @@ generator kavo {
   // direct path to the built entrypoint sidesteps the symlink entirely, the
   // same way packages/orms/prisma's own test-fixture schema does.
   provider = "node ../../packages/orms/prisma/dist/generator.js"
-  output   = "../src/generated/kavo-metadata.ts"
+  output   = "../generated/kavo-metadata.ts"
 }
 
 datasource db {

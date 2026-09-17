@@ -6,8 +6,10 @@ the `nest-*` examples: `createKavoHandler(...)` → CRUD engine → `@kavo/prism
 an OpenAPI export route — no NestJS, no decorators, no DI container.
 
 Where `examples/nest-*` wire `KavoModule.forRoot` + `@Kavo(Entity)` per
-controller, this app has exactly one Kavo import point
-(`src/kavo.ts`, the `app.module.ts` equivalent) and one catch-all route file:
+controller, this app has exactly one Kavo root instance
+(`lib/kavo.ts`, the `app.module.ts` equivalent), one `<entity>.service.ts`
+per entity under `entities/` that calls `kavo.createCrud`, and one catch-all
+route file:
 
 ```bash
 pnpm --filter @kavo/example-next-prisma run generate   # prisma generate + db push
@@ -34,7 +36,8 @@ GET    /api/openapi.json           # components.schemas, buildKavoSchemas' outpu
 
 ```ts
 import { createKavoHandler } from "@kavo/next";
-import { authors, books } from "../../../src/kavo.js";
+import { authors } from "../../../entities/author/author.service.js";
+import { books } from "../../../entities/book/book.service.js";
 
 export const { GET, POST, PUT, PATCH, DELETE } = createKavoHandler({ authors, books });
 ```
@@ -44,7 +47,7 @@ the rest resolves the operation through that entity's own operation
 registry — the same one `@kavo/nest`'s `@Kavo` decorator would read for the
 identical `createCrud` config. `publishOne`'s route
 (`POST /books/:id/publish`) is a custom operation, dispatched exactly like
-the standard eight — see `src/kavo.ts`.
+the standard eight — see `entities/book/book.service.ts`.
 
 **The App Router equivalent of manual-method-wins:** `@kavo/nest` lets a
 hand-written controller method with a matching name suppress a generated
@@ -57,9 +60,10 @@ reach entirely.
 
 ## What's different from the `nest-*` apps
 
-No decorators, no `@Kavo` class, no `KavoModule`. `src/kavo.ts` calls
-`createCrud` directly per entity and exports the resulting services; the two
-route files (`[...kavo]/route.ts`, `openapi.json/route.ts`) import them.
+No decorators, no `@Kavo` class, no `KavoModule`. `lib/kavo.ts` builds the
+root Kavo instance; each `entities/<name>/<name>.service.ts` calls
+`kavo.createCrud` and exports the resulting service; the two route files
+(`[...kavo]/route.ts`, `openapi.json/route.ts`) import them.
 Routes are resolved at request time against each entity's operation
 registry rather than generated once at decoration time (there is no
 decoration time in the App Router) — see `@kavo/next`'s own

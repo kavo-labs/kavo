@@ -1,4 +1,4 @@
-import type { Author } from "./author.entity";
+import type { Author } from "../author/author.entity";
 
 // Marker class — see author.entity.ts.
 export class Book {

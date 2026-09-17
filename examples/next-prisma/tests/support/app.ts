@@ -1,15 +1,16 @@
 import { NotFoundException, createKavo } from "@kavo/core";
 import { createInfrastructure } from "@kavo/prisma";
-import metadata from "../../src/generated/kavo-metadata";
-import { Author } from "../../src/author.entity";
-import { Book } from "../../src/book.entity";
+import metadata from "../../generated/kavo-metadata";
+import { Author } from "../../entities/author/author.entity";
+import { Book } from "../../entities/book/book.entity";
 import { newTestPrismaClient } from "./db";
 
 /**
- * The same entity wiring `src/kavo.ts` exports, rebuilt per test against a
- * fresh database copy (`newTestPrismaClient`) — duplicated rather than
- * imported because `src/kavo.ts` binds to the checked-out `dev.db` at
- * module load, and parallel test files must not share that file.
+ * The same entity wiring `lib/kavo.ts` + `entities/*.service.ts` export,
+ * rebuilt per test against a fresh database copy (`newTestPrismaClient`) —
+ * duplicated rather than imported because `lib/kavo.ts` binds to the
+ * checked-out `dev.db` at module load, and parallel test files must not
+ * share that file.
  */
 export function buildTestApp() {
   const prisma = newTestPrismaClient();

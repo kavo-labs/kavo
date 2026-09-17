@@ -105,6 +105,6 @@ Add whichever ORM adapter your app uses alongside it, the same as with `@kavo/ne
 
 - Bulk (`*Many`) operations dispatch once the underlying engine/registry support lands; the routing logic doesn't hardcode a fixed operation list, so this is a config change on the entity, not a `@kavo/next` change, once it arrives.
 - SSE, GraphQL, and MCP glue for Next.js aren't part of this binding — each is its own protocol-integration question.
-- A production build's minifier can rename JS classes, which breaks an ORM adapter's marker-class name matching (`@kavo/prisma`'s, for instance) unless each marker's runtime `.name` is pinned explicitly — see `examples/next-prisma/src/author.entity.ts` for the one-line fix.
+- A production build's minifier can rename JS classes, which breaks an ORM adapter's marker-class name matching (`@kavo/prisma`'s, for instance) unless each marker's runtime `.name` is pinned explicitly — see `examples/next-prisma/entities/author/author.entity.ts` for the one-line fix.
 
 See [examples/next-prisma](https://github.com/kavo-labs/kavo/tree/main/examples/next-prisma) for a full reference app: standard CRUD, a custom operation, filtering/sorting/include, and the OpenAPI export route, wired against `@kavo/prisma`.
