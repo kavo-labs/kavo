@@ -28,28 +28,8 @@ field selection — no hand-written controller methods.
 
 ## Getting started
 
-**pnpm**
-
-```bash
-pnpm add @kavo/core @kavo/nest @kavo/typeorm
-```
-
-**npm**
-
 ```bash
 npm install @kavo/core @kavo/nest @kavo/typeorm
-```
-
-**yarn**
-
-```bash
-yarn add @kavo/core @kavo/nest @kavo/typeorm
-```
-
-**bun**
-
-```bash
-bun add @kavo/core @kavo/nest @kavo/typeorm
 ```
 
 `@kavo/nest` expects `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, and
@@ -76,28 +56,44 @@ fast. [`extensions`](extensions) has ready-made skills for the whole surface —
 Swagger, the GraphQL and MCP bindings, and per-ORM wiring for each supported
 adapter — published as a plugin via this repo's own marketplace:
 
-```
-/plugin marketplace add kavo-labs/kavo
-/plugin install kavo-skills@kavo-marketplace
+```bash
+npx skills add kavo-labs/kavo
 ```
 
 Fewer tokens, ship faster.
 
 ## Packages
 
-| Package                                       | Role                                                        |
-| --------------------------------------------- | ----------------------------------------------------------- |
-| [`@kavo/core`](packages/core)                 | Contracts, type system, and the request engine              |
-| [`@kavo/typeorm`](packages/orms/typeorm)      | TypeORM adapter                                             |
-| [`@kavo/prisma`](packages/orms/prisma)        | Prisma adapter                                              |
-| [`@kavo/mongoose`](packages/orms/mongoose)    | Mongoose adapter                                            |
-| [`@kavo/mikroorm`](packages/orms/mikroorm)    | MikroORM adapter                                            |
-| [`@kavo/nest`](packages/frameworks/nest)      | NestJS binding — the `@Kavo` decorator and route generation |
-| [`@kavo/graphql`](packages/protocols/graphql) | Host-agnostic GraphQL schema binding                        |
-| [`@kavo/mcp`](packages/protocols/mcp)         | Host-agnostic MCP binding — entities as MCP tools           |
+[`@kavo/core`](packages/core) holds all contracts, the type system, and the
+request engine, with **zero runtime dependencies**. Everything else is a
+swappable adapter or binding on top of it: pick the ORM(s) you store data
+with, and the framework or protocol binding(s) you expose it through.
 
-Pick the ORM and framework/protocol bindings you need; `@kavo/core` has zero
-runtime dependencies.
+**Frameworks** — generate routes/handlers from an entity + `@Kavo` config:
+
+| Package                                  | Role                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| [`@kavo/nest`](packages/frameworks/nest) | NestJS binding — the `@Kavo` decorator and route generation    |
+| [`@kavo/next`](packages/frameworks/next) | Next.js App Router binding — registry-driven catch-all routing |
+
+**ORMs** — adapters that feed the engine from your data layer:
+
+| Package                                    | Role             |
+| ------------------------------------------ | ---------------- |
+| [`@kavo/typeorm`](packages/orms/typeorm)   | TypeORM adapter  |
+| [`@kavo/prisma`](packages/orms/prisma)     | Prisma adapter   |
+| [`@kavo/mongoose`](packages/orms/mongoose) | Mongoose adapter |
+| [`@kavo/mikroorm`](packages/orms/mikroorm) | MikroORM adapter |
+
+**Protocols** — host-framework-agnostic bindings for non-REST surfaces:
+
+| Package                                       | Role                                              |
+| --------------------------------------------- | ------------------------------------------------- |
+| [`@kavo/graphql`](packages/protocols/graphql) | Host-agnostic GraphQL schema binding              |
+| [`@kavo/mcp`](packages/protocols/mcp)         | Host-agnostic MCP binding — entities as MCP tools |
+
+`@kavo/sse` (`packages/realtime/sse`) adds a plain HTTP `text/event-stream`
+realtime transport, usable from `@kavo/nest` with no extra peer dependency.
 
 ## Contributing
 
