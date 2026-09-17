@@ -248,6 +248,34 @@ describe("custom operations reach MCP (issue #153)", () => {
     expect(adapter.rows[0]?.done).toBe(true);
   });
 
+  it("adds a tool for an enabled custom write that declares schema.output instead of dto.output (issue #467)", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "write tests", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: {
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                const { id } = input as { id: number };
+                return context.repository.update(id, { done: true }, context);
+              },
+            },
+            schema: { output: { safeParse: (input: unknown) => ({ success: true as const, data: input }) } },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const bindings = crudTools({ name: "Todo", service });
+    const result = await find(bindings, "todo.markDoneOne").handler({ id: 1 });
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse((result.content[0] as { text: string }).text)).toMatchObject({ id: 1, done: true });
+  });
+
   it("adds a tool for a custom read, taking id only (no declared dto.input)", async () => {
     const adapter = new InMemoryTodoAdapter();
     adapter.rows.push({ id: 1, title: "peek", done: false });
