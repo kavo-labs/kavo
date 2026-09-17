@@ -321,16 +321,22 @@ describe("custom operations reach MCP (issue #153)", () => {
             kind: "write",
             cardinality: "many",
             handler: {
-              async execute() {
-                for (const row of adapter.rows) {
-                  row.done = true;
+              async execute(input: unknown) {
+                const { parsed } = input as { parsed: boolean };
+                if (parsed) {
+                  for (const row of adapter.rows) {
+                    row.done = true;
+                  }
                 }
                 return { entities: adapter.rows, total: adapter.rows.length };
               },
             },
             dto: { output: Todo },
             schema: {
-              input: { safeParse: (input: unknown) => ({ success: true as const, data: input }) },
+              // Reshapes the raw args into a distinguishable `{ parsed: true }`
+              // — proves `execute` receives `schema.safeParse`'s own `data`,
+              // not the raw MCP tool args passed straight through.
+              input: { safeParse: () => ({ success: true as const, data: { parsed: true } }) },
             },
           },
         },
