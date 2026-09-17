@@ -125,7 +125,9 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isKavoSchema(schema)
       ? { input: schema, output: schema }
       : (schema ?? {});
-    const input = isKavoSchema(map.input) ? { create: map.input, update: map.input, patch: map.input } : (map.input ?? {});
+    const input = isKavoSchema(map.input)
+      ? { create: map.input, update: map.input, patch: map.input }
+      : (map.input ?? {});
     const output = isKavoSchema(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
     this.input = Object.freeze({
       create: input.create ?? null,
