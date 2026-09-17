@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
+import type { Datamodel as DmmfDatamodel } from "@prisma/dmmf";
 import type { PrismaField, PrismaMetadata } from "./datamodel.js";
 
 const require = createRequire(import.meta.url);
@@ -112,6 +113,10 @@ generatorHandler({
 
     const outputPath = resolve(output);
     await mkdir(resolve(outputPath, ".."), { recursive: true });
-    await writeFile(outputPath, generatedModule(options.dmmf.datamodel as unknown as PrismaMetadata), "utf8");
+    // `options.dmmf.datamodel` is `@prisma/dmmf`'s `Datamodel` — importing
+    // that real type (rather than casting through `unknown`) means a future
+    // DMMF shape change that actually breaks `PrismaMetadata`'s assumptions
+    // fails here at compile time instead of silently.
+    await writeFile(outputPath, generatedModule(options.dmmf.datamodel as DmmfDatamodel as PrismaMetadata), "utf8");
   },
 });
