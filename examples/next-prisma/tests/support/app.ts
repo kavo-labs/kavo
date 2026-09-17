@@ -2,6 +2,8 @@ import { NotFoundException, createKavo } from "@kavo/core";
 import { createInfrastructure } from "@kavo/prisma";
 import metadata, { entities, Author, Book } from "../../generated/kavo-metadata";
 import { newTestPrismaClient } from "./db";
+import { createAuthorSchema, patchAuthorSchema, updateAuthorSchema } from "../../entities/author/author.schema";
+import { createBookSchema, patchBookSchema, updateBookSchema } from "../../entities/book/book.schema";
 
 /**
  * The same entity wiring `lib/kavo.ts` + `entities/*.service.ts` export,
@@ -24,12 +26,14 @@ export function buildTestApp() {
     filter: { fields: ["id", "name", "email"] },
     sort: { fields: ["id", "name"] },
     include: { fields: ["books"] },
+    validate: { create: createAuthorSchema, update: updateAuthorSchema, patch: patchAuthorSchema },
   });
 
   const books = kavo.createCrud<Book>(Book, {
     filter: { fields: ["id", "title", "published", "authorId"] },
     sort: { fields: ["id", "title"] },
     include: { fields: ["author"] },
+    validate: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
     operations: {
       createOne: true,
       findOne: true,

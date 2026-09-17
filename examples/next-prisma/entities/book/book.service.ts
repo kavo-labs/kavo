@@ -1,6 +1,7 @@
 import { NotFoundException } from "@kavo/core";
 import { kavo } from "../../lib/kavo";
 import { Book } from "../../generated/kavo-metadata";
+import { createBookSchema, patchBookSchema, updateBookSchema } from "./book.schema";
 
 /**
  * `publishOne` is a custom operation (docs/core/custom-operations.md): its
@@ -13,6 +14,7 @@ export const books = kavo.createCrud<Book>(Book, {
   filter: { fields: ["id", "title", "published", "authorId"] },
   sort: { fields: ["id", "title"] },
   include: { fields: ["author"] },
+  validate: { create: createBookSchema, update: updateBookSchema, patch: patchBookSchema },
   operations: {
     createOne: true,
     findOne: true,

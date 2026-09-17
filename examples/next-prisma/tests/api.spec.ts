@@ -90,6 +90,28 @@ describe("next-prisma example app", () => {
     expect(response.headers.get("Content-Type")).toBe("application/problem+json");
   });
 
+  it("rejects a create body that fails the entity's own Zod schema (EntityConfig.validate) with a 400", async () => {
+    const { authors, books } = buildTestApp();
+    const handlers = createKavoHandler({ authors, books });
+
+    const response = await call(handlers, "POST", ["authors"], { body: { name: "", email: "not-an-email" } });
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Content-Type")).toBe("application/problem+json");
+    const body = (await response.json()) as { code: string; errors: { path: string[] }[] };
+    expect(body.code).toBe("KAVO_NEXT_BODY_VALIDATION_FAILED");
+    expect(body.errors.map((issue) => issue.path)).toEqual(expect.arrayContaining([["name"], ["email"]]));
+  });
+
+  it("still creates a valid entity once its EntityConfig.validate schema passes", async () => {
+    const { authors, books } = buildTestApp();
+    const handlers = createKavoHandler({ authors, books });
+
+    const response = await call(handlers, "POST", ["books"], { body: { title: "Valid Title" } });
+    expect(response.status).toBe(201);
+    const book = (await response.json()) as { title: string };
+    expect(book.title).toBe("Valid Title");
+  });
+
   it("serves component schemas over /api/openapi.json's own buildKavoSchemas call", () => {
     const { authors, books } = buildTestApp();
     const { schemas } = buildKavoSchemas({ authors, books });
