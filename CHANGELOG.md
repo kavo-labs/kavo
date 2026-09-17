@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.3](https://github.com/kavo-labs/kavo/compare/v0.22.2...v0.22.3) (2026-09-17)
+
+
+### CI
+
+* publish packages as one flat parallel matrix ([c5bc8e7](https://github.com/kavo-labs/kavo/commit/c5bc8e7883307c445e8195d7d637cbb206666251))
+
 ## [0.22.2](https://github.com/kavo-labs/kavo/compare/v0.22.1...v0.22.2) (2026-09-17)
 
 
