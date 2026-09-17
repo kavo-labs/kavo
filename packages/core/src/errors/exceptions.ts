@@ -66,6 +66,29 @@ export class QueryValidationException extends KavoException {
   }
 }
 
+/**
+ * A `schema.input.<slot>` (ADR-0055) `safeParse` failed for an incoming
+ * request body. Carries one `errors[]` entry per issue, reusing
+ * {@link QueryIssueDto}'s `{ field, code?, detail }` shape rather than a
+ * second field-level issue type — the same shape issue #437's
+ * `class-validator` bridge already reuses for framework-level body
+ * validation. Raised by the engine's deserialization stage, never by
+ * application code directly.
+ */
+export class SchemaValidationException extends KavoException {
+  readonly issues: readonly QueryIssueDto[];
+
+  constructor(issues: readonly QueryIssueDto[], options: KavoExceptionOptions = {}) {
+    super("KAVO_SCHEMA_INVALID", options);
+    this.issues = issues;
+  }
+
+  /** Convenience for the common single-issue case. */
+  static single(issue: QueryIssueDto, options: KavoExceptionOptions = {}): SchemaValidationException {
+    return new SchemaValidationException([issue], options);
+  }
+}
+
 export class NotFoundException extends KavoException {
   constructor(options: KavoExceptionOptions = {}) {
     super("KAVO_NOT_FOUND", options);

@@ -221,6 +221,11 @@ export const ERROR_CATALOG = {
       "column holding more than one textual spelling of an instant does on a backend that stores dates as text. " +
       "Check the adapter first, then the sort column.",
   },
+  KAVO_SCHEMA_INVALID: {
+    status: 400,
+    title: "Invalid request body",
+    message: "The request body for {entity} failed schema validation.",
+  },
   KAVO_HTTP_ERROR: {
     // Nominal only: this code is never thrown by a `KavoException` leaf, so
     // nothing in the hierarchy binds a fixed status to it. The `@kavo/nest`
