@@ -990,6 +990,44 @@ describe("@Kavo custom operations (issue #145)", () => {
     )?.post;
     expect(operation?.requestBody?.content?.["application/json"]?.schema).toMatchObject({ title: "TodoCreateDto" });
   });
+
+  it("marks a schema-documented single-row response x-kavo-operation-scoped when dto.output is also set (issue #467)", async () => {
+    const findOneSchema = {
+      safeParse: (input: unknown) => ({ success: true as const, data: input }),
+      toJSONSchema: () => ({
+        type: "object",
+        properties: { id: { type: "number" }, title: { type: "string" } },
+      }),
+    };
+    class TodoFindOneOutputDto {
+      id = 0;
+      title = "";
+    }
+
+    @Kavo(Todo, {
+      operations: {
+        findOne: { dto: { output: TodoFindOneOutputDto }, schema: { output: findOneSchema } },
+      },
+    })
+    @Controller("todos")
+    class ScopedSchemaController {}
+
+    await bootstrap(ScopedSchemaController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos/{id}"] as {
+        get?: { responses?: Record<string, { content?: Record<string, { schema?: Record<string, unknown> }> }> };
+      }
+    )?.get;
+    const schema = operation?.responses?.["200"]?.content?.["application/json"]?.schema;
+    expect(schema).toMatchObject({
+      "x-kavo-operation-scoped": true,
+      type: "object",
+      properties: { id: { type: "number" }, title: { type: "string" } },
+      "x-kavo-entity": "Todo",
+    });
+  });
 });
 
 describe("@Kavo custom operations reaching data (issue #152)", () => {
