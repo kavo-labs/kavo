@@ -180,12 +180,18 @@ describe("resolveEntityConfig — validate (ADR-0056)", () => {
     expect(config.validate.patch).toBe(standardSchema);
   });
 
-  it("rejects a create/update/patch value with no '~standard' validate function", () => {
+  it("rejects a create/update/patch value with no '~standard' key at all", () => {
     for (const slot of ["create", "update", "patch"] as const) {
       const error = rejectedEntityConfig({ validate: { [slot]: { not: "a schema" } } });
       expect(error.code).toBe("KAVO_CONFIG_INVALID");
       expect(error.messageParams).toMatchObject({ entity: "User", path: `validate.${slot}` });
     }
+  });
+
+  it("rejects a value whose '~standard' key exists but carries no validate function", () => {
+    const error = rejectedEntityConfig({ validate: { create: { "~standard": { version: 1, vendor: "test" } } } });
+    expect(error.code).toBe("KAVO_CONFIG_INVALID");
+    expect(error.messageParams).toMatchObject({ entity: "User", path: "validate.create" });
   });
 
   it("rejects null and non-object values the same way", () => {
