@@ -32,6 +32,20 @@ export const projects = kavo.createCrud(Project);
 
 Any ORM adapter works the same way here as it does with `@kavo/nest` — `@kavo/typeorm`, `@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm` all produce a plain `createCrud` result with nothing framework-specific about it.
 
+## Auto-discovering entities from the root
+
+Re-listing every entity in `createKavoHandler({ users, projects, ... })` is easy to forget one of. `createKavoHandler` also accepts the root `KavoInstance` directly and builds the entity-key map itself from every `createCrud` call made against it:
+
+```ts
+// app/api/[...kavo]/route.ts
+import { createKavoHandler } from "@kavo/next";
+import { kavo } from "../../../kavo";
+
+export const { GET, POST, PUT, PATCH, DELETE } = createKavoHandler(kavo);
+```
+
+The URL key is derived from each entity's `entityName` with only its first character lowercased — `User` → `user`, `Project` → `project` — and nothing else; there's no pluralization, since English plurals are irregular enough (`Category` → `Categories`) that guessing one would just move the surprise rather than remove it. If you want a different key (`users` instead of `user`, or a name that doesn't match `entityName` at all), pass the explicit `Record<string, DefaultKavoService>` map instead — both forms dispatch identically, and the explicit form keeps working exactly as it did before. See [ADR-0054](/internals/adr/0054-next-resolves-routes-at-request-time)'s amendment for the full rationale.
+
 ## Custom operations
 
 A [custom operation](/core/custom-operations) dispatches exactly like the standard eight — same registry, same `meta.routes` convention:

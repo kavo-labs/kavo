@@ -1,4 +1,4 @@
-import type { DefaultKavoService, KavoRequest, RequestPreconditions } from "@kavo/core";
+import type { DefaultKavoService, KavoInstance, KavoRequest, RequestPreconditions } from "@kavo/core";
 import { WireQuery } from "@kavo/core";
 import { toErrorResponse } from "./error-response.js";
 import { matchRoute } from "./match-route.js";
@@ -99,14 +99,50 @@ async function readBody(request: Request): Promise<unknown> {
 }
 
 /**
+ * The auto-discovery URL-key scheme (ADR-0054's amendment, issue #457):
+ * `resolved.entityName` verbatim, with only its first character
+ * lowercased — `Author` → `author`, `BookAuthor` → `bookAuthor`. No
+ * pluralization: English plurals are irregular enough (`Category` →
+ * `Categories`, not `Categorys`) that guessing one would be its own
+ * source of surprise, so the explicit-map form stays the answer for a
+ * caller who wants `authors` rather than `author`.
+ */
+function entityKeyFor(entityName: string): string {
+  return entityName.length === 0 ? entityName : entityName.charAt(0).toLowerCase() + entityName.slice(1);
+}
+
+/**
+ * Builds the entity-key map `createKavoHandler` dispatches against from a
+ * root `KavoInstance`'s own `services()` — every `DefaultKavoService`
+ * `createCrud` has produced on that root, keyed by `entityKeyFor`. This is
+ * read-only reflection over registrations `createCrud` already made
+ * (ADR-0054's Consequences), not a second way to register an entity.
+ */
+function entitiesFromInstance(instance: KavoInstance): KavoHandlerEntities {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see KavoHandlerEntities' own doc comment
+  const entities: Record<string, DefaultKavoService<any, any, any, any, any, any, any, any, any>> = {};
+  for (const service of instance.services()) {
+    const entityName = service.engine.config.entityName;
+    entities[entityKeyFor(entityName)] = service;
+  }
+  return entities;
+}
+
+function isKavoInstance(value: KavoHandlerEntities | KavoInstance): value is KavoInstance {
+  return typeof (value as Partial<KavoInstance>).services === "function";
+}
+
+/**
  * The App Router equivalent of `@kavo/nest`'s registry-driven route
  * generation (ADR-0006), for a mount with no decorator/DI container to
  * generate static routes at all: every call walks each entity's operation
  * registry — the same one `createCrud` built and `@Kavo` would read — and
  * resolves the first enabled entry whose route matches the request's
  * method and remaining path segments. See ADR-0054 for why this resolves
- * at request time rather than once at load, and for the entity-key map as
- * the registration mechanism a decorator would otherwise be.
+ * at request time rather than once at load.
+ *
+ * Accepts either the explicit `KavoHandlerEntities` map (ADR-0054's
+ * original form) —
  *
  * ```ts
  * // app/api/[...kavo]/route.ts
@@ -115,6 +151,13 @@ async function readBody(request: Request): Promise<unknown> {
  *   projects: projectsCrud,
  * });
  * ```
+ *
+ * — or a root `KavoInstance` directly (`createKavoHandler(kavo)`),
+ * auto-building the map from every entity that root's `createCrud` has
+ * produced (`entityKeyFor` derives each URL key from `entityName`;
+ * ADR-0054's amendment, issue #457). Both forms dispatch identically once
+ * the map is built — this only changes how the map is obtained, never
+ * `createCrud`'s own role as the sole way an entity enters the system.
  *
  * An unknown entity key, or a method/segment combination no enabled
  * operation resolves to, answers `404` — never `500`, and never a bare
@@ -130,7 +173,15 @@ async function readBody(request: Request): Promise<unknown> {
  * `app/api/users/[id]/activate/route.ts`) is matched by Next.js before this
  * catch-all ever runs.
  */
-export function createKavoHandler(entities: KavoHandlerEntities, options: KavoHandlerOptions = {}): KavoRouteHandlers {
+export function createKavoHandler(
+  entities: KavoHandlerEntities | KavoInstance,
+  options: KavoHandlerOptions = {},
+): KavoRouteHandlers {
+  const resolvedEntities = isKavoInstance(entities) ? entitiesFromInstance(entities) : entities;
+  return createKavoHandlerFromEntities(resolvedEntities, options);
+}
+
+function createKavoHandlerFromEntities(entities: KavoHandlerEntities, options: KavoHandlerOptions): KavoRouteHandlers {
   const handle = async (request: Request, context: Parameters<KavoRouteHandler>[1]): Promise<Response> => {
     try {
       const segments = await resolveSegments(context);
