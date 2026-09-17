@@ -61,11 +61,8 @@ without disabling `etag` at that scope; `ttl: 0` is rejected at bootstrap
 rather than treated as off.
 
 An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`allowed`, `computed`, `relations`, `operations`); only the settings subset
-participates in the merge. `computed` carries functions, so like `dto` it
-is entity-scope-only and never merges through the chain — see
-[ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated).
-`relations` (per-relation `read` loading tuning and `write.strategy`
+`allowed`, `relations`, `operations`); only the settings subset
+participates in the merge. `relations` (per-relation `read` loading tuning and `write.strategy`
 array-mutation policy) is entity-scope-only for the same reason — resolved
 by `DefaultRelationRegistry` at bootstrap, no global default; it folded the
 former `KavoSettings.relations.edges` and `KavoSettings.arrayMutation` keys
@@ -156,7 +153,7 @@ per-operation views behind `settingsFor(operation)`, resolved allowlists
 fields), the default response `projection` (`null` unless
 `allowed.selectable` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
-the cached `DtoResolver`, the validated `computed` map, the resolved
+the cached `DtoResolver`, the resolved
 `policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the
@@ -168,7 +165,7 @@ transports (live objects, not data) are resolved separately, on
 `ResolvedEntityConfig.realtimeTransports` from `KavoOptions.
 realtimeTransports`, and the result-cache store the same way, on
 `ResolvedEntityConfig.cacheStore` from `KavoOptions.cacheStore` (ADR-0031)
-— the same structural relationship `dto`/`computed`/
+— the same structural relationship `dto`/
 `relations` already have to `settings` (ADR-0023).
 
 ## 4. Bootstrap validation
@@ -179,29 +176,6 @@ realtimeTransports`, and the result-cache store the same way, on
 expected a positive integer, got -1`). The same bar applies to unknown
 pagination strategies, missing infrastructure, non-`@Kavo` controllers in
 `forFeature`, and custom-operation id collisions.
-
-### `computed`
-
-Every way a computed-field declaration can be structurally wrong fails at
-bootstrap rather than as a surprising response later
-([ADR-0019](/internals/adr/0019-computed-fields-are-serializer-evaluated)):
-
-- a name that collides with a real column or relation — the shadowed value
-  would silently vanish from every response;
-- a descriptor with no `resolve` function;
-- an `async` `resolve`, whose promise the serializer would emit unawaited;
-- the name `__proto__`, which is not an ordinary object key and would
-  disappear from the resolved map without a word — caught in both of its
-  spellings, by name for `{ ["__proto__"]: … }` and by inspecting the
-  declared record's prototype for the object-literal `{ __proto__: … }`,
-  which invokes the prototype setter and never reaches `Object.keys`;
-- a computed name in a configured `allowed.filterable`/`sortable`/
-  `searchable` — there is no column to translate to `WHERE`/`ORDER BY`, and
-  in-memory post-fetch filtering is rejected rather than deferred;
-- a computed name declared by a registered `create`/`update`/`patch` DTO
-  class — the value could only ever be discarded, and the DTO's runtime
-  shape is what `@kavo/nest` builds `@ApiBody` from, so OpenAPI would
-  advertise a property the engine unconditionally drops.
 
 ### `policy`
 
