@@ -31,4 +31,13 @@ model Book {
   published Boolean  @default(false)
   authorId  Int?
   author    Author?  @relation(fields: [authorId], references: [id])
+  reviews   Review[]
+}
+
+model Review {
+  id      Int    @id @default(autoincrement())
+  rating  Int
+  comment String
+  bookId  Int
+  book    Book   @relation(fields: [bookId], references: [id])
 }
