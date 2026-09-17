@@ -115,8 +115,7 @@ function readStepBlock(source: string, name: string): string {
  * only assertion that survives ` || true`, `; exit 0` and `set +e`, none of
  * which a substring check on the command notices.
  */
-function readStepRun(source: string, name: string): string {
-  const block = readStepBlock(source, name);
+function extractRun(block: string, name: string): string {
   const lines = block.split("\n");
   const start = lines.findIndex((line) => /^\s*run:/.test(line));
   if (start === -1) {
@@ -142,6 +141,91 @@ function readStepRun(source: string, name: string): string {
   }
 
   return body.join("\n").trim();
+}
+
+function readStepRun(source: string, name: string): string {
+  return extractRun(readStepBlock(source, name), name);
+}
+
+/**
+ * Every occurrence of a step, across every job — "Publish packages" now
+ * exists once per publish-tier job, and a guard that only held for the first
+ * occurrence would miss the other two silently dropping it.
+ */
+function readAllStepBlocks(source: string, name: string): string[] {
+  const lines = source.split("\n");
+  const blocks: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trim() !== `- name: ${name}`) {
+      continue;
+    }
+    const header = lines[i]!;
+    const stepIndent = header.length - header.trimStart().length;
+    const block = [header];
+    for (const line of lines.slice(i + 1)) {
+      const indent = line.length - line.trimStart().length;
+      if (line.trim() !== "" && indent <= stepIndent) {
+        break;
+      }
+      block.push(line);
+    }
+    blocks.push(block.join("\n"));
+  }
+
+  if (blocks.length === 0) {
+    throw new Error(`publish.yml has no step named "${name}"`);
+  }
+  return blocks;
+}
+
+function readAllStepRuns(source: string, name: string): string[] {
+  return readAllStepBlocks(source, name).map((block) => extractRun(block, name));
+}
+
+/**
+ * A job's `needs:` list, in either YAML form (`needs: prepare` or
+ * `needs: [a, b]`). This is what makes the publish-tier chain a real
+ * assertion instead of one that only reads the file's textual order — file
+ * order alone would stay green even if a job were scheduled independently of
+ * the jobs it actually has to wait for.
+ */
+function readJobNeeds(source: string, name: string): string[] {
+  const lines = readJobBlock(source, name).split("\n");
+  const start = lines.findIndex((line) => /^\s*needs:/.test(line));
+  if (start === -1) {
+    return [];
+  }
+
+  const header = lines[start]!;
+  const inline = /^\s*needs:[ \t]*(.*)$/.exec(header)![1]!.trim();
+  if (inline !== "") {
+    if (inline.startsWith("[")) {
+      return inline
+        .replace(/[[\]]/g, "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return [inline];
+  }
+
+  const needsIndent = header.length - header.trimStart().length;
+  const items: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() === "") {
+      continue;
+    }
+    const indent = line.length - line.trimStart().length;
+    if (indent <= needsIndent) {
+      break;
+    }
+    const item = /^\s*-\s*(.+)$/.exec(line);
+    if (item) {
+      items.push(item[1]!.trim());
+    }
+  }
+  return items;
 }
 
 /**
@@ -420,17 +504,24 @@ describe("publish.yml wiring", () => {
     }
   });
 
-  it("verifies lockstep versions before anything is packed or published", () => {
-    const steps = readStepNames(workflow);
+  it("verifies lockstep versions before anything is packed, inside prepare", () => {
+    const steps = readStepNames(readJobBlock(workflow, "prepare"));
     const verify = steps.indexOf("Verify lockstep versions");
     const pack = steps.indexOf("Pack packages");
-    const publish = steps.indexOf("Publish packages");
 
     expect(verify).toBeGreaterThanOrEqual(0);
     expect(pack).toBeGreaterThanOrEqual(0);
-    expect(publish).toBeGreaterThanOrEqual(0);
     expect(verify).toBeLessThan(pack);
-    expect(verify).toBeLessThan(publish);
+  });
+
+  it("chains every publish-tier job through needs:, not just file order", () => {
+    // A job's real execution order is its `needs:` graph, not where it sits
+    // in the file. Checking file order alone would stay green even if a
+    // publish job were left to run independently of the tier it actually has
+    // to wait for.
+    expect(readJobNeeds(workflow, "publish-core")).toEqual(["prepare"]);
+    expect(readJobNeeds(workflow, "publish")).toEqual(["publish-core"]);
+    expect(readJobNeeds(workflow, "publish-nest")).toEqual(["publish"]);
   });
 
   it("runs the gate script over the whole PACKAGE_DIRS list, not one package", () => {
@@ -449,24 +540,44 @@ describe("publish.yml wiring", () => {
     // Three ways to reopen the v0.6.0 hole, all of which used to leave every
     // assertion in this file green: silence the gate step, silence the whole
     // job, or let the steps the gate protects run anyway.
-    for (const name of ["Verify lockstep versions", "Pack packages", "Publish packages"]) {
+    for (const name of ["Verify lockstep versions", "Pack packages"]) {
       const step = readStepBlock(workflow, name);
       expect(step, `${name} is conditional`).not.toContain("continue-on-error");
       expect(step, `${name} is conditional`).not.toMatch(/^\s+if:/m);
     }
 
-    expect(readJobKeys(workflow, "publish")).not.toContain("if");
-    expect(readJobKeys(workflow, "publish")).not.toContain("continue-on-error");
+    // "Publish packages" now exists once per publish-tier job.
+    for (const step of readAllStepBlocks(workflow, "Publish packages")) {
+      expect(step, "Publish packages is conditional").not.toContain("continue-on-error");
+      expect(step, "Publish packages is conditional").not.toMatch(/^\s+if:/m);
+    }
+
+    for (const job of ["prepare", "publish-core", "publish", "publish-nest"]) {
+      expect(readJobKeys(workflow, job), `${job} is conditional`).not.toContain("if");
+      expect(readJobKeys(workflow, job), `${job} is conditional`).not.toContain("continue-on-error");
+    }
   });
 
-  it("keeps the skip-if-already-published guard so a re-run after a partial failure completes", () => {
+  it("keeps the skip-if-already-published guard in every publish-tier job, so a re-run after a partial failure completes", () => {
     // The echo alone is not the guard — assert the condition that produces it,
     // or deleting the `if` and leaving an unconditional echo would pass.
-    const step = readStepRun(workflow, "Publish packages");
+    for (const step of readAllStepRuns(workflow, "Publish packages")) {
+      expect(step).toMatch(/if npm view "\$NAME@\$VERSION" version .*; then/);
+      expect(step).toContain("already published, skipping");
+      expect(step).toContain("npm publish");
+    }
+  });
 
-    expect(step).toMatch(/if npm view "\$NAME@\$VERSION" version .*; then/);
-    expect(step).toContain("already published, skipping");
-    expect(step).toContain("npm publish");
+  it("treats an E409 'previously staged version' conflict as success, in every publish-tier job", () => {
+    // npm can report a version as already staged on the registry (accepted,
+    // provenance attestation published) before `npm view` reflects it back —
+    // a re-run or a retry then sees a 409 for a publish that already
+    // succeeded. That must not fail the job, or a transient registry lag
+    // turns a completed publish into a red release.
+    for (const step of readAllStepRuns(workflow, "Publish packages")) {
+      expect(step).toContain("Cannot publish over previously staged version");
+      expect(step).toContain("already staged on the registry, treating as published");
+    }
   });
 
   it("lists every package after the packages it depends on", () => {
@@ -509,15 +620,16 @@ describe("publish.yml wiring", () => {
     expect(workflow).not.toMatch(/gh release (create|upload|edit|delete)/);
   });
 
-  it("verifies the packed tarballs after packing them and before publishing", () => {
-    const steps = readStepNames(workflow);
+  it("verifies the packed tarballs after packing them, before any publish job can start", () => {
+    const steps = readStepNames(readJobBlock(workflow, "prepare"));
     const pack = steps.indexOf("Pack packages");
     const verify = steps.indexOf("Verify packed tarballs are installable");
-    const publish = steps.indexOf("Publish packages");
 
     expect(verify).toBeGreaterThanOrEqual(0);
     expect(pack).toBeLessThan(verify);
-    expect(verify).toBeLessThan(publish);
+
+    // Every publish-tier job depends (directly or transitively) on prepare.
+    expect(readJobNeeds(workflow, "publish-core")).toContain("prepare");
   });
 
   it("inspects every dependency field a consumer installs for workspace: ranges", () => {
@@ -562,10 +674,10 @@ describe("publish.yml wiring", () => {
     // `<prefix>-*.tgz` also matches a sibling whose name extends this one, and
     // `npm publish` takes exactly one spec — so the glob turns a future
     // @kavo/core-utils into an EUSAGE abort partway through a release.
-    const step = readStepRun(workflow, "Publish packages");
-
-    expect(step).toContain('-$VERSION.tgz"');
-    expect(step).not.toContain('"-*.tgz');
+    for (const step of readAllStepRuns(workflow, "Publish packages")) {
+      expect(step).toContain('-$VERSION.tgz"');
+      expect(step).not.toContain('"-*.tgz');
+    }
   });
 
   it("keeps /publish scoped to bootstrapping a brand-new package, not routine releases", () => {

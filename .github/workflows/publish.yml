@@ -14,27 +14,38 @@ on:
   workflow_dispatch:
 
 permissions:
-  # Read-only checkout is all this job needs: it publishes to npm and nothing
-  # else. The GitHub Release is release-please's to create (ADR-0041), so no
-  # `contents: write` here. `id-token: write` is for npm OIDC trusted
-  # publishing (and the provenance attestation that comes with it).
+  # Read-only checkout is all these jobs need: they publish to npm and
+  # nothing else. The GitHub Release is release-please's to create
+  # (ADR-0041), so no `contents: write` here. `id-token: write` is for npm
+  # OIDC trusted publishing (and the provenance attestation that comes with
+  # it) — every publish-* job below inherits it rather than redeclaring it,
+  # since job-level `permissions:` replaces the workflow-level block instead
+  # of merging with it.
   contents: read
   id-token: write
 
+env:
+  TARBALL_DIR: /tmp/kavo-tarballs
+
 jobs:
-  publish:
-    name: publish to npm
+  # Everything that must run exactly once, gate the whole release, and never
+  # touch npm: the lockstep check, the build, and packing every tarball. One
+  # `pnpm check` here (not one per publish job) is what keeps "never ships on
+  # a red build" true without paying for the gate N times.
+  prepare:
+    name: prepare release artifacts
     runs-on: ubuntu-latest
+    outputs:
+      tier0: ${{ steps.tiers.outputs.tier0 }}
+      tier1: ${{ steps.tiers.outputs.tier1 }}
+      tier2: ${{ steps.tiers.outputs.tier2 }}
     env:
-      TARBALL_DIR: /tmp/kavo-tarballs
       # Published in dependency order: every package appears after the
       # packages it depends on, which puts `@kavo/nest` last because it
-      # depends on `@kavo/graphql` and `@kavo/mcp`. npm has no cross-package
-      # ordering requirement, but a publish that fails partway then leaves
-      # the registry internally consistent — no published package referring
-      # to a sibling version that isn't there — and a re-run finishes the
-      # job. Single source of truth for "which packages get released" — add
-      # a new package here only.
+      # depends on `@kavo/graphql` and `@kavo/mcp`. This list is also the
+      # only input to the "Compute publish tiers" step below, so it stays the
+      # single source of truth for "which packages get released" — add a new
+      # package here only.
       PACKAGE_DIRS: >-
         packages/core
         packages/orms/typeorm
@@ -57,7 +68,6 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
       # ADR-0004 lockstep versioning, enforced mechanically rather than left
       # to review: *every* package must be at the tag's version, not just
@@ -75,11 +85,6 @@ jobs:
       - name: Verify lockstep versions
         # shellcheck disable=SC2086
         run: node .github/scripts/verify-lockstep-versions.mjs "${GITHUB_REF_NAME#v}" $PACKAGE_DIRS
-
-      # npm's OIDC trusted-publishing exchange needs npm >=11.5.1; the
-      # bundled version on some Node builds can lag behind that.
-      - name: Update npm
-        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -158,36 +163,239 @@ jobs:
           done
           exit $status
 
-      # Each publish is skipped if that exact name@version is already on
-      # the registry, so re-running the job after a partial failure (one
-      # package published, a later one failing) doesn't die re-publishing
+      # A per-package publish job (below) needs to know which dependency tier
+      # its package falls in, so publish-core can go before the matrix that
+      # needs @kavo/core, and publish-nest can wait on the matrix that
+      # publishes @kavo/graphql and @kavo/mcp. GitHub Actions has no
+      # per-matrix-entry `needs` — a matrix job's `needs:` applies to the
+      # whole job, not one leg of it — so the dependency chain has to be
+      # expressed as a chain of jobs instead of a chain within one job.
+      # Tiers are derived from PACKAGE_DIRS' own manifests rather than
+      # hand-listed a second time, so adding a package here is still the only
+      # place to add it. This currently assumes the dependency graph is at
+      # most 3 tiers deep (true today: core → {typeorm, prisma, mongoose,
+      # mikroorm, sse, graphql, mcp, next} → nest). A future package one hop
+      # deeper than nest needs a fourth publish-tier job added by hand.
+      - name: Compute publish tiers
+        id: tiers
+        run: |
+          node -e '
+            const fs = require("fs");
+            const dirs = process.env.PACKAGE_DIRS.trim().split(/\s+/);
+            const manifests = new Map(dirs.map((d) => [d, JSON.parse(fs.readFileSync(`${d}/package.json`, "utf8"))]));
+            const nameToDir = new Map(dirs.map((d) => [manifests.get(d).name, d]));
+            const depth = new Map();
+            function depthOf(dir) {
+              if (depth.has(dir)) return depth.get(dir);
+              const manifest = manifests.get(dir);
+              const edges = new Set([
+                ...Object.keys(manifest.dependencies ?? {}),
+                ...Object.keys(manifest.peerDependencies ?? {}),
+                ...Object.keys(manifest.optionalDependencies ?? {}),
+              ]);
+              const kavoDeps = [...edges].filter((n) => n.startsWith("@kavo/")).map((n) => nameToDir.get(n));
+              const d = kavoDeps.length === 0 ? 0 : 1 + Math.max(...kavoDeps.map(depthOf));
+              depth.set(dir, d);
+              return d;
+            }
+            const tiers = new Map();
+            for (const dir of dirs) {
+              const d = depthOf(dir);
+              if (!tiers.has(d)) tiers.set(d, []);
+              tiers.get(d).push(dir);
+            }
+            const maxDepth = Math.max(...tiers.keys());
+            if (maxDepth > 2) {
+              throw new Error(`dependency graph is ${maxDepth + 1} tiers deep; publish.yml only wires 3 publish-tier jobs`);
+            }
+            const out = fs.createWriteStream(process.env.GITHUB_OUTPUT, { flags: "a" });
+            for (let i = 0; i <= 2; i++) {
+              out.write(`tier${i}=${JSON.stringify(tiers.get(i) ?? [])}\n`);
+            }
+            out.end();
+          '
+
+      - name: Upload packed tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: kavo-tarballs
+          path: ${{ env.TARBALL_DIR }}
+          retention-days: 1
+
+  # Tier 0: @kavo/core, which nothing in this repo depends on to build but
+  # everything else depends on to install. One job (not a matrix) since
+  # today there is exactly one tier-0 package; the matrix form is kept for
+  # symmetry with the tiers below and to make adding a second tier-0 package
+  # free.
+  publish-core:
+    name: publish (tier 0)
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJson(needs.prepare.outputs.tier0) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+
+      # npm's OIDC trusted-publishing exchange needs npm >=11.5.1; the
+      # bundled version on some Node builds can lag behind that.
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Download packed tarballs
+        uses: actions/download-artifact@v5
+        with:
+          name: kavo-tarballs
+          path: ${{ env.TARBALL_DIR }}
+
+      # Skipped if that exact name@version is already on the registry, so
+      # re-running this job after a partial failure doesn't die republishing
       # what already succeeded — npm publish itself is not idempotent.
       #
       # The tarball is named exactly rather than globbed: `pnpm pack` writes
       # <name-with-@-and-/-flattened>-<version>.tgz, and a `<prefix>-*.tgz`
       # glob would also match a sibling whose name extends this one
       # (`kavo-core-*` matching a future `kavo-core-utils-…`). `npm publish`
-      # takes exactly one spec, so that aborts the release with EUSAGE rather
-      # than mispublishing — but only after the packages ahead of it went out.
+      # takes exactly one spec, so that aborts with EUSAGE rather than
+      # mispublishing.
       - name: Publish packages
         run: |
-          for dir in $PACKAGE_DIRS; do
-            NAME=$(node -p "require('./$dir/package.json').name")
-            VERSION=$(node -p "require('./$dir/package.json').version")
-            TARBALL="$TARBALL_DIR/$(echo "$NAME" | sed 's/^@//; s/\//-/')-$VERSION.tgz"
-            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
-              echo "$NAME@$VERSION already published, skipping"
-            else
-              npm publish "$TARBALL" --access public
-            fi
-          done
+          NAME=$(node -p "require('./${{ matrix.dir }}/package.json').name")
+          VERSION=$(node -p "require('./${{ matrix.dir }}/package.json').version")
+          TARBALL="$TARBALL_DIR/$(echo "$NAME" | sed 's/^@//; s/\//-/')-$VERSION.tgz"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION already published, skipping"
+          elif npm publish "$TARBALL" --access public 2>publish.log; then
+            cat publish.log
+          elif grep -q "Cannot publish over previously staged version" publish.log; then
+            # A prior attempt (this run's own retry, or a re-run after a
+            # partial failure) already got the version staged on the
+            # registry — npm accepted it but `npm view` above can lag behind
+            # that, especially right after a provenance attestation is
+            # published. That is a completed publish, not a failure.
+            cat publish.log
+            echo "$NAME@$VERSION already staged on the registry, treating as published"
+          else
+            cat publish.log >&2
+            exit 1
+          fi
 
-      # No GitHub Release step here on purpose. release-please owns the
-      # Release: it creates it, with notes from CHANGELOG.md, as part of
-      # cutting the tag (ADR-0041). This job's one job is to get the packages
-      # onto npm — the distribution channel — and `npm publish` runs with
-      # `id-token: write`, so each package carries an npm provenance
-      # attestation pointing back at this workflow and commit. Attaching the
-      # .tgz files to the Release as well would duplicate that for artifacts
-      # nobody installs from GitHub, and force this job to coordinate on a
-      # Release object another workflow made.
+  # Tier 1: every package whose only @kavo/* dependency is @kavo/core —
+  # eight packages today. They have no edges between each other, so they
+  # publish as one matrix, in parallel, once @kavo/core is out.
+  # `fail-fast: false` is deliberate: cancelling a sibling mid-`npm publish`
+  # on the first failure is worse than letting independent packages finish.
+  publish:
+    name: publish (tier 1)
+    needs: publish-core
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJson(needs.prepare.outputs.tier1) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Download packed tarballs
+        uses: actions/download-artifact@v5
+        with:
+          name: kavo-tarballs
+          path: ${{ env.TARBALL_DIR }}
+
+      - name: Publish packages
+        run: |
+          NAME=$(node -p "require('./${{ matrix.dir }}/package.json').name")
+          VERSION=$(node -p "require('./${{ matrix.dir }}/package.json').version")
+          TARBALL="$TARBALL_DIR/$(echo "$NAME" | sed 's/^@//; s/\//-/')-$VERSION.tgz"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION already published, skipping"
+          elif npm publish "$TARBALL" --access public 2>publish.log; then
+            cat publish.log
+          elif grep -q "Cannot publish over previously staged version" publish.log; then
+            # A prior attempt (this run's own retry, or a re-run after a
+            # partial failure) already got the version staged on the
+            # registry — npm accepted it but `npm view` above can lag behind
+            # that, especially right after a provenance attestation is
+            # published. That is a completed publish, not a failure.
+            cat publish.log
+            echo "$NAME@$VERSION already staged on the registry, treating as published"
+          else
+            cat publish.log >&2
+            exit 1
+          fi
+
+  # Tier 2: @kavo/nest, which depends on @kavo/graphql and @kavo/mcp — both
+  # tier-1 packages — so it waits for the whole tier-1 matrix to finish.
+  publish-nest:
+    name: publish (tier 2)
+    needs: publish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJson(needs.prepare.outputs.tier2) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+
+      - name: Update npm
+        run: npm install -g npm@latest
+
+      - name: Download packed tarballs
+        uses: actions/download-artifact@v5
+        with:
+          name: kavo-tarballs
+          path: ${{ env.TARBALL_DIR }}
+
+      - name: Publish packages
+        run: |
+          NAME=$(node -p "require('./${{ matrix.dir }}/package.json').name")
+          VERSION=$(node -p "require('./${{ matrix.dir }}/package.json').version")
+          TARBALL="$TARBALL_DIR/$(echo "$NAME" | sed 's/^@//; s/\//-/')-$VERSION.tgz"
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION already published, skipping"
+          elif npm publish "$TARBALL" --access public 2>publish.log; then
+            cat publish.log
+          elif grep -q "Cannot publish over previously staged version" publish.log; then
+            # A prior attempt (this run's own retry, or a re-run after a
+            # partial failure) already got the version staged on the
+            # registry — npm accepted it but `npm view` above can lag behind
+            # that, especially right after a provenance attestation is
+            # published. That is a completed publish, not a failure.
+            cat publish.log
+            echo "$NAME@$VERSION already staged on the registry, treating as published"
+          else
+            cat publish.log >&2
+            exit 1
+          fi
+
+  # No GitHub Release step anywhere here on purpose. release-please owns the
+  # Release: it creates it, with notes from CHANGELOG.md, as part of cutting
+  # the tag (ADR-0041). These jobs' only job is to get the packages onto
+  # npm — the distribution channel — and each `npm publish` runs with
+  # `id-token: write`, so every package carries an npm provenance attestation
+  # pointing back at this workflow and commit. Attaching the .tgz files to
+  # the Release as well would duplicate that for artifacts nobody installs
+  # from GitHub, and force these jobs to coordinate on a Release object
+  # another workflow made.
