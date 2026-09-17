@@ -18,10 +18,6 @@ export { getOperation, getResource } from "./route-identity.js";
 export { KavoModule, type KavoModuleAsyncOptions, type KavoGraphQLOption, type KavoMcpOption } from "./kavo.module.js";
 export type { KavoModuleOptions } from "./kavo-options.js";
 export { KavoExceptionFilter } from "./kavo-exception.filter.js";
-export {
-  kavoValidationExceptionFactory,
-  type KavoValidationExceptionBody,
-} from "./kavo-validation-exception-factory.js";
 export { KavoResponseInterceptor } from "./kavo-response.interceptor.js";
 export { ConditionalRequest, parseEntityTags } from "./conditional-request.decorator.js";
 export { flattenQuery } from "./flatten-query.js";

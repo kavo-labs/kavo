@@ -61,7 +61,7 @@ describe("toKavoExceptionShape", () => {
     expect(toKavoExceptionShape(new Error("x")).context.correlationId).toBeUndefined();
   });
 
-  describe("issue field errors (kavoValidationExceptionFactory body)", () => {
+  describe("issue field errors (a ValidationPipe's fieldErrors body)", () => {
     it("surfaces a fieldErrors array as KavoExceptionShape.issues", () => {
       const shape = toKavoExceptionShape(
         new BadRequestException({

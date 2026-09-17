@@ -14,8 +14,8 @@ export interface SchemaIssue {
   /**
    * The failing field's path, as a property-key sequence (e.g.
    * `["address", "zip"]` for a nested field) — joined with `.` into
-   * {@link QueryIssueDto.field} the same way `class-validator`'s nested
-   * `children` already are in `kavo-validation-exception-factory.ts`.
+   * {@link QueryIssueDto.field}, the same dot-joining a `class-validator`
+   * `ValidationPipe`'s nested `children` need for the same purpose.
    */
   readonly path: readonly PropertyKey[];
   readonly message: string;
@@ -28,11 +28,23 @@ export type SchemaParseResult<Output> =
 
 /**
  * The structural contract a `schema.input.<slot>` / `schema.output.<slot>`
- * value must satisfy. Deliberately minimal — one method, one result shape —
- * so it constrains nothing about the library that produced it.
+ * value must satisfy. Deliberately minimal — one required method, one result
+ * shape — so it constrains nothing about the library that produced it.
+ *
+ * `toJSONSchema` is optional (issue #467): ADR-0055 makes `schema` the
+ * source of truth for OpenAPI component generation too, but `safeParse`
+ * alone gives `@kavo/nest`'s `registerKavoSchemas` nothing to introspect —
+ * there is no field list to walk on an opaque validator. A schema that also
+ * implements `toJSONSchema` (a thin wrapper calling e.g. Zod 4's
+ * `z.toJSONSchema(schema)`) opts into being documented from its own shape;
+ * one that does not still validates and narrows at runtime exactly as
+ * before, and `@kavo/nest` falls back to deriving the component from the
+ * entity's own ORM metadata (the same fallback `dto`'s absence already
+ * takes) rather than leaving the route undocumented.
  */
 export interface KavoSchema<Output> {
   safeParse(input: unknown): SchemaParseResult<Output>;
+  toJSONSchema?(): object;
 }
 
 /**

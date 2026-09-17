@@ -4,13 +4,16 @@ import type {
   DtoResolver,
   EntityConfig,
   EntityMetadata,
+  EntitySchemaMap,
   FieldMetadata,
+  KavoSchema,
   OperationDescriptor,
   OperationDtoMap,
   RelationCardinality,
   RelationFieldSelector,
+  SchemaResolver,
 } from "@kavo/core";
-import { DefaultDtoResolver, shorthandFieldsOf } from "@kavo/core";
+import { DefaultDtoResolver, DefaultSchemaResolver, shorthandFieldsOf } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
 import { isSchemaHint, readSchemaHint, type SchemaHint } from "./schema-hints.js";
 
@@ -192,6 +195,37 @@ function withKavoEntity<T extends object>(schema: T, entityName: string): T & { 
   return { ...schema, "x-kavo-entity": entityName };
 }
 
+/**
+ * ADR-0055 / issue #467: `registerKavoSchemas` documents `schema` ahead of
+ * `dto` — a `KavoSchema` that opts into `toJSONSchema()` (`kavo-schema.ts`)
+ * is the source of truth for the component it produces, the same way
+ * `schema` already wins over `dto` at the engine's deserialization/
+ * serialization stages (`resolve-entity-config.ts`). A schema with no
+ * `toJSONSchema` (the common case — `.safeParse` alone satisfies
+ * `KavoSchema`) has nothing to introspect, so this returns `null` and the
+ * caller falls through to the existing `dto`/ORM-metadata chain exactly as
+ * if no `schema` were configured at all.
+ */
+function schemaDocFor(schema: KavoSchema<unknown> | null | undefined, entityName: string): object | null {
+  if (schema === null || schema === undefined || typeof schema.toJSONSchema !== "function") {
+    return null;
+  }
+  return withKavoEntity(schema.toJSONSchema(), entityName);
+}
+
+/**
+ * Root-scope `schema` resolver for one entity (issue #467) — the
+ * `schema`-typed sibling of the `dtoResolver` built alongside it in
+ * `applySwaggerMetadata`. Per-operation `schema` overrides
+ * (`descriptor.schemaInput`/`schemaOutput`) are read directly off the
+ * descriptor by the caller, the same tier `descriptor.input`/`output`
+ * already sit at ahead of `dtoResolver` — this resolver only ever answers
+ * the entity's own root `schema.input.<slot>`/`schema.output.<slot>`.
+ */
+function schemaResolverFor(config: EntityConfig<object> | undefined): SchemaResolver<object> {
+  return new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined);
+}
+
 export function applySwaggerMetadata(
   prototype: Record<string, unknown>,
   methodName: string,
@@ -305,10 +339,20 @@ export function applySwaggerMetadata(
     create: config?.create,
     update: config?.update,
   });
+  const schemaResolver = schemaResolverFor(config);
 
-  const bodyDto = bodyDtoFor(descriptor, dtoResolver);
-  if (bodyDto !== null) {
-    apply(swagger.ApiBody(bodyOptionsFor(bodyDto, entity.name)));
+  const inputSlot = inputSlotFor(descriptor.id);
+  const schemaBody =
+    inputSlot === null
+      ? null
+      : schemaDocFor(descriptor.schemaInput ?? schemaResolver.resolveInput(inputSlot, descriptor.id), entity.name);
+  if (schemaBody !== null) {
+    apply(swagger.ApiBody({ schema: schemaBody }));
+  } else {
+    const bodyDto = bodyDtoFor(descriptor, dtoResolver);
+    if (bodyDto !== null) {
+      apply(swagger.ApiBody(bodyOptionsFor(bodyDto, entity.name)));
+    }
   }
 
   // The success response's ETag header and the conditional-request
@@ -321,7 +365,7 @@ export function applySwaggerMetadata(
     swagger.ApiResponse({
       status: route.status,
       description: "Success",
-      ...successBodyFor(descriptor, route, entity, dtoResolver),
+      ...successBodyFor(descriptor, route, entity, dtoResolver, schemaResolver),
     }),
   );
   apply(
@@ -1232,9 +1276,42 @@ function successBodyFor(
   route: RouteShape,
   entity: ClassRef,
   dtoResolver: DtoResolver<object>,
+  schemaResolver: SchemaResolver<object>,
 ): object {
   if (route.status === 204) {
     return {};
+  }
+  const outputSlot = descriptor.cardinality === "many" ? "list" : "item";
+  // `schema.output.<slot>` (ADR-0055, issue #467) is documented ahead of
+  // `dto`, mirroring the engine's own precedence
+  // (`descriptor.schemaOutput ?? config.schema.resolveOutput(...)` at
+  // response mapping) — but only when it opts into `toJSONSchema`. A
+  // schema-documented list response still gets the ordinary envelope
+  // wrapper; it is not `x-kavo-operation-scoped` unless a `descriptor.output`
+  // DTO override is *also* set, which the `dto`-driven branch below still
+  // reads (a `schema` override alone does not rename the component, since
+  // `descriptor.output` — not `descriptor.schemaOutput` — is
+  // `registerKavoSchemas`'s per-operation-naming signal, issue #131).
+  const schemaDoc = schemaDocFor(
+    descriptor.schemaOutput ?? schemaResolver.resolveOutput(outputSlot, descriptor.id),
+    entity.name,
+  );
+  const operationScoped = descriptor.output !== null;
+  if (schemaDoc !== null) {
+    return {
+      schema:
+        descriptor.cardinality === "many"
+          ? listEnvelopeSchema(
+              schemaDoc as { type: "object"; properties: Record<string, object> },
+              entity.name,
+              entity.name,
+              operationScoped,
+            )
+          : withKavoEntity(
+              { ...(operationScoped ? { "x-kavo-operation-scoped": true } : {}), ...schemaDoc },
+              entity.name,
+            ),
+    };
   }
   // Descriptor override first, same fallback order as `mapResponse`
   // (issue #131): the engine serializes through `descriptor.output` ahead
@@ -1242,14 +1319,6 @@ function successBodyFor(
   // would advertise a shape no response actually has.
   const resolve = (slot: "item" | "list"): ClassRef =>
     (descriptor.output as ClassRef | null) ?? (dtoResolver.resolve(slot, descriptor.id) as ClassRef | null) ?? entity;
-  // A per-operation `descriptor.output` override (issue #131) or a custom
-  // operation's own `dto.output` produces a shape that is *not* the entity's
-  // root `item`/`list` slot, so `registerKavoSchemas` must name its
-  // component per operation (`<Entity><Operation>`) rather than fold it onto
-  // the shared `<Entity>Item`/`<Entity>List` and hand the loser a
-  // positional `_2`. This marker is that signal; it rides the same
-  // `withKavoEntity` stamp #294 already applies.
-  const operationScoped = descriptor.output !== null;
   if (descriptor.cardinality === "many") {
     // `list` falls back to `item` inside the resolver.
     const listDto = resolve("list");
@@ -1601,6 +1670,25 @@ function includableRelations(config: EntityConfig<object> | undefined): readonly
     return null;
   }
   return selector;
+}
+
+/**
+ * The `schema.input.<slot>` slot a request body operation reads from
+ * (issue #467) — the `schema`-typed sibling of `bodyDtoFor`'s own
+ * `create`/`update`/`patch` switch. `null` for every operation with no
+ * request body to document a schema for.
+ */
+function inputSlotFor(id: string): "create" | "update" | "patch" | null {
+  switch (id) {
+    case "createOne":
+      return "create";
+    case "updateOne":
+      return "update";
+    case "patchOne":
+      return "patch";
+    default:
+      return null;
+  }
 }
 
 export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {

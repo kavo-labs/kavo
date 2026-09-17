@@ -362,6 +362,39 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     expect(result.data?.todoStatusOne).toEqual({ id: 1, title: "peek" });
   });
 
+  it("exposes a custom write declaring schema.output instead of dto.output (issue #467)", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    adapter.rows.push({ id: 1, title: "write tests", done: false });
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          markDoneOne: {
+            handler: {
+              async execute(input: unknown, context: KavoContext<Todo>) {
+                const { id } = input as { id: number };
+                return context.repository.update(id, { done: true }, context);
+              },
+            },
+            schema: { output: { safeParse: (input: unknown) => ({ success: true as const, data: input }) } },
+          },
+        },
+      } as never,
+      { adapter, metadata: todoMetadata },
+    );
+
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      service,
+      itemType: TodoType,
+      operations: { markDoneOne: { type: TodoType } },
+    });
+
+    const result = await graphql({ schema, source: `mutation { todoMarkDoneOne(id: 1) { id done } }` });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.todoMarkDoneOne).toEqual({ id: 1, done: true });
+  });
+
   it("refuses a named custom operation with no declared dto.output", () => {
     const service = createKavo().createCrud(
       Todo,

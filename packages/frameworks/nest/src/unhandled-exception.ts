@@ -22,11 +22,12 @@ function isFieldIssue(value: unknown): value is QueryIssueDto {
 }
 
 /**
- * Recovers `kavoValidationExceptionFactory`'s `fieldErrors` off an
- * `HttpException`'s response body, so `toKavoExceptionShape` can surface it
- * through `KavoExceptionShape.issues` the same way `QueryValidationException`
- * does (issue #437). Structurally checked, never trusted on `instanceof` —
- * the body reaches here as arbitrary JSON an app's own `HttpException` could
+ * Recovers an `HttpException`'s `fieldErrors` off its response body — the
+ * shape a framework-level `ValidationPipe` an app wires up itself may set —
+ * so `toKavoExceptionShape` can surface it through `KavoExceptionShape.issues`
+ * the same way `QueryValidationException`/`SchemaValidationException` do
+ * (issue #437). Structurally checked, never trusted on `instanceof` — the
+ * body reaches here as arbitrary JSON an app's own `HttpException` could
  * shape however it likes, so a same-named key with the wrong shape is
  * omitted entirely rather than surfaced malformed.
  */

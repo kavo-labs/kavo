@@ -7,11 +7,23 @@ description: Reference for Kavo's six optional DTO slots (create/update/patch/qu
 
 Every REST verb has an independent, **optional** data contract. Zero config
 means entity-derived defaults; registering a class narrows exactly one slot.
-DTOs are shapes for **typing, serialization, and Swagger docs only** — there
-is no validation subsystem attached to them (that's the caller's own
-pipe/guard, e.g. Nest's `ValidationPipe`). Full detail:
+DTOs are shapes for **typing and serialization only** — there is no
+validation subsystem attached to them (that's the caller's own pipe/guard,
+e.g. Nest's `ValidationPipe`, or the `schema` key below). Full detail:
 `docs/internals/architecture/04-dto-system.md`. Config-side wiring
 (`@Kavo(Entity, { dto: {...} })`) is in the `kavo-decorator` skill.
+
+**`schema` (ADR-0055) is the current mechanism for validation and OpenAPI
+docs**, landed alongside `dto` rather than replacing it: a per-slot
+`schema.input.<slot>`/`schema.output.<slot>` (any object satisfying the
+structural `KavoSchema<Output>` contract — a Zod schema qualifies natively)
+actually validates an incoming body (`SchemaValidationException`,
+`KAVO_SCHEMA_INVALID`) and, where both are configured for the same slot,
+wins over `dto` for `@kavo/nest`'s OpenAPI generation and
+`@kavo/graphql`/`@kavo/mcp`'s type derivation too — see
+`docs/core/dtos.md`'s "Migrating to `schema`" section. `dto` stays the
+right tool for shape/serialization narrowing with no validation or docs
+generation attached to it.
 
 ## The six slots
 
