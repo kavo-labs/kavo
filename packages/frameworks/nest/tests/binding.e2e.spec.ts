@@ -924,6 +924,72 @@ describe("@Kavo custom operations (issue #145)", () => {
     // something #424 changes.
     expect(operation?.requestBody).toBeUndefined();
   });
+
+  /**
+   * ADR-0055 / issue #467: `registerKavoSchemas` documents `schema` ahead
+   * of `dto` when the registered schema implements the optional
+   * `toJSONSchema()` method — the same precedence `schema` already has at
+   * the engine's own deserialization/serialization stages. A `dto` also
+   * registered for the same slot is not consulted at all once `schema`
+   * wins.
+   */
+  it("documents createOne's request body from schema.input.create ahead of dto (issue #467)", async () => {
+    class TodoCreateDto {
+      title = "";
+    }
+    const createSchema = {
+      safeParse: (input: unknown) => ({ success: true as const, data: input }),
+      toJSONSchema: () => ({
+        type: "object",
+        properties: { title: { type: "string", minLength: 1 } },
+        required: ["title"],
+      }),
+    };
+
+    @Kavo(Todo, { dto: { create: TodoCreateDto }, schema: { input: { create: createSchema } } })
+    @Controller("todos")
+    class SchemaDocumentedController {}
+
+    await bootstrap(SchemaDocumentedController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos"] as {
+        post?: { requestBody?: { content?: Record<string, { schema?: Record<string, unknown> }> } };
+      }
+    )?.post;
+    const schema = operation?.requestBody?.content?.["application/json"]?.schema;
+    expect(schema).toMatchObject({
+      type: "object",
+      properties: { title: { type: "string", minLength: 1 } },
+      required: ["title"],
+      "x-kavo-entity": "Todo",
+    });
+    // Not the dto class's own title — schema's shape entirely replaces the
+    // dto-derived one rather than merging with it.
+    expect(schema).not.toHaveProperty("title", "TodoCreateDto");
+  });
+
+  it("falls back to dto/ORM metadata when schema.input.create has no toJSONSchema (issue #467)", async () => {
+    class TodoCreateDto {
+      title = "";
+    }
+    const untypedSchema = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
+
+    @Kavo(Todo, { dto: { create: TodoCreateDto }, schema: { input: { create: untypedSchema } } })
+    @Controller("todos")
+    class UntypedSchemaController {}
+
+    await bootstrap(UntypedSchemaController);
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
+
+    const operation = (
+      document.paths["/todos"] as {
+        post?: { requestBody?: { content?: Record<string, { schema?: Record<string, unknown> }> } };
+      }
+    )?.post;
+    expect(operation?.requestBody?.content?.["application/json"]?.schema).toMatchObject({ title: "TodoCreateDto" });
+  });
 });
 
 describe("@Kavo custom operations reaching data (issue #152)", () => {
