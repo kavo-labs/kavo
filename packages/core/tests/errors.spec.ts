@@ -250,6 +250,25 @@ describe("exception hierarchy", () => {
     expect(exception.issues).toEqual([issue]);
   });
 
+  it("carries explicit options through SchemaValidationException, not just the default-empty branch", () => {
+    const context = { entityName: "User", operation: "createOne" };
+    const cause = new Error("parse failed");
+    const exception = new SchemaValidationException([{ field: "email", detail: "Invalid email" }], {
+      context,
+      cause,
+      messageParams: { entity: "User" },
+    });
+    expect(exception.context).toEqual(context);
+    expect(exception.cause).toBe(cause);
+    expect(exception.messageParams).toEqual({ entity: "User" });
+  });
+
+  it("threads explicit options through SchemaValidationException.single too", () => {
+    const context = { entityName: "User", operation: "createOne" };
+    const exception = SchemaValidationException.single({ field: "email", detail: "Invalid email" }, { context });
+    expect(exception.context).toEqual(context);
+  });
+
   it("marks a transaction retryable only when told so", () => {
     expect(new TransactionException().retryable).toBe(false);
     expect(new TransactionException({ retryable: true }).retryable).toBe(true);
