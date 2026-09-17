@@ -514,14 +514,16 @@ describe("publish.yml wiring", () => {
     expect(verify).toBeLessThan(pack);
   });
 
-  it("chains every publish-tier job through needs:, not just file order", () => {
+  it("makes the publish matrix wait on prepare through needs:, not just file order", () => {
     // A job's real execution order is its `needs:` graph, not where it sits
-    // in the file. Checking file order alone would stay green even if a
-    // publish job were left to run independently of the tier it actually has
-    // to wait for.
-    expect(readJobNeeds(workflow, "publish-core")).toEqual(["prepare"]);
-    expect(readJobNeeds(workflow, "publish")).toEqual(["publish-core"]);
-    expect(readJobNeeds(workflow, "publish-nest")).toEqual(["publish"]);
+    // in the file. Checking file order alone would stay green even if
+    // publish were left to run independently of prepare.
+    expect(readJobNeeds(workflow, "publish")).toEqual(["prepare"]);
+  });
+
+  it("drives the publish matrix from prepare's own PACKAGE_DIRS output, not a second hand-kept list", () => {
+    expect(workflow).toContain("needs.prepare.outputs.package_dirs");
+    expect(readStepRun(workflow, "Compute publish matrix")).toContain("process.env.PACKAGE_DIRS");
   });
 
   it("runs the gate script over the whole PACKAGE_DIRS list, not one package", () => {
@@ -546,38 +548,36 @@ describe("publish.yml wiring", () => {
       expect(step, `${name} is conditional`).not.toMatch(/^\s+if:/m);
     }
 
-    // "Publish packages" now exists once per publish-tier job.
-    for (const step of readAllStepBlocks(workflow, "Publish packages")) {
-      expect(step, "Publish packages is conditional").not.toContain("continue-on-error");
-      expect(step, "Publish packages is conditional").not.toMatch(/^\s+if:/m);
-    }
+    const step = readStepBlock(workflow, "Publish packages");
+    expect(step, "Publish packages is conditional").not.toContain("continue-on-error");
+    expect(step, "Publish packages is conditional").not.toMatch(/^\s+if:/m);
 
-    for (const job of ["prepare", "publish-core", "publish", "publish-nest"]) {
+    for (const job of ["prepare", "publish"]) {
       expect(readJobKeys(workflow, job), `${job} is conditional`).not.toContain("if");
       expect(readJobKeys(workflow, job), `${job} is conditional`).not.toContain("continue-on-error");
     }
   });
 
-  it("keeps the skip-if-already-published guard in every publish-tier job, so a re-run after a partial failure completes", () => {
+  it("keeps the skip-if-already-published guard so a re-run after a partial failure completes", () => {
     // The echo alone is not the guard — assert the condition that produces it,
     // or deleting the `if` and leaving an unconditional echo would pass.
-    for (const step of readAllStepRuns(workflow, "Publish packages")) {
-      expect(step).toMatch(/if npm view "\$NAME@\$VERSION" version .*; then/);
-      expect(step).toContain("already published, skipping");
-      expect(step).toContain("npm publish");
-    }
+    const step = readStepRun(workflow, "Publish packages");
+
+    expect(step).toMatch(/if npm view "\$NAME@\$VERSION" version .*; then/);
+    expect(step).toContain("already published, skipping");
+    expect(step).toContain("npm publish");
   });
 
-  it("treats an E409 'previously staged version' conflict as success, in every publish-tier job", () => {
+  it("treats an E409 'previously staged version' conflict as success, not failure", () => {
     // npm can report a version as already staged on the registry (accepted,
     // provenance attestation published) before `npm view` reflects it back —
     // a re-run or a retry then sees a 409 for a publish that already
     // succeeded. That must not fail the job, or a transient registry lag
     // turns a completed publish into a red release.
-    for (const step of readAllStepRuns(workflow, "Publish packages")) {
-      expect(step).toContain("Cannot publish over previously staged version");
-      expect(step).toContain("already staged on the registry, treating as published");
-    }
+    const step = readStepRun(workflow, "Publish packages");
+
+    expect(step).toContain("Cannot publish over previously staged version");
+    expect(step).toContain("already staged on the registry, treating as published");
   });
 
   it("lists every package after the packages it depends on", () => {
@@ -628,8 +628,9 @@ describe("publish.yml wiring", () => {
     expect(verify).toBeGreaterThanOrEqual(0);
     expect(pack).toBeLessThan(verify);
 
-    // Every publish-tier job depends (directly or transitively) on prepare.
-    expect(readJobNeeds(workflow, "publish-core")).toContain("prepare");
+    // publish depends on prepare, which is what makes this real ordering
+    // rather than just textual position in the file.
+    expect(readJobNeeds(workflow, "publish")).toContain("prepare");
   });
 
   it("inspects every dependency field a consumer installs for workspace: ranges", () => {
