@@ -43,6 +43,7 @@
   "devDependencies": {
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@prisma/dmmf": "^7.10.0",
     "better-sqlite3": "^13.0.3",
     "prisma": "^7.10.0"
   }

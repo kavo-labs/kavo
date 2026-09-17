@@ -1,6 +1,6 @@
 import { NotFoundException } from "@kavo/core";
 import { kavo } from "../../lib/kavo";
-import { Book } from "./book.entity";
+import { Book } from "../../generated/kavo-metadata";
 
 /**
  * `publishOne` is a custom operation (docs/core/custom-operations.md): its
