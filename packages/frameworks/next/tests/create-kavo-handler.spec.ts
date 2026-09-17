@@ -346,6 +346,17 @@ describe("createKavoHandler", () => {
       expect(responseBody.errors).toEqual([{ path: ["title"], message: "nested via a PathSegment object" }]);
     });
 
+    it("defaults an issue with no path at all to an empty path array", async () => {
+      const rootIssue = fakeSchema(() => ({ issues: [{ message: "the whole body is wrong" }] }));
+      const built = buildTodoCrudWithValidate({ create: rootIssue });
+      const validated = createKavoHandler({ todos: built.service });
+
+      const response = await call(validated, "POST", ["todos"], { body: { title: "" } });
+      expect(response.status).toBe(400);
+      const responseBody = (await response.json()) as { errors: { path: string[]; message: string }[] };
+      expect(responseBody.errors).toEqual([{ path: [], message: "the whole body is wrong" }]);
+    });
+
     it("dispatches the schema's (possibly transformed) value, not the raw body", async () => {
       const upperCaseTitle = fakeSchema((body) => {
         const { title, ...rest } = body as { title: string };
