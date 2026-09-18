@@ -110,7 +110,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   `_` are **rejected with a 400** rather than mistranslated (doc 14 §6),
   and `@kavo/mikroorm` cannot attach an `ESCAPE` clause, so the backslash
   escape there is driver-dependent (doc 17 §7). The pattern's length is
-  capped by `limits.likePattern` (default 200) — values are always
+  capped by `filter.limits.maxLikePatternLength` (default 200) — values are always
   parameter-bound, so this is not an injection guard, but an unbounded
   pattern (heavy wildcard backtracking, e.g. `%a%b%c%…`) can otherwise force
   an expensive scan.
@@ -151,7 +151,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
 - **Sort:** `sort=-createdAt,name` — comma-separated, `-` prefix =
   descending, list order is priority order. Sortable-allowlist enforced.
   A request that supplies no `sort` falls back to the resolved
-  `defaults.sort` setting (doc 08) if one is configured; a client- or
+  `sort.default` setting (doc 08) if one is configured; a client- or
   caller-supplied `sort` always wins outright over the default rather than
   merging with it. With neither, there is no `ORDER BY` at all — row order
   is DB-dependent.
@@ -180,12 +180,12 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   `total` still spans the whole match set.
 
   The sort rules are: it ends in `idField`, every key is a root scalar
-  column, no key is `json`, and **every key is on `filterable` and
-  `selectable` as well as `sortable`**. That last one is the load-bearing
+  column, no key is `json`, and **every key is on `filter.fields` and
+  `select.fields` as well as `sort.fields`**. That last one is the load-bearing
   security rule rather than a tidiness one — the keyset predicate is
   AND-ed in _after_ `DefaultFilterParser` and `validateExpression` have run,
   and `cursorValuesOf` reads the raw entity into `meta`, which never passes
-  through the serializer. Gated on `sortable` alone, the cursor path would
+  through the serializer. Gated on `sort.fields` alone, the cursor path would
   be a way around the other two allowlists in both directions (ADR-0021 §2).
   A key that fails is rejected, never dropped: dropping one would break the
   total order.
@@ -222,7 +222,7 @@ LOWER(:v)`), identical on every driver. Both operators apply to string
   (unlike `nextCursor`, which is `null` on a non-full page) — polling has
   no "last page" to signal the end of, so an exhausted poll echoes the
   request's own `since` back rather than reporting `null`. `since.field`'s
-  existence, `date`/`string` kind, and `filterable`/`selectable`
+  existence, `date`/`string` kind, and `filter.fields`/`select.fields`
   membership (`idField`'s too) are bootstrap-checked (`resolveEntityConfig`),
   not per-request, because the forced sort is entirely config-known before
   any request arrives.
@@ -294,32 +294,32 @@ GET /products?search[query]=blue+iphone&search[mode]=words&search[fields]=name,d
   - **`words`:** the term splits on whitespace; one `OR` group per word,
     `AND`-ed together — every word must match somewhere, in any searched
     field, independently. The synthesized width — word count × searched-field
-    count, one `ILIKE` condition per pair — is capped at `limits.inValues`
+    count, one `ILIKE` condition per pair — is capped at `filter.limits.maxInValues`
     (the same limit `in`/`notIn`/`between` reuse, §3); past it,
     `KAVO_QUERY_LIMIT_EXCEEDED`. Unlike those operators this is not an array
-    value, and both factors matter: `searchable`'s own default is _every_ own
+    value, and both factors matter: `search.fields`'s own default is _every_ own
     string column, so a wide allowlist alone — with no unusually long query —
     can still exceed the cap.
 - **`search[fields]=<comma-list>`** — optional. Narrows which fields this
-  call searches to a subset of the entity's resolved `allowed.searchable`
+  call searches to a subset of the entity's resolved `search.fields`
   set; a name outside that set is `KAVO_QUERY_INVALID_FIELD` (the same
   allowlist-rejection family `filter[...]`/`sort=`/`select=` use). Omitted,
-  every field in `searchable` is searched.
+  every field in `search.fields` is searched.
 
-**Allowlist.** `EntityConfig.allowed.searchable` — same
-`QueryFieldSelector` shape as `filterable`/`sortable`/`selectable`, and
+**Allowlist.** `EntityConfig.search.fields` — same
+`QueryFieldSelector` shape as `filter.fields`/`sort.fields`/`select.fields`, and
 relation paths are permitted (`'brand.name'`), reusing the per-path join
 machinery `filter[...]` already has for relation filters. Unlike
-`filterable`/`sortable`, its zero-config default is narrower than "every
+`filter.fields`/`sort.fields`, its zero-config default is narrower than "every
 own column": every own **string-kind** column, since a non-string column
 has nothing an `ILIKE` fragment can usefully match — a bootstrap
 `ConfigurationException` if an explicit override names one anyway (own
 columns only; a relation-path leaf's kind is not checked). An explicit
-empty allowlist (`searchable: []`) is a deliberate "no fields"
-configuration — searching still 400s, the same as `filterable: []` would.
+empty allowlist (`search: { fields: [] }`) is a deliberate "no fields"
+configuration — searching still 400s, the same as `filter: { fields: [] }` would.
 
 Every synthesized pattern (`%term%`) carries a leading wildcard, so it can
-never use a plain B-tree index — a `searchable` column that needs to
+never use a plain B-tree index — a `search.fields` column that needs to
 support real query volume wants a trigram (Postgres `pg_trgm` `GIN`) index
 or equivalent, same as any other leading-wildcard `LIKE`/`ILIKE` query
 would.
@@ -332,8 +332,8 @@ precedence chain (doc 08). A nearer scope re-enabling search from `false`
 may name only the keys it changes (`search: { mode: "words" }`); the
 missing ones backfill from their defaults. This keeps "does this
 endpoint support search at all" an explicit decision even though
-`searchable`'s own default is permissive. The same rejection covers a
-`searchable` that resolves empty.
+`search.fields`'s own default is permissive. The same rejection covers a
+`search.fields` that resolves empty.
 
 `search.driver` is a **reserved discriminator**, not a pluggable
 backend seam: `'orm'` is the only value this schema accepts today, kept so
@@ -371,17 +371,17 @@ through `filter`, the same way it composes any other filter.
   (`KAVO_QUERY_INVALID_FIELD`), never a silent drop. Programmatic
   callers (`findMany({ filter })`) pass through the **same** allowlist
   and limit checks — typed input skips coercion, not security.
-- **`selectable` governs the response as well as the request:** where
-  `filterable` and `sortable` only gate what a request may name, an
-  _explicitly configured_ `selectable` also narrows the default projection,
+- **`select.fields` governs the response as well as the request:** where
+  `filter.fields` and `sort.fields` only gate what a request may name, an
+  _explicitly configured_ `select.fields` also narrows the default projection,
   so a column left off it is not serialized at all. That is what makes it a
   confidentiality control rather than a validation list. Omit the key and
   the projection is unchanged
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 - **ORM-derived fields are opt-in, never a default:** a field the adapter
-  reports as ORM-derived (doc 04 §7) joins `filterable`/`sortable`/
-  `selectable` only when named explicitly — the same opt-in rule a
-  relation follows — and never `searchable` at all, opted in or not
+  reports as ORM-derived (doc 04 §7) joins `filter.fields`/`sort.fields`/
+  `select.fields` only when named explicitly — the same opt-in rule a
+  relation follows — and never `search.fields` at all, opted in or not
   ([ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata)).
   Whether an opted-in filter/sort actually works is per-adapter: TypeORM
   and MikroORM can translate the expression into `WHERE`/`ORDER BY`;
@@ -395,18 +395,18 @@ through `filter`, the same way it composes any other filter.
   soft-delete marker) doesn't require re-listing every other one.
   Resolution starts from exactly the base set that key's plain default
   uses, so the result stays fail-closed like the plain array form.
-- **Limits** (configurable per scope, doc 8): `limits.filterDepth`
+- **Limits** (configurable per scope, doc 8): `filter.limits.maxDepth`
   (default 3) on the built AST — enforced _while_ the wire grammar is being
   converted into the AST, not after, so a pathologically nested
   `filter[and][0][and][0]…` (or the `filter={…}` JSON escape hatch, which
   lets `JSON.parse` build far deeper trees than the bracket grammar's own
   key-splitting could) is rejected before the recursion that builds it goes
-  any deeper than the limit allows; `limits.inValues` (default 100) on
-  `in`/`notIn`/`between` arrays; `limits.likePattern` (default 200)
+  any deeper than the limit allows; `filter.limits.maxInValues` (default 100) on
+  `in`/`notIn`/`between` arrays; `filter.limits.maxLikePatternLength` (default 200)
   on `like`/`ilike` pattern length; `pagination.maxLimit` (default 100) on
   page size.
-- **Allowlist identifier safety** (`@kavo/typeorm`, issue #367): `filterable`/
-  `sortable` are the only two allowlists whose fields are interpolated raw
+- **Allowlist identifier safety** (`@kavo/typeorm`, issue #367): `filter.fields`/
+  `sort.fields` are the only two allowlists whose fields are interpolated raw
   into SQL (a join property path, and a `where`/`addOrderBy` column
   reference — identifiers can't be parameter-bound). An explicit array
   override is used verbatim, so it is validated at bootstrap: a bare entry

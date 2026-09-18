@@ -130,7 +130,7 @@ const sse = createTransport({
 An entity with no `filterableEntities` entry rejects any `filter[...]`
 query param with `400` before the stream opens — filtering is opt-in per
 entity, not a fallback that silently does nothing. A malformed filter
-(bad operator, depth over `limits.filterDepth`, too many `in` values, …)
+(bad operator, depth over `filter.limits.maxDepth`, too many `in` values, …)
 gets the same `400` REST would give it, via the same
 `QueryValidationException`. A filter field that is not one of the entity's
 own columns — a relation path, an un-opted-in ORM-derived field — is also rejected with
@@ -178,7 +178,7 @@ _whether_ they were authorized to.
 `RealtimeSettings.subscribableFields` (or `@kavo/sse`'s equivalent
 callback) bounds an outgoing `item` **unconditionally**, once configured —
 not only when a subscriber names a `fields` query param, the same way
-`allowed.selectable` bounds a REST response whether or not the caller
+`select.fields` bounds a REST response whether or not the caller
 asked for a subset. A `fields` param narrows further _within_ that bound;
 it can never widen past it. A `filter` field must also be in this
 allowlist (§4.1) — a subscriber cannot see, or scope itself by, a field

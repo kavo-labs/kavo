@@ -15,9 +15,10 @@ hooks/events, no audit trail, and no policy-evaluation _engine_ — `policy`
 policy store. The package set has grown
 past the original three (`@kavo/core`, `@kavo/typeorm`, `@kavo/nest`) by
 adding _edges_, never widening the hub: three further ORM adapters
-(`@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm`) and one wire
-protocol (`@kavo/graphql`), each of which cost core no change at all —
-which is the clearest evidence the seams below are real.
+(`@kavo/prisma`, `@kavo/mongoose`, `@kavo/mikroorm`), a second host
+framework binding (`@kavo/next`, ADR-0054), and two protocol bindings
+(`@kavo/graphql`, `@kavo/mcp`, both ADR-0016), each of which cost core no
+change at all — which is the clearest evidence the seams below are real.
 
 ## 1. Layers and boundaries (C4 level 2)
 
@@ -68,12 +69,12 @@ technology.
 ## 2. Dependency graph (who may import whom)
 
 ```
-@kavo/nest ──▶ @kavo/core ◀── @kavo/typeorm
+@kavo/nest ──▶ @kavo/core ◀── @kavo/typeorm      @kavo/next ──▶ @kavo/core
      │             ▲  ▲  ▲  ▲
      │             │  │  │  └─ @kavo/prisma
      │             │  │  └──── @kavo/mongoose
      ▼ (peer)      │  └─────── @kavo/mikroorm
-  @nestjs/*   @kavo/graphql
+  @nestjs/*   @kavo/graphql, @kavo/mcp
 ```
 
 - `@kavo/core` imports **nothing** (ADR-0005).
@@ -83,10 +84,16 @@ technology.
 - `@kavo/mikroorm` imports `@kavo/core` + `@mikro-orm/core` (peer). Same rule.
 - `@kavo/graphql` imports `@kavo/core` + `graphql` (peer) — a
   `protocols/*` package, host-framework-agnostic (ADR-0016).
+- `@kavo/mcp` imports `@kavo/core` + `@modelcontextprotocol/sdk` (peer,
+  types only, never run at runtime by this package itself). Same
+  `protocols/*` shape as `@kavo/graphql` (ADR-0016).
 - `@kavo/nest` imports `@kavo/core`, `@nestjs/*` (peers), and optionally
-  `@kavo/graphql`. Never an ORM adapter — adapters enter Nest's DI
-  container as providers; the binding programs against
+  `@kavo/graphql`/`@kavo/mcp`. Never an ORM adapter — adapters enter
+  Nest's DI container as providers; the binding programs against
   `RepositoryAdapter` only.
+- `@kavo/next` imports `@kavo/core` only, plus `next` as an optional peer
+  nothing in it imports at runtime (ADR-0054). Never an ORM adapter, never
+  `@kavo/nest`.
 - Cross-package imports go through package barrels; deep imports are not API.
 
 Enforced mechanically by `.dependency-cruiser.cjs` and TS project
@@ -94,15 +101,17 @@ references — an illegal import fails CI, not code review.
 
 ## 3. Package overview
 
-| Package          | Owns                                                                                    | Must never depend on         |
-| ---------------- | --------------------------------------------------------------------------------------- | ---------------------------- |
-| `@kavo/core`     | Contracts, type system, engine, query model, DTO resolution, config merging, exceptions | anything (zero runtime deps) |
-| `@kavo/typeorm`  | `RepositoryAdapter`/`FilterBuilder` over TypeORM; error mapping; relation loading       | NestJS, `@kavo/nest`         |
-| `@kavo/prisma`   | The same contracts over a Prisma Client delegate; marker classes (ADR-0017)             | NestJS, `@kavo/nest`         |
-| `@kavo/mongoose` | The same contracts over a Mongoose model; `ObjectId` conversion (ADR-0018)              | NestJS, `@kavo/nest`         |
-| `@kavo/mikroorm` | The same contracts over a MikroORM `EntityManager`; per-operation forks (doc 17)        | NestJS, `@kavo/nest`         |
-| `@kavo/graphql`  | `GraphQLSchema` over a `createCrud` service (ADR-0016)                                  | any ORM or framework package |
-| `@kavo/nest`     | `@Kavo` decorator, module wiring, route generation, exception filter, Swagger           | any ORM adapter              |
+| Package          | Owns                                                                                    | Must never depend on          |
+| ---------------- | --------------------------------------------------------------------------------------- | ----------------------------- |
+| `@kavo/core`     | Contracts, type system, engine, query model, DTO resolution, config merging, exceptions | anything (zero runtime deps)  |
+| `@kavo/typeorm`  | `RepositoryAdapter`/`FilterBuilder` over TypeORM; error mapping; relation loading       | NestJS, `@kavo/nest`          |
+| `@kavo/prisma`   | The same contracts over a Prisma Client delegate; marker classes (ADR-0017)             | NestJS, `@kavo/nest`          |
+| `@kavo/mongoose` | The same contracts over a Mongoose model; `ObjectId` conversion (ADR-0018)              | NestJS, `@kavo/nest`          |
+| `@kavo/mikroorm` | The same contracts over a MikroORM `EntityManager`; per-operation forks (doc 17)        | NestJS, `@kavo/nest`          |
+| `@kavo/graphql`  | `GraphQLSchema` over a `createCrud` service (ADR-0016)                                  | any ORM or framework package  |
+| `@kavo/mcp`      | MCP tools over a `createCrud` service's standard operations (ADR-0016, doc 16)          | any ORM or framework package  |
+| `@kavo/nest`     | `@Kavo` decorator, module wiring, route generation, exception filter, Swagger           | any ORM adapter               |
+| `@kavo/next`     | Request-time route dispatch for the Next.js App Router (ADR-0054, doc 19)               | any ORM adapter, `@kavo/nest` |
 
 ORM independence inside core began as a structural discipline when only
 TypeORM existed; the Prisma, Mongoose, and MikroORM adapters are what

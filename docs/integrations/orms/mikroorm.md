@@ -113,7 +113,9 @@ export class Book {
 
 ```ts
 @Kavo(Book, {
-  allowlists: { filterable: ["titleLower"], sortable: ["titleLower"], selectable: ["id", "title", "titleLower"] },
+  filter: { fields: ["titleLower"] },
+  sort: { fields: ["titleLower"] },
+  select: { fields: ["id", "title", "titleLower"] },
 })
 ```
 
@@ -121,7 +123,7 @@ export class Book {
 GET /books?filter[titleLower][eq]=dune&sort=titleLower
 ```
 
-A derived field is **opt-in** to `filterable`/`sortable`/`selectable`, the same rule a relation follows — leave it off `allowlists` and it never appears, is never filterable, and is never sortable.
+A derived field is **opt-in** to `filter.fields`/`sort.fields`/`select.fields`, the same rule a relation follows — leave it off all three and it never appears, is never filterable, and is never sortable.
 
 Unlike `@kavo/typeorm`, a plain JavaScript getter is **not** a second way to get a response-only field here: every row this adapter hands to core has already gone through `wrap(entity).toObject()` (see [MikroORM adapter](/internals/architecture/17-mikroorm-adapter)), which serializes MikroORM's own declared properties, not arbitrary class getters — a getter that isn't a `@Property` is simply absent from the plain object core receives. `@Formula` is the one mechanism. See [Virtual fields](/features/virtual-fields) for the full picture and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
 
@@ -155,8 +157,8 @@ MikroORM nests relation paths in its own query language, so `filter[author.name]
 
 ```ts
 @Kavo(Book, {
-  allowed: { filterable: ["title", "author.name"] },
-  allowed: { includable: ["author"] },
+  filter: { fields: ["title", "author.name"] },
+  include: { fields: ["author"] },
 })
 ```
 

@@ -26,7 +26,7 @@ GET /books/1               → { "id": 1, "title": "Dune", "year": 1965, "displa
 GET /books?select=id,displayTitle
 ```
 
-A field with a `derivedExpression` in its ORM metadata is **opt-in** to `filterable`/`sortable`/`selectable`, the same rule a relation follows: the unconfigured default excludes it, and naming it explicitly is what opens it up.
+A field with a `derivedExpression` in its ORM metadata is **opt-in** to `filter.fields`/`sort.fields`/`select.fields`, the same rule a relation follows: the unconfigured default excludes it, and naming it explicitly is what opens it up.
 
 ```ts
 @Kavo(Book, {
