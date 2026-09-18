@@ -55,6 +55,7 @@ export type { FieldsShorthand, WriteApply, WriteFieldsConfig } from "./config/wr
 export { shorthandFieldsOf } from "./schema/schema-fields-shorthand.js";
 export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./schema/kavo-schema.js";
 export type { SchemaClass, SchemaLike } from "./schema/schema-class.js";
+export { isSchemaClass } from "./schema/schema-class.js";
 export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 export type {
   EntitySchema,

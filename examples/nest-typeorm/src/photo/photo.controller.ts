@@ -14,11 +14,9 @@ import { CreatePhotoDto, UpdatePhotoDto, PatchPhotoDto, PhotoItemDto, PhotoListD
  * type — see `owner.controller.ts`'s own validation note for why.
  */
 @Kavo(Photo, {
-  dto: {
-    create: CreatePhotoDto,
-    update: UpdatePhotoDto,
-    item: PhotoItemDto,
-    list: PhotoListDto,
+  schema: {
+    input: { create: CreatePhotoDto, update: UpdatePhotoDto },
+    output: { item: PhotoItemDto, list: PhotoListDto },
   },
 })
 @Controller("photos")

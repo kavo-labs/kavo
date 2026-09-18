@@ -116,9 +116,7 @@ export type EntitySchema<
   QueryOut = QueryContext<Entity>,
   ItemOut = Entity,
   ListOut = ItemOut,
-> =
-  | SchemaSlot<CreateOut>
-  | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
+> = SchemaSlot<CreateOut> | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
 
 /**
  * Structural check: is `value` the whole-map shorthand (a bare validator or
@@ -191,9 +189,7 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
   private readonly output: Readonly<Record<SchemaOutputSlot, SchemaLike<object> | null>>;
 
   constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
-    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(
-      schema,
-    )
+    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(schema)
       ? { input: schema, output: schema }
       : (schema ?? {});
     const input = isSchemaShorthand(map.input)
@@ -218,9 +214,9 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     const list = resolveSlot(output.list);
     const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
     this.input = Object.freeze({
-      create: (input.create ?? writableFieldsToSchemaClass(writable.create?.fields) ?? null) as
-        | SchemaLike<object>
-        | null,
+      create: (input.create ??
+        writableFieldsToSchemaClass(writable.create?.fields) ??
+        null) as SchemaLike<object> | null,
       update: (resolvedUpdate ?? null) as SchemaLike<object> | null,
       patch: (patch ?? resolvedUpdate ?? null) as SchemaLike<object> | null,
       query: (input.query ?? null) as SchemaLike<object> | null,

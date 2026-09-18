@@ -96,6 +96,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "SchemaQueryOf",
   "SchemaResolver",
   "DefaultSchemaResolver",
+  "isSchemaClass",
   "decodeCompositeId",
   "encodeCompositeId",
   "ERROR_CATALOG",

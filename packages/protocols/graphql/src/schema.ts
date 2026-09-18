@@ -136,9 +136,8 @@ export type BoundKavoService<
  * GraphQL schema — opt-in per id (the #153 amendment): naming an id here is
  * what reaches the schema, there is no automatic derivation from the
  * registry the way the standard eight get one. `crudFields` still refuses
- * an id named here whose registry entry has no declared `dto.output`/
- * `schema.output` (or, when `inputType` is given, no declared `dto.input`/
- * `schema.input`, ADR-0055) — GraphQL needs an actual output/input shape
+ * an id named here whose registry entry has no declared `schema.output`
+ * (or, when `inputType` is given, no declared `schema.input`, ADR-0055) — GraphQL needs an actual output/input shape
  * to build a field with, and unlike the standard eight a custom operation
  * has no entity-derived fallback shape to reach for (ADR-0006).
  */
@@ -356,24 +355,24 @@ export function crudFields<
         `'${id}' is disabled on this entity — a disabled operation cannot be exposed on the GraphQL schema`,
       );
     }
-    const hasDeclaredOutput = descriptor.output !== null || (descriptor.schemaOutput ?? null) !== null;
+    const hasDeclaredOutput = (descriptor.schemaOutput ?? null) !== null;
     if (!hasDeclaredOutput) {
       throw new ConfigurationException(
         name,
         `operations.${id}`,
-        `'${id}' has no declared 'dto.output'/'schema.output' — a custom operation needs a declared output ` +
+        `'${id}' has no declared 'schema.output' — a custom operation needs a declared output ` +
           `shape to reach GraphQL, unlike the standard eight it has no entity-derived fallback; declare ` +
-          `'dto.output' or 'schema.output' (ADR-0055) on the operation, or remove it from this schema's ` +
+          `'schema.output' (ADR-0055) on the operation, or remove it from this schema's ` +
           `'operations' option`,
       );
     }
-    const hasDeclaredInput = descriptor.input !== null || (descriptor.schemaInput ?? null) !== null;
+    const hasDeclaredInput = (descriptor.schemaInput ?? null) !== null;
     if (custom.inputType !== undefined && !hasDeclaredInput) {
       throw new ConfigurationException(
         name,
         `operations.${id}`,
-        `'${id}' names an 'inputType' here, but the operation has no declared 'dto.input'/'schema.input' — ` +
-          `declare 'dto.input' or 'schema.input' (ADR-0055) on the operation, or drop 'inputType' from this ` +
+        `'${id}' names an 'inputType' here, but the operation has no declared 'schema.input' — ` +
+          `declare 'schema.input' (ADR-0055) on the operation, or drop 'inputType' from this ` +
           `schema's 'operations' option`,
       );
     }

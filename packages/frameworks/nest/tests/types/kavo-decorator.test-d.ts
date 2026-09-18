@@ -42,7 +42,7 @@ const complete: OperationHandler<Todo> = {
 };
 
 @Kavo(Todo, {
-  dto: { create: CreateTodoDto, item: TodoItemDto },
+  schema: { input: { create: CreateTodoDto }, output: { item: TodoItemDto } },
   filter: { fields: ["title", "done"] },
   sort: { fields: ["title"] },
   operations: {

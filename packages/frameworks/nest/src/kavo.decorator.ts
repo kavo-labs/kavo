@@ -16,13 +16,13 @@ import { isObservable } from "rxjs";
 import type {
   ClassRef,
   DefaultKavoService,
-  DtoResolver,
+  EntitySchemaMap,
+  SchemaResolver,
   EntityConfig,
   EntityInput,
   KavoCallOptions,
   KavoResponse,
   OperationDescriptor,
-  OperationDtoMap,
   OperationId,
   OperationsConfig,
   QueryContext,
@@ -34,7 +34,8 @@ import {
   ConfigurationException,
   computeEtag,
   createOperationRegistry,
-  DefaultDtoResolver,
+  DefaultSchemaResolver,
+  isSchemaClass,
   isEtagEnabled,
   registerArrayMutationOperations,
   writeOptedInRelationNames,
@@ -592,11 +593,11 @@ function defineRoute(
     writable: true,
     configurable: true,
   });
-  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined, {
+  const schemaResolver = new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined, {
     create: config?.create,
     update: config?.update,
   });
-  applyRouteDecorators(prototype, methodName, descriptor, route, dtoResolver);
+  applyRouteDecorators(prototype, methodName, descriptor, route, schemaResolver);
 }
 
 /**
@@ -611,10 +612,10 @@ function applyRouteDecorators(
   methodName: string,
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
-  dtoResolver?: DtoResolver<object>,
+  schemaResolver?: SchemaResolver<object>,
 ): void {
   const propertyDescriptor = Object.getOwnPropertyDescriptor(prototype, methodName) as PropertyDescriptor;
-  applyParamDecorators(prototype, methodName, descriptor, route, dtoResolver);
+  applyParamDecorators(prototype, methodName, descriptor, route, schemaResolver);
   // Route identity for `getResource`/`getOperation` (issue #238), written
   // on the handler function itself — the same target Nest's method
   // decorators write to — so Nest's `Reflector` can read it off
@@ -660,11 +661,11 @@ function applyRouteDecorators(
  * request from the controller instance instead, and needs the request to
  * run it against.
  *
- * `dtoResolver`, when given, is issue #281's fix: a generated method has no
+ * `schemaResolver`, when given, is issue #281's fix: a generated method has no
  * source-level parameter declaration, so TypeScript's `emitDecoratorMetadata`
  * never writes `design:paramtypes` for it, and Nest's global `ValidationPipe`
- * resolves its `metatype` off exactly that metadata — so a registered
- * `dto.create`/`dto.update`/`dto.patch` class was silently never validated on
+ * resolves its `metatype` off exactly that metadata — so a class-shaped
+ * `schema.input.create`/`update`/`patch` was silently never validated on
  * a generated route, however it's decorated (`class-validator`, `zod`, or
  * anything else hooking Nest's pipe system; the gap is generic, not tied to
  * one validation library). Writing the same metadata by hand here, at the
@@ -672,14 +673,16 @@ function applyRouteDecorators(
  * validate it, with no change to how the pipe itself resolves a metatype.
  * `undefined` (the override path, which already carries real
  * `design:paramtypes` from its own compiled source) leaves that metadata
- * untouched rather than clobbering it.
+ * untouched rather than clobbering it. A validator-shaped `schema.input.<slot>`
+ * intentionally writes no metadata — `ValidationPipe` has nothing to bind
+ * to, and the engine's own `safeParse` covers it.
  */
 function applyParamDecorators(
   prototype: Record<string, unknown>,
   methodName: string,
   descriptor: OperationDescriptor<object>,
   route: ResolvedRoute,
-  dtoResolver?: DtoResolver<object>,
+  schemaResolver?: SchemaResolver<object>,
 ): void {
   let index = 0;
   let bodyIndex = -1;
@@ -695,15 +698,15 @@ function applyParamDecorators(
   ConditionalRequest()(prototype, methodName, index++);
   Req()(prototype, methodName, index++);
 
-  if (bodyIndex === -1 || dtoResolver === undefined) {
+  if (bodyIndex === -1 || schemaResolver === undefined) {
     return;
   }
-  const bodyDto = bodyDtoFor(descriptor, dtoResolver);
-  if (bodyDto === null) {
+  const bodySchema = bodyDtoFor(descriptor, schemaResolver);
+  if (bodySchema === null || !isSchemaClass(bodySchema)) {
     return;
   }
   const paramTypes: unknown[] = Array.from({ length: index });
-  paramTypes[bodyIndex] = bodyDto;
+  paramTypes[bodyIndex] = bodySchema;
   Reflect.defineMetadata("design:paramtypes", paramTypes, prototype, methodName);
 }
 

@@ -67,11 +67,9 @@ import { OwnerWelcomeService } from "./owner-welcome.service.js";
  * `docs/guides/configuration/operations#custom-operations`.
  */
 @Kavo(Owner, {
-  dto: {
-    create: CreateOwnerDto,
-    update: UpdateOwnerDto,
-    item: OwnerItemDto,
-    list: OwnerListDto,
+  schema: {
+    input: { create: CreateOwnerDto, update: UpdateOwnerDto },
+    output: { item: OwnerItemDto, list: OwnerListDto },
   },
   cache: { etag: false },
   realtime: { events: {} },

@@ -108,11 +108,7 @@ export interface KavoService<
    */
   run<Operation extends CustomOperationId<Ops>>(
     operation: Operation,
-    request?: CustomOperationRequest<
-      Id,
-      CustomOperationBody<Ops, Operation>,
-      SchemaQueryOf<Ops, Operation, QueryDto>
-    >,
+    request?: CustomOperationRequest<Id, CustomOperationBody<Ops, Operation>, SchemaQueryOf<Ops, Operation, QueryDto>>,
     options?: KavoCallOptions,
   ): Promise<CustomOperationResult<Ops, Operation>>;
 }

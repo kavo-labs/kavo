@@ -14,11 +14,9 @@ import { CreateAddressDto, UpdateAddressDto, AddressItemDto, AddressListDto } fr
  * without exercising anything MikroORM-specific.
  */
 @Kavo(Address, {
-  dto: {
-    create: CreateAddressDto,
-    update: UpdateAddressDto,
-    item: AddressItemDto,
-    list: AddressListDto,
+  schema: {
+    input: { create: CreateAddressDto, update: UpdateAddressDto },
+    output: { item: AddressItemDto, list: AddressListDto },
   },
 })
 @Controller("addresses")

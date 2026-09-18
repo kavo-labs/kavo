@@ -79,7 +79,7 @@ function server(): SupertestTarget {
 
 describe("generated route body metatype (issue #281)", () => {
   it("exposes the registered dto.create class to a global pipe, not Object", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class TodosController {}
 
@@ -90,7 +90,7 @@ describe("generated route body metatype (issue #281)", () => {
   });
 
   it("exposes the registered dto.update class on a generated PUT route", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto, update: UpdateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto, update: UpdateTodoDto } } })
     @Controller("todos")
     class TodosController {}
 
@@ -114,7 +114,7 @@ describe("generated route body metatype (issue #281)", () => {
   });
 
   it("does not disturb an @Override()'d route's own real design:paramtypes", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class TodosController {
       @Override()

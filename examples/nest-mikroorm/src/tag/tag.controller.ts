@@ -8,12 +8,7 @@ import { CreateTagDto, UpdateTagDto, TagItemDto, TagListDto } from "./tag.dtos.j
  * (`include=tags` on `/cats`).
  */
 @Kavo(Tag, {
-  dto: {
-    create: CreateTagDto,
-    update: UpdateTagDto,
-    item: TagItemDto,
-    list: TagListDto,
-  },
+  schema: { input: { create: CreateTagDto, update: UpdateTagDto }, output: { item: TagItemDto, list: TagListDto } },
 })
 @Controller("tags")
 export class TagController {}

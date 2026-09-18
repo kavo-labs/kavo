@@ -218,9 +218,7 @@ describe("DefaultSchemaResolver's create/update writable-fields fallback", () =>
     const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
       create: { fields: ["name"] },
     });
-    expect(schemaShapeKeys(resolver.resolveInput("create", "createOne") as unknown as SchemaClass)).toEqual([
-      "name",
-    ]);
+    expect(schemaShapeKeys(resolver.resolveInput("create", "createOne") as unknown as SchemaClass)).toEqual(["name"]);
   });
 
   it("a registered schema.input.create wins over the top-level create.fields fallback", () => {
@@ -245,9 +243,7 @@ describe("DefaultSchemaResolver's create/update writable-fields fallback", () =>
     const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
       update: { fields: ["name"] },
     });
-    expect(schemaShapeKeys(resolver.resolveInput("update", "updateOne") as unknown as SchemaClass)).toEqual([
-      "name",
-    ]);
+    expect(schemaShapeKeys(resolver.resolveInput("update", "updateOne") as unknown as SchemaClass)).toEqual(["name"]);
     expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
   });
 });

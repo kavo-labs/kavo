@@ -24,11 +24,9 @@ import {
  * type — see `owner.controller.ts`'s own validation note for why.
  */
 @Kavo(OwnerSetting, {
-  dto: {
-    create: CreateOwnerSettingDto,
-    update: UpdateOwnerSettingDto,
-    item: OwnerSettingItemDto,
-    list: OwnerSettingListDto,
+  schema: {
+    input: { create: CreateOwnerSettingDto, update: UpdateOwnerSettingDto },
+    output: { item: OwnerSettingItemDto, list: OwnerSettingListDto },
   },
 })
 @Controller("owner-settings")

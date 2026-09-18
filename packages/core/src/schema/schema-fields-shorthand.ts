@@ -1,10 +1,10 @@
-import type { SchemaClass } from "./schema-class.js";
+import type { SchemaClass, SchemaLike } from "./schema-class.js";
 import type { FieldsShorthand } from "../config/write-fields.js";
 
-const SHORTHAND_FIELDS = new WeakMap<SchemaClass, readonly string[]>();
+const SHORTHAND_FIELDS = new WeakMap<object, readonly string[]>();
 
 /** The fields behind a shorthand-synthesized class, or `null` for a hand-registered one (or no class at all). */
-export function shorthandFieldsOf(schemaClass: SchemaClass | null): readonly string[] | null {
+export function shorthandFieldsOf(schemaClass: SchemaLike<object> | null): readonly string[] | null {
   if (schemaClass === null) {
     return null;
   }

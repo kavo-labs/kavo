@@ -181,7 +181,13 @@ describe("createOperationRegistry — default entries", () => {
   it("binds the built-in handler and leaves both DTO slots to the defaults", async () => {
     const registry = createOperationRegistry<User>(undefined, standardHandlers);
     const entry = registry.get("findOne");
-    expect(entry).toMatchObject({ kind: "read", cardinality: "one", enabled: true, schemaInput: null, schemaOutput: null });
+    expect(entry).toMatchObject({
+      kind: "read",
+      cardinality: "one",
+      enabled: true,
+      schemaInput: null,
+      schemaOutput: null,
+    });
     expect(entry?.meta).toEqual({});
     await expect(entry?.handler.execute(1, contextStub())).resolves.toBe("built-in:findOne");
   });
@@ -279,7 +285,13 @@ describe("createOperationRegistry — the control surface", () => {
       standardHandlers,
     );
     const entry = registry.get("updateOne");
-    expect(entry).toMatchObject({ kind: "write", cardinality: "one", enabled: true, schemaInput: null, schemaOutput: null });
+    expect(entry).toMatchObject({
+      kind: "write",
+      cardinality: "one",
+      enabled: true,
+      schemaInput: null,
+      schemaOutput: null,
+    });
     await expect(entry?.handler.execute({}, contextStub())).resolves.toBe("custom-update");
   });
 
@@ -327,7 +339,9 @@ describe("createOperationRegistry — per-operation schema override (ADR-0055)",
 
   it("resolves output and query independently for findOne", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { findOne: { schema: { output: UserProfileSchema, query: UserSearchQuerySchema } } } } as UserConfig,
+      {
+        operations: { findOne: { schema: { output: UserProfileSchema, query: UserSearchQuerySchema } } },
+      } as UserConfig,
       standardHandlers,
     );
     expect(registry.get("findOne")).toMatchObject({
@@ -339,7 +353,9 @@ describe("createOperationRegistry — per-operation schema override (ADR-0055)",
 
   it("resolves output and query independently for findMany", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { findMany: { schema: { output: UserListItemSchema, query: UserSearchQuerySchema } } } } as UserConfig,
+      {
+        operations: { findMany: { schema: { output: UserListItemSchema, query: UserSearchQuerySchema } } },
+      } as UserConfig,
       standardHandlers,
     );
     expect(registry.get("findMany")).toMatchObject({
@@ -577,7 +593,9 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
     expect(() =>
       createOperationRegistry<User>(
         {
-          operations: { findActiveMany: { handler: handlerNamed("x"), kind: "read", schema: { input: MarkPaidSchema } } },
+          operations: {
+            findActiveMany: { handler: handlerNamed("x"), kind: "read", schema: { input: MarkPaidSchema } },
+          },
         } as unknown as UserConfig,
         standardHandlers,
         undefined,

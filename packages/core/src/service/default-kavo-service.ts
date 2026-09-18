@@ -129,10 +129,7 @@ export class DefaultKavoService<
     await this.engine.execute(this.request({ operation: "deleteOne", id, options: options ?? null }));
   }
 
-  async restoreOne(
-    id: Id,
-    options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "restoreOne", ItemDto>> {
+  async restoreOne(id: Id, options?: KavoCallOptions): Promise<SchemaOutputOf<Ops, "restoreOne", ItemDto>> {
     const response = await this.engine.execute(this.request({ operation: "restoreOne", id, options: options ?? null }));
     return response.item as SchemaOutputOf<Ops, "restoreOne", ItemDto>;
   }
@@ -153,11 +150,7 @@ export class DefaultKavoService<
    */
   async run<Operation extends CustomOperationId<Ops>>(
     operation: Operation,
-    request?: CustomOperationRequest<
-      Id,
-      CustomOperationBody<Ops, Operation>,
-      SchemaQueryOf<Ops, Operation, QueryDto>
-    >,
+    request?: CustomOperationRequest<Id, CustomOperationBody<Ops, Operation>, SchemaQueryOf<Ops, Operation, QueryDto>>,
     options?: KavoCallOptions,
   ): Promise<CustomOperationResult<Ops, Operation>> {
     const response = await this.engine.execute(

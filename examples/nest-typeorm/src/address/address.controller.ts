@@ -56,11 +56,9 @@ import { assertValidPostalCode, clearOwnerAddress, normalizePostalCode } from ".
  * `@Get`, `@Param` and status entirely.
  */
 @Kavo(Address, {
-  dto: {
-    create: CreateAddressDto,
-    update: UpdateAddressDto,
-    item: AddressItemDto,
-    list: AddressListDto,
+  schema: {
+    input: { create: CreateAddressDto, update: UpdateAddressDto },
+    output: { item: AddressItemDto, list: AddressListDto },
   },
   operations: {
     createOne: true,

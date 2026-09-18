@@ -1,19 +1,18 @@
 import { createRequire } from "node:module";
 import type {
   ClassRef,
-  DtoResolver,
   EntityConfig,
   EntityMetadata,
   EntitySchemaMap,
   FieldMetadata,
   KavoSchema,
+  SchemaLike,
   OperationDescriptor,
-  OperationDtoMap,
   RelationCardinality,
   RelationFieldSelector,
   SchemaResolver,
 } from "@kavo/core";
-import { DefaultDtoResolver, DefaultSchemaResolver, shorthandFieldsOf } from "@kavo/core";
+import { DefaultSchemaResolver, isSchemaClass, shorthandFieldsOf } from "@kavo/core";
 import type { KavoHttpMethod } from "./operation-metadata.js";
 import { isSchemaHint, readSchemaHint, type SchemaHint } from "./schema-hints.js";
 
@@ -196,34 +195,39 @@ function withKavoEntity<T extends object>(schema: T, entityName: string): T & { 
 }
 
 /**
- * ADR-0055 / issue #467: `registerKavoSchemas` documents `schema` ahead of
- * `dto` — a `KavoSchema` that opts into `toJSONSchema()` (`kavo-schema.ts`)
- * is the source of truth for the component it produces, the same way
- * `schema` already wins over `dto` at the engine's deserialization/
- * serialization stages (`resolve-entity-config.ts`). A schema with no
+ * ADR-0055 / issue #467: a validator-shaped `KavoSchema` that opts into
+ * `toJSONSchema()` (`kavo-schema.ts`) is the source of truth for the
+ * component it produces. A class-shaped schema, or a validator with no
  * `toJSONSchema` (the common case — `.safeParse` alone satisfies
- * `KavoSchema`) has nothing to introspect, so this returns `null` and the
- * caller falls through to the existing `dto`/ORM-metadata chain exactly as
- * if no `schema` were configured at all.
+ * `KavoSchema`), has nothing to introspect here, so this returns `null` and
+ * the caller falls through to the class-reflection/ORM-metadata chain
+ * exactly as if no `schema` were configured at all.
  */
-function schemaDocFor(schema: KavoSchema<unknown> | null | undefined, entityName: string): object | null {
-  if (schema === null || schema === undefined || typeof schema.toJSONSchema !== "function") {
+function schemaDocFor(schema: SchemaLike<object> | null | undefined, entityName: string): object | null {
+  if (schema === null || schema === undefined || isSchemaClass(schema)) {
     return null;
   }
-  return withKavoEntity(schema.toJSONSchema(), entityName);
+  const validator: KavoSchema<unknown> = schema;
+  if (typeof validator.toJSONSchema !== "function") {
+    return null;
+  }
+  return withKavoEntity(validator.toJSONSchema(), entityName);
 }
 
 /**
- * Root-scope `schema` resolver for one entity (issue #467) — the
- * `schema`-typed sibling of the `dtoResolver` built alongside it in
- * `applySwaggerMetadata`. Per-operation `schema` overrides
- * (`descriptor.schemaInput`/`schemaOutput`) are read directly off the
- * descriptor by the caller, the same tier `descriptor.input`/`output`
- * already sit at ahead of `dtoResolver` — this resolver only ever answers
- * the entity's own root `schema.input.<slot>`/`schema.output.<slot>`.
+ * Root-scope `schema` resolver for one entity. Per-operation `schema`
+ * overrides (`descriptor.schemaInput`/`schemaOutput`) are read directly off
+ * the descriptor by the caller — this resolver only ever answers the
+ * entity's own root `schema.input.<slot>`/`schema.output.<slot>`. Needs only
+ * the schema map and the top-level `create`/`update` shorthand, both legal
+ * at decoration time (ADR-0012); the slot fallbacks (`patch`→`update`,
+ * `list`→`item`) belong to the core resolver, not to this file.
  */
 function schemaResolverFor(config: EntityConfig<object> | undefined): SchemaResolver<object> {
-  return new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined);
+  return new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined, {
+    create: config?.create,
+    update: config?.update,
+  });
 }
 
 export function applySwaggerMetadata(
@@ -330,15 +334,6 @@ export function applySwaggerMetadata(
     }
   }
 
-  // The slot fallbacks (`patch`→`update`, `list`→`item`) belong to the core
-  // resolver, not to this file: documenting a shape the engine would not
-  // actually use is a lie that no test would catch. The resolver needs only
-  // the DTO map and the top-level `create`/`update` shorthand, both legal
-  // at decoration time (ADR-0012).
-  const dtoResolver = new DefaultDtoResolver(config?.dto as OperationDtoMap<object> | undefined, {
-    create: config?.create,
-    update: config?.update,
-  });
   const schemaResolver = schemaResolverFor(config);
 
   const inputSlot = inputSlotFor(descriptor.id);
@@ -349,7 +344,7 @@ export function applySwaggerMetadata(
   if (schemaBody !== null) {
     apply(swagger.ApiBody({ schema: schemaBody }));
   } else {
-    const bodyDto = bodyDtoFor(descriptor, dtoResolver);
+    const bodyDto = bodyDtoFor(descriptor, schemaResolver);
     if (bodyDto !== null) {
       apply(swagger.ApiBody(bodyOptionsFor(bodyDto, entity.name)));
     }
@@ -365,7 +360,7 @@ export function applySwaggerMetadata(
     swagger.ApiResponse({
       status: route.status,
       description: "Success",
-      ...successBodyFor(descriptor, route, entity, dtoResolver, schemaResolver),
+      ...successBodyFor(descriptor, route, entity, schemaResolver),
     }),
   );
   apply(
@@ -1010,7 +1005,7 @@ const alreadyBodySchemaDocumented = new WeakSet<object>();
 
 /**
  * Fallback request-body schema for `createOne`/`updateOne`/`patchOne` when
- * the entity has no `dto.create`/`dto.update`/`dto.patch` (or
+ * the entity has no `schema.input.create`/`schema.input.update`/`schema.input.patch` (or
  * `descriptor.input` override) configured — `applySwaggerMetadata`'s own
  * `bodyDtoFor` then resolves to `null` and applies no `@ApiBody` at all,
  * leaving a route that genuinely validates and accepts a specific field set
@@ -1275,7 +1270,6 @@ function successBodyFor(
   descriptor: OperationDescriptor<object>,
   route: RouteShape,
   entity: ClassRef,
-  dtoResolver: DtoResolver<object>,
   schemaResolver: SchemaResolver<object>,
 ): object {
   if (route.status === 204) {
@@ -1296,7 +1290,7 @@ function successBodyFor(
     descriptor.schemaOutput ?? schemaResolver.resolveOutput(outputSlot, descriptor.id),
     entity.name,
   );
-  const operationScoped = descriptor.output !== null;
+  const operationScoped = (descriptor.schemaOutput ?? null) !== null;
   if (schemaDoc !== null) {
     return {
       schema:
@@ -1317,8 +1311,10 @@ function successBodyFor(
   // (issue #131): the engine serializes through `descriptor.output` ahead
   // of the entity's root `item`/`list` slot, so documenting the slot alone
   // would advertise a shape no response actually has.
-  const resolve = (slot: "item" | "list"): ClassRef =>
-    (descriptor.output as ClassRef | null) ?? (dtoResolver.resolve(slot, descriptor.id) as ClassRef | null) ?? entity;
+  const resolve = (slot: "item" | "list"): ClassRef => {
+    const resolved = descriptor.schemaOutput ?? schemaResolver.resolveOutput(slot, descriptor.id);
+    return resolved !== null && isSchemaClass(resolved) ? (resolved as ClassRef) : entity;
+  };
   if (descriptor.cardinality === "many") {
     // `list` falls back to `item` inside the resolver.
     const listDto = resolve("list");
@@ -1327,7 +1323,7 @@ function successBodyFor(
     };
   }
   // Restore reuses the `item` slot — no dedicated restore shape — and so
-  // does every custom single-row operation that registers no `dto.output`.
+  // does every custom single-row operation that registers no `schema.output`.
   const itemDto = resolve("item");
   const schema = schemaFromDto(itemDto, entity.name);
   return schema === null
@@ -1484,14 +1480,14 @@ export function applyResponseSchemaDocs(
   selectable: readonly string[],
   includable: readonly string[],
   relationTargetMetadata: Readonly<Record<string, EntityMetadata<object>>>,
-  dtoResolver: DtoResolver<object>,
+  schemaResolver: SchemaResolver<object>,
 ): void {
   if (route.status === 204) {
     return;
   }
   const isList = descriptor.cardinality === "many";
   const slot: "item" | "list" = isList ? "list" : "item";
-  if (descriptor.output !== null || dtoResolver.resolve(slot, descriptor.id) !== null) {
+  if ((descriptor.schemaOutput ?? null) !== null || schemaResolver.resolveOutput(slot, descriptor.id) !== null) {
     return;
   }
 
@@ -1691,28 +1687,27 @@ function inputSlotFor(id: string): "create" | "update" | "patch" | null {
   }
 }
 
-export function bodyDtoFor(descriptor: OperationDescriptor<object>, dtoResolver: DtoResolver<object>): ClassRef | null {
-  if (descriptor.input !== null) {
-    return descriptor.input as ClassRef;
-  }
-  // A `dto.<slot>` `{ fields }` shorthand (issue #386) synthesizes a real
-  // class so the engine's own DTO machinery treats it uniformly, but it
-  // carries no type information of its own — treated as "no real DTO" here
-  // so the richer ORM-metadata-driven fallback below still runs instead of
-  // NestJS's generic (untyped) class introspection.
-  const resolve = (slot: "create" | "update" | "patch"): ClassRef | null => {
-    const resolved = dtoResolver.resolve(slot, descriptor.id) as (new () => object) | null;
-    return shorthandFieldsOf(resolved) !== null ? null : (resolved as ClassRef | null);
-  };
-  switch (descriptor.id) {
-    case "createOne":
-      return resolve("create");
-    case "updateOne":
-      return resolve("update");
-    case "patchOne":
-      // `patch` falls back to `update` inside the resolver.
-      return resolve("patch");
-    default:
+export function bodyDtoFor(
+  descriptor: OperationDescriptor<object>,
+  schemaResolver: SchemaResolver<object>,
+): ClassRef | null {
+  // Only a class-shaped schema can be reflected into a body type; a validator
+  // is documented (when it opts in) through `schemaDocFor` instead.
+  const classOf = (schema: SchemaLike<object> | null): ClassRef | null => {
+    // A `schema.<slot>` `{ fields }` shorthand (issue #386) synthesizes a real
+    // class so the engine's own machinery treats it uniformly, but it carries
+    // no type information of its own — treated as "no real class" here so the
+    // richer ORM-metadata-driven fallback below still runs instead of
+    // NestJS's generic (untyped) class introspection.
+    if (schema === null || !isSchemaClass(schema) || shorthandFieldsOf(schema) !== null) {
       return null;
+    }
+    return schema as ClassRef;
+  };
+  if ((descriptor.schemaInput ?? null) !== null) {
+    return classOf(descriptor.schemaInput ?? null);
   }
+  const slot = inputSlotFor(descriptor.id);
+  // `patch` falls back to `update` inside the resolver.
+  return slot === null ? null : classOf(schemaResolver.resolveInput(slot, descriptor.id));
 }

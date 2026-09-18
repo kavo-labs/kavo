@@ -166,8 +166,7 @@ const freeformObjectSchema: Tool["inputSchema"] = { type: "object" };
  * is nothing a caller needs to hand-author the way `@kavo/graphql`'s
  * `operations` option does. The opt-in instead is the registry entry
  * itself (the #153 amendment): an enabled custom operation reaches this
- * toolset only when it declares an output shape — `dto.output` or, since
- * issue #467, `schema.output` (ADR-0055) — a custom id with no declared
+ * toolset only when it declares an output shape (`schema.output`, ADR-0055) — a custom id with no declared
  * shape has nothing to build even a loose schema from, so it is excluded
  * rather than guessed at.
  */
@@ -265,12 +264,12 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
 
   const standardIds: ReadonlySet<StandardOperationId> = new Set(STANDARD_OPERATION_IDS);
   for (const descriptor of registryOf(service)?.all() ?? []) {
-    const hasOutput = descriptor.output !== null || (descriptor.schemaOutput ?? null) !== null;
+    const hasOutput = (descriptor.schemaOutput ?? null) !== null;
     if (standardIds.has(descriptor.id as StandardOperationId) || !descriptor.enabled || !hasOutput) {
       continue;
     }
     const takesId = descriptor.cardinality === "one";
-    const takesInput = descriptor.input !== null || (descriptor.schemaInput ?? null) !== null;
+    const takesInput = (descriptor.schemaInput ?? null) !== null;
     const inputSchema = takesId
       ? takesInput
         ? idAndFreeformSchema

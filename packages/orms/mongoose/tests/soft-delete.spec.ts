@@ -99,7 +99,7 @@ beforeAll(async () => {
   }) as unknown as DefaultKavoService<Invoice>;
   coupons = kavo.createCrud(models.Coupon, {
     delete: { field: "retiredAt" },
-    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+    schema: { input: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto } },
   }) as unknown as DefaultKavoService<Coupon>;
 });
 

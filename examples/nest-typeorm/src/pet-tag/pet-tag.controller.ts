@@ -22,11 +22,9 @@ import { assertValidNote, normalizeNote } from "./pet-tag.runtime.js";
  * uses for `postalCode`.
  */
 @Kavo(PetTag, {
-  dto: {
-    create: CreatePetTagDto,
-    update: UpdatePetTagDto,
-    item: PetTagItemDto,
-    list: PetTagListDto,
+  schema: {
+    input: { create: CreatePetTagDto, update: UpdatePetTagDto },
+    output: { item: PetTagItemDto, list: PetTagListDto },
   },
 })
 @Controller("pet-tags")

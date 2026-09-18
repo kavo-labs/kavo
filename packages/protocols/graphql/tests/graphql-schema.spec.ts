@@ -307,7 +307,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
                 return context.repository.update(id, { done: true }, context);
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,
@@ -342,7 +342,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
                 return context.repository.findOneById(input as number, null, context);
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,
@@ -395,7 +395,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     expect(result.data?.todoMarkDoneOne).toEqual({ id: 1, done: true });
   });
 
-  it("refuses a named custom operation with no declared dto.output", () => {
+  it("refuses a named custom operation with no declared schema.output", () => {
     const service = createKavo().createCrud(
       Todo,
       {
@@ -417,7 +417,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as Error).message).toMatch(/no declared 'dto.output'/);
+      expect((error as Error).message).toMatch(/no declared 'schema.output'/);
     }
   });
 
@@ -468,7 +468,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
       Todo,
       {
         operations: {
-          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo }, enabled: false },
+          markDoneOne: { handler: { async execute() {} }, schema: { output: Todo }, enabled: false },
         },
       } as never,
       { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
@@ -489,12 +489,12 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     }
   });
 
-  it("refuses an 'inputType' named for an operation with no declared dto.input", () => {
+  it("refuses an 'inputType' named for an operation with no declared schema.input", () => {
     const service = createKavo().createCrud(
       Todo,
       {
         operations: {
-          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo } },
+          markDoneOne: { handler: { async execute() {} }, schema: { output: Todo } },
         },
       } as never,
       { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
@@ -516,7 +516,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect(error).toMatchObject({ code: "KAVO_CONFIG_INVALID" });
-      expect((error as Error).message).toMatch(/no declared 'dto.input'/);
+      expect((error as Error).message).toMatch(/no declared 'schema.input'/);
     }
   });
 
@@ -541,7 +541,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
                 return { entities: rows, total: rows.length };
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,
@@ -578,7 +578,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     const service = createKavo().createCrud(
       Todo,
       {
-        operations: { markDoneOne: { handler: { async execute() {} }, dto: { output: Todo } } },
+        operations: { markDoneOne: { handler: { async execute() {} }, schema: { output: Todo } } },
       } as never,
       { adapter, metadata: todoMetadata },
     );
