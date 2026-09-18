@@ -27,7 +27,9 @@ kavo/
 │  │  └─ sse/                 # @kavo/sse
 │  │     └─ src/index.ts
 │  ├─ frameworks/
-│  │  └─ nest/                # @kavo/nest
+│  │  ├─ nest/                # @kavo/nest
+│  │  │  └─ src/index.ts
+│  │  └─ next/                # @kavo/next
 │  │     └─ src/index.ts
 │  └─ protocols/
 │     ├─ graphql/             # @kavo/graphql
@@ -39,16 +41,22 @@ kavo/
 │  │  └─ src/index.ts
 │  ├─ nest-mongoose/          # @kavo/example-nest-mongoose
 │  │  └─ src/index.ts
-│  └─ nest-mikroorm/          # @kavo/example-nest-mikroorm
-│     └─ src/index.ts
+│  ├─ nest-mikroorm/          # @kavo/example-nest-mikroorm
+│  │  └─ src/index.ts
+│  └─ next-prisma/            # @kavo/example-next-prisma (Next.js App Router, not src/)
+│     └─ app/api/
 └─ docs/                      # this documentation
 ```
 
 The `orms/`, `realtime/`, `frameworks/`, and `protocols/` parent folders
 keep the door open for future adapters, transports, host framework
-bindings (Express, Fastify, Next.js, …), and wire protocols (gRPC, …)
+bindings (Express, Fastify, …), and wire protocols (gRPC, …)
 without implying any get built ahead of real work landing (ADR-0002,
-ADR-0016). `@kavo/prisma` and `@kavo/mongoose` are the second and third
+ADR-0016). `@kavo/next` is the second `frameworks/*` package, alongside
+`@kavo/nest` — see ADR-0054 for the one place its design departs from
+`@kavo/nest`'s (resolving routes at request time rather than at
+decoration time, since the App Router has no decorator/DI container to
+generate static routes at all). `@kavo/prisma` and `@kavo/mongoose` are the second and third
 `orms/*` adapters, alongside `@kavo/typeorm` — see ADR-0017 for the one
 place Prisma's design departs from the TypeORM adapter's shape (marker
 classes standing in for Prisma's lack of runtime entity classes), and
@@ -105,6 +113,15 @@ edge.
   `RepositoryAdapter`. It may depend on a `protocols/*` package
   (`@kavo/graphql`, `@kavo/mcp`) to offer that protocol's glue as an
   add-on — see ADR-0016 — but never another `frameworks/*` package.
+- **`@kavo/next`** (`packages/frameworks/next`, ADR-0054) exists to bind
+  Kavo to the Next.js App Router: a catch-all route handler that resolves
+  each entity's operation registry at request time, since the App Router
+  has no decorator/DI container the way Nest's controller scan gives
+  `@kavo/nest`. Same `frameworks/*` shape and constraint as `@kavo/nest` —
+  it depends on `@kavo/core` only (never an ORM adapter, never
+  `@kavo/nest`), with `next` itself an optional peerDependency nothing
+  here imports at runtime. See
+  `docs/internals/architecture/19-nextjs-integration.md`.
 - **`@kavo/graphql`** (`packages/protocols/graphql`, ADR-0016) exists to
   build a `GraphQLSchema` over a `createCrud` service — host-framework-
   agnostic, same constraint as an ORM adapter: it depends on `@kavo/core`
@@ -230,7 +247,7 @@ dual ESM+CJS output is a future deliverable.
 ## 6. Build strategy
 
 `tsc -b` against the solution file: incremental (`.tsbuildinfo`),
-project-reference-ordered (core → typeorm/prisma/mongoose/mikroorm/sse/graphql/mcp → nest),
+project-reference-ordered (core → typeorm/prisma/mongoose/mikroorm/sse/graphql/mcp → nest/next),
 each package emitting
 `dist/` with declarations + declaration maps. Consumers inside the
 workspace resolve `@kavo/*` via pnpm workspace links to the built
