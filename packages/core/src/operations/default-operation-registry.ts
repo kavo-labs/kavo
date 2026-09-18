@@ -2,7 +2,6 @@ import type { OperationDescriptor, OperationRegistry } from "./operation-registr
 import type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operation.js";
 import type { OperationHandler } from "./operation-handler.js";
 import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
-import type { DtoClass } from "../dto/dto.js";
 import type { KavoSchema } from "../schema/kavo-schema.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
@@ -159,47 +158,9 @@ const CUSTOM_DTO_OVERRIDE_FIELDS: Readonly<Record<OperationKind, readonly DtoOve
 });
 
 /**
- * Validates one entry's `operations.<id>.dto` against the fields that
- * operation actually has, and returns the three descriptor fields it
- * resolves to (`null` for an unset or inapplicable field).
- */
-function resolveDtoOverride(
-  entityName: string,
-  id: OperationId,
-  allowed: readonly DtoOverrideField[],
-  settings: { readonly dto?: unknown } | undefined,
-): Pick<OperationDescriptor, "input" | "output" | "query"> {
-  const dto = settings?.dto as Readonly<Partial<Record<DtoOverrideField, DtoClass>>> | undefined;
-  const resolved: Record<DtoOverrideField, DtoClass | null> = { input: null, output: null, query: null };
-  if (dto === undefined) {
-    return resolved;
-  }
-
-  for (const field of Object.keys(dto) as DtoOverrideField[]) {
-    if (dto[field] === undefined) {
-      continue;
-    }
-    if (!allowed.includes(field)) {
-      throw new ConfigurationException(
-        entityName,
-        `operations.${id}.dto.${field}`,
-        allowed.length === 0
-          ? `'${id}' has a void result and no query, so a 'dto.${field}' override has nothing to narrow — remove it`
-          : `'${id}' has no '${field}' position — it only supports ${allowed.map((f) => `'${f}'`).join(", ")}`,
-      );
-    }
-    resolved[field] = dto[field] as DtoClass;
-  }
-  return resolved;
-}
-
-/**
  * Validates one entry's `operations.<id>.schema` against the fields that
  * operation actually has, and returns the three descriptor fields it
- * resolves to (`null` for an unset or inapplicable field) — the
- * `schema`-typed sibling of `resolveDtoOverride` above, since
- * `OperationSchemaOverride` (unlike `OperationDtoOverride`) is not narrowed
- * per operation id at the type level.
+ * resolves to (`null` for an unset or inapplicable field).
  */
 function resolveSchemaOverride(
   entityName: string,
@@ -389,7 +350,6 @@ export function createOperationRegistry<Entity extends object>(
         ? operationConfig
         : isListed
       : (globalOperations?.[id] ?? byDefault);
-    const dtoOverride = resolveDtoOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     const schemaOverride = resolveSchemaOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     registry.register({
       id,
@@ -400,7 +360,6 @@ export function createOperationRegistry<Entity extends object>(
         settings?.handler ??
         handlers?.(id) ??
         (unboundHandler(id, entityName ?? "entity") as unknown as OperationHandler<Entity>),
-      ...dtoOverride,
       ...schemaOverride,
       meta: settings?.meta ?? {},
     });
@@ -495,7 +454,6 @@ function registerCustomOperation<Entity extends object>(
     cardinality,
     enabled: custom.enabled ?? true,
     handler,
-    ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     ...resolveSchemaOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     meta: custom.meta ?? {},
     ...(custom.realtimeEvent !== undefined ? { realtimeEvent: custom.realtimeEvent } : {}),

@@ -36,9 +36,9 @@ function descriptor(overrides: Partial<OperationDescriptor<User>> = {}): Operati
     cardinality: "one",
     enabled: true,
     handler: handlerNamed("original"),
-    input: null,
-    output: null,
-    query: null,
+    schemaInput: null,
+    schemaOutput: null,
+    schemaQuery: null,
     meta: {},
     ...overrides,
   };
@@ -69,11 +69,11 @@ describe("DefaultOperationRegistry — the operation table (ADR-0006)", () => {
   });
 
   it("replaces only the handler, keeping the rest of the descriptor", () => {
-    class ActivateUserDto {}
-    class UserItemDto {}
+    class ActivateUserSchema {}
+    class UserItemSchema {}
     const registry = new DefaultOperationRegistry<User>();
     const meta: OperationMetadata = {};
-    const original = descriptor({ kind: "read", input: ActivateUserDto, output: UserItemDto, meta });
+    const original = descriptor({ kind: "read", schemaInput: ActivateUserSchema, schemaOutput: UserItemSchema, meta });
     registry.register(original);
 
     const replacement = handlerNamed("override");
@@ -181,7 +181,7 @@ describe("createOperationRegistry — default entries", () => {
   it("binds the built-in handler and leaves both DTO slots to the defaults", async () => {
     const registry = createOperationRegistry<User>(undefined, standardHandlers);
     const entry = registry.get("findOne");
-    expect(entry).toMatchObject({ kind: "read", cardinality: "one", enabled: true, input: null, output: null });
+    expect(entry).toMatchObject({ kind: "read", cardinality: "one", enabled: true, schemaInput: null, schemaOutput: null });
     expect(entry?.meta).toEqual({});
     await expect(entry?.handler.execute(1, contextStub())).resolves.toBe("built-in:findOne");
   });
@@ -279,7 +279,7 @@ describe("createOperationRegistry — the control surface", () => {
       standardHandlers,
     );
     const entry = registry.get("updateOne");
-    expect(entry).toMatchObject({ kind: "write", cardinality: "one", enabled: true, input: null, output: null });
+    expect(entry).toMatchObject({ kind: "write", cardinality: "one", enabled: true, schemaInput: null, schemaOutput: null });
     await expect(entry?.handler.execute({}, contextStub())).resolves.toBe("custom-update");
   });
 
@@ -304,39 +304,48 @@ describe("createOperationRegistry — the control surface", () => {
   });
 });
 
-describe("createOperationRegistry — per-operation DTO override (issue #131)", () => {
-  class CreateUserRequestDto {}
-  class UserCreatedDto {}
-  class UserProfileDto {}
-  class UserSearchQueryDto {}
-  class UserListItemDto {}
+describe("createOperationRegistry — per-operation schema override (ADR-0055)", () => {
+  class CreateUserRequestSchema {}
+  class UserCreatedSchema {}
+  class UserProfileSchema {}
+  class UserSearchQuerySchema {}
+  class UserListItemSchema {}
 
   it("resolves input/output independently for createOne, leaving other operations untouched", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { createOne: { dto: { input: CreateUserRequestDto, output: UserCreatedDto } } } } as UserConfig,
+      {
+        operations: { createOne: { schema: { input: CreateUserRequestSchema, output: UserCreatedSchema } } },
+      } as UserConfig,
       standardHandlers,
     );
-    expect(registry.get("createOne")).toMatchObject({ input: CreateUserRequestDto, output: UserCreatedDto });
-    expect(registry.get("findOne")).toMatchObject({ input: null, output: null, query: null });
+    expect(registry.get("createOne")).toMatchObject({
+      schemaInput: CreateUserRequestSchema,
+      schemaOutput: UserCreatedSchema,
+    });
+    expect(registry.get("findOne")).toMatchObject({ schemaInput: null, schemaOutput: null, schemaQuery: null });
   });
 
   it("resolves output and query independently for findOne", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { findOne: { dto: { output: UserProfileDto, query: UserSearchQueryDto } } } } as UserConfig,
+      { operations: { findOne: { schema: { output: UserProfileSchema, query: UserSearchQuerySchema } } } } as UserConfig,
       standardHandlers,
     );
-    expect(registry.get("findOne")).toMatchObject({ output: UserProfileDto, query: UserSearchQueryDto, input: null });
+    expect(registry.get("findOne")).toMatchObject({
+      schemaOutput: UserProfileSchema,
+      schemaQuery: UserSearchQuerySchema,
+      schemaInput: null,
+    });
   });
 
   it("resolves output and query independently for findMany", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { findMany: { dto: { output: UserListItemDto, query: UserSearchQueryDto } } } } as UserConfig,
+      { operations: { findMany: { schema: { output: UserListItemSchema, query: UserSearchQuerySchema } } } } as UserConfig,
       standardHandlers,
     );
     expect(registry.get("findMany")).toMatchObject({
-      output: UserListItemDto,
-      query: UserSearchQueryDto,
-      input: null,
+      schemaOutput: UserListItemSchema,
+      schemaQuery: UserSearchQuerySchema,
+      schemaInput: null,
     });
   });
 
@@ -344,36 +353,50 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
     const registry = createOperationRegistry<User>(
       {
         operations: {
-          createOne: { dto: { input: CreateUserRequestDto, output: UserCreatedDto } },
-          findOne: { dto: { output: UserProfileDto } },
+          createOne: { schema: { input: CreateUserRequestSchema, output: UserCreatedSchema } },
+          findOne: { schema: { output: UserProfileSchema } },
         },
       } as UserConfig,
       standardHandlers,
     );
-    expect(registry.get("createOne")?.output).toBe(UserCreatedDto);
-    expect(registry.get("findOne")?.output).toBe(UserProfileDto);
-    expect(registry.get("createOne")?.output).not.toBe(registry.get("findOne")?.output);
+    expect(registry.get("createOne")?.schemaOutput).toBe(UserCreatedSchema);
+    expect(registry.get("findOne")?.schemaOutput).toBe(UserProfileSchema);
+    expect(registry.get("createOne")?.schemaOutput).not.toBe(registry.get("findOne")?.schemaOutput);
   });
 
   it("resolves output for restoreOne", () => {
     const registry = createOperationRegistry<User>(
-      { operations: { restoreOne: { dto: { output: UserProfileDto } } } } as UserConfig,
+      { operations: { restoreOne: { schema: { output: UserProfileSchema } } } } as UserConfig,
       standardHandlers,
     );
-    expect(registry.get("restoreOne")?.output).toBe(UserProfileDto);
+    expect(registry.get("restoreOne")?.schemaOutput).toBe(UserProfileSchema);
   });
 
   it("leaves every field null when no operation declares an override", () => {
     const registry = createOperationRegistry<User>(undefined, standardHandlers);
     for (const id of Object.keys(STANDARD_OPERATIONS) as StandardOperationId[]) {
-      expect(registry.get(id)).toMatchObject({ input: null, output: null, query: null });
+      expect(registry.get(id)).toMatchObject({ schemaInput: null, schemaOutput: null, schemaQuery: null });
     }
+  });
+
+  it("produces a descriptor with schemaOutput only, no legacy output field", () => {
+    class ItemSchema {
+      id = 0;
+    }
+    const registry = createOperationRegistry<User>(
+      { schema: { output: { item: ItemSchema } } } as unknown as UserConfig,
+      standardHandlers,
+    );
+    const entry = registry.get("findOne");
+    expect(entry).not.toHaveProperty("output");
+    expect(entry).not.toHaveProperty("input");
+    expect(entry).not.toHaveProperty("query");
   });
 
   it("rejects an 'input' override on findOne, which has no request body", () => {
     expect(() =>
       createOperationRegistry<User>(
-        { operations: { findOne: { dto: { input: CreateUserRequestDto } } } } as UserConfig,
+        { operations: { findOne: { schema: { input: CreateUserRequestSchema } } } } as UserConfig,
         standardHandlers,
         undefined,
         "User",
@@ -381,7 +404,7 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
     ).toThrowError(ConfigurationException);
     try {
       createOperationRegistry<User>(
-        { operations: { findOne: { dto: { input: CreateUserRequestDto } } } } as UserConfig,
+        { operations: { findOne: { schema: { input: CreateUserRequestSchema } } } } as UserConfig,
         standardHandlers,
         undefined,
         "User",
@@ -390,7 +413,7 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
     } catch (error) {
       expect(error).toMatchObject({
         code: "KAVO_CONFIG_INVALID",
-        messageParams: { path: "operations.findOne.dto.input" },
+        messageParams: { path: "operations.findOne.schema.input" },
       });
     }
   });
@@ -398,29 +421,29 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
   it("rejects a 'query' override on createOne, which has no query contract", () => {
     expect(() =>
       createOperationRegistry<User>(
-        { operations: { createOne: { dto: { query: UserSearchQueryDto } } } } as UserConfig,
+        { operations: { createOne: { schema: { query: UserSearchQuerySchema } } } } as UserConfig,
         standardHandlers,
       ),
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects any dto override on deleteOne — void result, no query", () => {
+  it("rejects any schema override on deleteOne — void result, no query", () => {
     // `never` makes the mismatch a type error too (see the type-level
     // suite), so this reaches only through an erased/cast config — the
     // same defence `resolveAllowed` and `rejectComputedWriteDtoKeys`
     // apply to their own structural invariants.
     expect(() =>
       createOperationRegistry<User>(
-        { operations: { deleteOne: { dto: { output: UserProfileDto } } } } as unknown as UserConfig,
+        { operations: { deleteOne: { schema: { output: UserProfileSchema } } } } as unknown as UserConfig,
         standardHandlers,
       ),
     ).toThrowError(ConfigurationException);
   });
 
-  it("rejects any dto override on purgeOne — void result, no query", () => {
+  it("rejects any schema override on purgeOne — void result, no query", () => {
     expect(() =>
       createOperationRegistry<User>(
-        { operations: { purgeOne: { dto: { output: UserProfileDto } } } } as unknown as UserConfig,
+        { operations: { purgeOne: { schema: { output: UserProfileSchema } } } } as unknown as UserConfig,
         standardHandlers,
       ),
     ).toThrowError(ConfigurationException);
@@ -428,9 +451,9 @@ describe("createOperationRegistry — per-operation DTO override (issue #131)", 
 });
 
 describe("createOperationRegistry — custom operations (issue #145)", () => {
-  class MarkPaidDto {}
-  class OrderReceiptDto {}
-  class OrderSearchQueryDto {}
+  class MarkPaidSchema {}
+  class OrderReceiptSchema {}
+  class OrderSearchQuerySchema {}
 
   /** The motivating config: one custom write with a route of its own. */
   const markPaidConfig = {
@@ -489,11 +512,11 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
     expect(ids(registry)).toContain("markPaidOne");
   });
 
-  it("resolves input and output DTO overrides on a custom write", () => {
+  it("resolves input and output schema overrides on a custom write", () => {
     const registry = createOperationRegistry<User>(
       {
         operations: {
-          markPaidOne: { handler: handlerNamed("x"), dto: { input: MarkPaidDto, output: OrderReceiptDto } },
+          markPaidOne: { handler: handlerNamed("x"), schema: { input: MarkPaidSchema, output: OrderReceiptSchema } },
         },
       } as unknown as UserConfig,
       standardHandlers,
@@ -501,9 +524,9 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
       "User",
     );
     expect(registry.get("markPaidOne")).toMatchObject({
-      input: MarkPaidDto,
-      output: OrderReceiptDto,
-      query: null,
+      schemaInput: MarkPaidSchema,
+      schemaOutput: OrderReceiptSchema,
+      schemaQuery: null,
     });
   });
 
@@ -515,7 +538,7 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
             handler: handlerNamed("x"),
             kind: "read",
             cardinality: "many",
-            dto: { output: OrderReceiptDto, query: OrderSearchQueryDto },
+            schema: { output: OrderReceiptSchema, query: OrderSearchQuerySchema },
           },
         },
       } as unknown as UserConfig,
@@ -524,9 +547,9 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
       "User",
     );
     expect(registry.get("findActiveMany")).toMatchObject({
-      output: OrderReceiptDto,
-      query: OrderSearchQueryDto,
-      input: null,
+      schemaOutput: OrderReceiptSchema,
+      schemaQuery: OrderSearchQuerySchema,
+      schemaInput: null,
     });
   });
 
@@ -534,7 +557,7 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
     try {
       createOperationRegistry<User>(
         {
-          operations: { markPaidOne: { handler: handlerNamed("x"), dto: { query: OrderSearchQueryDto } } },
+          operations: { markPaidOne: { handler: handlerNamed("x"), schema: { query: OrderSearchQuerySchema } } },
         } as unknown as UserConfig,
         standardHandlers,
         undefined,
@@ -545,7 +568,7 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
       expect(error).toBeInstanceOf(ConfigurationException);
       expect(error).toMatchObject({
         code: "KAVO_CONFIG_INVALID",
-        messageParams: { entity: "User", path: "operations.markPaidOne.dto.query" },
+        messageParams: { entity: "User", path: "operations.markPaidOne.schema.query" },
       });
     }
   });
@@ -554,7 +577,7 @@ describe("createOperationRegistry — custom operations (issue #145)", () => {
     expect(() =>
       createOperationRegistry<User>(
         {
-          operations: { findActiveMany: { handler: handlerNamed("x"), kind: "read", dto: { input: MarkPaidDto } } },
+          operations: { findActiveMany: { handler: handlerNamed("x"), kind: "read", schema: { input: MarkPaidSchema } } },
         } as unknown as UserConfig,
         standardHandlers,
         undefined,

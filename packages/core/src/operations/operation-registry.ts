@@ -1,6 +1,5 @@
 import type { OperationCardinality, OperationId, OperationKind } from "./operation.js";
 import type { OperationHandler, OperationMetadata } from "./operation-handler.js";
-import type { DtoClass } from "../dto/dto.js";
 import type { KavoSchema } from "../schema/kavo-schema.js";
 import type { RealtimeEventId } from "../realtime/realtime-event.js";
 
@@ -16,16 +15,10 @@ export interface OperationDescriptor<Entity = unknown, Input = unknown, Output =
    */
   readonly enabled: boolean;
   readonly handler: OperationHandler<Entity, Input, Output>;
-  /** Explicit input DTO; `null` = the slot default. */
-  readonly input: DtoClass | null;
-  /** Explicit output DTO; `null` = the slot default. */
-  readonly output: DtoClass | null;
-  /** Explicit query DTO; `null`/absent = the slot default. Typing only — see doc 04 §8. */
-  readonly query?: DtoClass | null;
   /**
-   * ADR-0055's `schema`-typed siblings of `input`/`output`/`query` above —
-   * an explicit per-operation `schema` override, or `null` for the slot
-   * default (`config.schema.resolveInput`/`resolveOutput`).
+   * ADR-0055's `schema`-typed per-operation override — an explicit
+   * `schema.input`/`schema.output`/`schema.query` for this operation only,
+   * or `null` for the slot default (`config.schema.resolveInput`/`resolveOutput`).
    */
   readonly schemaInput?: KavoSchema<unknown> | null;
   readonly schemaOutput?: KavoSchema<unknown> | null;
