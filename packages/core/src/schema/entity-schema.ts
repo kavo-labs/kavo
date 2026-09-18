@@ -1,10 +1,12 @@
 import type { KavoSchema } from "./kavo-schema.js";
 import type { SchemaClass, SchemaLike } from "./schema-class.js";
 import { isSchemaClass } from "./schema-class.js";
+import { isFieldsShorthand, resolveSchemaClassSlot } from "./schema-fields-shorthand.js";
 import type { OperationEntryOf } from "../operations/operation-entry.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
+import type { FieldsShorthand } from "../config/write-fields.js";
 
 /**
  * The slot-position union `KavoSchema<T> | SchemaClass<T>` for an
@@ -45,12 +47,12 @@ export type SchemaOutputSlot = "item" | "list";
  * which has its own shape and no natural single-schema reading). Equivalent
  * to writing `{ create: X, update: X, patch: X }` by hand.
  */
-export type SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut> =
+export type SchemaInputMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut> =
   | SchemaSlot<CreateOut>
   | {
       readonly create?: SchemaSlot<CreateOut>;
       readonly update?: SchemaSlot<UpdateOut>;
-      readonly patch?: SchemaSlot<PatchOut>;
+      readonly patch?: SchemaSlot<PatchOut> | FieldsShorthand<Entity>;
       readonly query?: SchemaSlot<QueryOut>;
     };
 
@@ -59,11 +61,11 @@ export type SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut> =
  * per-slot map, applied to `item`/`list` alike. Equivalent to writing
  * `{ item: X, list: X }` by hand.
  */
-export type SchemaOutputMap<ItemOut, ListOut> =
+export type SchemaOutputMap<Entity, ItemOut, ListOut> =
   | SchemaSlot<ItemOut>
   | {
-      readonly item?: SchemaSlot<ItemOut>;
-      readonly list?: SchemaSlot<ListOut>;
+      readonly item?: SchemaSlot<ItemOut> | FieldsShorthand<Entity>;
+      readonly list?: SchemaSlot<ListOut> | FieldsShorthand<Entity>;
     };
 
 /**
@@ -89,8 +91,8 @@ export interface EntitySchemaMap<
   ItemOut = Entity,
   ListOut = ItemOut,
 > {
-  readonly input?: SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut>;
-  readonly output?: SchemaOutputMap<ItemOut, ListOut>;
+  readonly input?: SchemaInputMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut>;
+  readonly output?: SchemaOutputMap<Entity, ItemOut, ListOut>;
 }
 
 /**
@@ -172,19 +174,35 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
       ? { create: map.input, update: map.input, patch: map.input }
       : (map.input ?? {});
     const output = isSchemaShorthand(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
+    // A `{ fields }` shorthand slot resolves to a synthesized `SchemaClass`
+    // once; a non-shorthand slot (a `KavoSchema` validator or a hand-written
+    // class, or unset) passes through unchanged. Resolving once and reusing
+    // the result for the `patch`→`update` / `list`→`item` fallback chains
+    // matters: `resolveSchemaClassSlot` synthesizes a fresh class per call,
+    // and `shorthandFieldsOf`'s `WeakMap` is keyed on class identity, so
+    // resolving the same shorthand twice would produce two classes that
+    // read back inconsistently downstream.
+    const resolveSlot = (value: unknown): KavoSchema<unknown> | SchemaClass | undefined =>
+      isFieldsShorthand(value)
+        ? (resolveSchemaClassSlot(value) ?? undefined)
+        : (value as KavoSchema<unknown> | SchemaClass | undefined);
+    const patch = resolveSlot(input.patch);
+    const update = resolveSlot(input.update);
+    const item = resolveSlot(output.item);
+    const list = resolveSlot(output.list);
     // Cast: slot values are `SchemaLike` (Task 1), but the resolver's own
     // declared return type stays `KavoSchema<unknown> | null` until Task 9
     // teaches `kavo-engine.ts` to branch on kind — see the interface doc
     // comment above.
     this.input = Object.freeze({
       create: (input.create ?? null) as KavoSchema<unknown> | null,
-      update: (input.update ?? null) as KavoSchema<unknown> | null,
-      patch: (input.patch ?? input.update ?? null) as KavoSchema<unknown> | null,
+      update: (update ?? null) as KavoSchema<unknown> | null,
+      patch: (patch ?? update ?? null) as KavoSchema<unknown> | null,
       query: (input.query ?? null) as KavoSchema<unknown> | null,
     });
     this.output = Object.freeze({
-      item: (output.item ?? null) as KavoSchema<unknown> | null,
-      list: (output.list ?? output.item ?? null) as KavoSchema<unknown> | null,
+      item: (item ?? null) as KavoSchema<unknown> | null,
+      list: (list ?? item ?? null) as KavoSchema<unknown> | null,
     });
   }
 

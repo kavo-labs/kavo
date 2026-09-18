@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { KavoSchema, SchemaParseResult } from "@kavo/core";
 import { DefaultSchemaResolver, SchemaValidationException, createKavo } from "@kavo/core";
 import { InMemoryUserAdapter, User, userMetadata } from "../support/user-fixture.js";
+import type { SchemaClass } from "../../src/schema/schema-class.js";
+import { schemaShapeKeys } from "../../src/schema/schema-shape.js";
 
 /**
  * ADR-0055: `schema` wires a `KavoSchema` into the engine's deserialization
@@ -181,5 +183,32 @@ describe("DefaultSchemaResolver with a SchemaClass slot", () => {
     const resolver = new DefaultSchemaResolver<{ name: string }>(WholeEntitySchema);
     expect(resolver.resolveInput("create", "createOne") as unknown).toBe(WholeEntitySchema);
     expect(resolver.resolveOutput("item", "findOne") as unknown).toBe(WholeEntitySchema);
+  });
+});
+
+describe("DefaultSchemaResolver with the { fields } shorthand", () => {
+  it("resolves schema.output.item's { fields } shorthand to a synthesized class", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      output: { item: { fields: ["id"] } },
+    });
+    const resolved = resolver.resolveOutput("item", "findOne");
+    expect(schemaShapeKeys(resolved as unknown as SchemaClass)).toEqual(["id"]);
+  });
+
+  it("resolves schema.input.patch's { fields } shorthand", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      input: { patch: { fields: ["name"] } },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
+  });
+
+  it("schema.output.list falls back to schema.output.item's { fields } shorthand, reusing the same synthesized class", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      output: { item: { fields: ["id"] } },
+    });
+    const item = resolver.resolveOutput("item", "findOne");
+    const list = resolver.resolveOutput("list", "findMany");
+    expect(list).toBe(item);
+    expect(schemaShapeKeys(list as unknown as SchemaClass)).toEqual(["id"]);
   });
 });
