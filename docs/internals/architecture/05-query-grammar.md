@@ -315,8 +315,8 @@ own column": every own **string-kind** column, since a non-string column
 has nothing an `ILIKE` fragment can usefully match — a bootstrap
 `ConfigurationException` if an explicit override names one anyway (own
 columns only; a relation-path leaf's kind is not checked). An explicit
-empty allowlist (`searchable: []`) is a deliberate "no fields"
-configuration — searching still 400s, the same as `filterable: []` would.
+empty allowlist (`search: { fields: [] }`) is a deliberate "no fields"
+configuration — searching still 400s, the same as `filter: { fields: [] }` would.
 
 Every synthesized pattern (`%term%`) carries a leading wildcard, so it can
 never use a plain B-tree index — a `search.fields` column that needs to
