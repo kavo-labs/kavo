@@ -10,7 +10,6 @@ import type {
 import {
   AssociationInvalidShapeException,
   DefaultDeserializer,
-  DefaultDtoResolver,
   DefaultEntityCatalog,
   DefaultSerializer,
   createKavoContext,
@@ -641,78 +640,6 @@ describe("resolveEntityConfig — create.default/update.default bootstrap valida
     expect(() => resolveEntityConfig(userMetadata, { update: { default: "nope" as never } }, undefined)).toThrow(
       /update\.default/,
     );
-  });
-});
-
-describe("DefaultDtoResolver — slot resolution", () => {
-  class CreateUserDto {}
-  class UpdateUserDto {}
-  class PatchUserDto {}
-  class UserQueryDto {}
-  class UserItemDto {}
-  class UserListDto {}
-
-  it("resolves every slot to null when nothing is registered", () => {
-    // `null` is not "no DTO": it means "use the entity-derived default",
-    // which the serializer/deserializer builds from metadata.
-    const resolver = new DefaultDtoResolver<User>();
-    for (const slot of ["create", "update", "patch", "query", "item", "list"] as const) {
-      expect(resolver.resolve(slot, "findOne")).toBeNull();
-    }
-  });
-
-  it("returns the registered class for each slot it was given", () => {
-    const resolver = new DefaultDtoResolver<User>({
-      create: CreateUserDto,
-      update: UpdateUserDto,
-      patch: PatchUserDto,
-      query: UserQueryDto,
-      item: UserItemDto,
-      list: UserListDto,
-    } as never);
-    expect(resolver.resolve("create", "createOne")).toBe(CreateUserDto);
-    expect(resolver.resolve("update", "updateOne")).toBe(UpdateUserDto);
-    expect(resolver.resolve("patch", "patchOne")).toBe(PatchUserDto);
-    expect(resolver.resolve("query", "findMany")).toBe(UserQueryDto);
-    expect(resolver.resolve("item", "findOne")).toBe(UserItemDto);
-    expect(resolver.resolve("list", "findMany")).toBe(UserListDto);
-  });
-
-  it("falls patch back to the registered update class", () => {
-    const resolver = new DefaultDtoResolver<User>({ update: UpdateUserDto } as never);
-    expect(resolver.resolve("patch", "patchOne")).toBe(UpdateUserDto);
-  });
-
-  it("prefers an explicit patch class over the update fallback", () => {
-    const resolver = new DefaultDtoResolver<User>({ update: UpdateUserDto, patch: PatchUserDto } as never);
-    expect(resolver.resolve("patch", "patchOne")).toBe(PatchUserDto);
-  });
-
-  it("falls list back to the registered item class", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto } as never);
-    expect(resolver.resolve("list", "findMany")).toBe(UserItemDto);
-  });
-
-  it("prefers an explicit list class over the item fallback", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto, list: UserListDto } as never);
-    expect(resolver.resolve("list", "findMany")).toBe(UserListDto);
-  });
-
-  it("chains no other slot — update keeps its own derived default", () => {
-    // The table's "update: same default as create" means the same
-    // *derived* default, not the class someone registered for create.
-    const resolver = new DefaultDtoResolver<User>({ create: CreateUserDto } as never);
-    expect(resolver.resolve("create", "createOne")).toBe(CreateUserDto);
-    expect(resolver.resolve("update", "updateOne")).toBeNull();
-    expect(resolver.resolve("patch", "patchOne")).toBeNull();
-  });
-
-  it("resolves by slot alone — restore and custom operations reuse item and list", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto, list: UserListDto } as never);
-    for (const operation of ["findOne", "createOne", "restoreOne", "activate"]) {
-      expect(resolver.resolve("item", operation)).toBe(UserItemDto);
-      expect(resolver.resolve("list", operation)).toBe(UserListDto);
-    }
   });
 });
 

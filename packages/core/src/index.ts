@@ -50,28 +50,12 @@ export type { FilterParser } from "./query/filter-parser.js";
 export type { FilterBuilder } from "./query/filter-builder.js";
 export { evaluateFilter } from "./query/filter-evaluator.js";
 
-// ── DTO system ────────────────────────────────────────────────────────
-export type {
-  DtoClass,
-  DtoSlot,
-  Dto,
-  DtoResolver,
-  FieldsShorthand,
-  WriteFieldsConfig,
-  WriteApply,
-  OperationDtoMap,
-  OperationDtoOverride,
-  DtoInputOf,
-  DtoOutputOf,
-  DtoQueryOf,
-} from "./dto/dto.js";
-export { shorthandFieldsOf } from "./dto/dto-fields-shorthand.js";
-export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./schema/kavo-schema.js";
-export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
-
 // ── Schema (ADR-0055) ────────────────────────────────────────────────
-// Landed additively alongside the DTO system above — see
-// `schema/entity-schema.ts`'s module doc for why `dto` is not yet removed.
+export type { FieldsShorthand, WriteApply, WriteFieldsConfig } from "./config/write-fields.js";
+export { shorthandFieldsOf } from "./schema/schema-fields-shorthand.js";
+export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./schema/kavo-schema.js";
+export type { SchemaClass, SchemaLike } from "./schema/schema-class.js";
+export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 export type {
   EntitySchema,
   EntitySchemaMap,
@@ -84,6 +68,7 @@ export type {
   SchemaOutputSlot,
   SchemaQueryOf,
   SchemaResolver,
+  WritableSchemaFieldsConfig,
 } from "./schema/entity-schema.js";
 export { DefaultSchemaResolver } from "./schema/entity-schema.js";
 
@@ -300,9 +285,8 @@ export { validateSettings } from "./config/validate-settings.js";
 export { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
 export { HARD_DELETE, resolveSoftDelete } from "./persistence/soft-delete.js";
 
-// ── DTO & serialization runtime ───────────────────────────────────────
-export { DefaultDtoResolver } from "./dto/default-dto-resolver.js";
-export { dtoShapeKeys } from "./dto/dto-shape.js";
+// ── Schema & serialization runtime ───────────────────────────────────────
+export { schemaShapeKeys } from "./schema/schema-shape.js";
 export { DefaultDeserializer, DefaultSerializer } from "./serialization/default-serializer.js";
 
 // ── Query runtime ─────────────────────────────────────────────────────
