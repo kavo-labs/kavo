@@ -4,7 +4,8 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
+import type { WriteFieldsConfig } from "./write-fields.js";
+import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntitySchema, OperationSchemaOverride } from "../schema/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
@@ -404,16 +405,18 @@ type OperationSettings<Allowed extends SettingsSubtreeKey> = {
  *
  * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
  * `OperationDtoOverride` — only the fields that operation actually
- * supports (issue #131). `Allowed` is the same idea for the settings
- * subtree (issue #415): `StandardOperationsConfig` passes each id only the
- * `KavoSettings` keys that id's engine stages read — `pagination` to
- * `findMany` alone, `cache` to the reads, `realtime` to the writes,
- * `delete` to the reads and the delete family (the operations whose
- * behavior the resolved soft-delete view changes — `kavo-engine.ts`
- * `configViewFor`), and `errors` to all. Both parameters default to the
- * full shape so a bare `OperationConfig<Entity>` (used where no specific
- * operation id is in scope — the `OperationsConfig` index signature's
- * permissive upper bound) still type-checks.
+ * supports (issue #131); the legacy field is on its way out (the
+ * `remove-dto` plan's Task 9 retires it alongside `dto.ts`'s other
+ * consumers in `kavo-engine.ts`), but stays narrowed until then. `Allowed`
+ * is the same idea for the settings subtree (issue #415):
+ * `StandardOperationsConfig` passes each id only the `KavoSettings` keys
+ * that id's engine stages read — `pagination` to `findMany` alone, `cache`
+ * to the reads, `realtime` to the writes, `delete` to the reads and the
+ * delete family (the operations whose behavior the resolved soft-delete
+ * view changes — `kavo-engine.ts` `configViewFor`), and `errors` to all.
+ * Both parameters default to the full shape so a bare `OperationConfig<Entity>`
+ * (used where no specific operation id is in scope — the `OperationsConfig`
+ * index signature's permissive upper bound) still type-checks.
  */
 export type OperationConfig<
   Entity = unknown,
@@ -425,22 +428,21 @@ export type OperationConfig<
   /** Opaque metadata consumed by the framework layer (route options). */
   readonly meta?: OperationMetadata;
   /**
-   * Overrides the entity's root `dto` slot for this operation only —
-   * `input`/`output`/`query` as applicable to the operation's shape.
-   * Fallback order: this field → the entity's root `dto.<slot>` →
-   * entity-derived default (doc 04 §8).
+   * Legacy per-operation DTO override, still read by
+   * `default-operation-registry.ts`'s `resolveDtoOverride` — the
+   * `remove-dto` plan (Task 9) retires it alongside `dto.ts`'s other
+   * consumers in `kavo-engine.ts`. Fallback order: this field → the
+   * entity's root `dto.<slot>` → entity-derived default (doc 04 §8).
    */
   readonly dto?: DtoOverride;
   /**
-   * ADR-0055's `schema`-typed sibling of `dto` above: overrides the
-   * entity's root `schema.input.<slot>`/`schema.output.<slot>` for this
-   * operation only. Not narrowed per operation id via `Pick` the way
-   * `DtoOverride` is — every field is optional here regardless of id —
-   * because which fields apply is enforced at bootstrap
+   * ADR-0055's `schema`-typed override: overrides the entity's root
+   * `schema.input.<slot>`/`schema.output.<slot>` for this operation only.
+   * Not narrowed per operation id via `Pick` — every field is optional here
+   * regardless of id — because which fields apply is enforced at bootstrap
    * (`resolveSchemaOverride`, `default-operation-registry.ts`) rather than
    * at the type level. Fallback order: this field → the entity's root
-   * `schema.input.<slot>`/`schema.output.<slot>` → the corresponding `dto`
-   * override → entity-derived default.
+   * `schema.input.<slot>`/`schema.output.<slot>` → entity-derived default.
    */
   readonly schema?: OperationSchemaOverride;
   /**
@@ -467,7 +469,11 @@ export type OperationConfig<
  * `output`/`query`, and `deleteOne`/`purgeOne` (void results, no query)
  * get neither, so setting `dto` on them is a type error before it is ever
  * a bootstrap one. The `true`/`false` shorthand is still accepted at every
- * id (ADR-0038, issue #257), for a plain enable/disable with no settings attached.
+ * id (ADR-0038, issue #257), for a plain enable/disable with no settings
+ * attached, and every id also accepts a `schema` override (ADR-0055) for
+ * the slots that operation actually has — not `Pick`-narrowed the way
+ * `dto` is; which fields apply there is enforced at bootstrap
+ * (`resolveSchemaOverride`) rather than at the type level.
  *
  * The third `OperationConfig` argument narrows the settings subtree the
  * same way (issue #415): each id names only the `KavoSettings` keys its
@@ -556,9 +562,9 @@ export interface StandardOperationsConfig<
  *   the list envelope. Both default to the common case — a write against
  *   one row (`markPaidOne`, `publishOne`) — so the motivating operations
  *   declare neither.
- * - `dto` is the full `OperationDtoOverride`; which of its three fields
- *   apply follows from `kind` (a read has no request body, a write runs no
- *   query resolution), and the mismatch is a bootstrap
+ * - `schema` overrides this operation's body/response/query shape; which of
+ *   its fields apply follows from `kind` (a read has no request body, a
+ *   write runs no query resolution), and a mismatch is a bootstrap
  *   `ConfigurationException` rather than a type error, because `kind` is a
  *   value here and the standard eight's `Pick` is not available.
  * - the settings subtree it accepts (issue #415) is narrowed by the `Kind`
@@ -598,14 +604,15 @@ export type CustomOperationConfig<
   readonly kind?: OperationKind;
   /** Defaults to `"one"`. A `"many"` handler must return a `FindManyResult`. */
   readonly cardinality?: OperationCardinality;
-  /**
-   * Overrides the DTO used for this operation's body/response/query.
-   * A custom operation has no root slot of its own — `input` falls back to
-   * the entity's writable projection and `output` to the `item`/`list`
-   * slot — so this is the only way to give it a shape of its own.
-   */
+  /** Legacy per-operation DTO override — see `OperationConfig.dto`'s doc comment. */
   readonly dto?: OperationDtoOverride;
-  /** ADR-0055's `schema`-typed sibling of `dto` above — see `OperationConfig.schema`'s doc comment. */
+  /**
+   * ADR-0055's `schema` override for this operation's body/response/query
+   * shape — see `OperationConfig.schema`'s doc comment. A custom operation
+   * has no root slot of its own — `input` falls back to the entity's
+   * writable projection and `output` to the `item`/`list` slot — so this is
+   * the only way to give it a shape of its own.
+   */
   readonly schema?: OperationSchemaOverride;
   /**
    * Which realtime event this operation's write publishes as (issue #175).

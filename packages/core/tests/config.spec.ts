@@ -321,6 +321,61 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
+  it("rejects a registered schema.input.create/update class declaring an ORM-derived field", () => {
+    class DerivedCreateSchema {
+      fullName = "";
+    }
+    try {
+      resolveEntityConfig(
+        userMetadataWithDerivedFullName,
+        { schema: { input: { create: DerivedCreateSchema } } },
+        undefined,
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "User",
+        path: "schema.input.create",
+      });
+      expect((error as ConfigurationException).message).toContain("the 'create' schema declares 'fullName'");
+    }
+  });
+
+  it("rejects schema.input.patch's { fields } shorthand declaring an ORM-derived field", () => {
+    try {
+      resolveEntityConfig(
+        userMetadataWithDerivedFullName,
+        { schema: { input: { patch: { fields: ["fullName" as never] } } } },
+        undefined,
+      );
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).messageParams).toMatchObject({
+        entity: "User",
+        path: "schema.input.patch",
+      });
+      expect((error as ConfigurationException).message).toContain("the 'patch' schema declares 'fullName'");
+    }
+  });
+
+  it("skips the derived-field check for a schema.input.create validator (not a class — no shape to read)", () => {
+    // A `KavoSchema` has no static shape `schemaShapeKeys` can read — only a
+    // class is checkable — so a validator-configured slot never trips this
+    // check, even naming the derived field in its own validation logic.
+    const validator = {
+      safeParse: (input: unknown) => ({ success: true as const, data: input as never }),
+    };
+    const config = resolveEntityConfig(
+      userMetadataWithDerivedFullName,
+      { schema: { input: { create: validator } } },
+      undefined,
+    );
+    expect(config.schema.resolveInput("create", "createOne")).toBe(validator);
+  });
+
   it("resolves create.fields's { exclude } form to every writable field except the named ones", () => {
     // User's writable universe (ADR-0014): name, email, age, status — `id`
     // and `createdAt` are generated, and there are no relations.
