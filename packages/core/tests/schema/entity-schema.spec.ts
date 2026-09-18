@@ -186,6 +186,83 @@ describe("DefaultSchemaResolver with a SchemaClass slot", () => {
   });
 });
 
+describe("DefaultSchemaResolver — class-shaped slot fallbacks", () => {
+  class CreateS {}
+  class UpdateS {}
+  class PatchS {}
+  class ItemS {}
+  class ListS {}
+  type Any = { name: string };
+
+  it("resolves every slot to null when nothing is configured", () => {
+    const resolver = new DefaultSchemaResolver<Any>();
+    for (const slot of ["create", "update", "patch", "query"] as const) {
+      expect(resolver.resolveInput(slot, "findOne")).toBeNull();
+    }
+    for (const slot of ["item", "list"] as const) {
+      expect(resolver.resolveOutput(slot, "findOne")).toBeNull();
+    }
+  });
+
+  it("falls patch back to update, and prefers an explicit patch", () => {
+    expect(
+      new DefaultSchemaResolver<Any>({ input: { update: UpdateS } } as never).resolveInput("patch", "patchOne"),
+    ).toBe(UpdateS);
+    expect(
+      new DefaultSchemaResolver<Any>({ input: { update: UpdateS, patch: PatchS } } as never).resolveInput(
+        "patch",
+        "patchOne",
+      ),
+    ).toBe(PatchS);
+  });
+
+  it("falls list back to item, and prefers an explicit list", () => {
+    expect(new DefaultSchemaResolver<Any>({ output: { item: ItemS } } as never).resolveOutput("list", "findMany")).toBe(
+      ItemS,
+    );
+    expect(
+      new DefaultSchemaResolver<Any>({ output: { item: ItemS, list: ListS } } as never).resolveOutput(
+        "list",
+        "findMany",
+      ),
+    ).toBe(ListS);
+  });
+
+  it("chains no other slot — a create class does not leak into update or patch", () => {
+    const resolver = new DefaultSchemaResolver<Any>({ input: { create: CreateS } } as never);
+    expect(resolver.resolveInput("create", "createOne")).toBe(CreateS);
+    expect(resolver.resolveInput("update", "updateOne")).toBeNull();
+    expect(resolver.resolveInput("patch", "patchOne")).toBeNull();
+  });
+
+  it("resolves by slot alone — restore and custom operations reuse item and list", () => {
+    const resolver = new DefaultSchemaResolver<Any>({ output: { item: ItemS, list: ListS } } as never);
+    for (const operation of ["findOne", "restoreOne", "activate"]) {
+      expect(resolver.resolveOutput("item", operation)).toBe(ItemS);
+      expect(resolver.resolveOutput("list", operation)).toBe(ListS);
+    }
+  });
+});
+
+describe("DefaultSchemaResolver.resolveWriteAllowlist", () => {
+  const validator = { safeParse: () => ({ success: true as const, data: {} }) };
+
+  it("returns the create/update fields class even when a validator occupies the slot", () => {
+    const resolver = new DefaultSchemaResolver<{ name: string; email: string }>(
+      { input: { create: validator, update: validator } } as never,
+      { create: { fields: ["name"] } as never, update: { fields: ["email"] } as never },
+    );
+    expect(resolver.resolveInput("create", "createOne")).toBe(validator);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("create"))).toEqual(["name"]);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("update"))).toEqual(["email"]);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("patch"))).toEqual(["email"]);
+  });
+
+  it("is null when no fields list is configured", () => {
+    expect(new DefaultSchemaResolver().resolveWriteAllowlist("create")).toBeNull();
+  });
+});
+
 describe("DefaultSchemaResolver with the { fields } shorthand", () => {
   it("resolves schema.output.item's { fields } shorthand to a synthesized class", () => {
     const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({

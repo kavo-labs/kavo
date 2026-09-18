@@ -41,10 +41,12 @@ class BadDto {
 
 Classes stay plain: no decorators, no reflection library. The cost is that fields need initializers for the narrowing to take effect.
 
-A validator differs in two ways:
+A validator differs in these ways:
 
 - **`schema.input` validates.** The engine runs `safeParse` on the deserialized body and raises `SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) on failure, with one `errors[]` entry per issue. On success the schema's own `data` replaces the body, so a transform (trim a string, default a field) takes effect.
-- **`schema.output` shapes but is never re-validated.** A `safeParse` failure falls back to the already-projected value rather than rejecting a response Kavo itself produced.
+- **`schema.output` shapes but is never re-validated.** A `safeParse` failure falls back to the already-projected value rather than rejecting a response Kavo itself produced, so a validator is not a confidentiality boundary. Use a class, `{ fields }`, or `select.fields` to keep a column off the wire.
+- **`create.fields`/`update.fields` still apply.** The body is narrowed by that allowlist first and the validator judges what is left, so a lenient validator can't widen what those keys excluded.
+- **Nested rows ignore it.** An included relation is shaped only by its target's class-shaped `schema.output`; a validator there does not narrow nested rows.
 
 **Schema mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved schema already projects. Selection never widens a projection past what the schema or the `selectable` allowlist allows.
 

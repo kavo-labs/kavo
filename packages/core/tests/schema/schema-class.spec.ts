@@ -14,6 +14,11 @@ describe("isSchemaClass", () => {
     expect(isSchemaClass(validator)).toBe(false);
   });
 
+  it("is false for a callable validator that carries safeParse", () => {
+    const callable = Object.assign(() => undefined, { safeParse: () => ({ success: true, data: {} }) });
+    expect(isSchemaClass(callable)).toBe(false);
+  });
+
   it("is false for null and primitives", () => {
     expect(isSchemaClass(null)).toBe(false);
     expect(isSchemaClass(42)).toBe(false);

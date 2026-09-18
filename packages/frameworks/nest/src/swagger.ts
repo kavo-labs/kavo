@@ -187,7 +187,7 @@ function explicitAllowlist(selector: unknown): readonly string[] | null {
  * (issue #294) — additive to whatever OpenAPI keywords the schema already
  * carries. Only ever applied to a schema this module actually constructed
  * (`schemaFromDto` and the hand-built fallback/envelope schemas below); the
- * `{ type: DtoClass }` fallback path, where `@nestjs/swagger`'s own
+ * `{ type: SchemaClass }` fallback path, where `@nestjs/swagger`'s own
  * introspection builds the schema, is a documented gap this can't reach.
  */
 function withKavoEntity<T extends object>(schema: T, entityName: string): T & { "x-kavo-entity": string } {
@@ -1401,7 +1401,7 @@ const alreadyResponseSchemaDocumented = new WeakSet<object>();
  * regardless of `selectable` — even though the response the engine actually
  * serializes is projected through `selectable` at request time.
  *
- * `descriptor.output !== null` or a real `item`/`list` DTO (`dtoResolver`
+ * `descriptor.schemaOutput` set or a real `item`/`list` schema (`schemaResolver`
  * resolves non-`null`, following the same `list`→`item` internal fallback
  * `successBodyFor` already relies on) means decoration time already
  * documented a shape that has nothing to do with `selectable`, so this

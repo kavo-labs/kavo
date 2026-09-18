@@ -1236,10 +1236,16 @@ export class KavoEngine<Entity extends object> {
     descriptor: OperationDescriptor<Entity>,
     context: KavoContext<Entity>,
   ): unknown {
-    const candidate = this.deps.deserializer.deserialize(raw, schema, context);
     if (schema === null || isSchemaClass(schema)) {
-      return candidate;
+      return this.deps.deserializer.deserialize(raw, schema, context);
     }
+    // A validator has no key set of its own, so the deserializer would fall
+    // back to the full derived writable projection — discarding an
+    // operator's `create.fields`/`update.fields` allowlist. Narrow with that
+    // allowlist first; the validator then only judges the narrowed body.
+    const slot = INPUT_SLOTS[descriptor.id as StandardOperationId];
+    const allowlist = slot === undefined || slot === "query" ? null : context.config.schema.resolveWriteAllowlist(slot);
+    const candidate = this.deps.deserializer.deserialize(raw, allowlist, context);
     const result = schema.safeParse(candidate);
     if (result.success) {
       return result.data;

@@ -1,6 +1,6 @@
 ---
 name: kavo-decorator
-description: Reference for what @Kavo(Entity, config?) generates and how to configure/override it — routes table, EntityConfig shape (dto/allowed/operations), manual-method-wins, @Override, and fully custom routes. Use when writing or reviewing a @Kavo-decorated controller, or answering "how do I configure/override this route" questions.
+description: Reference for what @Kavo(Entity, config?) generates and how to configure/override it — routes table, EntityConfig shape (schema/allowed/operations), manual-method-wins, @Override, and fully custom routes. Use when writing or reviewing a @Kavo-decorated controller, or answering "how do I configure/override this route" questions.
 ---
 
 # `@Kavo()` reference
@@ -44,14 +44,15 @@ enables purge) — decoration time has no ORM metadata to auto-detect them from.
 ```ts
 interface EntityConfig<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>
   extends Omit<DeepPartial<KavoSettings>, "operations"> {
-  dto?: OperationDtoMap<...>;          // per-slot DTO overrides: create/update/patch/query/item/list
+  schema?: EntitySchema<...>;          // { input: { create/update/patch/query }, output: { item/list } }; class or validator per slot
   allowed?: QueryAllowed<Entity>; // filterable/sortable/selectable field allowlists
   operations?: Partial<Record<StandardOperationId, OperationConfig<Entity> | boolean>>;
 }
 ```
 
-- **`dto`** — override any of the bare-verb DTO slots (`create`, `update`,
-  `patch`, `query`, `item`, `list`). Omitted slots derive from the entity.
+- **`schema`** — configure any of the bare-verb slots (`input.create`/`update`/
+  `patch`/`query`, `output.item`/`list`) with a DTO class or a validator.
+  Omitted slots derive from the entity.
 - **`allowed`** — see below.
 - **`operations.<id>`** — `false` disables the operation (no route, no
   service method reachable); `true` enables one that is off by default

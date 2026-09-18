@@ -926,12 +926,8 @@ describe("@Kavo custom operations (issue #145)", () => {
   });
 
   /**
-   * ADR-0055 / issue #467: `registerKavoSchemas` documents `schema` ahead
-   * of `dto` when the registered schema implements the optional
-   * `toJSONSchema()` method — the same precedence `schema` already has at
-   * the engine's own deserialization/serialization stages. A `dto` also
-   * registered for the same slot is not consulted at all once `schema`
-   * wins.
+   * ADR-0055 / issue #467: `registerKavoSchemas` documents a validator-shaped
+   * `schema` slot from its optional `toJSONSchema()` method.
    */
   it("documents createOne's request body from schema.input.create (issue #467)", async () => {
     const createSchema = {
@@ -985,7 +981,7 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(operation?.requestBody?.content?.["application/json"]?.schema).toMatchObject({ title: "TodoCreate" });
   });
 
-  it("marks a schema-documented single-row response x-kavo-operation-scoped when dto.output is also set (issue #467)", async () => {
+  it("marks a schema-documented single-row response x-kavo-operation-scoped when a per-operation schema.output is set (issue #467)", async () => {
     const findOneSchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({
@@ -1084,7 +1080,7 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(schema).not.toHaveProperty("x-kavo-operation-scoped");
   });
 
-  it("marks a schema-documented list envelope x-kavo-operation-scoped when dto.output is also set (issue #467)", async () => {
+  it("marks a schema-documented list envelope x-kavo-operation-scoped when a per-operation schema.output is set (issue #467)", async () => {
     const findManySchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({

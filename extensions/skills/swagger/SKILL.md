@@ -49,13 +49,13 @@ void bootstrap();
 
 ## What's documented automatically, per generated route
 
-| Piece                       | Source                                                                                                                                                                  |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Operation id                | `<Entity>_<operationId>` (e.g. `User_findMany`)                                                                                                                         |
-| `:id` path param            | Every operation with an id in its route                                                                                                                                 |
-| Query params on list routes | `filter`/`sort`/`fields`/pagination/`include` shape (doc 05)                                                                                                            |
-| Request body schema         | `schema.input.<slot>` when registered and it implements `toJSONSchema()` (ADR-0055); else the entity's registered DTO class for that slot (`ApiBody`) — see `dto-slots` |
-| Error response schemas      | Problem-details shape for 400/404, from the error catalog — see `error-handling`                                                                                        |
+| Piece                       | Source                                                                                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Operation id                | `<Entity>_<operationId>` (e.g. `User_findMany`)                                                                                                                                             |
+| `:id` path param            | Every operation with an id in its route                                                                                                                                                     |
+| Query params on list routes | `filter`/`sort`/`fields`/pagination/`include` shape (doc 05)                                                                                                                                |
+| Request body schema         | `schema.input.<slot>` when registered and it implements `toJSONSchema()` (ADR-0055); else the class-shaped schema for that slot, or the entity's ORM metadata (`ApiBody`) — see `dto-slots` |
+| Error response schemas      | Problem-details shape for 400/404, from the error catalog — see `error-handling`                                                                                                            |
 
 This applies identically whether the route came from plain generation,
 `@Override`, or config-level `operations.<id>.meta` overrides — Swagger
@@ -69,7 +69,7 @@ route's method/param/status decorators.
   itself only if it also implements the optional `toJSONSchema(): object`
   method (e.g. a thin wrapper calling Zod 4's `z.toJSONSchema(schema)`).
   Without it, the schema still validates and narrows at runtime; the route
-  is documented from `dto`/the entity's ORM metadata instead, same as if no
+  is documented from a class-shaped schema or the entity's ORM metadata instead, same as if no
   `schema` were configured.
 - **Allowlist-derived per-field query documentation.** `filter[field][op]=`
   is documented as a generic shape, not expanded into one `ApiQuery` per

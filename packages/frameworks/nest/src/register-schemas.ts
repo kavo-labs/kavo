@@ -38,7 +38,7 @@
  *
  * Only inline schemas Kavo actually constructed are moved: the filter is
  * "carries `x-kavo-entity` or `x-kavo-error`". A schema that is already a
- * `$ref` is left untouched — which is exactly the `{ type: DtoClass }`
+ * `$ref` is left untouched — which is exactly the `{ type: SchemaClass }`
  * introspection-fallback path (`@nestjs/swagger` registers that class as its
  * own component), so a decorated/declarative DTO keeps the name Swagger gave
  * it and this helper does not double it up.

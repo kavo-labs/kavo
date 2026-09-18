@@ -4,7 +4,7 @@ import { Landmark, Region, Zone } from "./nested-demo.entities.js";
 
 /**
  * See `nested-demo.entities.ts`. Each controller opts its outgoing
- * relation(s) into `include=` and nothing else — no `dto` block — so the
+ * relation(s) into `include=` and nothing else — no `schema` block — so the
  * synthesized `<Entity>Item` schema composes the next hop by `$ref`
  * (issue #356).
  */

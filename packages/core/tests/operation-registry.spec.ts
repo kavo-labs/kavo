@@ -440,20 +440,28 @@ describe("createOperationRegistry — per-operation schema override (ADR-0055)",
         { operations: { createOne: { schema: { query: UserSearchQuerySchema } } } } as UserConfig,
         standardHandlers,
       ),
-    ).toThrowError(ConfigurationException);
+    ).toThrowError(
+      expect.objectContaining({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: expect.objectContaining({ path: "operations.createOne.schema.query" }),
+      }),
+    );
   });
 
   it("rejects any schema override on deleteOne — void result, no query", () => {
-    // `never` makes the mismatch a type error too (see the type-level
-    // suite), so this reaches only through an erased/cast config — the
-    // same defence `resolveAllowed` and `rejectComputedWriteDtoKeys`
-    // apply to their own structural invariants.
+    // Rejected at bootstrap only: `OperationSchemaOverride` offers every
+    // field on every operation, so there is no compile-time check.
     expect(() =>
       createOperationRegistry<User>(
         { operations: { deleteOne: { schema: { output: UserProfileSchema } } } } as unknown as UserConfig,
         standardHandlers,
       ),
-    ).toThrowError(ConfigurationException);
+    ).toThrowError(
+      expect.objectContaining({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: expect.objectContaining({ path: "operations.deleteOne.schema.output" }),
+      }),
+    );
   });
 
   it("rejects any schema override on purgeOne — void result, no query", () => {
@@ -462,7 +470,12 @@ describe("createOperationRegistry — per-operation schema override (ADR-0055)",
         { operations: { purgeOne: { schema: { output: UserProfileSchema } } } } as unknown as UserConfig,
         standardHandlers,
       ),
-    ).toThrowError(ConfigurationException);
+    ).toThrowError(
+      expect.objectContaining({
+        code: "KAVO_CONFIG_INVALID",
+        messageParams: expect.objectContaining({ path: "operations.purgeOne.schema.output" }),
+      }),
+    );
   });
 });
 

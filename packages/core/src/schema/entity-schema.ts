@@ -26,18 +26,10 @@ import { schemaClassFromFields } from "./schema-fields-shorthand.js";
 type SchemaSlot<T> = KavoSchema<T> | SchemaClass<T & object>;
 
 /**
- * ADR-0055: `schema` is the per-slot, input/output-split counterpart to
- * `schema` — a {@link SchemaLike} (a `KavoSchema<Output>` validator or a bare
- * `SchemaClass<Output>`, the structural contracts `kavo-schema.ts`/
- * `schema-class.ts` define) instead of a `DtoClass<Shape>`. Landed
- * additively alongside `schema` rather than replacing it outright: `@kavo/nest`'s
- * OpenAPI generation, route decoration, and body-validation wiring
- * (`swagger.ts`/`kavo.decorator.ts`/`kavo.module.ts`) resolve DTOs directly
- * off core's `schema` exports today, and `pnpm check` builds the whole
- * workspace — deleting `schema` here before that framework-layer migration
- * lands would red the gate for a package this issue scopes out. `schema`'s
- * removal is tracked as follow-up work once `@kavo/nest` (and
- * `@kavo/graphql`/`@kavo/mcp`) migrate off it.
+ * ADR-0055: `schema` is the per-slot, input/output-split entity contract.
+ * Each slot takes a {@link SchemaLike} — a `KavoSchema<Output>` validator or
+ * a bare `SchemaClass<Output>`, the structural contracts `kavo-schema.ts`/
+ * `schema-class.ts` define. It replaced the former `dto` config key.
  */
 export type SchemaInputSlot = "create" | "update" | "patch" | "query";
 export type SchemaOutputSlot = "item" | "list";
@@ -136,30 +128,37 @@ function isSchemaShorthand(value: unknown): value is SchemaSlot<unknown> {
 }
 
 /**
- * Bootstrap-cached schema resolution, the `schema`-typed sibling of
- * `DtoResolver`. Each slot resolves independently: the explicitly
+ * Bootstrap-cached schema resolution, each slot resolves independently: the explicitly
  * registered schema, or `null` meaning "no schema configured — no input
  * validation, no output narrowing beyond whatever `schema`/the entity-derived
  * default already does."
  *
  * `patch` falls back to the registered `update` schema when unset (the
- * same fallback `DefaultDtoResolver` gives `schema.input.patch`); `list` falls back
+ * same fallback `schema.input.patch` has); `list` falls back
  * to `item`. `create`/`query` have no fallback of their own.
  *
  * Resolution declares its return type as the wider `SchemaLike<object> |
- * null`: a class-shaped slot is accepted and
- * stored here, and `kavo-engine.ts` branches on kind (`isSchemaClass`)
+ * null`: a class-shaped slot is accepted and stored here, and `kavo-engine.ts` branches on kind (`isSchemaClass`)
  * before ever calling `safeParse`.
  */
 export interface SchemaResolver<_Entity = unknown> {
   resolveInput(slot: SchemaInputSlot, operation: OperationId): SchemaLike<object> | null;
   resolveOutput(slot: SchemaOutputSlot, operation: OperationId): SchemaLike<object> | null;
+  /**
+   * The writable-field allowlist synthesized from the top-level
+   * `create.fields`/`update.fields` config, independent of whether a
+   * validator occupies the slot. The deserializer narrows the body with it
+   * first; a validator only then judges the narrowed body, so a lenient
+   * validator can never widen what `create.fields` excluded. `patch` shares
+   * `update`'s list. `null` when no `fields` list is configured.
+   */
+  resolveWriteAllowlist(slot: "create" | "update" | "patch"): SchemaClass | null;
 }
 
 /**
  * `schema.input.create`/`.update`'s writable-fields fallback source — the
  * same top-level `create.fields`/`update.fields` config `resolveEntityConfig`
- * already resolves and passes to `DefaultDtoResolver` today.
+ * already resolves and passes to `DefaultSchemaResolver`.
  */
 export interface WritableSchemaFieldsConfig<Entity> {
   readonly create?: WriteFieldsConfig<Entity>;
@@ -168,10 +167,10 @@ export interface WritableSchemaFieldsConfig<Entity> {
 
 /**
  * Synthesizes a `SchemaClass` from a `WriteFieldsConfig`'s `fields` array —
- * mirrors `DefaultDtoResolver`'s own create/update fallback. Only the plain
+ * the create/update writable-fields fallback. Only the plain
  * array form is accepted here: the `{ exclude }` form is resolved to a
  * concrete array by `resolveEntityConfig` before it ever reaches this
- * resolver (same division of labor `DefaultDtoResolver` relies on), so
+ * resolver (the same division of labor as here), so
  * anything else (including the raw `{ exclude }` shape, if it somehow
  * arrives unresolved) yields no fallback rather than a wrong one.
  */
@@ -187,6 +186,7 @@ function writableFieldsToSchemaClass<Entity>(
 export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<Entity> {
   private readonly input: Readonly<Record<SchemaInputSlot, SchemaLike<object> | null>>;
   private readonly output: Readonly<Record<SchemaOutputSlot, SchemaLike<object> | null>>;
+  private readonly writeAllowlist: Readonly<Record<"create" | "update" | "patch", SchemaClass | null>>;
 
   constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
     const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(schema)
@@ -213,6 +213,9 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     const item = resolveSlot(output.item);
     const list = resolveSlot(output.list);
     const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
+    const createAllowlist = writableFieldsToSchemaClass(writable.create?.fields);
+    const updateAllowlist = writableFieldsToSchemaClass(writable.update?.fields);
+    this.writeAllowlist = Object.freeze({ create: createAllowlist, update: updateAllowlist, patch: updateAllowlist });
     this.input = Object.freeze({
       create: (input.create ??
         writableFieldsToSchemaClass(writable.create?.fields) ??
@@ -233,6 +236,10 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
 
   resolveOutput(slot: SchemaOutputSlot, _operation?: OperationId): SchemaLike<object> | null {
     return this.output[slot];
+  }
+
+  resolveWriteAllowlist(slot: "create" | "update" | "patch"): SchemaClass | null {
+    return this.writeAllowlist[slot];
   }
 }
 

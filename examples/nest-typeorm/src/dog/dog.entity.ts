@@ -27,7 +27,7 @@ export class Dog extends Pet {
   goodBoy!: boolean;
 
   // A JSON column, demonstrated on `Dog` because it falls back to
-  // entity-derived DTOs (no `dto` block, unlike `Cat`) — the field needs no
+  // entity-derived DTOs (no `schema` block, unlike `Cat`) — the field needs no
   // DTO plumbing to round-trip through POST/PUT/PATCH. `simple-json` is
   // TypeORM's driver-agnostic abstraction (stored as text, JSON-serialized
   // by the driver), so the same column works unchanged across sqlite,

@@ -341,6 +341,41 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     expect(() => makeCrud({ operations: { [id]: { schema } } } as never)).toThrowError(ConfigurationException);
   });
 
+  describe("a validator in a write slot keeps the create.fields/update.fields allowlist", () => {
+    // A lenient validator: passes every key through untouched.
+    const lenient = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
+
+    it("createOne drops a field create.fields excludes", async () => {
+      const { crud, adapter } = makeCrud({
+        create: { fields: ["name", "email"] },
+        schema: { input: { create: lenient } },
+      } as never);
+      await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
+      expect(adapter.rows[0]?.age).not.toBe(99);
+      expect(adapter.rows[0]).toMatchObject({ name: "Ada" });
+    });
+
+    it("updateOne and patchOne drop a field update.fields excludes", async () => {
+      const { crud, adapter } = makeCrud({
+        update: { fields: ["name"] },
+        schema: { input: { update: lenient } },
+      } as never);
+      const created = await crud.createOne({ name: "Ada", email: "a@b.c" } as never);
+      await crud.updateOne(created.id, { name: "Bea", email: "x@y.z" } as never);
+      await crud.patchOne(created.id, { name: "Cy", email: "q@q.q" } as never);
+      expect(adapter.rows[0]).toMatchObject({ name: "Cy", email: "a@b.c" });
+    });
+
+    it("a per-operation validator override does not widen the allowlist", async () => {
+      const { crud, adapter } = makeCrud({
+        create: { fields: ["name", "email"] },
+        operations: { createOne: { schema: { input: lenient } } },
+      } as never);
+      await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
+      expect(adapter.rows[0]?.age).not.toBe(99);
+    });
+  });
+
   it("treats an explicitly undefined dto key as unset, not as an inapplicable override", () => {
     // The counterpart of the rejection above, and what makes it safe to
     // build an entity config by spreading optional values: `deleteOne`

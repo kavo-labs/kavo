@@ -17,7 +17,7 @@ import { IdRefDto } from "../common/id-ref.dto.js";
 
 /**
  * Used only for `OwnerItemDto.pets`'s polymorphic union below — `DogController`
- * registers no `dto` block of its own (every `/dogs` slot resolves
+ * registers no `schema` block of its own (every `/dogs` slot resolves
  * entity-derived), so this is the one place `Dog`'s item shape needs a
  * concrete DTO class.
  */

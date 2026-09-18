@@ -2,7 +2,7 @@
 
 Every key `createKavo`, `@Kavo`, and `createCrud` accept, with its type, default, and where it's consulted. [Guides/Configuration](/guides/configuration/) covers the same schema as task-based prose ("how do I configure X"). This page is the exhaustive lookup form for when you already know the key and want its type and default.
 
-Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `dto`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, `create`/`update`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
+Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `schema`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, `create`/`update`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
 
 ## KavoSettings
 
@@ -72,7 +72,7 @@ Global → entity scope only — never per-operation, never per-call. Retargets 
 | ---------------------------------- | --------- | -------------------------------------------- |
 | `operations.<standardOperationId>` | `boolean` | see [CRUD operations](/core/crud-operations) |
 
-Global scope only — a boolean map keyed by the standard operation ids. Coarser than the per-entity `EntityConfig.operations` (below), which also carries `handler`/`meta`/`dto`/`policy` and always wins over this map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
+Global scope only — a boolean map keyed by the standard operation ids. Coarser than the per-entity `EntityConfig.operations` (below), which also carries `handler`/`meta`/`schema`/`policy` and always wins over this map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
 
 ## EntityConfig — structural, entity scope only
 
@@ -109,7 +109,7 @@ Not `KavoSettings`. Declared on `EntityConfig` directly, so there is no global d
 | `select.default` | `FieldPath<Entity,1>[]`                                       | unset — every selectable field |
 | `select.apply`   | `(args) => fields \| undefined`                               | unset                          |
 
-`fields` is depth 1 — `select=` addresses the entity's own columns, and an included relation is projected through `select[<relation>]=` against the target's own `select.fields` (ADR-0045); a relation-dotted entry neither type-checks nor boots. `fields` also closes the response body: a column left off is not served, which is what makes it a confidentiality control and not just a validation list (ADR-0026). A registered `dto.item`/`dto.list` with a runtime shape **replaces** the projection and wins even where wider. `default` is the projection for a request that sends no `select=`, validated against `fields` at bootstrap. `apply` (ADR-0048) is additive only, never a mask. See [Field selection](/querying/field-selection).
+`fields` is depth 1 — `select=` addresses the entity's own columns, and an included relation is projected through `select[<relation>]=` against the target's own `select.fields` (ADR-0045); a relation-dotted entry neither type-checks nor boots. `fields` also closes the response body: a column left off is not served, which is what makes it a confidentiality control and not just a validation list (ADR-0026). A class-shaped `schema.output.item`/`list` with a runtime shape **replaces** the projection and wins even where wider. `default` is the projection for a request that sends no `select=`, validated against `fields` at bootstrap. `apply` (ADR-0048) is additive only, never a mask. See [Field selection](/querying/field-selection).
 
 ### search
 
@@ -160,7 +160,7 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 | `update.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
 | `update.apply`   | same shape as `create.apply`                                  | unset                                                             |
 
-Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A registered `dto.create`/`dto.update` class with a runtime shape **replaces** this projection and wins over `fields`.
+Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A class-shaped `schema.input.create`/`update` with a runtime shape **replaces** this projection and wins over `fields`.
 
 `default` fills in a value for a writable field the body doesn't set — a body that does send the field wins outright (the same one-way relationship a client value has with `sort.default`). `default` is `createOne`- and `updateOne`-only, never `patchOne`: a PATCH that omits a field means "leave it unchanged". `apply` (issue #391, ADR-0048's write-side sibling) is the opposite composition rule — it forces field values into a `createOne`/`updateOne` body, overwriting whatever the client sent. See [Allowed](/features/allowed).
 
