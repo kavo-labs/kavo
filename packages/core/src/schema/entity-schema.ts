@@ -6,7 +6,8 @@ import type { OperationEntryOf } from "../operations/operation-entry.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { FieldsShorthand } from "../config/write-fields.js";
+import type { FieldsShorthand, WriteFieldsConfig } from "../config/write-fields.js";
+import { schemaClassFromFields } from "./schema-fields-shorthand.js";
 
 /**
  * The slot-position union `KavoSchema<T> | SchemaClass<T>` for an
@@ -160,11 +161,39 @@ export interface SchemaResolver<_Entity = unknown> {
   resolveOutput(slot: SchemaOutputSlot, operation: OperationId): KavoSchema<unknown> | null;
 }
 
+/**
+ * `schema.input.create`/`.update`'s writable-fields fallback source — the
+ * same top-level `create.fields`/`update.fields` config `resolveEntityConfig`
+ * already resolves and passes to `DefaultDtoResolver` today.
+ */
+export interface WritableSchemaFieldsConfig<Entity> {
+  readonly create?: WriteFieldsConfig<Entity>;
+  readonly update?: WriteFieldsConfig<Entity>;
+}
+
+/**
+ * Synthesizes a `SchemaClass` from a `WriteFieldsConfig`'s `fields` array —
+ * mirrors `DefaultDtoResolver`'s own create/update fallback. Only the plain
+ * array form is accepted here: the `{ exclude }` form is resolved to a
+ * concrete array by `resolveEntityConfig` before it ever reaches this
+ * resolver (same division of labor `DefaultDtoResolver` relies on), so
+ * anything else (including the raw `{ exclude }` shape, if it somehow
+ * arrives unresolved) yields no fallback rather than a wrong one.
+ */
+function writableFieldsToSchemaClass<Entity>(
+  fields: WriteFieldsConfig<Entity>["fields"] | undefined,
+): SchemaClass | null {
+  if (fields === undefined || !Array.isArray(fields)) {
+    return null;
+  }
+  return schemaClassFromFields(fields as readonly string[]);
+}
+
 export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<Entity> {
   private readonly input: Readonly<Record<SchemaInputSlot, KavoSchema<unknown> | null>>;
   private readonly output: Readonly<Record<SchemaOutputSlot, KavoSchema<unknown> | null>>;
 
-  constructor(schema?: EntitySchema<Entity>) {
+  constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
     const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(
       schema,
     )
@@ -195,8 +224,10 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     // teaches `kavo-engine.ts` to branch on kind — see the interface doc
     // comment above.
     this.input = Object.freeze({
-      create: (input.create ?? null) as KavoSchema<unknown> | null,
-      update: (update ?? null) as KavoSchema<unknown> | null,
+      create: (input.create ?? writableFieldsToSchemaClass(writable.create?.fields) ?? null) as
+        | KavoSchema<unknown>
+        | null,
+      update: (update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? null) as KavoSchema<unknown> | null,
       patch: (patch ?? update ?? null) as KavoSchema<unknown> | null,
       query: (input.query ?? null) as KavoSchema<unknown> | null,
     });

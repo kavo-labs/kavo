@@ -212,3 +212,32 @@ describe("DefaultSchemaResolver with the { fields } shorthand", () => {
     expect(schemaShapeKeys(list as unknown as SchemaClass)).toEqual(["id"]);
   });
 });
+
+describe("DefaultSchemaResolver's create/update writable-fields fallback", () => {
+  it("falls back to a class synthesized from the top-level create.fields when schema.input.create is unset", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      create: { fields: ["name"] },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("create", "createOne") as unknown as SchemaClass)).toEqual([
+      "name",
+    ]);
+  });
+
+  it("a registered schema.input.create wins over the top-level create.fields fallback", () => {
+    class CreateSchema {
+      id = 0;
+    }
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(
+      { input: { create: CreateSchema } },
+      { create: { fields: ["name"] } },
+    );
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(CreateSchema);
+  });
+
+  it("ignores a { exclude } form (not a plain array) for the fallback", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      create: { fields: { exclude: ["id"] } } as never,
+    });
+    expect(resolver.resolveInput("create", "createOne")).toBeNull();
+  });
+});
