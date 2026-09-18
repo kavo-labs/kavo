@@ -395,7 +395,7 @@ request/response bodies, a list envelope's element, the `issue #264`
 fallback body/response schemas, and each `oneOf` variant (schema hints,
 below) — carries the same `x-kavo-entity` (`withKavoEntity`), and the
 problem-details body plus its `errors[]` entry carry an `x-kavo-error`
-marker. The one exception is the `{ type: DtoClass }` fallback path, where
+marker. The one exception is the `{ type: SchemaClass }` fallback path, where
 `@nestjs/swagger`'s own introspection builds the schema instead of this
 module: there is no inline schema object to stamp. `operationId`'s value
 and format are unchanged.
@@ -590,7 +590,7 @@ lifts the inline schemas Kavo built into `components.schemas`, leaving a
 | `<Entity>List`                | a `"many"` success serving the root `list` slot                                                               |
 | `<Entity>ListItem`            | that envelope's `items[]` element                                                                             |
 | `<Entity>ListMeta`            | that envelope's `meta` bag                                                                                    |
-| `<Entity><Operation>`         | a single-row success with its own `dto.output`                                                                |
+| `<Entity><Operation>`         | a single-row success with its own `schema.output`                                                             |
 | `<Entity><Operation>List`     | the `many` counterpart (`…ListItem` / `…ListMeta` alongside)                                                  |
 | `<Entity>Pagination`          | the page controls for the resolved `pagination.strategy` (issue #313, #319)                                   |
 | `<Entity>Include`             | the includable relation paths, as `array<enum>` (issue #313)                                                  |
@@ -605,13 +605,13 @@ Names come from the `x-kavo-*` extensions already on the document (#294)
 plus position, plus one new internal marker: `successBodyFor` stamps
 `x-kavo-operation-scoped` on a success schema when `descriptor.output` is
 set (a per-operation override, issue #131, or a custom operation's own
-`dto.output`), and `registerKavoSchemas` names those `<Entity><Operation>`
+`schema.output`), and `registerKavoSchemas` names those `<Entity><Operation>`
 so a genuinely different shape does not race the root `<Entity>Item` /
 `<Entity>List` name and lose to a positional `_2`. That marker is stripped
 as the schema is hoisted (along with `title` — the component key supersedes
 it); the `x-kavo-entity` / `x-kavo-error` links back to Kavo are kept. The
 filter for hoisting is "the inline schema carries `x-kavo-entity` or
-`x-kavo-error`"; a schema already a `$ref` (the `{ type: DtoClass }`
+`x-kavo-error`"; a schema already a `$ref` (the `{ type: SchemaClass }`
 introspection path, where `@nestjs/swagger` names its own component) is left
 untouched, so that path is a no-op here rather than a special case, and the
 un-processed document stays byte-identical for an app that never calls the
@@ -712,7 +712,7 @@ explicit DTO class, not a name to rely on — and after the operation-aware
 naming above a real clash needs two entities whose names collide
 (`AdListItem` the entity vs `Ad`'s list element). The same shape requested
 under _different_ names is emitted under each — `<Entity>Update` /
-`<Entity>Patch` are identical when no `dto.patch` is configured — so every
+`<Entity>Patch` are identical when no `schema.input.patch` is configured — so every
 slot keeps its own stable name.
 
 Each hoisted schema is cloned first: `applySwaggerMetadata` hands out the

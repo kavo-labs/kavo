@@ -23,10 +23,6 @@ class AuthorProfileDto {
   name = "";
 }
 
-class AuthorSearchQueryDto {
-  q?: string;
-}
-
 const kavo = createKavo();
 
 // ── The well-formed shape ─────────────────────────────────────────────

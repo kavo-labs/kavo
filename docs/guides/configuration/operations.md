@@ -26,22 +26,22 @@ An `OperationConfig` object accepts:
 
 - **`handler`** (`OperationHandler<Entity>`): a replacement handler function, keeping the default DTO/serialization scaffolding around it.
 - **`meta`** (`OperationMetadata`): an opaque bag consumed by the framework layer; in `@kavo/nest` this is `{ routes: KavoRouteOptions }`.
-- **`dto`** (`{ input?, output?, query? }`): overrides the entity's root `dto` slot for this operation only, see below.
+- **`schema`** (`{ input?, output?, query? }`): overrides the entity's root `schema` slot for this operation only, see below.
 - **any settings key** (same shape as global `KavoSettings`): overrides that apply to this operation only, one level above the entity's own settings — merged with, not replacing, the entity/global settings it doesn't mention.
 
-**`operations.<id>.dto`** narrows one operation's request body, response, or query contract independently of the entity's root `dto` slots (§`dto` on [Entity config](/guides/configuration/entity-config#dto)). Only the fields a given operation actually has are accepted: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne` (void results).
+**`operations.<id>.schema`** narrows one operation's request body, response, or query contract independently of the entity's root `schema` slots (§`schema` on [Entity config](/guides/configuration/entity-config#schema)). Only the fields a given operation actually has are accepted: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne` (void results).
 
 ```ts
 @Kavo(Book, {
-  dto: { item: BookItemDto }, // entity-wide default for every read
+  schema: { output: { item: BookItemDto } }, // entity-wide default for every read
   operations: {
-    findOne: { dto: { output: BookDetailDto } }, // findOne only
-    createOne: { dto: { input: CreateBookRequestDto, output: BookCreatedDto } },
+    findOne: { schema: { output: BookDetailDto } }, // findOne only
+    createOne: { schema: { input: CreateBookRequestDto, output: BookCreatedDto } },
   },
 })
 ```
 
-Fallback order per field: `operations.<id>.dto.<field>`, then the entity's root `dto.<slot>`, then the entity-derived default. Setting a field an operation doesn't have (`dto.query` on `createOne`, say) is both a type error and a bootstrap `ConfigurationException`. See [DTO system §8](/internals/architecture/04-dto-system#8-per-operation-override-issue-131) for the full applicability table and the fallback chain in the engine.
+Fallback order per field: `operations.<id>.schema.<field>`, then the entity's root `schema.input.<slot>`/`schema.output.<slot>`, then the entity-derived default. Setting a field an operation doesn't have (`schema.query` on `createOne`, say) is a bootstrap `ConfigurationException`. See [Schema system §8](/internals/architecture/04-dto-system#8-per-operation-override-issue-131) for the full applicability table and the fallback chain in the engine.
 
 **`operations.<id>.meta.routes`** (`@kavo/nest`'s `KavoRouteOptions`) accepts:
 
@@ -62,7 +62,7 @@ A custom id is exempt from the whitelist rule above — it's always registered w
 @Kavo(Order, {
   operations: {
     markPaidOne: {
-      dto: { input: MarkPaidDto },
+      schema: { input: MarkPaidDto },
       handler: {
         async execute({ id, body }: { id: number; body: MarkPaidDto }, context) {
           // `context.repository` is this entity's own repository adapter.
@@ -87,7 +87,7 @@ A custom-operation entry accepts:
 - **`kind`** (`"read"` | `"write"`, default: `"write"`): a read runs query resolution and takes no request body; the generated route binds `@Query` instead of `@Body`.
 - **`cardinality`** (`"one"` | `"many"`, default: `"one"`): `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way a `findMany` handler does.
 - **`enabled`** (`boolean`, default: `true`): `false` registers the entry inert: no route, and calling it answers `405 KAVO_OPERATION_DISABLED`.
-- **`dto`** (`{ input?, output?, query? }`): `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root DTO slot of its own, so this is where it gets a shape.
+- **`schema`** (`{ input?, output?, query? }`): `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root DTO slot of its own, so this is where it gets a shape.
 - **`meta`** (`OperationMetadata`, default: `{}`): the route, as above. Without it the operation is routed `POST /<operation id>`.
 - **`realtimeEvent`** (`RealtimeEventId`, unset by default): which of the five standard event ids this operation's write publishes as ([Realtime events](/features/realtime-events)). Only valid on `kind: "write"`, `cardinality: "one"` — declaring it on a read or a `"many"` write is a bootstrap error. Unset, the operation publishes nothing.
 - **any settings key** (same shape as global `KavoSettings`): the operation scope of the precedence chain, exactly as for a standard id.
@@ -117,7 +117,7 @@ Worth knowing before you reach for one:
 - **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it's a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
 - **`@Override(id)` can be the whole implementation.** A DI-aware custom operation — one that needs another Nest provider, or a cross-entity transaction — cannot be expressed as a config-level `handler`; write it as an `@Override(id)` method instead and leave `handler` off the config entry entirely (issue #424). `@kavo/nest` resolves the override ahead of the generated route, so the config-level handler is never reached. Omitting both is caught at `KavoModule`'s bind time (`onModuleInit`), not silently: `ConfigurationException` names the operation and says it needs one or the other. See [`@Override`](/reference/decorators#override-operationid).
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
-- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `dto.output`, the handler's return value is filtered to the entity's own columns (plus any opted-in virtual field), exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its own shape needs a DTO:
+- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `schema.output`, the handler's return value is filtered to the entity's own columns (plus any opted-in virtual field), exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its own shape needs a DTO:
 
   ```ts
   class ImportOutcomeDto {
@@ -128,7 +128,7 @@ Worth knowing before you reach for one:
   operations: {
     // `One`, not `Many`: cardinality names the *response*, and this one
     // answers with a single outcome however many rows it wrote.
-    importPricesOne: { handler, dto: { output: ImportOutcomeDto } },
+    importPricesOne: { handler, schema: { output: ImportOutcomeDto } },
   }
   ```
 

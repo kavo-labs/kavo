@@ -8,21 +8,21 @@ later work never needs to mutate `@kavo/core` types.
 
 ## 1. Generic parameters
 
-| Parameter    | Purpose                                                        | Default                                                                           | Override example                                               |
-| ------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `TEntity`    | The ORM-mapped entity class everything is typed against        | — (always inferred from `createCrud(Entity)`)                                     | `KavoService<User>`                                            |
-| `TId`        | Primary-key type; appears in `findOne(id)`, `deleteOne(id)`, … | `EntityId` (`string \| number`)                                                   | `KavoService<User, string>` for UUID keys                      |
-| `TCreateDto` | `POST` request body                                            | `EntityInput<TEntity>` (the entity's scalar properties, all optional — see below) | `dto: { create: CreateUserDto }`                               |
-| `TUpdateDto` | `PUT` full-replace body                                        | `EntityInput<TEntity>`                                                            | `dto: { update: UpdateUserDto }`                               |
-| `TPatchDto`  | `PATCH` partial body                                           | `Partial<TUpdateDto>` — follows `update` when that is overridden                  | `dto: { patch: PatchUserDto }`                                 |
-| `TQueryDto`  | `GET` list query shape                                         | `QueryContext<TEntity>`                                                           | `dto: { query: UserQueryDto }`                                 |
-| `TItemDto`   | Any single-resource response                                   | `TEntity`                                                                         | `dto: { item: UserItemDto }`                                   |
-| `TListDto`   | Element type inside `ListResultDto.items`                      | `TItemDto` (follows `item`)                                                       | `dto: { list: UserListDto }` — leaner list projection          |
-| `TOps`       | The `operations` config's inferred literal type (issue #131)   | `OperationsConfig<...>` — no operation overrides anything                         | `operations: { findOne: { dto: { output: UserProfileDto } } }` |
+| Parameter    | Purpose                                                        | Default                                                                           | Override example                                                     |
+| ------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `TEntity`    | The ORM-mapped entity class everything is typed against        | — (always inferred from `createCrud(Entity)`)                                     | `KavoService<User>`                                                  |
+| `TId`        | Primary-key type; appears in `findOne(id)`, `deleteOne(id)`, … | `EntityId` (`string \| number`)                                                   | `KavoService<User, string>` for UUID keys                            |
+| `TCreateDto` | `POST` request body                                            | `EntityInput<TEntity>` (the entity's scalar properties, all optional — see below) | `schema: { input: { create: CreateUserDto } }`                       |
+| `TUpdateDto` | `PUT` full-replace body                                        | `EntityInput<TEntity>`                                                            | `schema: { input: { update: UpdateUserDto } }`                       |
+| `TPatchDto`  | `PATCH` partial body                                           | `Partial<TUpdateDto>` — follows `update` when that is overridden                  | `schema: { input: { patch: PatchUserDto } }`                         |
+| `TQueryDto`  | `GET` list query shape                                         | `QueryContext<TEntity>`                                                           | `schema: { input: { query: UserQueryDto } }`                         |
+| `TItemDto`   | Any single-resource response                                   | `TEntity`                                                                         | `schema: { output: { item: UserItemDto } }`                          |
+| `TListDto`   | Element type inside `ListResultDto.items`                      | `TItemDto` (follows `item`)                                                       | `schema: { output: { list: UserListDto } }` — leaner list projection |
+| `TOps`       | The `operations` config's inferred literal type (issue #131)   | `OperationsConfig<...>` — no operation overrides anything                         | `operations: { findOne: { schema: { output: UserProfileDto } } }`    |
 
 `TOps` is unlike the rest of the table: it is not a DTO type itself, and no
 one ever writes it by hand. It exists only so `KavoService`'s per-method
-positions (`DtoInputOf<TOps, "createOne", TCreateDto>`, and the `output`/
+positions (`SchemaInputOf<TOps, "createOne", TCreateDto>`, and the `output`/
 `query` equivalents, doc 4 §8) can read back the literal DTO classes a
 caller registered under `operations.<id>.dto`, falling back to the slot
 generic above when that operation declares no override of its own — the
@@ -33,7 +33,7 @@ It carries a second job since issue #145. `run`'s typed positions
 (`CustomOperationId`/`CustomOperationBody`/`CustomOperationResult`,
 `service/custom-operation.ts`) read the same literal for the operations
 `TOps` declares that Kavo has no name for, taking their shapes from the
-registered handler's own signature when no `dto` override narrows them.
+registered handler's own signature when no `schema` override narrows them.
 Its constraint is `OperationsConfig` rather than `StandardOperationsConfig`
 so that a key outside the standard eight is a permitted custom operation
 rather than an excess property; the extra requirement that such a key carry
@@ -222,7 +222,7 @@ signatures" is precisely the failure an exemption would have allowed.
 | Persistence   | `EntityReader`, `EntityWriter`, `RepositoryAdapter`                                                                                                                                                                                  |
 | Transactions  | `TransactionManager`, `TransactionContext`, `TransactionOptions` — not implemented, see below                                                                                                                                        |
 | Query         | `Filter*`, `FilterExpression`, `Sort`, `Pagination`, `OffsetPagination`, `CursorPagination`, `isCursorPagination`, `PaginationStrategy`, `FieldSelection`, `QueryContext`, `NormalizedQueryContext`, `FilterParser`, `FilterBuilder` |
-| DTO           | `Dto`, `DtoClass`, `OperationDtoMap`, `DtoResolver`, `ListResultDto`, `ListMetaDto`, `BulkResultDto` (bulk reserved)                                                                                                                 |
+| Schema / DTO  | `KavoSchema`, `SchemaClass`, `SchemaLike`, `EntitySchema`, `SchemaResolver`, `ListResultDto`, `ListMetaDto`, `BulkResultDto` (bulk reserved)                                                                                         |
 | Errors        | `KavoExceptionShape`, `KavoErrorCode`, `ErrorHandler`, `ProblemDetailsDto`                                                                                                                                                           |
 | Config        | `KavoSettings` (+ per-area settings), `GlobalConfig`, `EntityConfig`, `OperationConfig`, `ResolvedEntityConfig`                                                                                                                      |
 | Operations    | `OperationId`, `OperationHandler`, `OperationMetadata`, `OperationDescriptor`, `OperationRegistry`                                                                                                                                   |

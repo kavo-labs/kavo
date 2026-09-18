@@ -2,23 +2,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { ApplyArgs } from "../policy/kavo-apply.js";
 
-/**
- * An inline field-list shorthand for a `dto.<slot>` position (issue #386):
- * `{ fields: [...] }` derives a projection/writable-field list without a
- * hand-written class. `dto-fields-shorthand.ts` synthesizes a real
- * `DtoClass` from it at bootstrap (`resolveDtoSlot`), tagged so downstream
- * consumers (`@kavo/nest`'s Swagger generation) can tell it apart from a
- * hand-registered class.
- *
- * `create`/`update` no longer accept this shorthand directly (issue #388)
- * — their writable-field list is the top-level `EntityConfig.create.fields`
- * / `EntityConfig.update.fields` (`config/entity-config.ts`) instead, so
- * `dto.create`/`dto.update` stay `DtoClass`-only. `patch`/`item`/`list`
- * still accept it here.
- */
-export interface FieldsShorthand<Entity> {
-  readonly fields: readonly FieldPath<Entity, 1>[];
-}
+export type { FieldsShorthand } from "../schema/schema-fields-shorthand.js";
 
 /**
  * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side sibling):

@@ -142,7 +142,7 @@ walking skeleton shippable without stubbing later features as hacks.
 | ---------------- | ------------------------------------------------------------------------------------------------------------ |
 | `types/`         | `EntityId`, `FieldPath`, shared type utilities                                                               |
 | `query/`         | Filter AST, pagination, sort, field selection, lenient + normalized query contexts, parser/builder contracts |
-| `dto/`           | The six DTO slots, resolution contract, list + bulk envelopes                                                |
+| `schema/`        | The six schema slots, `KavoSchema`/`SchemaClass` contracts, resolver; `dto/` holds the list + bulk envelopes |
 | `errors/`        | `KavoExceptionShape`, stable error codes, problem-details shape                                              |
 | `config/`        | Settings schema, scope inputs, frozen resolved config                                                        |
 | `operations/`    | Operation ids, handler contract, dispatch registry                                                           |

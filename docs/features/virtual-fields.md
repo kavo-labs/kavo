@@ -103,7 +103,7 @@ class BookItemDto {
   id = 0;
   displayTitle = ""; // registers the key; the getter supplies the value
 }
-@Kavo(Book, { dto: { item: BookItemDto } })
+@Kavo(Book, { schema: { output: { item: BookItemDto } } })
 ```
 
 This only works on TypeORM. `@kavo/mikroorm` and `@kavo/mongoose` both convert an ORM row to a plain object at the adapter boundary before core ever sees it (`wrap(entity).toObject()`, `document.toObject({ getters: false, virtuals: false })`), which strips a plain getter or an unconfigured virtual either way; `@kavo/prisma` never has a class instance to put a getter on in the first place.

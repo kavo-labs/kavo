@@ -933,10 +933,7 @@ describe("@Kavo custom operations (issue #145)", () => {
    * registered for the same slot is not consulted at all once `schema`
    * wins.
    */
-  it("documents createOne's request body from schema.input.create ahead of dto (issue #467)", async () => {
-    class TodoCreateDto {
-      title = "";
-    }
+  it("documents createOne's request body from schema.input.create (issue #467)", async () => {
     const createSchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({
@@ -996,10 +993,6 @@ describe("@Kavo custom operations (issue #145)", () => {
         properties: { id: { type: "number" }, title: { type: "string" } },
       }),
     };
-    class TodoFindOneOutputDto {
-      id = 0;
-      title = "";
-    }
 
     @Kavo(Todo, {
       operations: {
@@ -1099,10 +1092,6 @@ describe("@Kavo custom operations (issue #145)", () => {
         properties: { id: { type: "number" }, title: { type: "string" } },
       }),
     };
-    class TodoFindManyOutputDto {
-      id = 0;
-      title = "";
-    }
 
     @Kavo(Todo, {
       operations: {

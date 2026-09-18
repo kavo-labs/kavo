@@ -46,7 +46,7 @@ An operation outside the standard eight (see [Custom operations](/core/custom-op
 await service.run("markPaidOne", { id: 7, body: { reference: "INV-42" } });
 ```
 
-`run`'s result and argument types come from the operation's own `dto` override, or, failing that, from its handler's own signature. That's the same type inference the eight named methods get.
+`run`'s result and argument types come from the operation's own `schema` override, or, failing that, from its handler's own signature. That's the same type inference the eight named methods get.
 
 ## Reaching the engine directly
 

@@ -87,7 +87,7 @@ export function GET() {
 }
 ```
 
-Every shape is derived from `EntityMetadata` and the entity's resolved config alone — there's no decorator/reflection story to introspect a configured `dto.create`/`item`/… class's actual field shape the way `@kavo/nest`'s Swagger integration does, so what's built here is the entity's own derived shape (columns, allowlists, pagination strategy), the same fallback `@kavo/nest` itself falls back to when no DTO is registered. `paths` is left to the caller: `resolveRoute`/`matchRoute` are exported so a caller who wants a full `paths` document can walk `engine.registry.all()` the same way `buildKavoSchemas` does and reuse the identical route shapes.
+Every shape is derived from `EntityMetadata` and the entity's resolved config alone — there's no decorator/reflection story to introspect a configured `schema.input.create`/`item`/… class's actual field shape the way `@kavo/nest`'s Swagger integration does, so what's built here is the entity's own derived shape (columns, allowlists, pagination strategy), the same fallback `@kavo/nest` itself falls back to when no DTO is registered. `paths` is left to the caller: `resolveRoute`/`matchRoute` are exported so a caller who wants a full `paths` document can walk `engine.registry.all()` the same way `buildKavoSchemas` does and reuse the identical route shapes.
 
 ## Installing it
 

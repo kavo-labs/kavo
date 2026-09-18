@@ -131,7 +131,7 @@ const config = defineConfig({
         items: [
           { text: "Entities", link: "/core/entities" },
           { text: "CRUD Operations", link: "/core/crud-operations" },
-          { text: "DTOs", link: "/core/dtos" },
+          { text: "Schemas and DTOs", link: "/core/dtos" },
           { text: "Services", link: "/core/services" },
           { text: "Routes & Controllers", link: "/core/routes-and-controllers" },
           { text: "Custom Operations", link: "/core/custom-operations" },
@@ -239,7 +239,7 @@ const config = defineConfig({
             text: "Walking skeleton",
             collapsed: true,
             items: [
-              { text: "DTO system", link: "/internals/architecture/04-dto-system" },
+              { text: "Schema system", link: "/internals/architecture/04-dto-system" },
               { text: "Query grammar", link: "/internals/architecture/05-query-grammar" },
               { text: "Error handling", link: "/internals/architecture/06-error-handling" },
               { text: "CRUD engine", link: "/internals/architecture/07-crud-engine" },

@@ -1,6 +1,6 @@
-# DTOs
+# Schemas and DTOs
 
-Every request/response shape in Kavo is optional. Zero config means an entity-derived default. Registering a DTO class narrows exactly one **slot** without touching the others.
+Every request/response shape in Kavo is optional. Zero config means an entity-derived default. A `schema` entry narrows exactly one **slot** without touching the others. A slot takes a plain **DTO class** (shape only) or a **validator** such as a Zod schema (shape and validation).
 
 ## The six slots
 
@@ -13,22 +13,20 @@ Every request/response shape in Kavo is optional. Zero config means an entity-de
 | `item`   | Any single-resource response          | Entity, subject to field selection                                  |
 | `list`   | Element type inside the list envelope | Same as `item`'s resolved type                                      |
 
-There's no separate `patch` class to write. It always derives from `update`. Registering one slot doesn't touch any other; each is resolved independently.
+There's no separate `patch` schema to write. It derives from `update`. Configuring one slot doesn't touch any other; each is resolved independently.
 
 ```ts
 @Kavo(Book, {
-  dto: {
-    create: CreateBookDto,
-    update: UpdateBookDto,
-    item: BookItemDto,
-    list: BookListDto,
-  },
+  schema: { input: { create: CreateBookDto, update: UpdateBookDto }, output: { item: BookItemDto, list: BookListDto } },
 })
 ```
 
-## How a class narrows a slot
+## Two kinds of slot value
 
-A registered class projects by its **runtime key set**: the own enumerable properties of `new Dto()`, not its TypeScript type. Fields need real initializers to exist at runtime:
+Each slot accepts either of these:
+
+- **A class**, narrowed by its **runtime key set**: the own enumerable properties of `new Schema()`, not its TypeScript type. Fields need real initializers to exist at runtime. A class never rejects a body; it only shapes it.
+- **A validator**: any object with `safeParse(input): SchemaParseResult<Output>`, the shape a Zod schema already has. `@kavo/core` has no `zod` dependency (ADR-0005).
 
 ```ts
 class BookListDto {
@@ -41,57 +39,18 @@ class BadDto {
 } // no runtime keys — falls back to the entity-derived default, silently
 ```
 
-This keeps DTO classes plain: no decorators, no reflection library. The cost is that fields need initializers for the narrowing to actually take effect.
+Classes stay plain: no decorators, no reflection library. The cost is that fields need initializers for the narrowing to take effect.
 
-**DTO mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved DTO already projects. Selection never widens a projection past what the DTO or the `selectable` allowlist already allows.
+A validator differs in two ways:
 
-## Included relations
+- **`schema.input` validates.** The engine runs `safeParse` on the deserialized body and raises `SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) on failure, with one `errors[]` entry per issue. On success the schema's own `data` replaces the body, so a transform (trim a string, default a field) takes effect.
+- **`schema.output` shapes but is never re-validated.** A `safeParse` failure falls back to the already-projected value rather than rejecting a response Kavo itself produced.
 
-A response embedding an included relation shapes that relation's node from the **target entity's own** registered `item`/`list` DTO, never a DTO slot on the root entity. There's no per-include DTO. The related resource owns its own contract, the same as if you'd requested it directly.
+**Schema mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved schema already projects. Selection never widens a projection past what the schema or the `selectable` allowlist allows.
 
-## Computed fields
+## Shorthands
 
-A field with no ordinary storage column is declared on the ORM entity itself — a TypeORM `@VirtualColumn`, a MikroORM `@Formula` — not faked through a DTO class. See [Virtual fields](/features/virtual-fields) for the full picture, including the per-ORM support matrix.
-
-## Per-operation overrides
-
-The six slots above are entity-wide: every operation that reads `create` reads the same class. `operations.<id>.dto` layers a narrower override in front of them, specific to one operation:
-
-```ts
-@Kavo(Book, {
-  dto: { item: BookItemDto }, // entity-wide default for every read
-  operations: {
-    // Naming any operation makes `operations` an exclusive whitelist (see
-    // [Operations](/guides/configuration/operations#operations)) — narrowing
-    // findOne alone only if every other standard operation is also named.
-    findOne: { dto: { output: BookDetailDto } }, // findOne only
-  },
-})
-```
-
-Fallback order per field: `operations.<id>.dto.<field>` → the entity's root `dto.<slot>` → the entity-derived default. Which fields apply depends on the operation: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne`. See [Guides/Configuration/Entity config](/guides/configuration/entity-config#dto) and [Operations](/guides/configuration/operations#operations) for the field-by-field mechanics, and [DTO system](/internals/architecture/04-dto-system) for the full derivation and fallback rules.
-
-## Migrating to `schema` (ADR-0055)
-
-A `schema` key is landing alongside `dto`, per slot and split by direction rather than one flat map:
-
-```ts
-@Kavo(Book, {
-  schema: {
-    input: { create: CreateBookSchema, update: UpdateBookSchema },
-    output: { item: BookItemSchema, list: BookListSchema },
-  },
-})
-```
-
-Where `dto` is a plain class narrowed by its runtime key set, `schema.input.<slot>`/`schema.output.<slot>` is any object satisfying the structural `KavoSchema<Output>` contract — one `safeParse(input): SchemaParseResult<Output>` method, the same shape a Zod schema already has, with no `zod` dependency in `@kavo/core` itself (ADR-0005). Two differences follow from that:
-
-- **`schema.input` actually validates.** `dto` never rejects a body — v6 has no validation subsystem attached to it. A `schema.input.<slot>` does: the engine runs `safeParse` on the deserialized body and raises `SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) on failure, with one `errors[]` entry per issue. On success, the schema's own `data` replaces the deserialized body — so a schema that transforms its input (trims a string, defaults a field) has that transformation take effect.
-- **`schema.output` narrows/shapes, but is never re-validated.** Applied after the ordinary `dto`/field-selection projection, the same role `dto.item`/`dto.list`'s field set plays — but a `safeParse` failure here falls back to the already-projected value rather than rejecting a response Kavo itself produced.
-
-Per-operation overrides follow the same shape at `operations.<id>.schema.<field>`, with the same fallback chain `dto` has: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the corresponding `dto` override → the entity-derived default. Where both `schema` and `dto` are configured for the same slot, `schema` wins.
-
-`schema.input`, `schema.output`, and `schema` itself each also accept a single schema in place of their per-slot map, as shorthand for applying one schema everywhere that side reads from:
+`schema.input`, `schema.output`, and `schema` itself each accept a single value in place of their per-slot map:
 
 ```ts
 @Kavo(Book, {
@@ -103,6 +62,36 @@ Per-operation overrides follow the same shape at `operations.<id>.schema.<field>
 })
 ```
 
-`schema.input`'s shorthand never reaches `query` — it has its own shape and no natural single-schema reading. A shorthand `schema.output`/top-level `schema` is typed against the input side's output type only: a failing `schema.output` safely falls back to the already-projected value rather than rejecting, so a create schema narrower than the full entity still works as the output shorthand too.
+`schema.input`'s shorthand never reaches `query`, which has its own shape and no natural single-schema reading. A shorthand `schema.output` is typed against the input side's output type only: a failing output schema falls back to the projected value, so a create schema narrower than the full entity still works as the output shorthand.
 
-`dto` is not removed by this — see ADR-0055 and issue #466 for why. `@kavo/nest`'s OpenAPI generation (`registerKavoSchemas`) and `@kavo/graphql`/`@kavo/mcp` have migrated onto `schema` (issue #467): a configured `schema.input.<slot>`/`schema.output.<slot>` is documented/typed ahead of `dto`, with `dto` and then the entity's own ORM metadata as the fallback chain when no `schema` is configured for a slot. OpenAPI generation specifically needs a schema that opts into an optional `toJSONSchema(): object` method (`KavoSchema`, `kavo-schema.ts`) — `.safeParse` alone gives `registerKavoSchemas` nothing to introspect; a schema with no `toJSONSchema` still validates and narrows at runtime, but is documented from the `dto`/ORM-metadata fallback instead. `@kavo/nest` also no longer bundles a `class-validator` exception factory or an entity-class validation fallback of its own (issue #283/#437) — `schema` is Kavo's own answer to write-body validation now, so a `class-validator`-backed `ValidationPipe` is entirely an app's own choice (see `examples/nest-typeorm/src/common/validation-exception-factory.ts`). Prefer `schema` for entities that need real input validation and OpenAPI-documented shapes; keep `dto` where you only need shape/serialization narrowing with no validation or docs generation attached — the two coexist per slot without conflict.
+A slot also takes `{ fields: [...] }` to synthesize a class from a field list, the same key set a hand-written class with those fields would give.
+
+## Included relations
+
+A response embedding an included relation shapes that relation's node from the **target entity's own** `item`/`list` schema, never a slot on the root entity. There's no per-include schema. The related resource owns its own contract, the same as if you'd requested it directly.
+
+## Computed fields
+
+A field with no ordinary storage column is declared on the ORM entity itself — a TypeORM `@VirtualColumn`, a MikroORM `@Formula` — not faked through a schema class. See [Virtual fields](/features/virtual-fields) for the full picture, including the per-ORM support matrix.
+
+## Per-operation overrides
+
+The six slots above are entity-wide: every operation that reads `create` reads the same value. `operations.<id>.schema` layers a narrower override in front of them, specific to one operation:
+
+```ts
+@Kavo(Book, {
+  schema: { output: { item: BookItemDto } }, // entity-wide default for every read
+  operations: {
+    // Naming any operation makes `operations` an exclusive whitelist (see
+    // [Operations](/guides/configuration/operations#operations)) — narrowing
+    // findOne alone only if every other standard operation is also named.
+    findOne: { schema: { output: BookDetailDto } }, // findOne only
+  },
+})
+```
+
+Fallback order per field: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the entity-derived default. Which fields apply depends on the operation: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne`; naming a field the operation lacks throws a `ConfigurationException` at `createCrud`. See [Entity config](/guides/configuration/entity-config) and [Operations](/guides/configuration/operations#operations) for the field-by-field mechanics, and [Schema system](/internals/architecture/04-dto-system) for the full derivation and fallback rules.
+
+## OpenAPI and validation pipes
+
+`@kavo/nest` documents a validator in OpenAPI only if it opts into an optional `toJSONSchema(): object` method (`KavoSchema`); `.safeParse` alone gives `registerKavoSchemas` nothing to introspect, so such a slot is documented from the entity's ORM metadata instead. A class-shaped `schema.input.<slot>` is also written to a generated route's `design:paramtypes`, so a global `ValidationPipe` (for example a `class-validator` one) validates it. `@kavo/nest` ships no `class-validator` exception factory of its own (see `examples/nest-typeorm/src/common/validation-exception-factory.ts`). See ADR-0055.

@@ -99,7 +99,7 @@ to one of these blocks:
 
 1. **The raw type** (`packages/core/src/config/entity-config.ts`) — extend
    the block's own interface (`FilterConfig`, `SortConfig`, `SelectConfig`,
-   `SearchConfig`, `IncludeConfig`) or `WriteFieldsConfig` in `dto/dto.ts`.
+   `SearchConfig`, `IncludeConfig`) or `WriteFieldsConfig` in `config/write-fields.ts`.
    A `fields`-style selector is an array-or-`{ exclude }` shape typed
    against the right path depth: `QueryFieldSelector<Entity>`
    (`FieldPath<Entity>`, dotted relation paths allowed) for `filter`/`sort`;
@@ -128,7 +128,7 @@ to one of these blocks:
    blocks are read by the query normalizer and the include/select resolvers.
    Find or add the analogous read site, and decide the new key's **DTO
    precedence**: does a registered DTO with a runtime shape still win
-   outright (the `select`-vs-`dto.item` precedent, ADR-0026), or does the
+   outright (the `select`-vs-`schema.output.item` precedent, ADR-0026), or does the
    new key gate something no DTO already governs?
 5. **The core barrel** (`index.ts`) — a new selector or config type is a new
    public type; add it to the explicit list (ADR-0010), and to

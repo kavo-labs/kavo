@@ -1,19 +1,14 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every `KavoSettings` field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity and never merge through the scope chain: `dto`, `policy` (below, an entity-wide default), `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)), and the per-axis query blocks `filter`, `sort`, `select`, `search`, and `include` — each holding that axis's `fields` allowlist, its `default` for an omitted request, its `apply` server-side override (ADR-0048), and (for `filter`/`include`) its request-cost `limits`. The write-side siblings are `create` and `update`. Per-relation read tuning and array-mutation write policy is `relations`. [Allowed](/features/allowed) covers the `fields` allowlists in full; [Config keys](/reference/config-keys) is the field-by-field table for all of them.
+`@Kavo(Entity, config)` accepts every `KavoSettings` field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity and never merge through the scope chain: `schema`, `policy` (below, an entity-wide default), `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)), and the per-axis query blocks `filter`, `sort`, `select`, `search`, and `include` — each holding that axis's `fields` allowlist, its `default` for an omitted request, its `apply` server-side override (ADR-0048), and (for `filter`/`include`) its request-cost `limits`. The write-side siblings are `create` and `update`. Per-relation read tuning and array-mutation write policy is `relations`. [Allowed](/features/allowed) covers the `fields` allowlists in full; [Config keys](/reference/config-keys) is the field-by-field table for all of them.
 
-## dto
+## schema
 
-Registers DTO classes per slot. Every slot is independently optional and falls back to an entity-derived default when omitted:
+Configures a class or validator per slot, split into `input` and `output`. Every slot is independently optional and falls back to an entity-derived default when omitted:
 
 ```ts
 @Kavo(Book, {
-  dto: {
-    create: CreateBookDto,
-    update: UpdateBookDto,
-    item: BookItemDto,
-    list: BookListDto,
-  },
+  schema: { input: { create: CreateBookDto, update: UpdateBookDto }, output: { item: BookItemDto, list: BookListDto } },
 })
 ```
 
@@ -26,7 +21,7 @@ Registers DTO classes per slot. Every slot is independently optional and falls b
 | `item`   | Entity, subject to field selection                  |
 | `list`   | Same as `item`'s resolved type                      |
 
-There's no `patch` DTO class to write on its own; it derives from `update`. See [DTO system](/internals/architecture/04-dto-system) for full derivation rules.
+There's no `patch` schema to write on its own; it derives from `update`. See [Schemas and DTOs](/core/dtos) and [Schema system](/internals/architecture/04-dto-system) for full derivation rules.
 
 ## allowed
 

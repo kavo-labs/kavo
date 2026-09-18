@@ -156,7 +156,7 @@ class BookItemDto {
   displayTitle = ""; // the initializer's value is never used — see below
 }
 
-@Kavo(Book, { dto: { item: BookItemDto } })
+@Kavo(Book, { schema: { output: { item: BookItemDto } } })
 ```
 
 The DTO's own `displayTitle = ""` initializer only registers the **key**: `DefaultSerializer` reads the _value_ straight off the real `Book` instance at response time (`source.displayTitle`), which is what invokes the getter. Leave `displayTitle` off the DTO and it never appears — with no DTO at all, the entity-derived default projection is `metadata.fields` only, and a getter is never in `metadata.fields`.

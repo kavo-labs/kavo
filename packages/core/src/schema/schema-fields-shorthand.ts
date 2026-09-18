@@ -1,5 +1,22 @@
 import type { SchemaClass, SchemaLike } from "./schema-class.js";
-import type { FieldsShorthand } from "../config/write-fields.js";
+import type { FieldPath } from "../types/field-path.js";
+
+/**
+ * An inline field-list shorthand for a `schema.<slot>` position (issue #386):
+ * `{ fields: [...] }` derives a projection/writable-field list without a
+ * hand-written class. `schemaClassFromFields` synthesizes a real
+ * `SchemaClass` from it at bootstrap (`resolveSchemaClassSlot`), tagged so
+ * downstream consumers (`@kavo/nest`'s Swagger generation) can tell it apart
+ * from a hand-registered class.
+ *
+ * `create`/`update` don't accept this shorthand directly (issue #388) —
+ * their writable-field list is the top-level `EntityConfig.create.fields` /
+ * `EntityConfig.update.fields` (`config/entity-config.ts`) instead.
+ * `patch`/`item`/`list` accept it here.
+ */
+export interface FieldsShorthand<Entity> {
+  readonly fields: readonly FieldPath<Entity, 1>[];
+}
 
 const SHORTHAND_FIELDS = new WeakMap<object, readonly string[]>();
 

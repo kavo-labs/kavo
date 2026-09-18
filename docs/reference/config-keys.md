@@ -172,17 +172,17 @@ Their own top-level objects rather than nested under a shared `allowed` block (i
 
 A single entity-default authorization function (ADR-0037), not a per-operation map. Resolved by its own "nearest scope wins" walk: falls back to `GlobalConfig.policy` (`createKavo({ policy })`), overridden per operation by `operations.<id>.policy`, including `operations.<id>.policy: false` to opt one operation out. No per-call override. Absent every scope, the operation runs unrestricted. See [CRUD operations](/core/crud-operations).
 
-### dto / operations (entity scope)
+### schema / operations (entity scope)
 
-| Key                       | Type                                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------------- |
-| `dto.create`              | DTO class                                                                                       |
-| `dto.update`              | DTO class                                                                                       |
-| `dto.patch`               | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `dto.query`               | DTO class                                                                                       |
-| `dto.item`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `dto.list`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `operations.<standardId>` | `boolean \| { handler?, meta?, dto?, policy?, + narrowed settings }`                            |
-| `operations.<customId>`   | `{ handler?, kind?, cardinality?, dto?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
+| Key                       | Type                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------- |
+| `schema.input.create`     | schema class \| validator                                                                          |
+| `schema.input.update`     | schema class \| validator                                                                          |
+| `schema.input.patch`      | schema class \| validator \| `{ fields: FieldPath<Entity,1>[] }`                                   |
+| `schema.input.query`      | schema class \| validator                                                                          |
+| `schema.output.item`      | schema class \| validator \| `{ fields: FieldPath<Entity,1>[] }`                                   |
+| `schema.output.list`      | schema class \| validator \| `{ fields: FieldPath<Entity,1>[] }`                                   |
+| `operations.<standardId>` | `boolean \| { handler?, meta?, schema?, policy?, + narrowed settings }`                            |
+| `operations.<customId>`   | `{ handler?, kind?, cardinality?, schema?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
 
-`dto.create`/`dto.update` accept a registered class only — their writable-field list is the top-level `create`/`update` keys above (issue #388). `patch`/`item`/`list` additionally accept the inline `{ fields }` shorthand (issue #386). A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
+`schema.input.create`/`update` accept a class or validator only, not the `{ fields }` shorthand — their writable-field list is the top-level `create`/`update` keys above (issue #388). `patch`/`item`/`list` additionally accept the inline `{ fields }` shorthand (issue #386). A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [Schemas and DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
