@@ -9,7 +9,7 @@ ADR-0055 introduced `schema` (a per-slot, input/output-split map of
 `KavoSchema` validators) as "the source of truth for DTO shape, input
 validation, and OpenAPI component generation," explicitly deciding `schema`
 "replaces `dto` outright — no coexistence period." In practice `schema`
-landed *alongside* `dto` (`entity-schema.ts`'s own module doc says so), with
+landed _alongside_ `dto` (`entity-schema.ts`'s own module doc says so), with
 `dto` deletion deferred as follow-up work — re-deriving `KavoService`'s
 typed surface, and migrating `@kavo/nest`/`@kavo/graphql`/`@kavo/mcp` off
 `dto`-reading. `KavoService`'s typed surface (`SchemaInputOf`/`SchemaOutputOf`/
@@ -60,7 +60,7 @@ Downstream code branches on which shape it got, by testing for `safeParse`
   variant exactly as it attaches to `dto` today.
 
 This merge is what satisfies "keep class-validator support" without a
-second config key: a class-validator-decorated class *is* a `SchemaClass`,
+second config key: a class-validator-decorated class _is_ a `SchemaClass`,
 just handed to `schema` instead of `dto`.
 
 ### `{ fields: [...] }` shorthand survives
@@ -76,14 +76,14 @@ variant above, not a third shape.
 `packages/core/src/dto/` is deleted. Its surviving pieces move to
 `packages/core/src/schema/`:
 
-| Today | Becomes |
-|---|---|
-| `dto/kavo-schema.ts` | `schema/kavo-schema.ts` (unchanged) |
-| `dto/entity-schema.ts` | `schema/entity-schema.ts` — `EntitySchemaMap`/`EntitySchema` slot types widen from `KavoSchema<T>` to `SchemaLike<T>` |
-| `dto/dto-shape.ts` (`dtoShapeKeys`) | `schema/schema-shape.ts` (`schemaShapeKeys`, same reflection logic, typed against `SchemaClass`) |
-| `dto/dto-fields-shorthand.ts` | `schema/schema-fields-shorthand.ts` |
+| Today                                                                                                                                          | Becomes                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dto/kavo-schema.ts`                                                                                                                           | `schema/kavo-schema.ts` (unchanged)                                                                                                                                                                                                                             |
+| `dto/entity-schema.ts`                                                                                                                         | `schema/entity-schema.ts` — `EntitySchemaMap`/`EntitySchema` slot types widen from `KavoSchema<T>` to `SchemaLike<T>`                                                                                                                                           |
+| `dto/dto-shape.ts` (`dtoShapeKeys`)                                                                                                            | `schema/schema-shape.ts` (`schemaShapeKeys`, same reflection logic, typed against `SchemaClass`)                                                                                                                                                                |
+| `dto/dto-fields-shorthand.ts`                                                                                                                  | `schema/schema-fields-shorthand.ts`                                                                                                                                                                                                                             |
 | `dto/dto.ts` (`Dto`, `DtoClass`, `DtoSlot`, `OperationDtoMap`, `DtoResolver`, `OperationDtoOverride`, `DtoInputOf`/`DtoOutputOf`/`DtoQueryOf`) | deleted outright — `SchemaClass` replaces `DtoClass`; `DtoResolver` folds into the existing `SchemaResolver`/`DefaultSchemaResolver`; the `Dto*Of` helpers are deleted, and `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf` lose their fallback branch to them |
-| `dto/default-dto-resolver.ts` | deleted — `DefaultSchemaResolver` (already exists) is the only resolver |
+| `dto/default-dto-resolver.ts`                                                                                                                  | deleted — `DefaultSchemaResolver` (already exists) is the only resolver                                                                                                                                                                                         |
 
 ## Package-by-package consequences
 
@@ -98,7 +98,7 @@ variant above, not a third shape.
   (registered write class vs. derived `create.fields`/`update.fields`)
   re-targets `schema.input.create`/`schema.input.update`.
 - `config/resolved-entity-config.ts`: drop `dto: DtoResolver`; `schema:
-  SchemaResolver` is the only resolver field.
+SchemaResolver` is the only resolver field.
 - `operations/default-operation-registry.ts` /
   `operations/operation-registry.ts`: `OperationDescriptor.input`/`output`/
   `query` (typed `DtoClass | null`) are deleted; only `schemaInput`/
@@ -108,7 +108,7 @@ variant above, not a third shape.
   validation) is unchanged; `resolveDtoOverride` is deleted.
 - `serialization/serializer.ts` / `default-serializer.ts`: `serializeItem`/
   `serializeList`/`deserialize` rename their `dto` parameter to `schema:
-  SchemaLike<T> | null`. Narrowing branches on kind: validator kind passes
+SchemaLike<T> | null`. Narrowing branches on kind: validator kind passes
   through unchanged here (the engine's later `safeParse` step is what
   narrows/validates it — unchanged from today's `schema.output`/
   `schema.input` path); class kind runs `schemaShapeKeys` reflection
@@ -137,7 +137,7 @@ variant above, not a third shape.
 
 - `kavo.decorator.ts`: swaps `DefaultDtoResolver`/`OperationDtoMap`/
   `bodyDtoFor` for their `schema`-module equivalents. The `design:
-  paramtypes` metadata trick (issue #281) that lets Nest's global
+paramtypes` metadata trick (issue #281) that lets Nest's global
   `ValidationPipe` find a `metatype` for a generated route's body now
   checks whether the resolved `schema.input.<slot>` is class-shaped before
   writing that metadata — a validator-kind schema gets no metatype (there

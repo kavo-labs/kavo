@@ -23,11 +23,13 @@
 ## Task 1: `SchemaClass` and the merged structural contract in core
 
 **Files:**
+
 - Create: `packages/core/src/schema/kavo-schema.ts` (moved from `packages/core/src/dto/kavo-schema.ts`, unchanged content)
 - Create: `packages/core/src/schema/schema-class.ts`
 - Test: `packages/core/tests/schema/schema-class.spec.ts`
 
 **Interfaces:**
+
 - Produces: `SchemaClass<Shape extends object = object>` (`type SchemaClass<Shape extends object = object> = new () => Shape`), `SchemaLike<T>` (`type SchemaLike<T> = KavoSchema<T> | SchemaClass<T>`), `isSchemaClass(value: unknown): value is SchemaClass` (structural check: `typeof value === "function"`).
 - Consumes: `KavoSchema<Output>` from `./kavo-schema.js` (moved, not yet deleted from `dto/` in this task — Task 2 deletes the old location).
 
@@ -107,11 +109,13 @@ git commit -m "feat(core): add SchemaClass/SchemaLike, the merged dto+schema con
 ## Task 2: Move and widen `entity-schema.ts`; delete `dto.ts`
 
 **Files:**
+
 - Modify: `packages/core/src/dto/entity-schema.ts` → move to `packages/core/src/schema/entity-schema.ts`
 - Delete: `packages/core/src/dto/dto.ts`
 - Test: `packages/core/tests/schema/entity-schema.spec.ts` (renamed/extended from the existing `packages/core/tests/dto/entity-schema.spec.ts` if one exists — check first)
 
 **Interfaces:**
+
 - Consumes: `KavoSchema`, `SchemaClass`, `SchemaLike`, `isSchemaClass` from Task 1.
 - Produces: `SchemaInputSlot`, `SchemaOutputSlot` (unchanged), `EntitySchemaMap<Entity, ...>` and `EntitySchema<Entity, ...>` now typed with `SchemaLike<T>` instead of `KavoSchema<T>` at every slot position, `SchemaResolver<Entity>`, `DefaultSchemaResolver<Entity>`, `OperationSchemaOverride<InputOut, OutputOut, QueryOut>` now with `SchemaLike<...>` fields, `SchemaInputOf<Ops, Id, Fallback>` / `SchemaOutputOf<Ops, Id, Fallback>` / `SchemaQueryOf<Ops, Id, Fallback>` with **no fallback branch to `Dto*Of`** — they resolve `Fallback` directly when no `schema` override exists.
 
@@ -144,18 +148,25 @@ function isSchemaShorthand(value: unknown): value is SchemaLike<unknown> {
 }
 ```
 
-  Use `isSchemaShorthand` everywhere `isKavoSchema` was used.
+Use `isSchemaShorthand` everywhere `isKavoSchema` was used.
+
 - Delete the `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf` fallback to `DtoInputOf`/`DtoOutputOf`/`DtoQueryOf`:
 
 ```ts
 export type SchemaInputOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly input: SchemaLike<infer Output> } } ? Output : Fallback;
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly input: SchemaLike<infer Output> } }
+    ? Output
+    : Fallback;
 
 export type SchemaOutputOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly output: SchemaLike<infer Output> } } ? Output : Fallback;
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly output: SchemaLike<infer Output> } }
+    ? Output
+    : Fallback;
 
 export type SchemaQueryOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly query: SchemaLike<infer Output> } } ? Output : Fallback;
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly query: SchemaLike<infer Output> } }
+    ? Output
+    : Fallback;
 ```
 
 - [ ] **Step 3: Move `OperationEntryOf`**
@@ -232,12 +243,14 @@ git commit -m "feat(core): widen EntitySchema slots to SchemaLike, delete dto.ts
 ## Task 3: Port `dtoShapeKeys` → `schemaShapeKeys` and the `{ fields }` shorthand
 
 **Files:**
+
 - Create: `packages/core/src/schema/schema-shape.ts` (ported from `packages/core/src/dto/dto-shape.ts`)
 - Create: `packages/core/src/schema/schema-fields-shorthand.ts` (ported from `packages/core/src/dto/dto-fields-shorthand.ts`)
 - Delete: `packages/core/src/dto/dto-shape.ts`, `packages/core/src/dto/dto-fields-shorthand.ts`
 - Test: `packages/core/tests/schema/schema-shape.spec.ts`, `packages/core/tests/schema/schema-fields-shorthand.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `SchemaClass`, `isSchemaClass` from Task 1.
 - Produces: `schemaShapeKeys(schema: SchemaClass | null): readonly string[] | null`, `shorthandFieldsOf(schemaClass: SchemaClass | null): readonly string[] | null`, `isFieldsShorthand(value: unknown): value is FieldsShorthand<unknown>`, `schemaClassFromFields(fields: readonly string[]): SchemaClass`, `resolveSchemaClassSlot<Entity>(entry: SchemaClass | FieldsShorthand<Entity> | undefined): SchemaClass | null`.
 
@@ -433,10 +446,12 @@ git commit -m "feat(core): port dtoShapeKeys and the fields shorthand into schem
 ## Task 4: `EntitySchemaMap`'s `patch`/`item`/`list` accept the `{ fields }` shorthand
 
 **Files:**
+
 - Modify: `packages/core/src/schema/entity-schema.ts`
 - Test: `packages/core/tests/schema/entity-schema.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `FieldsShorthand` from `../config/write-fields.js` (Task 2), `resolveSchemaClassSlot`, `isFieldsShorthand` from Task 3.
 - Produces: `SchemaInputMap`'s `patch` field and `SchemaOutputMap`'s `item`/`list` fields now typed `SchemaLike<X> | FieldsShorthand<Entity>` (not `create`/`update`/`query` — those stay `SchemaLike`-only, mirroring `dto.create`/`dto.update`'s historical class-only restriction from issue #388, and `query` never had a shorthand).
 
@@ -474,7 +489,7 @@ Expected: FAIL — `{ fields: [...] }` is rejected by the current type/resolutio
 
 - Import `FieldsShorthand` from `../config/write-fields.js` and `resolveSchemaClassSlot`, `isFieldsShorthand` from `./schema-fields-shorthand.js`.
 - Change `SchemaInputMap`'s `patch` field type to `KavoSchema<PatchOut> | SchemaClass<PatchOut & object> | FieldsShorthand<unknown>` — actually, to keep the generic parameterization clean, change the whole map's field types to accept `SchemaLike<X> | FieldsShorthand<Entity>` only for `patch` (input side) and `item`/`list` (output side); `create`/`update`/`query` stay `SchemaLike<X>`-only. Thread an `Entity` generic parameter through `SchemaInputMap`/`SchemaOutputMap` (they currently have none) so `FieldsShorthand<Entity>` can be spelled — add `Entity` as their first generic parameter and update `EntitySchemaMap`'s two call sites to pass it through.
-- In `DefaultSchemaResolver`'s constructor, after resolving `input.patch`/`output.item`/`output.list` from the map, run each through: if `isFieldsShorthand(value)`, replace it with `resolveSchemaClassSlot(value)` before storing; otherwise store the `SchemaLike` value unchanged. `isSchemaShorthand` (Task 2's whole-map-shorthand detector) must check `isFieldsShorthand` too, so a bare `{ fields: [...] }` passed as the *entire* `schema` argument is rejected the same way today's code rejects nonsense — actually per the spec, the whole-`schema`-argument shorthand is validator/class only, never `{ fields }` (that shorthand is per-slot, not whole-schema), so no change needed there — just don't let `isFieldsShorthand` objects fall into the `isSchemaShorthand` branch by mistake (`isFieldsShorthand` and `isSchemaShorthand` are mutually exclusive shapes already: one has `.fields`, the other has `.safeParse` or is a function).
+- In `DefaultSchemaResolver`'s constructor, after resolving `input.patch`/`output.item`/`output.list` from the map, run each through: if `isFieldsShorthand(value)`, replace it with `resolveSchemaClassSlot(value)` before storing; otherwise store the `SchemaLike` value unchanged. `isSchemaShorthand` (Task 2's whole-map-shorthand detector) must check `isFieldsShorthand` too, so a bare `{ fields: [...] }` passed as the _entire_ `schema` argument is rejected the same way today's code rejects nonsense — actually per the spec, the whole-`schema`-argument shorthand is validator/class only, never `{ fields }` (that shorthand is per-slot, not whole-schema), so no change needed there — just don't let `isFieldsShorthand` objects fall into the `isSchemaShorthand` branch by mistake (`isFieldsShorthand` and `isSchemaShorthand` are mutually exclusive shapes already: one has `.fields`, the other has `.safeParse` or is a function).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -495,11 +510,13 @@ git commit -m "feat(core): schema.input.patch/output.item/list accept { fields }
 ## Task 5: `DefaultSchemaResolver` absorbs `DefaultDtoResolver`'s write-fields fallback
 
 **Files:**
+
 - Modify: `packages/core/src/schema/entity-schema.ts`
 - Delete: `packages/core/src/dto/default-dto-resolver.ts`
 - Test: `packages/core/tests/schema/entity-schema.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `WriteFieldsConfig` from `../config/write-fields.js`.
 - Produces: `DefaultSchemaResolver`'s constructor gains a second parameter, `writable: { readonly create?: WriteFieldsConfig<Entity>; readonly update?: WriteFieldsConfig<Entity> } = {}` — when `schema.input.create`/`schema.input.update` names no class/validator, it falls back to a class synthesized from the top-level `create.fields`/`update.fields` array (today's `DefaultDtoResolver` behavior), exactly mirroring how `resolveEntityConfig` already passes `writable` fields alongside `dto` today.
 
@@ -597,12 +614,14 @@ git commit -m "feat(core): DefaultSchemaResolver absorbs the create/update writa
 ## Task 6: `resolve-entity-config.ts` — drop `DefaultDtoResolver`, retarget the derived-field check
 
 **Files:**
+
 - Modify: `packages/core/src/config/resolve-entity-config.ts`
 - Modify: `packages/core/src/config/resolved-entity-config.ts`
 - Modify: `packages/core/src/config/entity-config.ts`
 - Test: `packages/core/tests/config/resolve-entity-config.spec.ts` (locate exact path with `find packages/core/tests -iname "*resolve-entity-config*"`)
 
 **Interfaces:**
+
 - Consumes: `DefaultSchemaResolver`, `WritableSchemaFieldsConfig` from `../schema/entity-schema.js`; `schemaShapeKeys` from `../schema/schema-shape.js`; `schemaClassFromFields`, `resolveSchemaClassSlot` from `../schema/schema-fields-shorthand.js`; `WriteApply`, `WriteFieldsConfig`, `FieldsShorthand` from `./write-fields.js`.
 - Produces: `ResolvedEntityConfig.schema: SchemaResolver<Entity>` is the **only** resolver field (`dto: DtoResolver<Entity>` deleted). `EntityConfig.dto` deleted from `entity-config.ts`.
 
@@ -644,18 +663,22 @@ function rejectDerivedWriteSchemaKeys<Entity extends object>(
     [
       "create",
       "schema.input.create",
-      isSchemaClass(map.create) ? (map.create as SchemaClass) : createFields ? schemaClassFromFields(createFields) : null,
+      isSchemaClass(map.create)
+        ? (map.create as SchemaClass)
+        : createFields
+          ? schemaClassFromFields(createFields)
+          : null,
     ],
     [
       "update",
       "schema.input.update",
-      isSchemaClass(map.update) ? (map.update as SchemaClass) : updateFields ? schemaClassFromFields(updateFields) : null,
+      isSchemaClass(map.update)
+        ? (map.update as SchemaClass)
+        : updateFields
+          ? schemaClassFromFields(updateFields)
+          : null,
     ],
-    [
-      "patch",
-      "schema.input.patch",
-      resolveSchemaClassSlot(map.patch as Parameters<typeof resolveSchemaClassSlot>[0]),
-    ],
+    ["patch", "schema.input.patch", resolveSchemaClassSlot(map.patch as Parameters<typeof resolveSchemaClassSlot>[0])],
   ];
   for (const [slot, scope, schemaClass] of checks) {
     const declared = schemaShapeKeys(schemaClass)?.find((key) => names.has(key));
@@ -673,7 +696,7 @@ function rejectDerivedWriteSchemaKeys<Entity extends object>(
 }
 ```
 
-  (`isSchemaClass` needs importing from `../schema/schema-class.js`; note `map.create`/`map.update` here are values already known to be either a `SchemaClass` or a `KavoSchema` — the `isSchemaClass` guard is what skips the validator case per the paragraph above.) Update the call site that invokes this function to use the new name.
+(`isSchemaClass` needs importing from `../schema/schema-class.js`; note `map.create`/`map.update` here are values already known to be either a `SchemaClass` or a `KavoSchema` — the `isSchemaClass` guard is what skips the validator case per the paragraph above.) Update the call site that invokes this function to use the new name.
 
 - [ ] **Step 4: Update the existing test file for the renamed/retargeted function**
 
@@ -696,11 +719,13 @@ git commit -m "feat(core): drop dto from EntityConfig/ResolvedEntityConfig, reta
 ## Task 7: Operation registry — drop `input`/`output`/`query: DtoClass`, keep only `schemaInput`/`schemaOutput`/`schemaQuery`
 
 **Files:**
+
 - Modify: `packages/core/src/operations/operation-registry.ts`
 - Modify: `packages/core/src/operations/default-operation-registry.ts`
 - Test: `packages/core/tests/operations/default-operation-registry.spec.ts` (confirm path with `find`)
 
 **Interfaces:**
+
 - Produces: `OperationDescriptor<Entity>` no longer has `input`/`output`/`query: DtoClass | null` fields — only `schemaInput`/`schemaOutput`/`schemaQuery: SchemaLike<unknown> | null` remain. `resolveDtoOverride` deleted; `resolveSchemaOverride` (already existing per the spec) is the only per-operation override resolver, and its validated-fields check (which operation ids may declare `input`/`output`/`query`) is unchanged — it already runs against `schema`.
 
 - [ ] **Step 1: Read the current registry files in full**
@@ -757,11 +782,13 @@ git commit -m "feat(core): operation registry drops DtoClass fields, keeps schem
 ## Task 8: Serializer/Deserializer — rename `dto` param to `schema`, branch on validator vs. class
 
 **Files:**
+
 - Modify: `packages/core/src/serialization/serializer.ts`
 - Modify: `packages/core/src/serialization/default-serializer.ts`
 - Test: `packages/core/tests/serialization/default-serializer.spec.ts` (confirm path)
 
 **Interfaces:**
+
 - Produces: `Serializer.serializeItem<T>(entity, schema: SchemaLike<T & object> | null, context)`, `serializeList` likewise, `Deserializer.deserialize<T>(raw, schema: SchemaLike<T & object> | null, context)`. Narrowing logic: `isSchemaClass(schema) ? schemaShapeKeys(schema) : null` — a validator-kind schema contributes **no** narrowing at this layer (unchanged: the engine's own `safeParse` step, Task 10, is what narrows/validates it); a class-kind one narrows exactly as `dtoShapeKeys` did.
 
 - [ ] **Step 1: Write the failing test**
@@ -829,10 +856,12 @@ git commit -m "feat(core): serializer/deserializer narrow on class-shaped schema
 ## Task 9: `kavo-engine.ts` — delete `config.dto.resolve(...)` calls, branch `applyOutputSchema`/`deserializeWithSchema` on kind
 
 **Files:**
+
 - Modify: `packages/core/src/engine/kavo-engine.ts`
 - Test: `packages/core/tests/engine/kavo-engine.spec.ts` (and any other `engine/*.spec.ts` covering create/update/patch/find flows — search for `dto:` in `packages/core/tests/engine/`)
 
 **Interfaces:**
+
 - Consumes: `isSchemaClass` from `../schema/schema-class.js`.
 - Produces: `applyOutputSchema<T>(schema: SchemaLike<unknown> | null, value: T): T` only calls `.safeParse` when `!isSchemaClass(schema)`; for a class-shaped schema it returns `value` unchanged (narrowing for that case already happened in the serializer, Task 8). `deserializeWithSchema` likewise: skip `.safeParse`/`SchemaValidationException` entirely when the resolved schema is class-shaped — return the deserializer's own output as-is (matching `dto`'s "no validation subsystem attached" posture).
 
@@ -940,6 +969,7 @@ git commit -m "feat(core): engine validates only validator-shaped schemas, delet
 ## Task 10: `KavoService` typed surface and `index.ts` barrel
 
 **Files:**
+
 - Modify: `packages/core/src/service/kavo-service.ts`
 - Modify: `packages/core/src/service/default-kavo-service.ts`
 - Modify: `packages/core/src/service/custom-operation.ts`
@@ -947,6 +977,7 @@ git commit -m "feat(core): engine validates only validator-shaped schemas, delet
 - Test: `packages/core/tests/types/kavo-service.test-d.ts` (locate — this is a `*.test-d.ts` type-only test per repo convention, checked by `pnpm typecheck` not `pnpm test`)
 
 **Interfaces:**
+
 - Produces: `index.ts`'s public barrel drops every `Dto*`-named export (`Dto`, `DtoClass`, `DtoSlot`, `DtoResolver`, `OperationDtoMap`, `OperationDtoOverride`, `DtoInputOf`, `DtoOutputOf`, `DtoQueryOf`, `FieldsShorthand` if it was re-exported from the old location, `WriteApply`, `WriteFieldsConfig`) and adds the `schema` module's surface: `KavoSchema`, `SchemaOutput`, `SchemaClass`, `SchemaLike`, `EntitySchema`, `EntitySchemaMap`, `SchemaResolver`, `DefaultSchemaResolver`, `OperationSchemaOverride`, `SchemaInputOf`, `SchemaOutputOf`, `SchemaQueryOf`, `WritableSchemaFieldsConfig`, plus `WriteApply`/`WriteFieldsConfig`/`FieldsShorthand` re-pointed to `./config/write-fields.js`.
 
 - [ ] **Step 1: Confirm no runtime code changes needed in `kavo-service.ts`/`default-kavo-service.ts`/`custom-operation.ts`**
@@ -962,10 +993,7 @@ Locate `packages/core/tests/types/*.test-d.ts` files referencing `DtoInputOf`/`D
 Remove the `Dto*` export block (reported at lines 55-67, 304-305 in the research). Add:
 
 ```ts
-export type {
-  KavoSchema,
-  SchemaOutput,
-} from "./schema/kavo-schema.js";
+export type { KavoSchema, SchemaOutput } from "./schema/kavo-schema.js";
 export type { SchemaClass, SchemaLike } from "./schema/schema-class.js";
 export type {
   EntitySchema,
@@ -1009,16 +1037,18 @@ git commit -m "feat(core): retarget KavoService typed surface and public barrel 
 ## Task 11: `@kavo/nest` — `kavo.decorator.ts`'s `ValidationPipe` wiring moves to `schema`
 
 **Files:**
+
 - Modify: `packages/frameworks/nest/src/kavo.decorator.ts`
 - Test: `packages/frameworks/nest/tests/kavo.decorator.spec.ts` (confirm path)
 
 **Interfaces:**
+
 - Consumes: `DefaultSchemaResolver`, `SchemaResolver`, `isSchemaClass` from `@kavo/core`.
 - Produces: `defineRoute`/`applyRouteDecorators`/`applyParamDecorators` take a `schemaResolver?: SchemaResolver<object>` parameter (renamed from `dtoResolver?: DtoResolver<object>`); `applyParamDecorators`'s `design:paramtypes` write only happens when `bodyDtoFor`'s resolved value is class-shaped (`isSchemaClass`), never for a validator.
 
 - [ ] **Step 1: Read the current `bodyDtoFor` definition**
 
-Run: `sed -n '1690,1720p' packages/frameworks/nest/src/swagger.ts` (it's exported from `swagger.ts`, imported into `kavo.decorator.ts` per line 56 of the earlier read) to get its exact current signature before editing — Task 12 also touches this function, so coordinate: this task only needs to consume its *new* return type (`SchemaLike<object> | null` instead of `ClassRef | null`), and Task 12 is the one that actually changes `bodyDtoFor`'s body. Do this task second if execuing serially, after Task 12 — reorder if using subagent-driven execution so `bodyDtoFor`'s signature is already updated when this task runs. **If executing tasks in order, do Task 12 before Task 11.**
+Run: `sed -n '1690,1720p' packages/frameworks/nest/src/swagger.ts` (it's exported from `swagger.ts`, imported into `kavo.decorator.ts` per line 56 of the earlier read) to get its exact current signature before editing — Task 12 also touches this function, so coordinate: this task only needs to consume its _new_ return type (`SchemaLike<object> | null` instead of `ClassRef | null`), and Task 12 is the one that actually changes `bodyDtoFor`'s body. Do this task second if execuing serially, after Task 12 — reorder if using subagent-driven execution so `bodyDtoFor`'s signature is already updated when this task runs. **If executing tasks in order, do Task 12 before Task 11.**
 
 - [ ] **Step 2: Write the failing test**
 
@@ -1069,7 +1099,7 @@ if (bodyDto === null) {
 }
 ```
 
-  to:
+to:
 
 ```ts
 if (bodyIndex === -1 || schemaResolver === undefined) {
@@ -1081,7 +1111,7 @@ if (bodySchema === null || !isSchemaClass(bodySchema)) {
 }
 ```
 
-  and rename `paramTypes[bodyIndex] = bodyDto;` to `paramTypes[bodyIndex] = bodySchema;`. Update the doc comment above `applyParamDecorators` (the one explaining issue #281) to say "a class-shaped `schema.input.<slot>`" instead of "a registered `dto.create`/`dto.update`/`dto.patch` class," and add one sentence noting a validator-shaped `schema.input.<slot>` intentionally writes no metadata — `ValidationPipe` has nothing to bind to, and engine-level `safeParse` validation covers it instead.
+and rename `paramTypes[bodyIndex] = bodyDto;` to `paramTypes[bodyIndex] = bodySchema;`. Update the doc comment above `applyParamDecorators` (the one explaining issue #281) to say "a class-shaped `schema.input.<slot>`" instead of "a registered `dto.create`/`dto.update`/`dto.patch` class," and add one sentence noting a validator-shaped `schema.input.<slot>` intentionally writes no metadata — `ValidationPipe` has nothing to bind to, and engine-level `safeParse` validation covers it instead.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -1105,10 +1135,12 @@ git commit -m "feat(nest): ValidationPipe metadata wiring reads class-shaped sch
 ## Task 12: `@kavo/nest` — `swagger.ts`'s `bodyDtoFor`/`schemaFromDto`/OpenAPI generation merge onto `schema`
 
 **Files:**
+
 - Modify: `packages/frameworks/nest/src/swagger.ts`
 - Test: `packages/frameworks/nest/tests/swagger.spec.ts` (confirm path)
 
 **Interfaces:**
+
 - Produces: `bodyDtoFor(descriptor: OperationDescriptor<object>, schemaResolver: SchemaResolver<object>): SchemaLike<object> | null` (renamed parameter and resolver type; return type widens from `ClassRef | null` to `SchemaLike<object> | null`). `schemaFromDto` is renamed `openApiSchemaFor` and gains a branch: class-shaped input → today's instantiate-and-reflect behavior (renamed, unchanged logic); validator-shaped input → call `.toJSONSchema?.()` if present, else fall back to the entity-derived default (the same fallback an unconfigured slot already takes).
 
 - [ ] **Step 1: Read `swagger.ts` in full around every reported line (190-222, 338, 352, 368, 1013, 1252, 1278-1332, 1351-1424, 1487-1494, 1575-1650, 1694-1710)**
@@ -1125,7 +1157,9 @@ it("generates the response schema by reflecting a class-shaped schema.output.ite
     id = 0;
     title = "";
   }
-  const document = buildOpenApiDocument(BookController /* with @Kavo(Book, { schema: { output: { item: BookItemSchema } } }) */);
+  const document = buildOpenApiDocument(
+    BookController /* with @Kavo(Book, { schema: { output: { item: BookItemSchema } } }) */,
+  );
   const responseSchema = document.paths["/books/{id}"].get.responses["200"].content["application/json"].schema;
   expect(responseSchema.properties).toHaveProperty("id");
   expect(responseSchema.properties).toHaveProperty("title");
@@ -1164,11 +1198,12 @@ function openApiSchemaFor(schema: SchemaLike<object> | null, entityName: string)
     // ...today's schemaFromDto body, unchanged: instantiate `schema`, reflect own-enumerable keys, build the OpenAPI object schema...
     return classShapeToOpenApiSchema(schema, entityName); // keep whatever the existing implementation was actually named internally — this line documents intent, not a new helper to invent if one doesn't already exist as a separable function; if `schemaFromDto`'s body wasn't already factored into a sub-helper, just keep its existing logic inline under this branch
   }
-  return schema.toJSONSchema?.() as OpenApiSchema | undefined ?? null;
+  return (schema.toJSONSchema?.() as OpenApiSchema | undefined) ?? null;
 }
 ```
 
-  Update every call site of `schemaFromDto` (lines 1252, 1326, 1332, 1640 per the earlier grep) to call `openApiSchemaFor` instead, and where a caller previously fell back to the entity-derived default when `schemaFromDto` returned `null` for an unconfigured slot, confirm that same fallback still fires when `openApiSchemaFor` returns `null` for a validator with no `toJSONSchema` — this should already be the existing control flow (no `dto` → entity-derived default), just re-triggered by a different `null`-producing condition now.
+Update every call site of `schemaFromDto` (lines 1252, 1326, 1332, 1640 per the earlier grep) to call `openApiSchemaFor` instead, and where a caller previously fell back to the entity-derived default when `schemaFromDto` returned `null` for an unconfigured slot, confirm that same fallback still fires when `openApiSchemaFor` returns `null` for a validator with no `toJSONSchema` — this should already be the existing control flow (no `dto` → entity-derived default), just re-triggered by a different `null`-producing condition now.
+
 - Update `successBodyFor`'s signature (line 1278) — it currently takes both `dtoResolver: DtoResolver<object>` and, per the spec excerpt at line 218-222, an already-separate `schemaResolver` — collapse to the single `schemaResolver: SchemaResolver<object>` parameter, and update its body's `dtoResolver.resolve(slot, descriptor.id)` (line 1321) to `schemaResolver.resolveOutput(slot, descriptor.id)`.
 - Update `applyBodySchemaDocs`/wherever line 1487-1494's `dtoResolver.resolve(slot, descriptor.id) !== null` check lives, retargeting to `schemaResolver.resolveInput(slot, descriptor.id) !== null` (or `resolveOutput`, matching whichever slot kind that check was already gating).
 - Sweep every remaining `dto.output`/`dto.input`/"DTO" wording in doc comments and error/warning strings in this file to `schema.output`/`schema.input`/"schema".
@@ -1193,11 +1228,13 @@ git commit -m "feat(nest): swagger generation merges dto/schema resolvers, adds 
 ## Task 13: `@kavo/nest` — `kavo.module.ts` and `register-schemas.ts`
 
 **Files:**
+
 - Modify: `packages/frameworks/nest/src/kavo.module.ts`
 - Modify: `packages/frameworks/nest/src/register-schemas.ts`
 - Test: `packages/frameworks/nest/tests/kavo.module.spec.ts` (confirm path)
 
 **Interfaces:**
+
 - Produces: `kavo.module.ts`'s `dtoResolver` (built at lines ~398, ~450 per the earlier grep) becomes the same merged `schemaResolver: SchemaResolver<object>` pattern from Task 12 — no separate `dto`-only resolver remains anywhere in `@kavo/nest`.
 
 - [ ] **Step 1: Read the two reported construction sites in full**
@@ -1250,6 +1287,7 @@ git commit -m "feat(nest): kavo.module.ts's override-docs fallback reads schema,
 ## Task 14: `@kavo/graphql`, `@kavo/mcp`, `@kavo/next` — cosmetic wording, `@kavo/orms/*` test fixtures
 
 **Files:**
+
 - Modify: `packages/protocols/graphql/src/schema.ts`
 - Modify: `packages/frameworks/next/src/openapi/entity-schemas.ts`
 - Modify: `packages/orms/typeorm/tests/soft-delete.spec.ts`, `packages/orms/typeorm/tests/adapter.spec.ts`
@@ -1287,6 +1325,7 @@ git commit -m "chore: reword dto references to schema in graphql/next docs and O
 ## Task 15: Workspace-wide gate, ADR addendum, docs sweep
 
 **Files:**
+
 - Modify: `docs/internals/adr/0055-schema-is-the-source-of-truth-for-dto-and-validation.md`
 - Modify: every `docs/**/*.md` file matching `dto:`/`dto.create`/`dto.item`/etc. config examples (find with `grep -rl "dto:" docs/ --include=*.md`)
 - Modify: `.claude/skills/add-config-key/*`, `.claude/skills/add-operation/*` if they reference `dto` as a worked example (find with `grep -rl "dto" .claude/skills/add-config-key .claude/skills/add-operation`)
