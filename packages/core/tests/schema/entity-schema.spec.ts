@@ -240,4 +240,14 @@ describe("DefaultSchemaResolver's create/update writable-fields fallback", () =>
     });
     expect(resolver.resolveInput("create", "createOne")).toBeNull();
   });
+
+  it("schema.input.patch inherits the update.fields fallback synthesized for schema.input.update", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      update: { fields: ["name"] },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("update", "updateOne") as unknown as SchemaClass)).toEqual([
+      "name",
+    ]);
+    expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
+  });
 });

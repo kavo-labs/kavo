@@ -223,12 +223,13 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     // declared return type stays `KavoSchema<unknown> | null` until Task 9
     // teaches `kavo-engine.ts` to branch on kind — see the interface doc
     // comment above.
+    const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
     this.input = Object.freeze({
       create: (input.create ?? writableFieldsToSchemaClass(writable.create?.fields) ?? null) as
         | KavoSchema<unknown>
         | null,
-      update: (update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? null) as KavoSchema<unknown> | null,
-      patch: (patch ?? update ?? null) as KavoSchema<unknown> | null,
+      update: (resolvedUpdate ?? null) as KavoSchema<unknown> | null,
+      patch: (patch ?? resolvedUpdate ?? null) as KavoSchema<unknown> | null,
       query: (input.query ?? null) as KavoSchema<unknown> | null,
     });
     this.output = Object.freeze({
