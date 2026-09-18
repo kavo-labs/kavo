@@ -26,7 +26,7 @@ positions (`DtoInputOf<TOps, "createOne", TCreateDto>`, and the `output`/
 `query` equivalents, doc 4 §8) can read back the literal DTO classes a
 caller registered under `operations.<id>.dto`, falling back to the slot
 generic above when that operation declares no override of its own — the
-same "constrain, don't fix" shape `EntityConfig.allowed.selectable`
+same "constrain, don't fix" shape `EntityConfig.select.fields`
 already uses for `NoInfer<Computed>`.
 
 It carries a second job since issue #145. `run`'s typed positions
@@ -123,7 +123,7 @@ With `QueryContext`'s default `Entity = unknown` it degrades to `string`,
 so untyped callers keep the previous `readonly string[]` contract.
 
 The runtime gates are unchanged and still authoritative: the relation
-registry's `includable` flag and the include-depth budget.
+registry's `include.fields` flag and the include-depth budget.
 
 ### `FieldSelectionInput` — three spellings, one normalized form
 

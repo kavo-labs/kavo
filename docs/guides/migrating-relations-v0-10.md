@@ -4,17 +4,29 @@ Before v0.10, `relations.edges.<name>.includable: true` was how you opted a rela
 
 To migrate:
 
-1. Move each opted-in relation name to `allowed.includable` (see [Allowed](/features/allowed)).
+1. Move each opted-in relation name to `include.fields` (see [Allowed](/features/allowed)).
 2. Move any `maxDepth` or `strategy` to `EntityConfig.relations.<name>.read` (issue #404 — the `relations.edges` `KavoSettings` key is gone; see [Relations](/features/relations)).
 
-`allowed.includable` is entity-scope-only config; there's no global `defaults` and no per-operation override. So a permission that used to come from a global default now needs its own `createCrud`/`@Kavo` registration per entity.
+`include.fields` is entity-scope-only config; there's no global default and no per-operation override. So a permission that used to come from a global default now needs its own `createCrud`/`@Kavo` registration per entity.
 
 ## `defaultInclude` moved again, in v0.18 (issue #375)
 
-`relations.edges.<name>.defaultInclude` — the per-relation boolean this guide's earlier revisions covered — is also gone now, replaced by a flat `defaults.include` list ([ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)): `relations.edges.posts.defaultInclude: true` becomes `defaults: { include: ["posts"] }`, alongside the same `allowed.includable` grant as before.
+`relations.edges.<name>.defaultInclude` — the per-relation boolean this guide's earlier revisions covered — is also gone now, replaced (at the time) by a flat `defaults.include` list ([ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)): `relations.edges.posts.defaultInclude: true` became `defaults: { include: ["posts"] }`, alongside the same includable grant as before.
 
-## `defaults.include` at global scope needs extra care
+## `include.fields`/`include.default` replace `allowed`/`defaults` entirely (issue #386)
 
-`allowed.includable` cannot be set globally — it is entity-scope-only config, same as before. A global `defaults.include: ["posts"]` with no entity-level `allowed.includable` naming that relation crashes at bootstrap (`ConfigurationException`) on every entity that has a relation of that name. It is not a silent no-op.
+The `allowed`/`defaults` `KavoSettings` blocks this guide described above are themselves gone now, folded into per-axis `EntityConfig` blocks (issue #386, see [Config keys](/reference/config-keys)):
 
-Move `defaults.include` down to each entity's own `defaults`, alongside that entity's `allowed.includable` grant, instead of leaving it at global scope.
+- `allowed.includable` → `include.fields`
+- `defaults.include` → `include.default`
+
+```ts
+@Kavo(Book, {
+  include: {
+    fields: ["author", "tags"],
+    default: ["author"],
+  },
+})
+```
+
+Unlike the old `defaults.include`, `include.default` is `EntityConfig` — entity scope only, with no global default and no per-operation override, so the global-scope caveat this guide used to carry (a global `defaults.include` needing a matching per-entity `allowed.includable` grant) no longer applies: there is no global scope to set it at in the first place.

@@ -114,7 +114,9 @@ export class Book {
 
 ```ts
 @Kavo(Book, {
-  allowlists: { filterable: ["titleLower"], sortable: ["titleLower"], selectable: ["id", "title", "titleLower"] },
+  filter: { fields: ["titleLower"] },
+  sort: { fields: ["titleLower"] },
+  select: { fields: ["id", "title", "titleLower"] },
 })
 ```
 
@@ -122,7 +124,7 @@ export class Book {
 GET /books?filter[titleLower][eq]=dune&sort=titleLower
 ```
 
-A derived field is **opt-in** to `filterable`/`sortable`/`selectable`, the same rule a relation follows — leave it off `allowlists` and it never appears, is never filterable, and is never sortable. `SELECT` needs no extra config beyond `selectable`: since it's a real TypeORM column, ordinary entity hydration already includes it.
+A derived field is **opt-in** to `filter.fields`/`sort.fields`/`select.fields`, the same rule a relation follows — leave it off all three and it never appears, is never filterable, and is never sortable. `SELECT` needs no extra config beyond `select.fields`: since it's a real TypeORM column, ordinary entity hydration already includes it.
 
 ### The other way: a plain class getter
 
@@ -147,7 +149,7 @@ export class Book {
 }
 ```
 
-A getter carries no `FieldMetadata` — Kavo's metadata seam only ever sees `@Column`/`@VirtualColumn`, so there is nothing to opt into `allowlists` and no way to filter or sort on it. It reaches a response only through a **registered DTO** that names it:
+A getter carries no `FieldMetadata` — Kavo's metadata seam only ever sees `@Column`/`@VirtualColumn`, so there is nothing to opt into `filter.fields`/`sort.fields`/`select.fields` and no way to filter or sort on it. It reaches a response only through a **registered DTO** that names it:
 
 ```ts
 class BookItemDto {
