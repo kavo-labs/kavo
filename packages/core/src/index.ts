@@ -66,7 +66,7 @@ export type {
   DtoQueryOf,
 } from "./dto/dto.js";
 export { shorthandFieldsOf } from "./dto/dto-fields-shorthand.js";
-export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./dto/kavo-schema.js";
+export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./schema/kavo-schema.js";
 export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 
 // ── Schema (ADR-0055) ────────────────────────────────────────────────

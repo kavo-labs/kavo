@@ -3,7 +3,7 @@ import type { OperationCardinality, OperationId, OperationKind, StandardOperatio
 import type { OperationHandler } from "./operation-handler.js";
 import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
 import type { DtoClass } from "../dto/dto.js";
-import type { KavoSchema } from "../dto/kavo-schema.js";
+import type { KavoSchema } from "../schema/kavo-schema.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
 /**

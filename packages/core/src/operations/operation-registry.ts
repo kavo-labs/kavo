@@ -1,7 +1,7 @@
 import type { OperationCardinality, OperationId, OperationKind } from "./operation.js";
 import type { OperationHandler, OperationMetadata } from "./operation-handler.js";
 import type { DtoClass } from "../dto/dto.js";
-import type { KavoSchema } from "../dto/kavo-schema.js";
+import type { KavoSchema } from "../schema/kavo-schema.js";
 import type { RealtimeEventId } from "../realtime/realtime-event.js";
 
 /** One registered operation: the unit the engine dispatches through. */

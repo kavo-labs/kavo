@@ -1,4 +1,4 @@
-import type { KavoSchema } from "./kavo-schema.js";
+import type { KavoSchema } from "../schema/kavo-schema.js";
 import type { OperationEntryOf, DtoInputOf, DtoOutputOf, DtoQueryOf } from "./dto.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
