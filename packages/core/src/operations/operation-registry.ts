@@ -1,6 +1,6 @@
 import type { OperationCardinality, OperationId, OperationKind } from "./operation.js";
 import type { OperationHandler, OperationMetadata } from "./operation-handler.js";
-import type { KavoSchema } from "../schema/kavo-schema.js";
+import type { SchemaLike } from "../schema/schema-class.js";
 import type { RealtimeEventId } from "../realtime/realtime-event.js";
 
 /** One registered operation: the unit the engine dispatches through. */
@@ -20,9 +20,9 @@ export interface OperationDescriptor<Entity = unknown, Input = unknown, Output =
    * `schema.input`/`schema.output`/`schema.query` for this operation only,
    * or `null` for the slot default (`config.schema.resolveInput`/`resolveOutput`).
    */
-  readonly schemaInput?: KavoSchema<unknown> | null;
-  readonly schemaOutput?: KavoSchema<unknown> | null;
-  readonly schemaQuery?: KavoSchema<unknown> | null;
+  readonly schemaInput?: SchemaLike<object> | null;
+  readonly schemaOutput?: SchemaLike<object> | null;
+  readonly schemaQuery?: SchemaLike<object> | null;
   readonly meta: OperationMetadata;
   /**
    * The realtime event a **custom** operation's write publishes as (issue

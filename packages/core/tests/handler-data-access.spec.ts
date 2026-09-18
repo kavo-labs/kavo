@@ -55,7 +55,7 @@ const banConfig = {
     createOne: true,
     findOne: true,
     banOne: {
-      dto: { input: BanUserDto },
+      schema: { input: BanUserDto },
       handler: {
         async execute(input: { id: EntityId; body: { reason: string } }, context: KavoContext<User>) {
           const existing = await context.repository.findOneById(input.id, null, context);

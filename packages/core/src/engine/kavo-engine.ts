@@ -1,8 +1,7 @@
 import type { KavoAppContext, KavoContext } from "../context/kavo-context.js";
 import type { KavoRequest } from "../context/kavo-request.js";
 import type { KavoResponse } from "../context/kavo-response.js";
-import type { DtoClass, DtoSlot } from "../dto/dto.js";
-import type { KavoSchema } from "../schema/kavo-schema.js";
+import { isSchemaClass, type SchemaClass, type SchemaLike } from "../schema/schema-class.js";
 import type { SchemaInputSlot } from "../schema/entity-schema.js";
 import type { ListMetaDto } from "../dto/list-result.js";
 import type { Deserializer, Serializer } from "../serialization/serializer.js";
@@ -39,7 +38,7 @@ import type { ApplyArgs, ResolvedApply } from "../policy/kavo-apply.js";
 import type { FilterExpression } from "../query/filter.js";
 import { parseJsonPatchDocument } from "./json-patch.js";
 import { nameList } from "../errors/message-hints.js";
-import { dtoShapeKeys } from "../dto/dto-shape.js";
+import { schemaShapeKeys } from "../schema/schema-shape.js";
 import { isStandardOperationId } from "../operations/default-operation-registry.js";
 import { QueryNormalizer } from "../query/query-normalizer.js";
 import { hasKeyset, isSincePagination } from "../query/pagination.js";
@@ -126,12 +125,12 @@ const UNEVALUABLE = {
 } as const;
 
 /**
- * Which DTO slot feeds each standard write operation's input. `Partial` is
- * deliberate — reads and the bodyless writes take no input DTO — but the
- * key is the union, so a misspelled id fails the build instead of quietly
- * adding an entry nothing will ever read.
+ * Which schema input slot feeds each standard write operation's input.
+ * `Partial` is deliberate — reads and the bodyless writes take no input
+ * shape — but the key is the union, so a misspelled id fails the build
+ * instead of quietly adding an entry nothing will ever read.
  */
-const INPUT_SLOTS: Readonly<Partial<Record<StandardOperationId, DtoSlot>>> = {
+const INPUT_SLOTS: Readonly<Partial<Record<StandardOperationId, SchemaInputSlot>>> = {
   createOne: "create",
   updateOne: "update",
   patchOne: "patch",
@@ -806,9 +805,13 @@ export class KavoEngine<Entity extends object> {
    * the value already projected rather than rejecting something Kavo itself
    * produced (nothing about it needs rejecting, per ADR-0055's validation-
    * timing decision).
+   *
+   * A class-shaped schema carries no `safeParse` — its narrowing already
+   * happened in the serializer's own projection (Task 8) — so it is
+   * returned unchanged here rather than treated as "no schema."
    */
-  private applyOutputSchema<T>(schema: KavoSchema<unknown> | null, value: T): T {
-    if (schema === null) {
+  private applyOutputSchema<T>(schema: SchemaLike<object> | null, value: T): T {
+    if (schema === null || isSchemaClass(schema)) {
       return value;
     }
     const result = schema.safeParse(value);
@@ -945,11 +948,10 @@ export class KavoEngine<Entity extends object> {
     // return" (ADR-0020) means the representation `findOne`'s own
     // registry entry actually serves, not the entity's root `item` slot.
     const findOneDescriptor = registry.get("findOne");
-    const itemDto =
-      (findOneDescriptor?.output as DtoClass<object> | null) ??
-      (config.dto.resolve("item", "findOne") as DtoClass<object> | null);
-    const itemSchema = findOneDescriptor?.schemaOutput ?? config.schema.resolveOutput("item", "findOne");
-    const item = this.applyOutputSchema(itemSchema, serializer.serializeItem(entity, itemDto, context));
+    const itemSchema =
+      (findOneDescriptor?.schemaOutput as SchemaLike<object> | null | undefined) ??
+      config.schema.resolveOutput("item", "findOne");
+    const item = this.applyOutputSchema(itemSchema, serializer.serializeItem(entity, itemSchema, context));
     return computeEtag(item);
   }
 
@@ -991,7 +993,6 @@ export class KavoEngine<Entity extends object> {
       // Structural, not per-call (ADR-0052): `identifier` is excluded from
       // every operation's settings `Allowed` union, so it never varies here.
       identifierField: config.identifierField,
-      dto: config.dto,
       schema: config.schema,
       relations: config.relations,
       // Same reasoning: transports are resolved once per `createKavo` root,
@@ -1037,7 +1038,7 @@ export class KavoEngine<Entity extends object> {
     // normalized query. A `safeParse` failure raises `SchemaValidationException`
     // the same way a body's does.
     const schema = descriptor.schemaQuery ?? config.schema.resolveInput("query", descriptor.id);
-    if (schema !== null) {
+    if (schema !== null && !isSchemaClass(schema)) {
       const result = schema.safeParse(normalized);
       if (!result.success) {
         throw new SchemaValidationException(
@@ -1153,10 +1154,9 @@ export class KavoEngine<Entity extends object> {
     // A custom id is simply absent from the table; the cast narrows for the
     // lookup and `noUncheckedIndexedAccess` keeps the miss visible.
     const slot = INPUT_SLOTS[descriptor.id as StandardOperationId];
-    const dto = descriptor.input ?? (slot !== undefined ? config.dto.resolve(slot, descriptor.id) : null);
     const schema =
-      descriptor.schemaInput ??
-      (slot !== undefined ? config.schema.resolveInput(slot as SchemaInputSlot, descriptor.id) : null);
+      (descriptor.schemaInput as SchemaLike<object> | null | undefined) ??
+      (slot !== undefined ? config.schema.resolveInput(slot, descriptor.id) : null);
 
     switch (descriptor.id) {
       case "findOne":
@@ -1169,10 +1169,10 @@ export class KavoEngine<Entity extends object> {
       case "updateOne":
         return {
           id: this.coerceId(request.id),
-          data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context),
+          data: this.deserializeWithSchema(request.body, schema, descriptor, context),
         };
       case "patchOne":
-        return this.resolvePatchOneInput(request, dto, schema, descriptor, context);
+        return this.resolvePatchOneInput(request, schema, descriptor, context);
       default: {
         // A custom read (issue #145) follows the same rule the two standard
         // reads above do: no request body exists to deserialize, so the
@@ -1209,7 +1209,7 @@ export class KavoEngine<Entity extends object> {
         // createOne, and every custom write: the deserialized body, plus
         // the request id when one is present. createOne never carries an
         // id, so this falls through to the body alone there.
-        const body = this.deserializeWithSchema(request.body, dto, schema, descriptor, context);
+        const body = this.deserializeWithSchema(request.body, schema, descriptor, context);
         return request.id === null ? body : { id: this.coerceId(request.id), body };
       }
     }
@@ -1232,13 +1232,12 @@ export class KavoEngine<Entity extends object> {
    */
   private deserializeWithSchema(
     raw: unknown,
-    dto: DtoClass<object> | null,
-    schema: KavoSchema<unknown> | null,
+    schema: SchemaLike<object> | null,
     descriptor: OperationDescriptor<Entity>,
     context: KavoContext<Entity>,
   ): unknown {
-    const candidate = this.deps.deserializer.deserialize(raw, dto, context);
-    if (schema === null) {
+    const candidate = this.deps.deserializer.deserialize(raw, schema, context);
+    if (schema === null || isSchemaClass(schema)) {
       return candidate;
     }
     const result = schema.safeParse(candidate);
@@ -1270,8 +1269,7 @@ export class KavoEngine<Entity extends object> {
    */
   private resolvePatchOneInput(
     request: KavoRequest<Entity>,
-    dto: DtoClass<object> | null,
-    schema: KavoSchema<unknown> | null,
+    schema: SchemaLike<object> | null,
     descriptor: OperationDescriptor<Entity>,
     context: KavoContext<Entity>,
   ): unknown {
@@ -1281,7 +1279,7 @@ export class KavoEngine<Entity extends object> {
     // (`.all()` allocates a fresh array per call) — the relation scan below
     // only runs for the rare array-body request.
     if (!Array.isArray(request.body)) {
-      return { id, data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context) };
+      return { id, data: this.deserializeWithSchema(request.body, schema, descriptor, context) };
     }
     // Since issue #404 the strategy is per-relation only (there is no
     // entity-level `arrayMutation` default left to consult): an array
@@ -1293,7 +1291,7 @@ export class KavoEngine<Entity extends object> {
     // writable field, not just that relation.
     const jsonPatchRelations = context.config.relations.all().filter((relation) => relation.write === "jsonPatch");
     if (jsonPatchRelations.length === 0) {
-      return { id, data: this.deserializeWithSchema(request.body, dto, schema, descriptor, context) };
+      return { id, data: this.deserializeWithSchema(request.body, schema, descriptor, context) };
     }
 
     const writeOptedRelations = new Set(jsonPatchRelations.map((relation) => relation.name));
@@ -1304,7 +1302,7 @@ export class KavoEngine<Entity extends object> {
       operation: context.operation,
       correlationId: context.correlationId,
     });
-    const data = this.deserializeWithSchema(parsed.fields, dto, schema, descriptor, context);
+    const data = this.deserializeWithSchema(parsed.fields, schema, descriptor, context);
     const relationEntries = Object.entries(parsed.relations);
     if (relationEntries.length === 0) {
       return { id, data };
@@ -1531,27 +1529,20 @@ export class KavoEngine<Entity extends object> {
     // the same way — nothing is special-cased per verb (ADR-0006).
     if (descriptor.cardinality === "many") {
       const listResult = result as FindManyResult<Entity>;
-      const listDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("list", descriptor.id);
-      const listSchema = descriptor.schemaOutput ?? config.schema.resolveOutput("list", descriptor.id);
+      const listSchema =
+        (descriptor.schemaOutput as SchemaLike<object> | null | undefined) ??
+        config.schema.resolveOutput("list", descriptor.id);
       const pagination: Pagination<Entity> = context.query?.pagination ?? { limit: 0, offset: 0 };
       const listMeta = this.listMeta(listResult, context);
-      const items = serializer.serializeList(listResult.entities, listDto, context);
+      const items = serializer.serializeList(listResult.entities, listSchema, context);
       // First row only: this catches a declaration mistake, which is the
       // same for every row, and checking all of them would be per-request
       // work for a bootstrap-class error.
-      validateProjectedResult(
-        items[0],
-        listResult.entities[0],
-        listDto as DtoClass | null,
-        descriptor,
-        context,
-        "list",
-      );
-      // ADR-0055: `schema.output.list` narrows/shapes each row the way
-      // `dto.list`'s field set did — applied after projection, never
-      // re-validated (a `safeParse` failure here falls back to the
-      // already-projected row rather than rejecting a value Kavo itself
-      // produced).
+      validateProjectedResult(items[0], listResult.entities[0], listSchema, descriptor, context, "list");
+      // ADR-0055: `schema.output.list` narrows/shapes each row — applied
+      // after projection, never re-validated (a `safeParse` failure here
+      // falls back to the already-projected row rather than rejecting a
+      // value Kavo itself produced).
       const shapedItems = listSchema === null ? items : items.map((item) => this.applyOutputSchema(listSchema, item));
       return {
         operation: descriptor.id,
@@ -1589,11 +1580,12 @@ export class KavoEngine<Entity extends object> {
       return { operation: descriptor.id, item: null, list: null, etag: null, notModified: false };
     }
 
-    const itemDto = (descriptor.output as DtoClass<object> | null) ?? config.dto.resolve("item", descriptor.id);
-    const itemSchema = descriptor.schemaOutput ?? config.schema.resolveOutput("item", descriptor.id);
+    const itemSchema =
+      (descriptor.schemaOutput as SchemaLike<object> | null | undefined) ??
+      config.schema.resolveOutput("item", descriptor.id);
     const serializeContext = this.contextForArrayMutationResponse(descriptor, context);
-    const item = serializer.serializeItem(result as Entity, itemDto, serializeContext);
-    validateProjectedResult(item, result, itemDto as DtoClass | null, descriptor, context, "item");
+    const item = serializer.serializeItem(result as Entity, itemSchema, serializeContext);
+    validateProjectedResult(item, result, itemSchema, descriptor, context, "item");
     // ADR-0055: `schema.output.item`'s narrowing, same as the list branch above.
     const shapedItem = this.applyOutputSchema(itemSchema, item);
     // `context.config` is the per-call view, so `cache.etag` honors an
@@ -1859,17 +1851,20 @@ function cloneResponsePayload(response: KavoResponse): KavoResponse {
  *
  * A custom operation is the one place a handler's result is not the entity
  * by contract, so it is the one place the projection can empty a value
- * entirely. `dto.output` is how a result with its own shape declares
- * itself; with none, the result is filtered to the entity's own columns,
- * and a result that shares none of them survives as an empty object.
- * Nothing said so — not a type error, not a log line — and
- * the static types actively disagreed: `CustomOperationResult` types
- * `run`'s return as the handler's own return type when no `dto.output` is
- * declared, so the signature promised the shape while the wire served `{}`.
+ * entirely. `schema.output` is how a result with its own shape declares
+ * itself — a class-shaped one, whose keys the serializer actually
+ * projected through; a validator-shaped one narrows nothing about the
+ * projection (ADR-0055), so it reads the same as "none" here. With
+ * neither, the result is filtered to the entity's own columns, and a
+ * result that shares none of them survives as an empty object. Nothing
+ * said so — not a type error, not a log line — and the static types
+ * actively disagreed: `CustomOperationResult` types `run`'s return as the
+ * handler's own return type when no `schema.output` class is declared, so
+ * the signature promised the shape while the wire served `{}`.
  *
  * Scoped to custom ids deliberately. A standard operation's result *is* the
  * entity by contract, so an empty projection there is a different bug with
- * a different fix, and `dto.output` is not the answer to it.
+ * a different fix, and `schema.output` is not the answer to it.
  *
  * Zero intersection is the test, not "narrower than the result": a genuine
  * narrowing — a handler returning a row with a subset of the entity's
@@ -1889,7 +1884,7 @@ function cloneResponsePayload(response: KavoResponse): KavoResponse {
 function validateProjectedResult<Entity>(
   projected: unknown,
   source: unknown,
-  dto: DtoClass | null,
+  schema: SchemaLike<object> | null,
   descriptor: OperationDescriptor<Entity>,
   context: KavoContext<Entity>,
   slot: "item" | "list",
@@ -1907,9 +1902,12 @@ function validateProjectedResult<Entity>(
     return;
   }
   const served = slot === "list" ? "the first row of the list" : "the response";
+  // Only a class-shaped schema narrows the projection — a validator judges
+  // an already-projected value, it never widens or names its own key set.
+  const dto = schema !== null && isSchemaClass(schema) ? schema : null;
   throw new ConfigurationException(
     context.entityName,
-    `operations.${descriptor.id}.dto.output`,
+    `operations.${descriptor.id}.schema.output`,
     `the '${descriptor.id}' handler returned ${describeResult(source)}, so ${served} serialized to {}. ` +
       projectedAgainst(dto, context.entityName, slot),
   );
@@ -1966,25 +1964,25 @@ function describeResult(source: unknown): string {
  * The second half: what the result was projected *through*, which decides
  * what the reader has to change.
  *
- * Naming the entity unconditionally was wrong. Where a `dto.output` is
- * registered, the entity's fields are irrelevant — the projection is the
- * DTO's keys — and telling an author to "declare `dto: { output: … }`" when
- * they already did sends them to fix the thing they got right. Where one is
- * registered but has no runtime shape (a declared-only class, which
- * `@kavo/nest` supports on purpose so Swagger's decorators can answer), the
- * fallback is the entity's projection and the missing initializers are the
- * actual fault.
+ * Naming the entity unconditionally was wrong. Where a class-shaped
+ * `schema.output` is registered, the entity's fields are irrelevant — the
+ * projection is the class's keys — and telling an author to "declare
+ * `schema: { output: … }`" when they already did sends them to fix the
+ * thing they got right. Where one is registered but has no runtime shape
+ * (a declared-only class, which `@kavo/nest` supports on purpose so
+ * Swagger's decorators can answer), the fallback is the entity's
+ * projection and the missing initializers are the actual fault.
  */
-function projectedAgainst(dto: DtoClass | null, entityName: string, slot: "item" | "list"): string {
+function projectedAgainst(dto: SchemaClass | null, entityName: string, slot: "item" | "list"): string {
   if (dto === null) {
     return (
       `A custom operation's result is projected through the entity's '${slot}' shape unless the operation ` +
       `registers one of its own, and none of those keys are fields of '${entityName}' — declare ` +
-      `'dto: { output: <YourResultDto> }' on the operation, with every field initialized so the class has a ` +
-      `runtime shape`
+      `'schema: { output: <YourResultClass> }' on the operation, with every field initialized so the class has ` +
+      `a runtime shape`
     );
   }
-  const keys = dtoShapeKeys(dto);
+  const keys = schemaShapeKeys(dto);
   if (keys === null) {
     return (
       `The registered '${dto.name || "(anonymous)"}' declares no runtime fields — TypeScript erases an ` +
@@ -1994,7 +1992,7 @@ function projectedAgainst(dto: DtoClass | null, entityName: string, slot: "item"
   }
   return (
     `The result was projected through the registered '${dto.name || "(anonymous)"}', which declares ` +
-    `${nameList(keys)} — none of which the handler returned. The DTO and the handler disagree about the ` +
+    `${nameList(keys)} — none of which the handler returned. The schema and the handler disagree about the ` +
     `result's shape; change whichever is wrong`
   );
 }

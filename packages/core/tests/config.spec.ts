@@ -284,8 +284,8 @@ describe("resolveEntityConfig — bootstrap", () => {
     // (generated, and the primary key regardless) and `deletedAt`
     // (generated) are excluded; `title`/`authorId` and both relations join
     // the default.
-    expect(config.dto.resolve("create", "createOne")).toBeNull();
-    expect(config.dto.resolve("update", "updateOne")).toBeNull();
+    expect(config.schema.resolveInput("create", "createOne")).toBeNull();
+    expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
   });
 
   it("reaches creatable/updatable through the top-level create/update { fields } shorthand", () => {
@@ -294,8 +294,8 @@ describe("resolveEntityConfig — bootstrap", () => {
       { create: { fields: ["name"] }, update: { fields: ["name", "email"] } },
       undefined,
     );
-    const createDto = config.dto.resolve("create", "createOne");
-    const updateDto = config.dto.resolve("update", "updateOne");
+    const createDto = config.schema.resolveInput("create", "createOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
     expect(createDto).not.toBeNull();
     expect(updateDto).not.toBeNull();
     expect(Object.keys(new (createDto as new () => object)())).toEqual(["name"]);
@@ -384,18 +384,18 @@ describe("resolveEntityConfig — bootstrap", () => {
       { create: { fields: { exclude: ["email", "status"] } } },
       undefined,
     );
-    const createDto = config.dto.resolve("create", "createOne");
+    const createDto = config.schema.resolveInput("create", "createOne");
     expect(createDto).not.toBeNull();
     expect(Object.keys(new (createDto as new () => object)())).toEqual(["name", "age"]);
     // `update` is untouched — still the entity-derived default.
-    expect(config.dto.resolve("update", "updateOne")).toBeNull();
+    expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
   });
 
   it("keeps relations in the writable universe create.fields's { exclude } subtracts from", () => {
     // Post: title, authorId are writable columns; author, comments are
     // writable-by-association relations; `id`/`deletedAt` are generated.
     const config = resolveEntityConfig(postMetadata, { update: { fields: { exclude: ["title"] } } }, undefined);
-    const updateDto = config.dto.resolve("update", "updateOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
     expect(Object.keys(new (updateDto as new () => object)())).toEqual(["authorId", "author", "comments"]);
   });
 
@@ -409,8 +409,8 @@ describe("resolveEntityConfig — bootstrap", () => {
       { create: { fields: { exclude: [] } }, update: { fields: { exclude: [] } } },
       undefined,
     );
-    expect(config.dto.resolve("create", "createOne")).toBeNull();
-    expect(config.dto.resolve("update", "updateOne")).toBeNull();
+    expect(config.schema.resolveInput("create", "createOne")).toBeNull();
+    expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
   });
 
   it("fails fast on a name in create.fields's { exclude } that is not a writable field", () => {
@@ -435,7 +435,7 @@ describe("resolveEntityConfig — bootstrap", () => {
       { create: { fields: { exclude: ["age"] }, default: { status: "pending" as const }, apply } },
       undefined,
     );
-    expect(Object.keys(new (config.dto.resolve("create", "createOne") as new () => object)())).toEqual([
+    expect(Object.keys(new (config.schema.resolveInput("create", "createOne") as new () => object)())).toEqual([
       "name",
       "email",
       "status",
@@ -450,10 +450,10 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
     const config = resolveEntityConfig(
       userMetadata,
-      { dto: { create: NarrowCreateUserDto }, create: { fields: { exclude: ["email"] } } },
+      { schema: { input: { create: NarrowCreateUserDto } }, create: { fields: { exclude: ["email"] } } },
       undefined,
     );
-    expect(config.dto.resolve("create", "createOne")).toBe(NarrowCreateUserDto);
+    expect(config.schema.resolveInput("create", "createOne")).toBe(NarrowCreateUserDto);
   });
 
   it("resolves an entity-scope sort.default", () => {

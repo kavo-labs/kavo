@@ -47,7 +47,7 @@ function configWith(
     sortDefault: defaultSort,
     search: false,
     delete: { strategy: "hard", field: "deletedAt" },
-    dto: { resolve: () => null },
+    schema: { resolveInput: () => null, resolveOutput: () => null },
     relations: { all: () => [], get: () => undefined },
   } as unknown as ResolvedEntityConfig<CompositeEntity>;
 }

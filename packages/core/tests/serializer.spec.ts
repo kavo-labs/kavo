@@ -131,7 +131,7 @@ describe("DefaultSerializer — response projection", () => {
 
   it("does not narrow serializeItem's projection for a validator-shaped schema (narrowing happens at the engine layer)", () => {
     const validator = { safeParse: () => ({ success: true, data: {} }) };
-    const result = serializer.serializeItem(ada(), validator as never, contextStub());
+    const result = serializer.serializeItem(ada(), validator as never, contextStub()) as object;
     expect(Object.keys(result)).toEqual(COLUMNS);
   });
 
@@ -455,7 +455,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("narrows createOne's derived projection via the top-level create.fields shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       dto,
@@ -467,7 +467,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("leaves updateOne/patchOne unaffected by a create-only shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const updateDto = config.dto.resolve("update", "updateOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
     const updatePayload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       updateDto,
@@ -480,8 +480,8 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const body = { name: "Ada", email: "ada@example.com" };
-    const updateDto = config.dto.resolve("update", "updateOne");
-    const patchDto = config.dto.resolve("patch", "patchOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
+    const patchDto = config.schema.resolveInput("patch", "patchOne");
     expect(deserializer.deserialize(body, updateDto, writeContext("updateOne", config))).toEqual({ name: "Ada" });
     expect(deserializer.deserialize(body, patchDto, writeContext("patchOne", config))).toEqual({ name: "Ada" });
   });
@@ -489,7 +489,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("leaves createOne unaffected by an update-only shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const createDto = config.dto.resolve("create", "createOne");
+    const createDto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       createDto,
@@ -505,7 +505,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     // key unconditionally (commit 8aa8d65).
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["id" as never, "name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ id: 5, name: "Ada" });
   });
@@ -582,8 +582,8 @@ describe("DefaultDeserializer — create.default/update.default", () => {
   it("fills a field updateOne's body omits, but never patchOne's", () => {
     const config = resolveEntityConfig(userMetadata, { update: { default: { status: "pending" } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const updateDto = config.dto.resolve("update", "updateOne");
-    const patchDto = config.dto.resolve("patch", "patchOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
+    const patchDto = config.schema.resolveInput("patch", "patchOne");
     expect(deserializer.deserialize({ name: "Ada" }, updateDto, writeContext("updateOne", config))).toEqual({
       name: "Ada",
       status: "pending",
@@ -617,7 +617,7 @@ describe("DefaultDeserializer — create.default/update.default", () => {
       undefined,
     );
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize({ name: "Ada" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ name: "Ada" });
   });

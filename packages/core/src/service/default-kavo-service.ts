@@ -6,7 +6,6 @@ import type { EntityInput } from "../types/utility.js";
 import type { ListResultDto } from "../dto/list-result.js";
 import type { OperationId } from "../operations/operation.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { DtoInputOf, DtoOutputOf, DtoQueryOf } from "../dto/dto.js";
 import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../schema/entity-schema.js";
 import type {
   CustomOperationBody,
@@ -51,9 +50,9 @@ export class DefaultKavoService<
   }
 
   async createOne(
-    data: SchemaInputOf<Ops, "createOne", DtoInputOf<Ops, "createOne", CreateDto>>,
+    data: SchemaInputOf<Ops, "createOne", CreateDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "createOne", DtoOutputOf<Ops, "createOne", ItemDto>>> {
+  ): Promise<SchemaOutputOf<Ops, "createOne", ItemDto>> {
     const response = await this.engine.execute(
       this.request({
         operation: "createOne",
@@ -61,14 +60,14 @@ export class DefaultKavoService<
         options: options ?? null,
       }),
     );
-    return response.item as SchemaOutputOf<Ops, "createOne", DtoOutputOf<Ops, "createOne", ItemDto>>;
+    return response.item as SchemaOutputOf<Ops, "createOne", ItemDto>;
   }
 
   async findOne(
     id: Id,
-    query?: SchemaQueryOf<Ops, "findOne", DtoQueryOf<Ops, "findOne", QueryDto>>,
+    query?: SchemaQueryOf<Ops, "findOne", QueryDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "findOne", DtoOutputOf<Ops, "findOne", ItemDto>>> {
+  ): Promise<SchemaOutputOf<Ops, "findOne", ItemDto>> {
     const response = await this.engine.execute(
       this.request({
         operation: "findOne",
@@ -77,13 +76,13 @@ export class DefaultKavoService<
         options: options ?? null,
       }),
     );
-    return response.item as SchemaOutputOf<Ops, "findOne", DtoOutputOf<Ops, "findOne", ItemDto>>;
+    return response.item as SchemaOutputOf<Ops, "findOne", ItemDto>;
   }
 
   async findMany(
-    query?: SchemaQueryOf<Ops, "findMany", DtoQueryOf<Ops, "findMany", QueryDto>>,
+    query?: SchemaQueryOf<Ops, "findMany", QueryDto>,
     options?: KavoCallOptions,
-  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", DtoOutputOf<Ops, "findMany", ListDto>>>> {
+  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", ListDto>>> {
     const response = await this.engine.execute(
       this.request({
         operation: "findMany",
@@ -91,14 +90,14 @@ export class DefaultKavoService<
         options: options ?? null,
       }),
     );
-    return response.list as ListResultDto<SchemaOutputOf<Ops, "findMany", DtoOutputOf<Ops, "findMany", ListDto>>>;
+    return response.list as ListResultDto<SchemaOutputOf<Ops, "findMany", ListDto>>;
   }
 
   async updateOne(
     id: Id,
-    data: SchemaInputOf<Ops, "updateOne", DtoInputOf<Ops, "updateOne", UpdateDto>>,
+    data: SchemaInputOf<Ops, "updateOne", UpdateDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "updateOne", DtoOutputOf<Ops, "updateOne", ItemDto>>> {
+  ): Promise<SchemaOutputOf<Ops, "updateOne", ItemDto>> {
     const response = await this.engine.execute(
       this.request({
         operation: "updateOne",
@@ -107,14 +106,14 @@ export class DefaultKavoService<
         options: options ?? null,
       }),
     );
-    return response.item as SchemaOutputOf<Ops, "updateOne", DtoOutputOf<Ops, "updateOne", ItemDto>>;
+    return response.item as SchemaOutputOf<Ops, "updateOne", ItemDto>;
   }
 
   async patchOne(
     id: Id,
-    data: SchemaInputOf<Ops, "patchOne", DtoInputOf<Ops, "patchOne", PatchDto>>,
+    data: SchemaInputOf<Ops, "patchOne", PatchDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "patchOne", DtoOutputOf<Ops, "patchOne", ItemDto>>> {
+  ): Promise<SchemaOutputOf<Ops, "patchOne", ItemDto>> {
     const response = await this.engine.execute(
       this.request({
         operation: "patchOne",
@@ -123,7 +122,7 @@ export class DefaultKavoService<
         options: options ?? null,
       }),
     );
-    return response.item as SchemaOutputOf<Ops, "patchOne", DtoOutputOf<Ops, "patchOne", ItemDto>>;
+    return response.item as SchemaOutputOf<Ops, "patchOne", ItemDto>;
   }
 
   async deleteOne(id: Id, options?: KavoCallOptions): Promise<void> {
@@ -133,9 +132,9 @@ export class DefaultKavoService<
   async restoreOne(
     id: Id,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "restoreOne", DtoOutputOf<Ops, "restoreOne", ItemDto>>> {
+  ): Promise<SchemaOutputOf<Ops, "restoreOne", ItemDto>> {
     const response = await this.engine.execute(this.request({ operation: "restoreOne", id, options: options ?? null }));
-    return response.item as SchemaOutputOf<Ops, "restoreOne", DtoOutputOf<Ops, "restoreOne", ItemDto>>;
+    return response.item as SchemaOutputOf<Ops, "restoreOne", ItemDto>;
   }
 
   async purgeOne(id: Id, options?: KavoCallOptions): Promise<void> {
@@ -157,7 +156,7 @@ export class DefaultKavoService<
     request?: CustomOperationRequest<
       Id,
       CustomOperationBody<Ops, Operation>,
-      SchemaQueryOf<Ops, Operation, DtoQueryOf<Ops, Operation, QueryDto>>
+      SchemaQueryOf<Ops, Operation, QueryDto>
     >,
     options?: KavoCallOptions,
   ): Promise<CustomOperationResult<Ops, Operation>> {

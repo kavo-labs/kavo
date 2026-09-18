@@ -35,9 +35,9 @@ const kavo = createKavo();
 
 const authors = kavo.createCrud(Author, {
   operations: {
-    createOne: { dto: { input: CreateAuthorRequestDto, output: AuthorCreatedDto } },
-    findOne: { dto: { output: AuthorProfileDto, query: AuthorSearchQueryDto } },
-    findMany: { dto: { output: AuthorListItemDto, query: AuthorSearchQueryDto } },
+    createOne: { schema: { input: CreateAuthorRequestDto, output: AuthorCreatedDto } },
+    findOne: { schema: { output: AuthorProfileDto, query: AuthorSearchQueryDto } },
+    findMany: { schema: { output: AuthorListItemDto, query: AuthorSearchQueryDto } },
   },
 });
 
@@ -63,24 +63,13 @@ expectTypeOf(authors.findMany).returns.resolves.toEqualTypeOf<ListResultDto<Auth
 expectTypeOf(authors.updateOne).parameter(1).toEqualTypeOf<EntityInput<Author>>();
 expectTypeOf(authors.updateOne).returns.resolves.toEqualTypeOf<Author>();
 
-// `deleteOne`/`purgeOne` have no `dto` position at all — the override
-// shape is unrepresentable, not just unused.
-kavo.createCrud(Author, {
-  // @ts-expect-error — `deleteOne` is a void result with no query; it has no `dto` key to set.
-  operations: { deleteOne: { dto: { output: AuthorProfileDto } } },
-});
-kavo.createCrud(Author, {
-  // @ts-expect-error — `createOne` has no `query` position.
-  operations: { createOne: { dto: { query: AuthorSearchQueryDto } } },
-});
-kavo.createCrud(Author, {
-  // @ts-expect-error — `findOne` has no `input` position (no request body).
-  operations: { findOne: { dto: { input: CreateAuthorRequestDto } } },
-});
+// An override on a position an operation lacks (`deleteOne`'s output,
+// `createOne`'s query, `findOne`'s input) is no longer a type error: it is
+// rejected at bootstrap with a `ConfigurationException` (see engine.spec.ts).
 
 // `restoreOne` narrows independently too, reusing the `item` slot's
 // *position* but not necessarily its type.
 const restorable = kavo.createCrud(Author, {
-  operations: { restoreOne: { dto: { output: AuthorProfileDto } } },
+  operations: { restoreOne: { schema: { output: AuthorProfileDto } } },
 });
 expectTypeOf(restorable.restoreOne).returns.resolves.toEqualTypeOf<AuthorProfileDto>();

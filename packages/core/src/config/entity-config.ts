@@ -5,7 +5,6 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { WriteFieldsConfig } from "./write-fields.js";
-import type { OperationDtoMap, OperationDtoOverride } from "../dto/dto.js";
 import type { EntitySchema, OperationSchemaOverride } from "../schema/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
@@ -403,38 +402,24 @@ type OperationSettings<Allowed extends SettingsSubtreeKey> = {
  * already says so explicitly and this object's own presence says so
  * implicitly.
  *
- * `DtoOverride` is `StandardOperationsConfig`'s per-id `Pick` of
- * `OperationDtoOverride` — only the fields that operation actually
- * supports (issue #131); the legacy field is on its way out (the
- * `remove-dto` plan's Task 9 retires it alongside `dto.ts`'s other
- * consumers in `kavo-engine.ts`), but stays narrowed until then. `Allowed`
- * is the same idea for the settings subtree (issue #415):
+ * `Allowed` narrows the settings subtree (issue #415):
  * `StandardOperationsConfig` passes each id only the `KavoSettings` keys
  * that id's engine stages read — `pagination` to `findMany` alone, `cache`
  * to the reads, `realtime` to the writes, `delete` to the reads and the
  * delete family (the operations whose behavior the resolved soft-delete
  * view changes — `kavo-engine.ts` `configViewFor`), and `errors` to all.
- * Both parameters default to the full shape so a bare `OperationConfig<Entity>`
+ * It defaults to the full shape so a bare `OperationConfig<Entity>`
  * (used where no specific operation id is in scope — the `OperationsConfig`
  * index signature's permissive upper bound) still type-checks.
  */
 export type OperationConfig<
   Entity = unknown,
-  DtoOverride = OperationDtoOverride,
   Allowed extends SettingsSubtreeKey = SettingsSubtreeKey,
 > = OperationSettings<Allowed> & {
-  /** Replacement handler — keeps the default DTO/serialization scaffolding. */
+  /** Replacement handler — keeps the default serialization scaffolding. */
   readonly handler?: OperationHandler<Entity>;
   /** Opaque metadata consumed by the framework layer (route options). */
   readonly meta?: OperationMetadata;
-  /**
-   * Legacy per-operation DTO override, still read by
-   * `default-operation-registry.ts`'s `resolveDtoOverride` — the
-   * `remove-dto` plan (Task 9) retires it alongside `dto.ts`'s other
-   * consumers in `kavo-engine.ts`. Fallback order: this field → the
-   * entity's root `dto.<slot>` → entity-derived default (doc 04 §8).
-   */
-  readonly dto?: DtoOverride;
   /**
    * ADR-0055's `schema`-typed override: overrides the entity's root
    * `schema.input.<slot>`/`schema.output.<slot>` for this operation only.
@@ -463,21 +448,17 @@ export type OperationConfig<
 };
 
 /**
- * The `operations` map's per-id DTO override shapes (issue #131): each
- * standard operation `Pick`s only the `OperationDtoOverride` fields it
- * actually has — a write op gets `input`/`output`, a read gets
- * `output`/`query`, and `deleteOne`/`purgeOne` (void results, no query)
- * get neither, so setting `dto` on them is a type error before it is ever
- * a bootstrap one. The `true`/`false` shorthand is still accepted at every
- * id (ADR-0038, issue #257), for a plain enable/disable with no settings
- * attached, and every id also accepts a `schema` override (ADR-0055) for
- * the slots that operation actually has — not `Pick`-narrowed the way
- * `dto` is; which fields apply there is enforced at bootstrap
- * (`resolveSchemaOverride`) rather than at the type level.
+ * The `operations` map's per-id entries. Every id also accepts a `schema`
+ * override (ADR-0055) for the slots that operation actually has; which
+ * fields apply there is enforced at bootstrap (`resolveSchemaOverride`)
+ * rather than at the type level — unlike the former `dto` override (issue
+ * #131), it is not `Pick`-narrowed per id here. The `true`/`false`
+ * shorthand is still accepted at every id (ADR-0038, issue #257), for a
+ * plain enable/disable with no settings attached.
  *
- * The third `OperationConfig` argument narrows the settings subtree the
- * same way (issue #415): each id names only the `KavoSettings` keys its
- * engine stages read —
+ * The second `OperationConfig` argument narrows the settings subtree
+ * (issue #415): each id names only the `KavoSettings` keys its engine
+ * stages read —
  *
  * - `pagination` on `findMany` alone — the sole operation the query
  *   normalizer applies a page window for.
@@ -495,25 +476,16 @@ export type OperationConfig<
  * A key an id does not name is pinned to `never`, so `findOne: { pagination:
  * … }` or `createOne: { delete: false }` is a compile error rather than a
  * silently-dropped value.
- *
- * Unlike the root `dto` map, a per-operation override is **not** narrowed
- * against the entity's own `CreateDto`/`ItemDto`/etc. — those generics are
- * inferred from the root `dto` slots alone, so constraining an override to
- * them here would force it to structurally equal the *default* (usually
- * `Entity` itself) instead of letting the registered class's own shape
- * flow through to `KavoService`'s `Ops`-based positions (`DtoInputOf`/
- * `DtoOutputOf`/`DtoQueryOf`, `dto.ts`). Each field is simply `DtoClass<Dto>`
- * — any class — which is what lets `AuthorProfileDto` (fewer fields than
- * `Author`) narrow `findOne`'s response independently of `createOne`'s.
  */
 export interface StandardOperationsConfig<
   Entity,
-  // Unused by this interface's own fields (see the comment above) — kept as
-  // generic parameters, `_`-prefixed where the linter would otherwise flag
-  // them as unused, purely so `EntityConfig`'s
+  // Unused by this interface's own fields — kept as generic parameters,
+  // `_`-prefixed where the linter would otherwise flag them as unused,
+  // purely so `EntityConfig`'s
   // `Ops extends StandardOperationsConfig<Entity, CreateDto, ..., ListDto>`
   // constraint keeps the same shape it always has; the DTO generics stay
-  // meaningful for the *root* `dto` map, just not for this per-operation one.
+  // meaningful for the *root* `schema` map, just not for this per-operation
+  // one.
   _CreateDto = EntityInput<Entity>,
   UpdateDto = EntityInput<Entity>,
   _PatchDto = Partial<UpdateDto>,
@@ -521,27 +493,14 @@ export interface StandardOperationsConfig<
   ItemDto = Entity,
   _ListDto = ItemDto,
 > {
-  readonly createOne?:
-    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
-  readonly findOne?:
-    OperationConfig<Entity, Pick<OperationDtoOverride, "output" | "query">, "errors" | "cache" | "delete"> | boolean;
-  readonly findMany?:
-    | OperationConfig<
-        Entity,
-        Pick<OperationDtoOverride, "output" | "query">,
-        "errors" | "cache" | "delete" | "pagination"
-      >
-    | boolean;
-  readonly updateOne?:
-    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
-  readonly patchOne?:
-    OperationConfig<Entity, Pick<OperationDtoOverride, "input" | "output">, "errors" | "cache" | "realtime"> | boolean;
-  /** Void result, no query — no `dto` override is representable. */
-  readonly deleteOne?: OperationConfig<Entity, never, "errors" | "cache" | "realtime" | "delete"> | boolean;
-  readonly restoreOne?:
-    OperationConfig<Entity, Pick<OperationDtoOverride, "output">, "errors" | "cache" | "realtime" | "delete"> | boolean;
-  /** Void result, no query — no `dto` override is representable. */
-  readonly purgeOne?: OperationConfig<Entity, never, "errors" | "cache" | "realtime" | "delete"> | boolean;
+  readonly createOne?: OperationConfig<Entity, "errors" | "cache" | "realtime"> | boolean;
+  readonly findOne?: OperationConfig<Entity, "errors" | "cache" | "delete"> | boolean;
+  readonly findMany?: OperationConfig<Entity, "errors" | "cache" | "delete" | "pagination"> | boolean;
+  readonly updateOne?: OperationConfig<Entity, "errors" | "cache" | "realtime"> | boolean;
+  readonly patchOne?: OperationConfig<Entity, "errors" | "cache" | "realtime"> | boolean;
+  readonly deleteOne?: OperationConfig<Entity, "errors" | "cache" | "realtime" | "delete"> | boolean;
+  readonly restoreOne?: OperationConfig<Entity, "errors" | "cache" | "realtime" | "delete"> | boolean;
+  readonly purgeOne?: OperationConfig<Entity, "errors" | "cache" | "realtime" | "delete"> | boolean;
 }
 
 /**
@@ -604,8 +563,6 @@ export type CustomOperationConfig<
   readonly kind?: OperationKind;
   /** Defaults to `"one"`. A `"many"` handler must return a `FindManyResult`. */
   readonly cardinality?: OperationCardinality;
-  /** Legacy per-operation DTO override — see `OperationConfig.dto`'s doc comment. */
-  readonly dto?: OperationDtoOverride;
   /**
    * ADR-0055's `schema` override for this operation's body/response/query
    * shape — see `OperationConfig.schema`'s doc comment. A custom operation
@@ -777,23 +734,18 @@ export interface EntityConfig<
   >,
 > extends Omit<DeepPartial<KavoSettings>, "operations"> {
   /**
-   * `create`/`update`/`patch`/`item`/`list` each accept a registered DTO
-   * class; `patch`/`item`/`list` additionally accept an inline
-   * `{ fields: [...] }` shorthand (issue #386) that derives a
-   * projection/writable-field list without a hand-written class.
+   * A per-slot, input/output-split map of `KavoSchema` validators or plain
+   * shape-only classes (ADR-0055): `create`/`update`/`patch`/`item`/`list`
+   * each accept a registered class; `patch`/`item`/`list` additionally
+   * accept an inline `{ fields: [...] }` shorthand (issue #386) that
+   * derives a projection/writable-field list without a hand-written class.
    * `create`/`update` do not accept that shorthand here — their writable-
    * field list is the top-level `create`/`update` keys below (issue #388),
-   * keeping this map DTO-class-only for the two write slots.
-   */
-  readonly dto?: OperationDtoMap<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
-  /**
-   * ADR-0055's `schema`-typed sibling of `dto` above: a per-slot,
-   * input/output-split map of `KavoSchema` validators, which additionally
-   * drives input validation (`schema.input.<slot>.safeParse`, raising
+   * keeping this map class-only for the two write slots. A validator-shaped
+   * slot (a `KavoSchema`, rather than a plain class) additionally drives
+   * input validation (`schema.input.<slot>.safeParse`, raising
    * `SchemaValidationException` on failure) and narrows/shapes the response
-   * at `schema.output.<slot>`. Landed alongside `dto` rather than replacing
-   * it (see `entity-schema.ts`'s module doc) — where both are configured
-   * for the same slot, `schema` wins.
+   * at `schema.output.<slot>`.
    */
   readonly schema?: EntitySchema<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**

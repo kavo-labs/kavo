@@ -101,7 +101,7 @@ describe("KavoEngine pipeline", () => {
       id = 0;
       name = "";
     }
-    const { crud } = makeCrud({ dto: { item: UserItemDto } } as never);
+    const { crud } = makeCrud({ schema: { output: { item: UserItemDto } } } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(Object.keys(created as object)).toEqual(["id", "name"]);
   });
@@ -242,8 +242,8 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       // though the root `create` DTO carries it.
     }
     const { crud } = makeCrud({
-      dto: { create: RootCreateDto },
-      operations: { createOne: { enabled: true, dto: { input: CreateUserRequestDto } } },
+      schema: { input: { create: RootCreateDto } },
+      operations: { createOne: { enabled: true, schema: { input: CreateUserRequestDto } } },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(created).toMatchObject({ name: "Ada", email: "a@x.io" });
@@ -260,8 +260,8 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     }
     const { crud } = makeCrud({
       operations: {
-        findOne: { enabled: true, dto: { output: UserProfileDto } },
-        createOne: { enabled: true, dto: { output: UserCreatedDto } },
+        findOne: { enabled: true, schema: { output: UserProfileDto } },
+        createOne: { enabled: true, schema: { output: UserCreatedDto } },
       },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
@@ -276,7 +276,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       id = 0;
     }
     const { crud } = makeCrud({
-      operations: { createOne: true, findMany: { enabled: true, dto: { output: UserListItemDto } } },
+      operations: { createOne: true, findMany: { enabled: true, schema: { output: UserListItemDto } } },
     } as never);
     await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     const list = await crud.findMany();
@@ -295,7 +295,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
         operations: {
           createOne: true,
           deleteOne: true,
-          restoreOne: { enabled: true, dto: { output: AccountProfileDto } },
+          restoreOne: { enabled: true, schema: { output: AccountProfileDto } },
         },
       } as never,
       { adapter, metadata: accountMetadata },
@@ -316,8 +316,8 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       email = "";
     }
     const { crud } = makeCrud({
-      dto: { item: UserItemDto },
-      operations: { findOne: true, createOne: { enabled: true, dto: { output: UserCreatedDto } } },
+      schema: { output: { item: UserItemDto } },
+      operations: { findOne: true, createOne: { enabled: true, schema: { output: UserCreatedDto } } },
     } as never);
     const created = await crud.createOne({ name: "Ada", email: "a@x.io", age: 36 } as never);
     expect(Object.keys(created as object)).toEqual(["id", "email"]);
@@ -329,9 +329,16 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
 
   it("rejects a dto override that doesn't apply to that operation, at createCrud (bootstrap)", () => {
     class Bogus {}
-    expect(() => makeCrud({ operations: { deleteOne: { dto: { output: Bogus } } } } as never)).toThrowError(
+    expect(() => makeCrud({ operations: { deleteOne: { schema: { output: Bogus } } } } as never)).toThrowError(
       ConfigurationException,
     );
+  });
+
+  it.each([
+    ["createOne", { query: class Q {} }],
+    ["findOne", { input: class I {} }],
+  ])("rejects a schema override on a position %s lacks, at createCrud", (id, schema) => {
+    expect(() => makeCrud({ operations: { [id]: { schema } } } as never)).toThrowError(ConfigurationException);
   });
 
   it("treats an explicitly undefined dto key as unset, not as an inapplicable override", () => {
@@ -339,7 +346,7 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     // build an entity config by spreading optional values: `deleteOne`
     // permits no `dto` fields at all, yet `{ output: undefined }` states
     // no opinion rather than stating a wrong one.
-    expect(() => makeCrud({ operations: { deleteOne: { dto: { output: undefined } } } } as never)).not.toThrow();
+    expect(() => makeCrud({ operations: { deleteOne: { schema: { output: undefined } } } } as never)).not.toThrow();
   });
 });
 
@@ -495,9 +502,9 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
       const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
 
       expect(error.code).toBe("KAVO_CONFIG_INVALID");
-      expect(error.messageParams).toMatchObject({ entity: "User", path: "operations.probeOne.dto.output" });
+      expect(error.messageParams).toMatchObject({ entity: "User", path: "operations.probeOne.schema.output" });
       expect(error.message).toContain("keys are checkedAt, probed");
-      expect(error.message).toContain("dto: { output:");
+      expect(error.message).toContain("schema: { output:");
     });
 
     it("leaves a genuine narrowing alone", async () => {
@@ -512,7 +519,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
         probed = false;
         checkedAt = "";
       }
-      const { crud } = withShape({ probed: true, checkedAt: "now" }, { dto: { output: ProbeResultDto } });
+      const { crud } = withShape({ probed: true, checkedAt: "now" }, { schema: { output: ProbeResultDto } });
       expect(await crud.run("probeOne")).toEqual({ probed: true, checkedAt: "now" });
     });
 
@@ -550,7 +557,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
       // "the first row", not "every row": the check reads index 0 only, and
       // the message must not claim more than it verified.
       expect(error.message).toContain("the first row of the list");
-      expect(error.messageParams).toMatchObject({ path: "operations.probeMany.dto.output" });
+      expect(error.messageParams).toMatchObject({ path: "operations.probeMany.schema.output" });
     });
 
     it("names the registered DTO, not the entity, when the DTO is what emptied the result", async () => {
@@ -561,13 +568,13 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
         applied = 0;
         skus: string[] = [];
       }
-      const { crud } = withShape({ appliedCount: 3, skuList: ["a"] }, { dto: { output: OutcomeDto } });
+      const { crud } = withShape({ appliedCount: 3, skuList: ["a"] }, { schema: { output: OutcomeDto } });
       const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
 
       expect(error).toBeInstanceOf(ConfigurationException);
       expect(error.message).toContain("registered 'OutcomeDto'");
       expect(error.message).toContain("applied, skus");
-      expect(error.message).not.toContain("declare 'dto: { output:");
+      expect(error.message).not.toContain("declare 'schema: { output:");
     });
 
     it("names the missing initializers when a registered DTO has no runtime shape", async () => {
@@ -577,7 +584,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
       class DeclaredOnlyDto {
         declare applied: number;
       }
-      const { crud } = withShape({ applied: 3 }, { dto: { output: DeclaredOnlyDto } });
+      const { crud } = withShape({ applied: 3 }, { schema: { output: DeclaredOnlyDto } });
       const error = (await crud.run("probeOne").catch((thrown: unknown) => thrown)) as ConfigurationException;
 
       expect(error.message).toContain("'DeclaredOnlyDto' declares no runtime fields");
@@ -685,7 +692,7 @@ describe("KavoEngine — custom operations declared in config (issue #145)", () 
     const { crud } = makeCrud({
       operations: {
         promoteOne: {
-          dto: { input: PromoteUserDto },
+          schema: { input: PromoteUserDto },
           handler: {
             async execute(input: unknown) {
               received = input;

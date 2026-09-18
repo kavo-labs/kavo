@@ -2,7 +2,6 @@ import type { EntityId } from "../types/entity-id.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { ListResultDto } from "../dto/list-result.js";
-import type { DtoInputOf, DtoOutputOf, DtoQueryOf } from "../dto/dto.js";
 import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../schema/entity-schema.js";
 import type { KavoCallOptions } from "./kavo-call-options.js";
 import type {
@@ -23,7 +22,7 @@ import type {
  *
  * `Ops` is `EntityConfig`'s inferred `operations` literal (issue #131): each
  * method position reads it through `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`
- * (`dto.ts`), which fall back to the entity-wide generic above when that
+ * (`entity-schema.ts`), which fall back to the entity-wide generic above when that
  * operation declares no override — so `findOne`'s response can be typed
  * differently from `createOne`'s even though both default to `ItemDto`.
  *
@@ -46,42 +45,42 @@ export interface KavoService<
   Ops = unknown,
 > {
   createOne(
-    data: SchemaInputOf<Ops, "createOne", DtoInputOf<Ops, "createOne", CreateDto>>,
+    data: SchemaInputOf<Ops, "createOne", CreateDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "createOne", DtoOutputOf<Ops, "createOne", ItemDto>>>;
+  ): Promise<SchemaOutputOf<Ops, "createOne", ItemDto>>;
 
   findOne(
     id: Id,
-    query?: SchemaQueryOf<Ops, "findOne", DtoQueryOf<Ops, "findOne", QueryDto>>,
+    query?: SchemaQueryOf<Ops, "findOne", QueryDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "findOne", DtoOutputOf<Ops, "findOne", ItemDto>>>;
+  ): Promise<SchemaOutputOf<Ops, "findOne", ItemDto>>;
   findMany(
-    query?: SchemaQueryOf<Ops, "findMany", DtoQueryOf<Ops, "findMany", QueryDto>>,
+    query?: SchemaQueryOf<Ops, "findMany", QueryDto>,
     options?: KavoCallOptions,
-  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", DtoOutputOf<Ops, "findMany", ListDto>>>>;
+  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", ListDto>>>;
 
   updateOne(
     id: Id,
-    data: SchemaInputOf<Ops, "updateOne", DtoInputOf<Ops, "updateOne", UpdateDto>>,
+    data: SchemaInputOf<Ops, "updateOne", UpdateDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "updateOne", DtoOutputOf<Ops, "updateOne", ItemDto>>>;
+  ): Promise<SchemaOutputOf<Ops, "updateOne", ItemDto>>;
 
   patchOne(
     id: Id,
-    data: SchemaInputOf<Ops, "patchOne", DtoInputOf<Ops, "patchOne", PatchDto>>,
+    data: SchemaInputOf<Ops, "patchOne", PatchDto>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "patchOne", DtoOutputOf<Ops, "patchOne", ItemDto>>>;
+  ): Promise<SchemaOutputOf<Ops, "patchOne", ItemDto>>;
 
   /** Hard or soft per the resolved delete strategy. */
   deleteOne(id: Id, options?: KavoCallOptions): Promise<void>;
 
   /**
-   * Un-deletes a soft-deleted row. Reuses the `item` DTO slot by default —
-   * no dedicated restore shape — but `operations.restoreOne.dto.output`
+   * Un-deletes a soft-deleted row. Reuses the `item` schema slot by default
+   * — no dedicated restore shape — but `operations.restoreOne.schema.output`
    * still narrows it independently (issue #131). Enabled when the entity
    * config declares soft delete.
    */
-  restoreOne(id: Id, options?: KavoCallOptions): Promise<SchemaOutputOf<Ops, "restoreOne", DtoOutputOf<Ops, "restoreOne", ItemDto>>>;
+  restoreOne(id: Id, options?: KavoCallOptions): Promise<SchemaOutputOf<Ops, "restoreOne", ItemDto>>;
 
   /**
    * Permanently removes a soft-deleted row; disabled by default, enabled
@@ -99,7 +98,7 @@ export interface KavoService<
    * Everything else is identical: same engine, same lifecycle, same
    * envelope. `request` carries whichever of `id`/`body`/`query` the
    * operation uses, and the result is typed from the operation's own
-   * `dto` override or, failing that, from its registered handler's
+   * `schema` override or, failing that, from its registered handler's
    * signature.
    *
    * Calling an id that is not registered raises
@@ -112,7 +111,7 @@ export interface KavoService<
     request?: CustomOperationRequest<
       Id,
       CustomOperationBody<Ops, Operation>,
-      SchemaQueryOf<Ops, Operation, DtoQueryOf<Ops, Operation, QueryDto>>
+      SchemaQueryOf<Ops, Operation, QueryDto>
     >,
     options?: KavoCallOptions,
   ): Promise<CustomOperationResult<Ops, Operation>>;

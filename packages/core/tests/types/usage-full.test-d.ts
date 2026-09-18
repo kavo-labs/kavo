@@ -48,12 +48,9 @@ const promote: OperationHandler<Author> = {
 };
 
 const authors = kavo.createCrud(Author, {
-  dto: {
-    create: CreateAuthorDto,
-    update: UpdateAuthorDto,
-    query: AuthorQueryDto,
-    item: AuthorItemDto,
-    list: AuthorListDto,
+  schema: {
+    input: { create: CreateAuthorDto, update: UpdateAuthorDto, query: AuthorQueryDto },
+    output: { item: AuthorItemDto, list: AuthorListDto },
   },
   filter: { fields: ["name"] },
   sort: { fields: ["name"] },

@@ -2,7 +2,7 @@ import type { OperationDescriptor, OperationRegistry } from "./operation-registr
 import type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operation.js";
 import type { OperationHandler } from "./operation-handler.js";
 import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
-import type { KavoSchema } from "../schema/kavo-schema.js";
+import type { SchemaLike } from "../schema/schema-class.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
 /**
@@ -168,12 +168,12 @@ function resolveSchemaOverride(
   allowed: readonly DtoOverrideField[],
   settings: { readonly schema?: unknown } | undefined,
 ): {
-  schemaInput: KavoSchema<unknown> | null;
-  schemaOutput: KavoSchema<unknown> | null;
-  schemaQuery: KavoSchema<unknown> | null;
+  schemaInput: SchemaLike<object> | null;
+  schemaOutput: SchemaLike<object> | null;
+  schemaQuery: SchemaLike<object> | null;
 } {
-  const schema = settings?.schema as Readonly<Partial<Record<DtoOverrideField, KavoSchema<unknown>>>> | undefined;
-  const resolved: Record<DtoOverrideField, KavoSchema<unknown> | null> = { input: null, output: null, query: null };
+  const schema = settings?.schema as Readonly<Partial<Record<DtoOverrideField, SchemaLike<object>>>> | undefined;
+  const resolved: Record<DtoOverrideField, SchemaLike<object> | null> = { input: null, output: null, query: null };
   if (schema === undefined) {
     return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
   }
@@ -190,7 +190,7 @@ function resolveSchemaOverride(
           : `'${id}' has no '${field}' position — it only supports ${allowed.map((f) => `'${f}'`).join(", ")}`,
       );
     }
-    resolved[field] = schema[field] as KavoSchema<unknown>;
+    resolved[field] = schema[field] as SchemaLike<object>;
   }
   return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
 }

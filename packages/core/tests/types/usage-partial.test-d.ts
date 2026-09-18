@@ -25,7 +25,7 @@ class AuthorListDto {
 const kavo = createKavo({ defaults: { pagination: { maxLimit: 50 } } });
 
 const authors = kavo.createCrud(Author, {
-  dto: { item: AuthorItemDto, list: AuthorListDto },
+  schema: { output: { item: AuthorItemDto, list: AuthorListDto } },
 });
 
 // The two registered slots, narrowed.

@@ -148,17 +148,14 @@ function isSchemaShorthand(value: unknown): value is SchemaSlot<unknown> {
  * same fallback `DefaultDtoResolver` gives `dto.patch`); `list` falls back
  * to `item`. `create`/`query` have no fallback of their own.
  *
- * Resolution still declares its return type as `KavoSchema<unknown> | null`
- * rather than the wider `SchemaLike` the config side now accepts
- * (`EntitySchemaMap`/`EntitySchema`/`OperationSchemaOverride` below): a
- * class-shaped slot is accepted and stored here, but `kavo-engine.ts` does
- * not yet branch on kind before calling `safeParse` — that is Task 9's
- * change (per the `remove-dto` plan). Widening this resolver's own return
- * type ahead of that would red `kavo-engine.ts`'s build today.
+ * Resolution declares its return type as the wider `SchemaLike<object> |
+ * null` (Task 9, `remove-dto` plan): a class-shaped slot is accepted and
+ * stored here, and `kavo-engine.ts` branches on kind (`isSchemaClass`)
+ * before ever calling `safeParse`.
  */
 export interface SchemaResolver<_Entity = unknown> {
-  resolveInput(slot: SchemaInputSlot, operation: OperationId): KavoSchema<unknown> | null;
-  resolveOutput(slot: SchemaOutputSlot, operation: OperationId): KavoSchema<unknown> | null;
+  resolveInput(slot: SchemaInputSlot, operation: OperationId): SchemaLike<object> | null;
+  resolveOutput(slot: SchemaOutputSlot, operation: OperationId): SchemaLike<object> | null;
 }
 
 /**
@@ -190,8 +187,8 @@ function writableFieldsToSchemaClass<Entity>(
 }
 
 export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<Entity> {
-  private readonly input: Readonly<Record<SchemaInputSlot, KavoSchema<unknown> | null>>;
-  private readonly output: Readonly<Record<SchemaOutputSlot, KavoSchema<unknown> | null>>;
+  private readonly input: Readonly<Record<SchemaInputSlot, SchemaLike<object> | null>>;
+  private readonly output: Readonly<Record<SchemaOutputSlot, SchemaLike<object> | null>>;
 
   constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
     const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(
@@ -219,30 +216,26 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
     const update = resolveSlot(input.update);
     const item = resolveSlot(output.item);
     const list = resolveSlot(output.list);
-    // Cast: slot values are `SchemaLike` (Task 1), but the resolver's own
-    // declared return type stays `KavoSchema<unknown> | null` until Task 9
-    // teaches `kavo-engine.ts` to branch on kind — see the interface doc
-    // comment above.
     const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
     this.input = Object.freeze({
       create: (input.create ?? writableFieldsToSchemaClass(writable.create?.fields) ?? null) as
-        | KavoSchema<unknown>
+        | SchemaLike<object>
         | null,
-      update: (resolvedUpdate ?? null) as KavoSchema<unknown> | null,
-      patch: (patch ?? resolvedUpdate ?? null) as KavoSchema<unknown> | null,
-      query: (input.query ?? null) as KavoSchema<unknown> | null,
+      update: (resolvedUpdate ?? null) as SchemaLike<object> | null,
+      patch: (patch ?? resolvedUpdate ?? null) as SchemaLike<object> | null,
+      query: (input.query ?? null) as SchemaLike<object> | null,
     });
     this.output = Object.freeze({
-      item: (item ?? null) as KavoSchema<unknown> | null,
-      list: (list ?? item ?? null) as KavoSchema<unknown> | null,
+      item: (item ?? null) as SchemaLike<object> | null,
+      list: (list ?? item ?? null) as SchemaLike<object> | null,
     });
   }
 
-  resolveInput(slot: SchemaInputSlot, _operation?: OperationId): KavoSchema<unknown> | null {
+  resolveInput(slot: SchemaInputSlot, _operation?: OperationId): SchemaLike<object> | null {
     return this.input[slot];
   }
 
-  resolveOutput(slot: SchemaOutputSlot, _operation?: OperationId): KavoSchema<unknown> | null {
+  resolveOutput(slot: SchemaOutputSlot, _operation?: OperationId): SchemaLike<object> | null {
     return this.output[slot];
   }
 }

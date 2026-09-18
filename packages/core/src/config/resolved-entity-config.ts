@@ -2,7 +2,6 @@ import type { KavoSettings } from "./settings.js";
 import type { SearchDriver, SearchMode } from "./entity-config.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
-import type { DtoResolver } from "../dto/dto.js";
 import type { WriteApply } from "./write-fields.js";
 import type { SchemaResolver } from "../schema/entity-schema.js";
 import type { FilterExpression, FilterOperator } from "../query/filter.js";
@@ -121,8 +120,6 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    * `compositeIdFields` directly instead.
    */
   readonly identifierField: string;
-  /** Bootstrap-cached DTO resolution. */
-  readonly dto: DtoResolver<Entity>;
   /** Bootstrap-cached schema resolution (ADR-0055). */
   readonly schema: SchemaResolver<Entity>;
   /** Relation edges of this entity. */

@@ -36,7 +36,6 @@ import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
 import type { WriteApply, WriteFieldsConfig } from "./write-fields.js";
-import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
 import type { SchemaClass } from "../schema/schema-class.js";
 import { isSchemaClass } from "../schema/schema-class.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
@@ -191,15 +190,11 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
     identifierField,
-    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
+    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
       create: createFields === undefined ? undefined : ({ fields: createFields } as WriteFieldsConfig<Entity>),
       update: updateFields === undefined ? undefined : ({ fields: updateFields } as WriteFieldsConfig<Entity>),
-    }),
-    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema, {
-      create: entityConfig?.create,
-      update: entityConfig?.update,
     }),
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's

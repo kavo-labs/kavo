@@ -34,7 +34,7 @@ const kavo = createKavo();
 const authors = kavo.createCrud(Author, {
   operations: {
     // Standard entries keep their narrowing, side by side with a custom one.
-    findOne: { dto: { output: AuthorProfileDto } },
+    findOne: { schema: { output: AuthorProfileDto } },
     markFeaturedOne: {
       handler: {
         async execute(_input: { id: number; body: MarkFeaturedDto }, _context: KavoContext<Author>) {
@@ -86,7 +86,7 @@ const overridden = kavo.createCrud(Author, {
   operations: {
     markFeaturedOne: {
       handler: { async execute() {} },
-      dto: { input: MarkFeaturedDto, output: AuthorProfileDto },
+      schema: { input: MarkFeaturedDto, output: AuthorProfileDto },
     },
   },
 });
@@ -139,30 +139,6 @@ kavo.createCrud(Author, {
 });
 
 // ── The standard eight keep their #131 narrowing ──────────────────────
-
-kavo.createCrud(Author, {
-  operations: {
-    markFeaturedOne: { handler: { async execute() {} } },
-    // @ts-expect-error — `deleteOne` is a void result with no query; it has no `dto` key to set.
-    deleteOne: { dto: { input: MarkFeaturedDto } },
-  },
-});
-
-kavo.createCrud(Author, {
-  operations: {
-    markFeaturedOne: { handler: { async execute() {} } },
-    // @ts-expect-error — `findOne` has no `input` position (no request body).
-    findOne: { dto: { input: MarkFeaturedDto } },
-  },
-});
-
-kavo.createCrud(Author, {
-  operations: {
-    markFeaturedOne: { handler: { async execute() {} } },
-    // @ts-expect-error — `createOne` has no `query` position.
-    createOne: { dto: { query: AuthorSearchQueryDto } },
-  },
-});
 
 // A standard id is configured, never redefined: its kind is fixed.
 kavo.createCrud(Author, {

@@ -294,7 +294,7 @@ describe("DefaultKavoService — the engine escape hatch", () => {
       id = 0;
       name = "";
     }
-    const { crud } = makeCrud({ dto: { item: UserItemDto } } as never);
+    const { crud } = makeCrud({ schema: { output: { item: UserItemDto } } } as never);
     await crud.createOne(ADA as never);
 
     const typed = await crud.findOne(1);
@@ -504,7 +504,7 @@ describe("createCrud — the standalone zero-config front door", () => {
       id = 0;
       name = "";
     }
-    const crud = createCrud(User, { dto: { item: UserItemDto } } as never, {
+    const crud = createCrud(User, { schema: { output: { item: UserItemDto } } } as never, {
       adapter: new InMemoryUserAdapter(),
       metadata: userMetadata,
     });
