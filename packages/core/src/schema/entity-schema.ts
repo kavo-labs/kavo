@@ -27,15 +27,15 @@ type SchemaSlot<T> = KavoSchema<T> | SchemaClass<T & object>;
 
 /**
  * ADR-0055: `schema` is the per-slot, input/output-split counterpart to
- * `dto` — a {@link SchemaLike} (a `KavoSchema<Output>` validator or a bare
+ * `schema` — a {@link SchemaLike} (a `KavoSchema<Output>` validator or a bare
  * `SchemaClass<Output>`, the structural contracts `kavo-schema.ts`/
  * `schema-class.ts` define) instead of a `DtoClass<Shape>`. Landed
- * additively alongside `dto` rather than replacing it outright: `@kavo/nest`'s
+ * additively alongside `schema` rather than replacing it outright: `@kavo/nest`'s
  * OpenAPI generation, route decoration, and body-validation wiring
  * (`swagger.ts`/`kavo.decorator.ts`/`kavo.module.ts`) resolve DTOs directly
- * off core's `dto` exports today, and `pnpm check` builds the whole
- * workspace — deleting `dto` here before that framework-layer migration
- * lands would red the gate for a package this issue scopes out. `dto`'s
+ * off core's `schema` exports today, and `pnpm check` builds the whole
+ * workspace — deleting `schema` here before that framework-layer migration
+ * lands would red the gate for a package this issue scopes out. `schema`'s
  * removal is tracked as follow-up work once `@kavo/nest` (and
  * `@kavo/graphql`/`@kavo/mcp`) migrate off it.
  */
@@ -71,7 +71,7 @@ export type SchemaOutputMap<Entity, ItemOut, ListOut> =
 
 /**
  * Per-entity schema registration — the `schema` key of `createCrud`'s
- * config. Mirrors `dto`'s slot convention exactly (ADR-0055's own
+ * config. Mirrors `schema`'s slot convention exactly (ADR-0055's own
  * decision), split into `input`/`output` rather than one flat map: `input`
  * feeds the engine's deserialization stage, `output` feeds response
  * mapping at serialization — the two never run at the same pipeline stage,
@@ -139,15 +139,15 @@ function isSchemaShorthand(value: unknown): value is SchemaSlot<unknown> {
  * Bootstrap-cached schema resolution, the `schema`-typed sibling of
  * `DtoResolver`. Each slot resolves independently: the explicitly
  * registered schema, or `null` meaning "no schema configured — no input
- * validation, no output narrowing beyond whatever `dto`/the entity-derived
+ * validation, no output narrowing beyond whatever `schema`/the entity-derived
  * default already does."
  *
  * `patch` falls back to the registered `update` schema when unset (the
- * same fallback `DefaultDtoResolver` gives `dto.patch`); `list` falls back
+ * same fallback `DefaultDtoResolver` gives `schema.input.patch`); `list` falls back
  * to `item`. `create`/`query` have no fallback of their own.
  *
  * Resolution declares its return type as the wider `SchemaLike<object> |
- * null` (Task 9, `remove-dto` plan): a class-shaped slot is accepted and
+ * null`: a class-shaped slot is accepted and
  * stored here, and `kavo-engine.ts` branches on kind (`isSchemaClass`)
  * before ever calling `safeParse`.
  */
@@ -240,13 +240,13 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
  * Per-operation schema override (the `schema`-typed sibling of
  * `OperationDtoOverride`, issue #131): `operations.<id>.schema.<field>` →
  * root `schema.input.<slot>`/`schema.output.<slot>` → entity-derived
- * default, the same three-tier fallback chain `dto` has.
+ * default, the same three-tier fallback chain `schema` has.
  *
  * Unlike `OperationDtoOverride`, this is not narrowed per standard
  * operation id via `Pick` — every field is simply optional here, and which
  * ones are meaningful for a given id is enforced at bootstrap
  * (`resolveSchemaOverride`, `default-operation-registry.ts`), the runtime
- * mirror of the same check `DTO_OVERRIDE_FIELDS` makes for `dto`.
+ * mirror of the same check `DTO_OVERRIDE_FIELDS` makes for `schema`.
  */
 export interface OperationSchemaOverride<InputOut = unknown, OutputOut = unknown, QueryOut = unknown> {
   readonly input?: SchemaSlot<InputOut>;
@@ -260,7 +260,7 @@ export interface OperationSchemaOverride<InputOut = unknown, OutputOut = unknown
  * takes precedence when present (`SchemaOutput<S>`, the structural-contract
  * equivalent of `z.infer`); otherwise resolves `Fallback` (the entity's
  * root-slot-derived type) directly — there is no further fallback to a
- * `dto`-typed reading here.
+ * `schema`-typed reading here.
  */
 export type SchemaInputOf<Ops, Id extends string, Fallback> =
   OperationEntryOf<Ops, Id> extends { readonly schema: { readonly input: SchemaLike<infer Output> } }

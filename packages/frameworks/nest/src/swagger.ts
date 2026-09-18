@@ -1277,12 +1277,12 @@ function successBodyFor(
   }
   const outputSlot = descriptor.cardinality === "many" ? "list" : "item";
   // `schema.output.<slot>` (ADR-0055, issue #467) is documented ahead of
-  // `dto`, mirroring the engine's own precedence
+  // `schema`, mirroring the engine's own precedence
   // (`descriptor.schemaOutput ?? config.schema.resolveOutput(...)` at
   // response mapping) — but only when it opts into `toJSONSchema`. A
   // schema-documented list response still gets the ordinary envelope
   // wrapper; it is not `x-kavo-operation-scoped` unless a `descriptor.output`
-  // DTO override is *also* set, which the `dto`-driven branch below still
+  // DTO override is *also* set, which the `schema`-driven branch below still
   // reads (a `schema` override alone does not rename the component, since
   // `descriptor.output` — not `descriptor.schemaOutput` — is
   // `registerKavoSchemas`'s per-operation-naming signal, issue #131).

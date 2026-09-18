@@ -13,7 +13,7 @@ import type { RealtimeTransport } from "../realtime/realtime-transport.js";
  *
  * Field-level configuration — what a request may filter/sort/select/
  * search/include, its per-axis defaults, and its per-axis ceilings — lives
- * on `EntityConfig`'s `dto`/`select`/`search`/`filter`/`sort`/`include`
+ * on `EntityConfig`'s `schema`/`select`/`search`/`filter`/`sort`/`include`
  * blocks instead (issue #386), grouped by concern rather than split across
  * this schema and a separate allowlist tree. Per-relation read tuning and
  * array-mutation write policy moved the same way (issue #404): they live on
@@ -164,7 +164,7 @@ export type RealtimeFieldSelector = readonly string[] | { readonly exclude: read
  * (`kavo.ts`) is where transports are registered instead, once per
  * `createKavo` root, and reached at runtime through
  * `ResolvedEntityConfig.realtimeTransports` — structural, like `relations`
- * (`EntityConfig.relations`) and `dto`, not merged through this precedence
+ * (`EntityConfig.relations`) and `schema`, not merged through this precedence
  * chain. See the `operations.
  * <id>.handler` doc for the same reasoning applied to another live-object
  * exception to "settings are data."

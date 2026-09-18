@@ -76,7 +76,7 @@ const SETTINGS_KEYS = [
 
 /**
  * An `EntityConfig`/`OperationConfig` mixes settings keys with structural
- * keys (`dto`, `filter`/`sort`/`select`/`search`/`include`, `handler`, …);
+ * keys (`schema`, `filter`/`sort`/`select`/`search`/`include`, `handler`, …);
  * only the settings subset participates in the merge algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {

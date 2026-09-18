@@ -332,11 +332,11 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // synthesized from the `{ fields }` shorthand (issue #386,
     // `schema-fields-shorthand.ts`) — *replaces* the derived writable
     // projection rather than narrowing it (ADR-0026's `select.fields`-vs-
-    // `dto.item` precedent); a validator-shaped schema contributes no
+    // `schema.output.item` precedent); a validator-shaped schema contributes no
     // explicit allowlist here (the derived writable projection is still
     // used, and the engine's `safeParse` step separately validates/reshapes
     // afterward). `creatable`/`updatable` are reached through
-    // `dto.create`/`dto.update`'s shorthand now, not a separate allowlist
+    // `schema.input.create`/`schema.input.update`'s shorthand now, not a separate allowlist
     // key.
     const allowed = explicit ?? this.writableProjection;
     // Only the derived default excludes the marker — an explicit DTO's own

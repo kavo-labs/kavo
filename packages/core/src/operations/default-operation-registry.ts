@@ -127,7 +127,7 @@ export type StandardHandlerFactory<Entity> = (id: StandardOperationId) => Operat
 type DtoOverrideField = "input" | "output" | "query";
 
 /**
- * Which `dto.<field>` overrides (issue #131) are meaningful on each
+ * Which `schema.<field>` overrides (issue #131) are meaningful on each
  * standard operation — `StandardOperationsConfig` (`config/entity-config.ts`)
  * makes the same rule unrepresentable at the type level via `Pick`; this
  * is its runtime mirror, for configs built from an erased or cast type
@@ -147,7 +147,7 @@ const DTO_OVERRIDE_FIELDS: Readonly<Record<StandardOperationId, readonly DtoOver
 });
 
 /**
- * Which `dto.<field>` overrides a **custom** operation supports, derived
+ * Which `schema.<field>` overrides a **custom** operation supports, derived
  * from its declared `kind` rather than looked up by id (issue #145). Same
  * rule the standard table above encodes, stated once: a read has no
  * request body to narrow, a write runs no query resolution.

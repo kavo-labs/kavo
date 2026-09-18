@@ -258,7 +258,7 @@ export interface RelationConfig {
  * `KavoSettings.arrayMutation` into one entity-scope block — the same move
  * issue #386 made for `filter`/`sort`/`select`/`search`/`include`).
  *
- * Structural entity-scope config like `dto`: resolved directly
+ * Structural entity-scope config like `schema`: resolved directly
  * by `DefaultRelationRegistry` at bootstrap, never merged through the
  * global → operation → per-call precedence chain, and with no global or
  * built-in default. This block never grants permission — read-includability
@@ -321,7 +321,7 @@ export interface SelectConfig<Entity> {
    * *invisible* by removing the echo. Hiding a credential means narrowing
    * every axis and registering a write DTO (ADR-0026 §6).
    *
-   * A registered `dto.item`/`dto.list` with a runtime shape **replaces**
+   * A registered `schema.output.item`/`schema.output.list` with a runtime shape **replaces**
    * the projection rather than intersecting with it, so it wins even where
    * it is *wider*. Where you register one, it — not this key — is the
    * narrowing statement.
@@ -451,7 +451,7 @@ export type OperationConfig<
  * The `operations` map's per-id entries. Every id also accepts a `schema`
  * override (ADR-0055) for the slots that operation actually has; which
  * fields apply there is enforced at bootstrap (`resolveSchemaOverride`)
- * rather than at the type level — unlike the former `dto` override (issue
+ * rather than at the type level — unlike the former `schema` override (issue
  * #131), it is not `Pick`-narrowed per id here. The `true`/`false`
  * shorthand is still accepted at every id (ADR-0038, issue #257), for a
  * plain enable/disable with no settings attached.
@@ -631,14 +631,14 @@ type CustomOperationSettingsKey<
  * types, plus any number of custom ids (issue #145). This is the
  * **constraint** on `EntityConfig`'s `Ops` parameter; `Ops` itself is still
  * inferred from the caller's object literal, which is what keeps the
- * per-operation `dto` narrowing (`DtoInputOf`/`DtoOutputOf`/`DtoQueryOf`)
+ * per-operation `schema` narrowing (`SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`)
  * reading real classes back rather than the constraint's wider shape.
  *
  * The intersection is what admits a custom id at all: the eight declared
  * properties come from `StandardOperationsConfig`, so each keeps exactly
  * the type issue #131 gave it, and the index signature turns every *other*
  * key from an excess property into a permitted one. Assignability to an
- * intersection is assignability to both halves, so `deleteOne: { dto: … }`
+ * intersection is assignability to both halves, so `deleteOne: { schema: … }`
  * is still rejected by the first half no matter what the second admits.
  *
  * The index signature's union is a genuine upper bound rather than
@@ -672,7 +672,7 @@ export type OperationsConfig<
  * than folded into `Ops`' constraint, and the difference is load-bearing. A
  * constraint that names `Ops` inside itself makes TypeScript stop keeping
  * the caller's object literal as the inferred `Ops` — it re-derives it from
- * the constraint — and every per-operation `dto` narrowing from issue #131
+ * the constraint — and every per-operation `schema` narrowing from issue #131
  * disappears with it. Intersected at the property, `Ops` is already
  * inferred, so this is a plain second check over a known type.
  *
@@ -718,7 +718,7 @@ export interface EntityConfig<
   // The constraint fixes the shape `operations` accepts; the free
   // parameter is what lets inference capture the *literal* dto classes a
   // caller registers per operation, which `DtoInputOf`/`DtoOutputOf`/
-  // `DtoQueryOf` (dto.ts) then read back off `KavoService`'s `Ops`
+  // `SchemaQueryOf` (entity-schema.ts) then read back off `KavoService`'s `Ops`
   // parameter (issue #131). The constraint is `OperationsConfig` rather
   // than `StandardOperationsConfig` (issue #145) so that a key outside the
   // standard eight is a permitted custom operation rather than an excess
@@ -750,17 +750,17 @@ export interface EntityConfig<
   readonly schema?: EntitySchema<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
   /**
    * What `createOne` (and `createMany`, once #137 lands) may write. A
-   * `{ fields: [...] }` allowlist (the shorthand `dto.patch`/`dto.item`/
-   * `dto.list` also accept, issue #386), or the inverse `{ fields: { exclude:
+   * `{ fields: [...] }` allowlist (the shorthand `schema.input.patch`/`schema.output.item`/
+   * `schema.output.list` also accept, issue #386), or the inverse `{ fields: { exclude:
    * [...] } }` form the read-side field groups take (issue #397) — "every
    * writable field except these", resolved at bootstrap against the ADR-0014
    * writable projection, with an `exclude` entry that names nothing writable
    * a bootstrap error. Moved to its own top-level key (issue #388) so
-   * `dto.create` stays reserved for a registered DTO class. Omitted — or an
+   * `schema.input.create` stays reserved for a registered DTO class. Omitted — or an
    * `{ exclude }` that removes nothing — every own writable field is open:
    * every non-generated scalar column except the primary key, plus every
    * relation, by association (ADR-0014). A
-   * registered `dto.create` class with a runtime shape **replaces** this
+   * registered `schema.input.create` class with a runtime shape **replaces** this
    * projection rather than intersecting with it, and wins over this key —
    * where you register one, it, not this key, is the narrowing statement.
    *
@@ -793,7 +793,7 @@ export interface EntityConfig<
    * `operations.<id>.policy` overrides (or opts out of with `false`) does
    * not.
    *
-   * Structural entity-scope config like `dto` — outside the settings
+   * Structural entity-scope config like `schema` — outside the settings
    * precedence chain (a policy is itself a closure) — resolved by its own
    * "nearest scope wins" walk, not `mergeSettings`. Falls back to
    * `GlobalConfig.policy` (`createKavo({ policy })`) when unset here;
@@ -844,7 +844,7 @@ export interface EntityConfig<
   /**
    * Per-operation overrides. `false` disables the operation; `true`
    * enables one that is off by default (`purgeOne`, `restoreOne`); an
-   * object form may also carry a per-operation `dto` override
+   * object form may also carry a per-operation `schema` override
    * (`StandardOperationsConfig`, above).
    *
    * A key that is not one of the standard eight declares a **custom**

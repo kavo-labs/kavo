@@ -1904,12 +1904,12 @@ function validateProjectedResult<Entity>(
   const served = slot === "list" ? "the first row of the list" : "the response";
   // Only a class-shaped schema narrows the projection — a validator judges
   // an already-projected value, it never widens or names its own key set.
-  const dto = schema !== null && isSchemaClass(schema) ? schema : null;
+  const schemaClass = schema !== null && isSchemaClass(schema) ? schema : null;
   throw new ConfigurationException(
     context.entityName,
     `operations.${descriptor.id}.schema.output`,
     `the '${descriptor.id}' handler returned ${describeResult(source)}, so ${served} serialized to {}. ` +
-      projectedAgainst(dto, context.entityName, slot),
+      projectedAgainst(schemaClass, context.entityName, slot),
   );
 }
 
@@ -1973,8 +1973,8 @@ function describeResult(source: unknown): string {
  * Swagger's decorators can answer), the fallback is the entity's
  * projection and the missing initializers are the actual fault.
  */
-function projectedAgainst(dto: SchemaClass | null, entityName: string, slot: "item" | "list"): string {
-  if (dto === null) {
+function projectedAgainst(schemaClass: SchemaClass | null, entityName: string, slot: "item" | "list"): string {
+  if (schemaClass === null) {
     return (
       `A custom operation's result is projected through the entity's '${slot}' shape unless the operation ` +
       `registers one of its own, and none of those keys are fields of '${entityName}' — declare ` +
@@ -1982,16 +1982,16 @@ function projectedAgainst(dto: SchemaClass | null, entityName: string, slot: "it
       `a runtime shape`
     );
   }
-  const keys = schemaShapeKeys(dto);
+  const keys = schemaShapeKeys(schemaClass);
   if (keys === null) {
     return (
-      `The registered '${dto.name || "(anonymous)"}' declares no runtime fields — TypeScript erases an ` +
+      `The registered '${schemaClass.name || "(anonymous)"}' declares no runtime fields — TypeScript erases an ` +
       `uninitialized class field, so 'applied!: number' declares nothing at runtime and the projection falls ` +
       `back to '${entityName}'. Give each field an initializer ('applied = 0')`
     );
   }
   return (
-    `The result was projected through the registered '${dto.name || "(anonymous)"}', which declares ` +
+    `The result was projected through the registered '${schemaClass.name || "(anonymous)"}', which declares ` +
     `${nameList(keys)} — none of which the handler returned. The schema and the handler disagree about the ` +
     `result's shape; change whichever is wrong`
   );
