@@ -121,6 +121,20 @@ describe("DefaultSerializer — response projection", () => {
     expect(serializer.serializeItem(partial, null, contextStub())).toEqual({ id: 1, name: "Ada" });
   });
 
+  it("narrows serializeItem's projection using a class-shaped schema", () => {
+    class ItemSchema {
+      id = 0;
+    }
+    const result = serializer.serializeItem(ada(), ItemSchema, contextStub());
+    expect(result).toEqual({ id: 1 });
+  });
+
+  it("does not narrow serializeItem's projection for a validator-shaped schema (narrowing happens at the engine layer)", () => {
+    const validator = { safeParse: () => ({ success: true, data: {} }) };
+    const result = serializer.serializeItem(ada(), validator as never, contextStub());
+    expect(Object.keys(result)).toEqual(COLUMNS);
+  });
+
   it("applies the same rules element-wise across a list", () => {
     class UserListDto {
       id = 0;
