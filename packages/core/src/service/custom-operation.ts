@@ -1,8 +1,9 @@
 import type { EntityId } from "../types/entity-id.js";
 import type { ListResultDto } from "../dto/list-result.js";
+import type { DtoInputOf, DtoOutputOf } from "../dto/dto.js";
 import type { StandardOperationId } from "../operations/operation.js";
-import type { OperationEntryOf } from "../dto/dto.js";
-import type { SchemaInputOf, SchemaOutputOf } from "../dto/entity-schema.js";
+import type { OperationEntryOf } from "../operations/operation-entry.js";
+import type { SchemaInputOf, SchemaOutputOf } from "../schema/entity-schema.js";
 
 /**
  * The typed surface for a **custom** operation (issue #145) — everything
@@ -71,7 +72,11 @@ export type CustomOperationId<Ops> = [DeclaredCustomIds<Ops>] extends [never] ? 
 export type CustomOperationBody<Ops, Id extends string> = SchemaInputOf<
   Ops,
   Id,
-  HandlerInputOf<Ops, Id> extends { readonly id: unknown; readonly body: infer Body } ? Body : HandlerInputOf<Ops, Id>
+  DtoInputOf<
+    Ops,
+    Id,
+    HandlerInputOf<Ops, Id> extends { readonly id: unknown; readonly body: infer Body } ? Body : HandlerInputOf<Ops, Id>
+  >
 >;
 
 /**
@@ -82,8 +87,8 @@ export type CustomOperationBody<Ops, Id extends string> = SchemaInputOf<
  */
 export type CustomOperationResult<Ops, Id extends string> =
   OperationEntryOf<Ops, Id> extends { readonly cardinality: "many" }
-    ? ListResultDto<SchemaOutputOf<Ops, Id, RowOf<HandlerOutputOf<Ops, Id>>>>
-    : SchemaOutputOf<Ops, Id, HandlerOutputOf<Ops, Id>>;
+    ? ListResultDto<SchemaOutputOf<Ops, Id, DtoOutputOf<Ops, Id, RowOf<HandlerOutputOf<Ops, Id>>>>>
+    : SchemaOutputOf<Ops, Id, DtoOutputOf<Ops, Id, HandlerOutputOf<Ops, Id>>>;
 
 /**
  * The request half of a `run` call — the members of `KavoRequest` a caller

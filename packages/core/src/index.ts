@@ -71,7 +71,7 @@ export type { ListMetaDto, ListResultDto } from "./dto/list-result.js";
 
 // ── Schema (ADR-0055) ────────────────────────────────────────────────
 // Landed additively alongside the DTO system above — see
-// `dto/entity-schema.ts`'s module doc for why `dto` is not yet removed.
+// `schema/entity-schema.ts`'s module doc for why `dto` is not yet removed.
 export type {
   EntitySchema,
   EntitySchemaMap,
@@ -84,8 +84,8 @@ export type {
   SchemaOutputSlot,
   SchemaQueryOf,
   SchemaResolver,
-} from "./dto/entity-schema.js";
-export { DefaultSchemaResolver } from "./dto/entity-schema.js";
+} from "./schema/entity-schema.js";
+export { DefaultSchemaResolver } from "./schema/entity-schema.js";
 
 // ── Errors ────────────────────────────────────────────────────────────
 export type { KavoErrorCode, KavoExceptionShape, ErrorContext, ErrorHandler } from "./errors/kavo-exception-shape.js";

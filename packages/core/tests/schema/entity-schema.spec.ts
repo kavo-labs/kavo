@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { KavoSchema, SchemaParseResult } from "@kavo/core";
-import { SchemaValidationException, createKavo } from "@kavo/core";
-import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
+import { DefaultSchemaResolver, SchemaValidationException, createKavo } from "@kavo/core";
+import { InMemoryUserAdapter, User, userMetadata } from "../support/user-fixture.js";
 
 /**
  * ADR-0055: `schema` wires a `KavoSchema` into the engine's deserialization
  * (input) and response-mapping (output) stages, alongside `dto` — landed
- * additively per issue #466 (see `dto/entity-schema.ts`'s module doc for
+ * additively per issue #466 (see `schema/entity-schema.ts`'s module doc for
  * why `dto` itself isn't removed yet).
  */
 
@@ -159,5 +159,27 @@ describe("EntityConfig.schema (ADR-0055)", () => {
     // schema instance here — the input side stamps the stored value once,
     // the output side stamps the response a second time.
     expect(created).toMatchObject({ name: "Ada (validated) (validated)" });
+  });
+});
+
+describe("DefaultSchemaResolver with a SchemaClass slot", () => {
+  it("resolves a class-shaped schema.input.create unchanged", () => {
+    class CreateUserSchema {
+      name = "";
+    }
+    const resolver = new DefaultSchemaResolver<{ name: string }>({ input: { create: CreateUserSchema } });
+    // `resolveInput` is still typed `KavoSchema<unknown> | null` (Task 9
+    // widens it once `kavo-engine.ts` branches on kind) — cast to assert
+    // the class-shaped value the constructor actually stored.
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(CreateUserSchema);
+  });
+
+  it("does not confuse a class-shaped shorthand with the { input, output } map", () => {
+    class WholeEntitySchema {
+      name = "";
+    }
+    const resolver = new DefaultSchemaResolver<{ name: string }>(WholeEntitySchema);
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(WholeEntitySchema);
+    expect(resolver.resolveOutput("item", "findOne") as unknown).toBe(WholeEntitySchema);
   });
 });

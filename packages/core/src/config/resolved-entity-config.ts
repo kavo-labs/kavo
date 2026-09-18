@@ -3,7 +3,7 @@ import type { SearchDriver, SearchMode } from "./entity-config.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { DtoResolver, WriteApply } from "../dto/dto.js";
-import type { SchemaResolver } from "../dto/entity-schema.js";
+import type { SchemaResolver } from "../schema/entity-schema.js";
 import type { FilterExpression, FilterOperator } from "../query/filter.js";
 import type { Sort } from "../query/sort.js";
 import type { OperationId, StandardOperationId } from "../operations/operation.js";

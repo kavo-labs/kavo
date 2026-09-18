@@ -2,7 +2,8 @@ import type { EntityId } from "../types/entity-id.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { ListResultDto } from "../dto/list-result.js";
-import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../dto/entity-schema.js";
+import type { DtoInputOf, DtoOutputOf, DtoQueryOf } from "../dto/dto.js";
+import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../schema/entity-schema.js";
 import type { KavoCallOptions } from "./kavo-call-options.js";
 import type {
   CustomOperationBody,
@@ -45,31 +46,31 @@ export interface KavoService<
   Ops = unknown,
 > {
   createOne(
-    data: SchemaInputOf<Ops, "createOne", CreateDto>,
+    data: SchemaInputOf<Ops, "createOne", DtoInputOf<Ops, "createOne", CreateDto>>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "createOne", ItemDto>>;
+  ): Promise<SchemaOutputOf<Ops, "createOne", DtoOutputOf<Ops, "createOne", ItemDto>>>;
 
   findOne(
     id: Id,
-    query?: SchemaQueryOf<Ops, "findOne", QueryDto>,
+    query?: SchemaQueryOf<Ops, "findOne", DtoQueryOf<Ops, "findOne", QueryDto>>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "findOne", ItemDto>>;
+  ): Promise<SchemaOutputOf<Ops, "findOne", DtoOutputOf<Ops, "findOne", ItemDto>>>;
   findMany(
-    query?: SchemaQueryOf<Ops, "findMany", QueryDto>,
+    query?: SchemaQueryOf<Ops, "findMany", DtoQueryOf<Ops, "findMany", QueryDto>>,
     options?: KavoCallOptions,
-  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", ListDto>>>;
+  ): Promise<ListResultDto<SchemaOutputOf<Ops, "findMany", DtoOutputOf<Ops, "findMany", ListDto>>>>;
 
   updateOne(
     id: Id,
-    data: SchemaInputOf<Ops, "updateOne", UpdateDto>,
+    data: SchemaInputOf<Ops, "updateOne", DtoInputOf<Ops, "updateOne", UpdateDto>>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "updateOne", ItemDto>>;
+  ): Promise<SchemaOutputOf<Ops, "updateOne", DtoOutputOf<Ops, "updateOne", ItemDto>>>;
 
   patchOne(
     id: Id,
-    data: SchemaInputOf<Ops, "patchOne", PatchDto>,
+    data: SchemaInputOf<Ops, "patchOne", DtoInputOf<Ops, "patchOne", PatchDto>>,
     options?: KavoCallOptions,
-  ): Promise<SchemaOutputOf<Ops, "patchOne", ItemDto>>;
+  ): Promise<SchemaOutputOf<Ops, "patchOne", DtoOutputOf<Ops, "patchOne", ItemDto>>>;
 
   /** Hard or soft per the resolved delete strategy. */
   deleteOne(id: Id, options?: KavoCallOptions): Promise<void>;
@@ -80,7 +81,7 @@ export interface KavoService<
    * still narrows it independently (issue #131). Enabled when the entity
    * config declares soft delete.
    */
-  restoreOne(id: Id, options?: KavoCallOptions): Promise<SchemaOutputOf<Ops, "restoreOne", ItemDto>>;
+  restoreOne(id: Id, options?: KavoCallOptions): Promise<SchemaOutputOf<Ops, "restoreOne", DtoOutputOf<Ops, "restoreOne", ItemDto>>>;
 
   /**
    * Permanently removes a soft-deleted row; disabled by default, enabled
@@ -108,7 +109,11 @@ export interface KavoService<
    */
   run<Operation extends CustomOperationId<Ops>>(
     operation: Operation,
-    request?: CustomOperationRequest<Id, CustomOperationBody<Ops, Operation>, SchemaQueryOf<Ops, Operation, QueryDto>>,
+    request?: CustomOperationRequest<
+      Id,
+      CustomOperationBody<Ops, Operation>,
+      SchemaQueryOf<Ops, Operation, DtoQueryOf<Ops, Operation, QueryDto>>
+    >,
     options?: KavoCallOptions,
   ): Promise<CustomOperationResult<Ops, Operation>>;
 }

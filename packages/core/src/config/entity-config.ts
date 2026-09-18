@@ -5,7 +5,7 @@ import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { OperationDtoMap, OperationDtoOverride, WriteFieldsConfig } from "../dto/dto.js";
-import type { EntitySchema, OperationSchemaOverride } from "../dto/entity-schema.js";
+import type { EntitySchema, OperationSchemaOverride } from "../schema/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
 import type { OperationCardinality, OperationKind, StandardOperationId } from "../operations/operation.js";

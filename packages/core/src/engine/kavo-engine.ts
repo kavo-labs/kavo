@@ -3,7 +3,7 @@ import type { KavoRequest } from "../context/kavo-request.js";
 import type { KavoResponse } from "../context/kavo-response.js";
 import type { DtoClass, DtoSlot } from "../dto/dto.js";
 import type { KavoSchema } from "../schema/kavo-schema.js";
-import type { SchemaInputSlot } from "../dto/entity-schema.js";
+import type { SchemaInputSlot } from "../schema/entity-schema.js";
 import type { ListMetaDto } from "../dto/list-result.js";
 import type { Deserializer, Serializer } from "../serialization/serializer.js";
 import type { EntityId } from "../types/entity-id.js";

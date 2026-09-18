@@ -1,15 +1,34 @@
-import type { KavoSchema } from "../schema/kavo-schema.js";
-import type { OperationEntryOf, DtoInputOf, DtoOutputOf, DtoQueryOf } from "./dto.js";
+import type { KavoSchema } from "./kavo-schema.js";
+import type { SchemaClass, SchemaLike } from "./schema-class.js";
+import { isSchemaClass } from "./schema-class.js";
+import type { OperationEntryOf } from "../operations/operation-entry.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 
 /**
+ * The slot-position union `KavoSchema<T> | SchemaClass<T>` for an
+ * unconstrained `T`. `SchemaLike<T extends object = object>` (Task 1)
+ * bounds `T` to `object` at its own declaration because `SchemaClass<Shape
+ * extends object>` requires it — but the slot positions below are typed
+ * against the entity's own (unconstrained) generic parameters, exactly as
+ * `KavoSchema<X>` was before this widening. Intersecting `& object` at
+ * every slot to satisfy `SchemaLike`'s bound would change what's accepted
+ * there (and does — it breaks inference in `EntityConfig`'s no-type-argument
+ * position, e.g. `Parameters<...>` extraction, where the entity type
+ * parameter defaults to `unknown`). Defining the union locally instead
+ * keeps the `KavoSchema<T>` half exactly as unconstrained as it always was,
+ * and only asks `SchemaClass` for `T & object` (its own actual bound).
+ */
+type SchemaSlot<T> = KavoSchema<T> | SchemaClass<T & object>;
+
+/**
  * ADR-0055: `schema` is the per-slot, input/output-split counterpart to
- * `dto` — a `KavoSchema<Output>` (the structural contract `kavo-schema.ts`
- * defines) instead of a `DtoClass<Shape>`. Landed additively alongside
- * `dto` rather than replacing it outright: `@kavo/nest`'s OpenAPI
- * generation, route decoration, and body-validation wiring
+ * `dto` — a {@link SchemaLike} (a `KavoSchema<Output>` validator or a bare
+ * `SchemaClass<Output>`, the structural contracts `kavo-schema.ts`/
+ * `schema-class.ts` define) instead of a `DtoClass<Shape>`. Landed
+ * additively alongside `dto` rather than replacing it outright: `@kavo/nest`'s
+ * OpenAPI generation, route decoration, and body-validation wiring
  * (`swagger.ts`/`kavo.decorator.ts`/`kavo.module.ts`) resolve DTOs directly
  * off core's `dto` exports today, and `pnpm check` builds the whole
  * workspace — deleting `dto` here before that framework-layer migration
@@ -21,30 +40,30 @@ export type SchemaInputSlot = "create" | "update" | "patch" | "query";
 export type SchemaOutputSlot = "item" | "list";
 
 /**
- * `schema.input`'s shorthand: a single {@link KavoSchema} in place of the
+ * `schema.input`'s shorthand: a single {@link SchemaLike} in place of the
  * per-slot map, applied to `create`/`update`/`patch` alike (never `query`,
  * which has its own shape and no natural single-schema reading). Equivalent
  * to writing `{ create: X, update: X, patch: X }` by hand.
  */
 export type SchemaInputMap<CreateOut, UpdateOut, PatchOut, QueryOut> =
-  | KavoSchema<CreateOut>
+  | SchemaSlot<CreateOut>
   | {
-      readonly create?: KavoSchema<CreateOut>;
-      readonly update?: KavoSchema<UpdateOut>;
-      readonly patch?: KavoSchema<PatchOut>;
-      readonly query?: KavoSchema<QueryOut>;
+      readonly create?: SchemaSlot<CreateOut>;
+      readonly update?: SchemaSlot<UpdateOut>;
+      readonly patch?: SchemaSlot<PatchOut>;
+      readonly query?: SchemaSlot<QueryOut>;
     };
 
 /**
- * `schema.output`'s shorthand: a single {@link KavoSchema} in place of the
+ * `schema.output`'s shorthand: a single {@link SchemaLike} in place of the
  * per-slot map, applied to `item`/`list` alike. Equivalent to writing
  * `{ item: X, list: X }` by hand.
  */
 export type SchemaOutputMap<ItemOut, ListOut> =
-  | KavoSchema<ItemOut>
+  | SchemaSlot<ItemOut>
   | {
-      readonly item?: KavoSchema<ItemOut>;
-      readonly list?: KavoSchema<ListOut>;
+      readonly item?: SchemaSlot<ItemOut>;
+      readonly list?: SchemaSlot<ListOut>;
     };
 
 /**
@@ -56,9 +75,9 @@ export type SchemaOutputMap<ItemOut, ListOut> =
  * so keeping them apart avoids a single map whose keys mean different
  * things depending on which slot you're looking at.
  *
- * Both `input` and `output` accept a single {@link KavoSchema} as shorthand
+ * Both `input` and `output` accept a single {@link SchemaLike} as shorthand
  * for their whole per-slot map (`SchemaInputMap`/`SchemaOutputMap`), and
- * `EntitySchema` below additionally accepts a single `KavoSchema` in place
+ * `EntitySchema` below additionally accepts a single `SchemaLike` in place
  * of this whole map, applied to every slot on both sides at once.
  */
 export interface EntitySchemaMap<
@@ -76,7 +95,7 @@ export interface EntitySchemaMap<
 
 /**
  * `createCrud`'s `schema` key itself: `EntitySchemaMap`'s `input`/`output`
- * split, or a single {@link KavoSchema} as shorthand for
+ * split, or a single {@link SchemaLike} as shorthand for
  * `{ input: X, output: X }` — one schema applied to `create`/`update`/
  * `patch` on the way in and `item`/`list` on the way out. Typed against
  * `CreateOut` only: the input leg is where a mismatched shape is actually
@@ -94,11 +113,25 @@ export type EntitySchema<
   QueryOut = QueryContext<Entity>,
   ItemOut = Entity,
   ListOut = ItemOut,
-> = KavoSchema<CreateOut> | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
+> =
+  | SchemaSlot<CreateOut>
+  | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
 
-/** Structural check: a `KavoSchema` shorthand has `safeParse`, a per-slot map does not. */
-function isKavoSchema(value: unknown): value is KavoSchema<unknown> {
-  return typeof value === "object" && value !== null && typeof (value as KavoSchema<unknown>).safeParse === "function";
+/**
+ * Structural check: is `value` the whole-map shorthand (a bare validator or
+ * class) rather than the `{ input, output }` / per-slot object? A validator
+ * has `safeParse`; a class is itself a function ({@link isSchemaClass}) —
+ * neither shape has meaning as a plain `{ input, output }` map, so either
+ * one signals "this is the shorthand, not the map".
+ */
+function isSchemaShorthand(value: unknown): value is SchemaSlot<unknown> {
+  if (typeof value !== "object" && typeof value !== "function") {
+    return false;
+  }
+  if (value === null) {
+    return false;
+  }
+  return isSchemaClass(value) || typeof (value as { safeParse?: unknown }).safeParse === "function";
 }
 
 /**
@@ -111,6 +144,14 @@ function isKavoSchema(value: unknown): value is KavoSchema<unknown> {
  * `patch` falls back to the registered `update` schema when unset (the
  * same fallback `DefaultDtoResolver` gives `dto.patch`); `list` falls back
  * to `item`. `create`/`query` have no fallback of their own.
+ *
+ * Resolution still declares its return type as `KavoSchema<unknown> | null`
+ * rather than the wider `SchemaLike` the config side now accepts
+ * (`EntitySchemaMap`/`EntitySchema`/`OperationSchemaOverride` below): a
+ * class-shaped slot is accepted and stored here, but `kavo-engine.ts` does
+ * not yet branch on kind before calling `safeParse` — that is Task 9's
+ * change (per the `remove-dto` plan). Widening this resolver's own return
+ * type ahead of that would red `kavo-engine.ts`'s build today.
  */
 export interface SchemaResolver<_Entity = unknown> {
   resolveInput(slot: SchemaInputSlot, operation: OperationId): KavoSchema<unknown> | null;
@@ -122,30 +163,36 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
   private readonly output: Readonly<Record<SchemaOutputSlot, KavoSchema<unknown> | null>>;
 
   constructor(schema?: EntitySchema<Entity>) {
-    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isKavoSchema(schema)
+    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(
+      schema,
+    )
       ? { input: schema, output: schema }
       : (schema ?? {});
-    const input = isKavoSchema(map.input)
+    const input = isSchemaShorthand(map.input)
       ? { create: map.input, update: map.input, patch: map.input }
       : (map.input ?? {});
-    const output = isKavoSchema(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
+    const output = isSchemaShorthand(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
+    // Cast: slot values are `SchemaLike` (Task 1), but the resolver's own
+    // declared return type stays `KavoSchema<unknown> | null` until Task 9
+    // teaches `kavo-engine.ts` to branch on kind — see the interface doc
+    // comment above.
     this.input = Object.freeze({
-      create: input.create ?? null,
-      update: input.update ?? null,
-      patch: input.patch ?? input.update ?? null,
-      query: input.query ?? null,
+      create: (input.create ?? null) as KavoSchema<unknown> | null,
+      update: (input.update ?? null) as KavoSchema<unknown> | null,
+      patch: (input.patch ?? input.update ?? null) as KavoSchema<unknown> | null,
+      query: (input.query ?? null) as KavoSchema<unknown> | null,
     });
     this.output = Object.freeze({
-      item: output.item ?? null,
-      list: output.list ?? output.item ?? null,
+      item: (output.item ?? null) as KavoSchema<unknown> | null,
+      list: (output.list ?? output.item ?? null) as KavoSchema<unknown> | null,
     });
   }
 
-  resolveInput(slot: SchemaInputSlot): KavoSchema<unknown> | null {
+  resolveInput(slot: SchemaInputSlot, _operation?: OperationId): KavoSchema<unknown> | null {
     return this.input[slot];
   }
 
-  resolveOutput(slot: SchemaOutputSlot): KavoSchema<unknown> | null {
+  resolveOutput(slot: SchemaOutputSlot, _operation?: OperationId): KavoSchema<unknown> | null {
     return this.output[slot];
   }
 }
@@ -163,31 +210,30 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
  * mirror of the same check `DTO_OVERRIDE_FIELDS` makes for `dto`.
  */
 export interface OperationSchemaOverride<InputOut = unknown, OutputOut = unknown, QueryOut = unknown> {
-  readonly input?: KavoSchema<InputOut>;
-  readonly output?: KavoSchema<OutputOut>;
-  readonly query?: KavoSchema<QueryOut>;
+  readonly input?: SchemaSlot<InputOut>;
+  readonly output?: SchemaSlot<OutputOut>;
+  readonly query?: SchemaSlot<QueryOut>;
 }
 
 /**
  * The three `Schema*Of` type-inference helpers, the `schema`-typed
  * siblings of `DtoInputOf`/`DtoOutputOf`/`DtoQueryOf`. A `schema` override
  * takes precedence when present (`SchemaOutput<S>`, the structural-contract
- * equivalent of `z.infer`); otherwise falls through to the corresponding
- * `Dto*Of` reading (which itself falls through to `Fallback`) — so a
- * `KavoService` position narrows from whichever of `schema`/`dto` an
- * operation actually configured, without a caller having to declare both.
+ * equivalent of `z.infer`); otherwise resolves `Fallback` (the entity's
+ * root-slot-derived type) directly — there is no further fallback to a
+ * `dto`-typed reading here.
  */
 export type SchemaInputOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly input: KavoSchema<infer Output> } }
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly input: SchemaLike<infer Output> } }
     ? Output
-    : DtoInputOf<Ops, Id, Fallback>;
+    : Fallback;
 
 export type SchemaOutputOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly output: KavoSchema<infer Output> } }
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly output: SchemaLike<infer Output> } }
     ? Output
-    : DtoOutputOf<Ops, Id, Fallback>;
+    : Fallback;
 
 export type SchemaQueryOf<Ops, Id extends string, Fallback> =
-  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly query: KavoSchema<infer Output> } }
+  OperationEntryOf<Ops, Id> extends { readonly schema: { readonly query: SchemaLike<infer Output> } }
     ? Output
-    : DtoQueryOf<Ops, Id, Fallback>;
+    : Fallback;
