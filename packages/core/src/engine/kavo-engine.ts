@@ -1005,12 +1005,8 @@ export class KavoEngine<Entity extends object> {
       // bootstrap, outside the settings precedence chain, so a per-call
       // override cannot loosen what an entity's `policy` demands.
       policy: config.policy,
-      // Structural, like `create`/`update`'s own field-group config above —
-      // a per-call override cannot widen what a write is defaulted from.
-      createDefault: config.createDefault,
-      updateDefault: config.updateDefault,
-      // Same reasoning: a per-call override cannot loosen the unconditional
-      // constraint `create.apply`/`update.apply` forces (issue #391).
+      // Structural, like `relations`/`policy` above: a per-call override
+      // cannot loosen the unconditional constraint `set` forces (issue #476).
       createApply: config.createApply,
       updateApply: config.updateApply,
     };
@@ -1104,12 +1100,11 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
-   * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side
-   * sibling): evaluated once per `createOne`/`updateOne`, after
-   * `resolveInput` has already produced the deserialized body, so its
-   * result can overwrite whatever the client sent for a forced field —
-   * `default` only fills a gap, `apply` always wins. `patchOne` never
-   * consults it, matching `update.default`'s own scope. Mutates `input` in
+   * `set` (issue #476, ADR-0048's write-side sibling): evaluated once per
+   * `createOne`/`updateOne`, after `resolveInput` has already produced the
+   * deserialized body, so its result can overwrite whatever the client sent
+   * for a forced field. `patchOne` never consults it — a `PATCH` omitting a
+   * field means "leave it unchanged", not "reset it." Mutates `input` in
    * place rather than returning a new object: `resolveInput`'s two write
    * shapes differ (`createOne`'s input *is* the body; `updateOne`'s wraps it
    * under `data`), and mutating the body object either shape already holds
@@ -1225,10 +1220,9 @@ export class KavoEngine<Entity extends object> {
    * with one `errors[]` entry per `SchemaIssue`, before the query/handler
    * stages ever see the payload. Running the schema over the deserializer's
    * output — rather than the raw wire body — keeps relation-association
-   * (`{ owner: { id } }`), the writable-field allowlist, and
-   * `create.default`/`update.default` all in effect regardless of whether a
-   * schema is configured; the schema only judges (and reshapes) what those
-   * already produced.
+   * (`{ owner: { id } }`) and the writable-field allowlist in effect
+   * regardless of whether a schema is configured; the schema only judges
+   * (and reshapes) what those already produced.
    */
   private deserializeWithSchema(
     raw: unknown,
@@ -1240,9 +1234,10 @@ export class KavoEngine<Entity extends object> {
       return this.deps.deserializer.deserialize(raw, schema, context);
     }
     // A validator has no key set of its own, so the deserializer would fall
-    // back to the full derived writable projection — discarding an
-    // operator's `create.fields`/`update.fields` allowlist. Narrow with that
-    // allowlist first; the validator then only judges the narrowed body.
+    // back to the full derived writable projection — discarding a
+    // class-shaped `schema.input.create`/`update` allowlist configured at
+    // entity scope. Narrow with that allowlist first; the validator then
+    // only judges the narrowed body.
     const slot = INPUT_SLOTS[descriptor.id as StandardOperationId];
     const allowlist = slot === undefined || slot === "query" ? null : context.config.schema.resolveWriteAllowlist(slot);
     const candidate = this.deps.deserializer.deserialize(raw, allowlist, context);

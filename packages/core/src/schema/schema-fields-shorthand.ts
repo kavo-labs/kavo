@@ -9,10 +9,10 @@ import type { FieldPath } from "../types/field-path.js";
  * downstream consumers (`@kavo/nest`'s Swagger generation) can tell it apart
  * from a hand-registered class.
  *
- * Every `schema` position accepts it, `create`/`update` included; those two
- * keep the top-level `EntityConfig.create.fields`/`update.fields`
- * (`config/entity-config.ts`) as the richer form (`apply`, `default`,
- * `{ exclude }`), and a schema-position list wins over it like any class.
+ * Every `schema` position accepts it, `create`/`update` included (issue
+ * #476): since the top-level `EntityConfig.create`/`update` keys were
+ * removed, this shorthand is the only way to narrow what `createOne`/
+ * `updateOne` may write without a hand-written class.
  */
 export interface FieldsShorthand<Entity> {
   readonly fields: readonly FieldPath<Entity, 1>[];

@@ -35,11 +35,13 @@ response rather than shipping as `{}`.
 each slot **independently at bootstrap** and caches the result on the
 resolved config (`config.schema`) — never per request. Resolution returns
 the registered class or validator, or `null`, where `null` means "use the
-entity-derived default". It also folds the top-level `create.fields`/
-`update.fields` shorthand into a synthesized class for `create`/`update`.
-The fallback chains `patch → update` and `list → item` are baked in at
-construction, mirroring the static generic defaults (doc 03 §1), so the
-type level and the runtime never disagree about which slot follows which.
+entity-derived default". `resolveWriteAllowlist("create"|"update"|"patch")`
+reads the class-shaped `schema.input.create`/`update` slot back off that
+same resolved map (issue #476 removed the separate top-level `create`/
+`update` fallback this used to synthesize from). The fallback chains
+`patch → update` and `list → item` are baked in at construction, mirroring
+the static generic defaults (doc 03 §1), so the type level and the runtime
+never disagree about which slot follows which.
 
 ## 3. Runtime derivation rules
 
@@ -79,25 +81,24 @@ the defaults derive from:
   defence in depth against reassigning an _existing_ row's identity or
   soft-delete state that way.
 
-  This default projection can be narrowed further, without configuring a
-  schema at all, by `create.fields` (for `createOne`) and
-  `update.fields` (for `updateOne`/`patchOne` — the two share one
-  list, since both mutate an existing row) — the write-side counterpart to
-  `select.fields` above, and subject to the same rules: it can only
-  narrow the derived projection, never widen it, so naming the id or the
-  soft-delete marker in the plain array form has no effect; and a
-  configured write schema class with a runtime shape wins outright, exactly as a
-  configured `item`/`list` schema wins over `select.fields` — where you register
-  one, it, not the allowlist, is the narrowing statement. It also accepts
-  the `{ exclude: [...] }` form (issue #397) — "every writable field except
-  these" — resolved at bootstrap against that same base; there, unlike the
-  array form and unlike `filter.fields`/`sort.fields`/`select.fields`/
-  `search.fields`'s lax `{ exclude }`, a name that is not in
-  the base set is a bootstrap `ConfigurationException` rather than a no-op,
-  matching `include.fields`'s strict `{ exclude }`. Unconfigured — or an
-  `{ exclude }` that removes nothing — both default to the same base
-  described above, so an entity that never sets either sees no change
-  (issue #259).
+  This default projection can be narrowed further, without a hand-written
+  class, by `schema.input.create`'s (for `createOne`) and
+  `schema.input.update`'s (for `updateOne`/`patchOne` — the two share one
+  list, since both mutate an existing row) own `{ fields }` shorthand — the
+  write-side counterpart to `select.fields` above, and subject to the same
+  rules: it can only narrow the derived projection, never widen it, so
+  naming the id or the soft-delete marker in the plain array form has no
+  effect; and a hand-written write schema class occupying that same slot
+  wins outright, exactly as a configured `item`/`list` schema wins over
+  `select.fields` — where you register one, it, not the allowlist, is the
+  narrowing statement. Unlike `filter.fields`/`sort.fields`/`select.fields`/
+  `search.fields`/`include.fields`, it has no `{ exclude: [...] }` form —
+  only the plain allowlist array (issue #476 removed the top-level
+  `create.fields`/`update.fields` config that form belonged to, along with
+  the config-level `default` gap-filler; `set` is the only tool left for
+  forcing a value, and it is unconstrained by this allowlist). Unconfigured,
+  both default to the same base described above, so an entity that never
+  sets either sees no change (issue #259).
 
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.
@@ -122,6 +123,17 @@ A class with no initialized fields degrades to the entity-derived
 default — the response is still correct, just not narrowed. This keeps
 schema classes plain (no decorators, no reflection library) at the cost of
 requiring initializers for narrowing; the tradeoff is documented API.
+
+`schemaShapeKeys` alone cannot tell "declares zero fields on purpose" apart
+from "shape unknown" — both are a fresh instance with zero own keys. The
+`{ fields }` shorthand's own synthesized class carries that intent
+separately (`shorthandFieldsOf`, `schema-fields-shorthand.ts`), which every
+consumer that needs the distinction — `DefaultDeserializer.deserialize`,
+`DefaultSerializer`'s `narrowToSchema`/include projection — checks first,
+falling back to `schemaShapeKeys` only when the slot holds no shorthand
+tag. `{ fields: [] }` (or its bare-array spelling) therefore narrows to
+nothing, on both the read and write side, rather than degrading to the
+derived default the way an equivalently-empty hand-written class does.
 
 A **validator-shaped** slot has no static key set: the engine `safeParse`s
 the deserialized body (`schema.input`, raising `SchemaValidationException`

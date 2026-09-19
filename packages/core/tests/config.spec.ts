@@ -288,10 +288,10 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
   });
 
-  it("reaches creatable/updatable through the top-level create/update { fields } shorthand", () => {
+  it("reaches creatable/updatable through the schema.input.create/update { fields } shorthand", () => {
     const config = resolveEntityConfig(
       userMetadata,
-      { create: { fields: ["name"] }, update: { fields: ["name", "email"] } },
+      { schema: { input: { create: { fields: ["name"] }, update: { fields: ["name", "email"] } } } },
       undefined,
     );
     const createDto = config.schema.resolveInput("create", "createOne");
@@ -304,12 +304,12 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.filter.fields).toContain("age");
   });
 
-  it("rejects an ORM-derived field named in the top-level create's or update's { fields } shorthand", () => {
+  it("rejects an ORM-derived field named in schema.input.create's { fields } shorthand", () => {
     try {
       resolveEntityConfig(
         userMetadataWithDerivedFullName,
         {
-          create: { fields: ["fullName" as never] },
+          schema: { input: { create: { fields: ["fullName" as never] } } },
         },
         undefined,
       );
@@ -376,84 +376,21 @@ describe("resolveEntityConfig — bootstrap", () => {
     expect(config.schema.resolveInput("create", "createOne")).toBe(validator);
   });
 
-  it("resolves create.fields's { exclude } form to every writable field except the named ones", () => {
-    // User's writable universe (ADR-0014): name, email, age, status — `id`
-    // and `createdAt` are generated, and there are no relations.
-    const config = resolveEntityConfig(
-      userMetadata,
-      { create: { fields: { exclude: ["email", "status"] } } },
-      undefined,
-    );
-    const createDto = config.schema.resolveInput("create", "createOne");
-    expect(createDto).not.toBeNull();
-    expect(Object.keys(new (createDto as new () => object)())).toEqual(["name", "age"]);
-    // `update` is untouched — still the entity-derived default.
-    expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
-  });
-
-  it("keeps relations in the writable universe create.fields's { exclude } subtracts from", () => {
-    // Post: title, authorId are writable columns; author, comments are
-    // writable-by-association relations; `id`/`deletedAt` are generated.
-    const config = resolveEntityConfig(postMetadata, { update: { fields: { exclude: ["title"] } } }, undefined);
-    const updateDto = config.schema.resolveInput("update", "updateOne");
-    expect(Object.keys(new (updateDto as new () => object)())).toEqual(["authorId", "author", "comments"]);
-  });
-
-  it("treats create.fields { exclude: [] } as exactly equivalent to omitting the key", () => {
-    // An explicit full field list would synthesize a DTO class and so widen
-    // writes past the derived default by the soft-delete marker column
-    // (`DefaultDeserializer` drops it only on its derived-default path), so
-    // an { exclude } that removes nothing resolves to the derived default.
-    const config = resolveEntityConfig(
-      userMetadata,
-      { create: { fields: { exclude: [] } }, update: { fields: { exclude: [] } } },
-      undefined,
-    );
-    expect(config.schema.resolveInput("create", "createOne")).toBeNull();
-    expect(config.schema.resolveInput("update", "updateOne")).toBeNull();
-  });
-
-  it("fails fast on a name in create.fields's { exclude } that is not a writable field", () => {
-    try {
-      resolveEntityConfig(userMetadata, { create: { fields: { exclude: ["nope" as never] } } }, undefined);
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationException);
-      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
-      expect((error as ConfigurationException).messageParams).toMatchObject({
-        entity: "User",
-        path: "create.fields.exclude",
-      });
-      expect((error as ConfigurationException).detail).toContain("nope");
-    }
-  });
-
-  it("still composes create.default / create.apply with the { exclude } fields form", () => {
+  it("still resolves set.create alongside a schema.input.create { fields } shorthand", () => {
     const apply = () => ({ status: "active" as const });
     const config = resolveEntityConfig(
       userMetadata,
-      { create: { fields: { exclude: ["age"] }, default: { status: "pending" as const }, apply } },
+      {
+        schema: { input: { create: { fields: ["name", "status"] } } },
+        set: { create: apply },
+      },
       undefined,
     );
     expect(Object.keys(new (config.schema.resolveInput("create", "createOne") as new () => object)())).toEqual([
       "name",
-      "email",
       "status",
     ]);
-    expect(config.createDefault).toEqual({ status: "pending" });
     expect(config.createApply).toBe(apply);
-  });
-
-  it("lets a registered dto.create class win over the create.fields { exclude } shorthand", () => {
-    class NarrowCreateUserDto {
-      name = "";
-    }
-    const config = resolveEntityConfig(
-      userMetadata,
-      { schema: { input: { create: NarrowCreateUserDto } }, create: { fields: { exclude: ["email"] } } },
-      undefined,
-    );
-    expect(config.schema.resolveInput("create", "createOne")).toBe(NarrowCreateUserDto);
   });
 
   it("resolves an entity-scope sort.default", () => {

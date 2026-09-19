@@ -2807,18 +2807,6 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     }
   });
 
-  it("documents an explicit empty creatable/updatable allowlist as closed via description, not silence", async () => {
-    @Kavo(Todo, { create: { fields: [] }, update: { fields: [] } })
-    @Controller("todos")
-    class ClosedController {}
-    await bootstrap(ClosedController);
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-
-    const schema = bodySchema("/todos", "post");
-    expect(schema?.properties).toEqual({});
-    expect(schema?.description).toBe("No field is writable.");
-  });
-
   it("documents a relation-only writable projection instead of an empty, bodyless-looking schema (issue #339)", async () => {
     await withMetadata(
       // The whole entity is a generated id plus two relations — nothing the
@@ -2867,8 +2855,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     // so it produces zero properties. The "no body" description must still
     // appear: it is gated on the property count, not the allowlist length.
     await withMetadata([{ name: "id", kind: "string", nullable: false, generated: true }], [], {
-      create: { fields: ["id"] },
-      update: { fields: ["id"] },
+      schema: { input: { create: { fields: ["id"] }, update: { fields: ["id"] } } },
     });
 
     const schema = (
@@ -2881,8 +2868,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     expect(schema?.description).toBe("No field is writable.");
   });
 
-  it("narrows the documented body to an explicit creatable/updatable allowlist", async () => {
-    @Kavo(Todo, { create: { fields: ["title"] }, update: { fields: ["done"] } })
+  it("narrows the documented body to an explicit schema.input.create/update allowlist", async () => {
+    @Kavo(Todo, { schema: { input: { create: { fields: ["title"] }, update: { fields: ["done"] } } } })
     @Controller("todos")
     class NarrowedController {}
     await bootstrap(NarrowedController);
@@ -2891,25 +2878,6 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title"]);
     expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["done"]);
     expect(Object.keys(bodySchema("/todos/{id}", "patch")?.properties ?? {})).toEqual(["done"]);
-  });
-
-  it("narrows the documented body for a create.fields/update.fields { exclude } form (issue #397)", async () => {
-    // The `{ exclude }` form can only be expanded once ORM metadata exists,
-    // so the bind-time fallback reads the field list from the engine's
-    // *resolved* DTO resolver — the documented body is the narrowed set the
-    // engine enforces, not the full writable base. Todo's writable base is
-    // title, done, priority, list.
-    @Kavo(Todo, {
-      create: { fields: { exclude: ["priority"] } },
-      update: { fields: { exclude: ["title", "done"] } },
-    })
-    @Controller("todos")
-    class ExcludeController {}
-    await bootstrap(ExcludeController);
-    document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle("t").setVersion("0").build());
-
-    expect(Object.keys(bodySchema("/todos", "post")?.properties ?? {})).toEqual(["title", "done", "list"]);
-    expect(Object.keys(bodySchema("/todos/{id}", "put")?.properties ?? {})).toEqual(["priority", "list"]);
   });
 
   it("leaves a configured DTO's own documented body untouched", async () => {
@@ -3012,8 +2980,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      create: { fields: ["word"] },
-      update: { fields: ["word"] },
+      schema: { input: { create: { fields: ["word"] }, update: { fields: ["word"] } } },
     });
 
     expect(bodySchema("/notes", "post")?.properties?.word).toEqual({
@@ -3031,7 +2998,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       () => {
         throw new Error("no metadata for this relation target from this root");
       },
-      { create: { fields: ["word"] }, update: { fields: ["word"] } },
+      { schema: { input: { create: { fields: ["word"] }, update: { fields: ["word"] } } } },
     );
 
     // Bootstrap survived the throw, and the field falls back to the
@@ -3059,8 +3026,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      create: { fields: ["word"] },
-      update: { fields: ["word"] },
+      schema: { input: { create: { fields: ["word"] }, update: { fields: ["word"] } } },
     });
 
     // A single scalar `id` would be a wrong assertion for a two-column key,
@@ -3089,8 +3055,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       relations: [],
     };
     await withDiscriminatingMetadata(relationOnlySource(), () => wordMetadata, {
-      create: { fields: ["word"] },
-      update: { fields: ["word"] },
+      schema: { input: { create: { fields: ["word"] }, update: { fields: ["word"] } } },
     });
     expect(bodySchema("/notes", "post")?.properties?.word?.properties?.id).toEqual(expected);
   });

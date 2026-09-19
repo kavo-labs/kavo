@@ -247,15 +247,21 @@ describe("DefaultSchemaResolver — class-shaped slot fallbacks", () => {
 describe("DefaultSchemaResolver.resolveWriteAllowlist", () => {
   const validator = { safeParse: () => ({ success: true as const, data: {} }) };
 
-  it("returns the create/update fields class even when a validator occupies the slot", () => {
-    const resolver = new DefaultSchemaResolver<{ name: string; email: string }>(
-      { input: { create: validator, update: validator } } as never,
-      { create: { fields: ["name"] } as never, update: { fields: ["email"] } as never },
-    );
-    expect(resolver.resolveInput("create", "createOne")).toBe(validator);
+  it("returns the class-shaped create/update fields allowlist", () => {
+    const resolver = new DefaultSchemaResolver<{ name: string; email: string }>({
+      input: { create: { fields: ["name"] }, update: { fields: ["email"] } },
+    } as never);
     expect(schemaShapeKeys(resolver.resolveWriteAllowlist("create"))).toEqual(["name"]);
     expect(schemaShapeKeys(resolver.resolveWriteAllowlist("update"))).toEqual(["email"]);
     expect(schemaShapeKeys(resolver.resolveWriteAllowlist("patch"))).toEqual(["email"]);
+  });
+
+  it("is null when a validator occupies the slot — a validator has no key set of its own", () => {
+    const resolver = new DefaultSchemaResolver<{ name: string; email: string }>({
+      input: { create: validator, update: validator },
+    } as never);
+    expect(resolver.resolveInput("create", "createOne")).toBe(validator);
+    expect(resolver.resolveWriteAllowlist("create")).toBeNull();
   });
 
   it("is null when no fields list is configured", () => {
@@ -287,40 +293,5 @@ describe("DefaultSchemaResolver with the { fields } shorthand", () => {
     const list = resolver.resolveOutput("list", "findMany");
     expect(list).toBe(item);
     expect(schemaShapeKeys(list as unknown as SchemaClass)).toEqual(["id"]);
-  });
-});
-
-describe("DefaultSchemaResolver's create/update writable-fields fallback", () => {
-  it("falls back to a class synthesized from the top-level create.fields when schema.input.create is unset", () => {
-    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
-      create: { fields: ["name"] },
-    });
-    expect(schemaShapeKeys(resolver.resolveInput("create", "createOne") as unknown as SchemaClass)).toEqual(["name"]);
-  });
-
-  it("a registered schema.input.create wins over the top-level create.fields fallback", () => {
-    class CreateSchema {
-      id = 0;
-    }
-    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(
-      { input: { create: CreateSchema } },
-      { create: { fields: ["name"] } },
-    );
-    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(CreateSchema);
-  });
-
-  it("ignores a { exclude } form (not a plain array) for the fallback", () => {
-    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
-      create: { fields: { exclude: ["id"] } } as never,
-    });
-    expect(resolver.resolveInput("create", "createOne")).toBeNull();
-  });
-
-  it("schema.input.patch inherits the update.fields fallback synthesized for schema.input.update", () => {
-    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
-      update: { fields: ["name"] },
-    });
-    expect(schemaShapeKeys(resolver.resolveInput("update", "updateOne") as unknown as SchemaClass)).toEqual(["name"]);
-    expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
   });
 });

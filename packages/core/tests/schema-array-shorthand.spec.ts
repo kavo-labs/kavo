@@ -43,14 +43,6 @@ describe("schema — bare field-array shorthand", () => {
     const resolver = new DefaultSchemaResolver<User>({ input: { update: ["name"] } });
     expect(keysOf(resolver.resolveInput("patch", "patchOne"))).toEqual(["name"]);
   });
-
-  it("wins over the top-level create.fields fallback, like any class", () => {
-    const resolver = new DefaultSchemaResolver<User>(
-      { input: { create: ["email"] } },
-      { create: { fields: ["name"] } },
-    );
-    expect(keysOf(resolver.resolveInput("create", "createOne"))).toEqual(["email"]);
-  });
 });
 
 describe("schema — array shorthand, derived-field guard", () => {

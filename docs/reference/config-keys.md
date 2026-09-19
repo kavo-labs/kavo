@@ -2,7 +2,7 @@
 
 Every key `createKavo`, `@Kavo`, and `createCrud` accept, with its type, default, and where it's consulted. [Guides/Configuration](/guides/configuration/) covers the same schema as task-based prose ("how do I configure X"). This page is the exhaustive lookup form for when you already know the key and want its type and default.
 
-Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `schema`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, `create`/`update`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
+Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `schema`, `set`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
 
 ## KavoSettings
 
@@ -147,22 +147,15 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 
 `read` tunes how an already-includable relation loads — whether a relation is includable at all is `include.fields` (ADR-0028), which includable relations load by default is `include.default`, neither of which lives here. `read.strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null.
 
-`write.strategy` opts a to-many relation into array-mutation writes and names the strategy in one statement — there is no entity-level default and no boolean form; omitting `write` is how a relation stays non-array-mutable. `"replace"` (whole-array `PUT :id/<relation>`), `"jsonPatch"` (`PATCH /entity/:id` with an RFC 6902 array body), and `"resource"` (four per-relation sub-collection routes — `GET`/`POST`/`DELETE`/`PUT` `:id/<relation>`) are all implemented (ADR-0029). `write` on a to-one relation is a bootstrap error — association by id already covers those (ADR-0014). Write **permission** for a relation is the `create`/`update` field lists and registered write schemas, not this key. See [Relations](/features/relations).
+`write.strategy` opts a to-many relation into array-mutation writes and names the strategy in one statement — there is no entity-level default and no boolean form; omitting `write` is how a relation stays non-array-mutable. `"replace"` (whole-array `PUT :id/<relation>`), `"jsonPatch"` (`PATCH /entity/:id` with an RFC 6902 array body), and `"resource"` (four per-relation sub-collection routes — `GET`/`POST`/`DELETE`/`PUT` `:id/<relation>`) are all implemented (ADR-0029). `write` on a to-one relation is a bootstrap error — association by id already covers those (ADR-0014). Write **permission** for a relation is `schema.input.create`/`update`'s own field list and registered write schemas, not this key. See [Relations](/features/relations).
 
-### create / update
+### set
 
-| Key              | Type                                                          | Default                                                           |
-| ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `create.fields`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
-| `create.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
-| `create.apply`   | `(args) => Partial<EntityInput<Entity>> \| undefined`         | unset                                                             |
-| `update.fields`  | same shape as `create.fields`                                 | same default as `create.fields`                                   |
-| `update.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
-| `update.apply`   | same shape as `create.apply`                                  | unset                                                             |
+| Key   | Type                                                                                                                  | Default |
+| ----- | --------------------------------------------------------------------------------------------------------------------- | ------- |
+| `set` | `(args) => Partial<EntityInput<Entity>> \| undefined \| { create?: WriteApply<Entity>; update?: WriteApply<Entity> }` | unset   |
 
-Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A class-shaped `schema.input.create`/`update` with a runtime shape **replaces** this projection and wins over `fields`.
-
-`default` fills in a value for a writable field the body doesn't set — a body that does send the field wins outright (the same one-way relationship a client value has with `sort.default`). `default` is `createOne`- and `updateOne`-only, never `patchOne`: a PATCH that omits a field means "leave it unchanged". `apply` (issue #391, ADR-0048's write-side sibling) is the opposite composition rule — it forces field values into a `createOne`/`updateOne` body, overwriting whatever the client sent. See [Allowed](/features/allowed).
+Issue #476, ADR-0048's write-side sibling ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)); supersedes the former `create.apply`/`update.apply`. A bare function forces the same values on both `createOne` and `updateOne`; a `{ create?, update? }` object lets the two diverge — an unconditional, per-request constraint that overwrites whatever the client sent, rather than only filling a gap the way `schema.input.create`/`update` can't (writable-field narrowing is the only write-side allowlist left; see [Allowed](/features/allowed)). `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`. See [Apply](/features/apply).
 
 ### policy
 

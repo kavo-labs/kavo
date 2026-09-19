@@ -41,13 +41,14 @@ export type KavoGraphQLOption = boolean | { readonly path?: string };
 
 /**
  * The entity-derived writable default `DefaultDeserializer` falls back to
- * when neither `schema.input.create`/`schema.input.update` names a real class nor the
- * top-level `create`/`update` `{ fields }` shorthand (issue #388, formerly
- * `schema.input.create`/`schema.input.update`'s own shorthand, issue #386) is set: every
- * non-generated column except the primary key (kept for a composite key,
- * which has no single column to exclude), plus every relation, associable
- * by id (ADR-0014). Used only as a Swagger fallback — `applyBodySchemaDocs`'s
- * decoration-time schema when no real DTO exists.
+ * when `schema.input.create`/`schema.input.update` names neither a real
+ * class nor its own `{ fields }` shorthand (issue #386; issue #476 removed
+ * the separate top-level `create`/`update` shorthand this used to fall
+ * back to as well): every non-generated column except the primary key
+ * (kept for a composite key, which has no single column to exclude), plus
+ * every relation, associable by id (ADR-0014). Used only as a Swagger
+ * fallback — `applyBodySchemaDocs`'s decoration-time schema when no real
+ * DTO exists.
  */
 function writableBaseOf(metadata: EntityMetadata<object>): readonly string[] {
   const compositeIdFields = metadata.compositeIdFields;
@@ -397,10 +398,6 @@ class KavoBinder implements OnModuleInit {
         const prototype = metatype.prototype as Record<string, unknown>;
         const schemaResolver = new DefaultSchemaResolver(
           metadata.config?.schema as EntitySchemaMap<object> | undefined,
-          {
-            create: metadata.config?.create,
-            update: metadata.config?.update,
-          },
         );
         // The target entity's own metadata for each relation a synthesized
         // schema references — includable ones so `applyResponseSchemaDocs`
@@ -443,12 +440,11 @@ class KavoBinder implements OnModuleInit {
           // Fallback request-body schema (issue #264) — only when decoration
           // time had no DTO to document (`bodyDtoFor` resolved `null`
           // there too, from the same decoration-time config). The field
-          // lists are read from the engine's *resolved* DTO resolver
-          // (`service.engine.config.schema`), not the decoration-time one: a
-          // `create.fields`/`update.fields` `{ exclude }` form (#397) can
-          // only be expanded to concrete field names once ORM metadata
-          // exists, which is now — so this documents the narrowed set the
-          // engine actually enforces rather than the full writable base.
+          // lists are read from the engine's *resolved* schema resolver
+          // (`service.engine.config.schema`), not the decoration-time one,
+          // so this documents the narrowed set a registered
+          // `schema.input.create`/`update` class actually enforces, falling
+          // back to the full writable base when neither is registered.
           if (bodyDtoFor(descriptor, schemaResolver) === null) {
             const resolvedSchema = service.engine.config.schema;
             applyBodySchemaDocs(

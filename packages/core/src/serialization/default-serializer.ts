@@ -4,6 +4,7 @@ import type { EntityCatalog } from "../metadata/entity-catalog.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
 import { isSchemaClass, type SchemaLike } from "../schema/schema-class.js";
+import { shorthandFieldsOf } from "../schema/schema-fields-shorthand.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
 import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
@@ -190,7 +191,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     // other entity included `user`.
     return {
       keys:
-        (isSchemaClass(schema) ? schemaShapeKeys(schema) : null) ??
+        (isSchemaClass(schema) ? (shorthandFieldsOf(schema) ?? schemaShapeKeys(schema)) : null) ??
         (targetProjection === null
           ? info.metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name)
           : narrowToProjection(
@@ -232,7 +233,7 @@ function narrowToSchema(projection: Projection, schema: SchemaLike<object> | nul
   if (schema === null || !isSchemaClass(schema)) {
     return projection;
   }
-  const keys = schemaShapeKeys(schema);
+  const keys = shorthandFieldsOf(schema) ?? schemaShapeKeys(schema);
   return keys === null ? projection : { ...projection, keys };
 }
 
@@ -317,9 +318,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // The shared derivation (ADR-0014): every non-generated column except a
     // single primary key (a composite natural key is kept — the client
     // supplies it on `createOne`), plus every relation, writable by
-    // association. `EntityConfig.create.fields`/`update.fields`'s
-    // `{ exclude }` form subtracts from this same set (issue #397), so both
-    // sides read it from one place.
+    // association.
     this.writableProjection = derivedWritableFieldNames(metadata);
   }
 
@@ -327,7 +326,14 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return {} as Shape;
     }
-    const explicit = isSchemaClass(schema) ? schemaShapeKeys(schema) : null;
+    // `shorthandFieldsOf` first: a `{ fields: [] }`/`[]` shorthand is a
+    // *known* empty allowlist, not "shape unknown" — `schemaShapeKeys`
+    // alone can't tell the two apart (a class with zero own keys, whether
+    // from an empty shorthand or an uninitialized declarative class, looks
+    // identical at the instance level), so consulting the shorthand's own
+    // tracked field list first is what lets an explicit empty allowlist
+    // actually close writes instead of silently falling back.
+    const explicit = isSchemaClass(schema) ? (shorthandFieldsOf(schema) ?? schemaShapeKeys(schema)) : null;
     // A class-shaped `create`/`update`/`patch` schema — including one
     // synthesized from the `{ fields }` shorthand (issue #386,
     // `schema-fields-shorthand.ts`) — *replaces* the derived writable
@@ -335,9 +341,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // `schema.output.item` precedent); a validator-shaped schema contributes no
     // explicit allowlist here (the derived writable projection is still
     // used, and the engine's `safeParse` step separately validates/reshapes
-    // afterward). `creatable`/`updatable` are reached through
-    // `schema.input.create`/`schema.input.update`'s shorthand now, not a separate allowlist
-    // key.
+    // afterward).
     const allowed = explicit ?? this.writableProjection;
     // Only the derived default excludes the marker — an explicit DTO's own
     // key set is deliberately left alone, same as the id (see class doc).
@@ -346,17 +350,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // say), and the exclusion degrading to "none" there is the same
     // graceful fallback the id exclusion already makes.
     const softDeleteField = explicit === null ? (context.config?.delete?.field ?? null) : null;
-    // `create.default`/`update.default` (`createOne` and `updateOne` only —
-    // never `patchOne`, whose omission means "leave unchanged" rather than
-    // "reset"). Optional chaining for the same reason `softDeleteField`
-    // above uses it: this class is constructible directly against a
-    // context that never went through the engine.
-    const writeDefault =
-      context.operation === "createOne"
-        ? context.config?.createDefault
-        : context.operation === "updateOne"
-          ? context.config?.updateDefault
-          : undefined;
     const source = raw as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const key of allowed) {
@@ -370,9 +363,6 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       // longer offers a way to pollute (see `emptyNode` there), and this
       // keeps a pollution introduced anywhere else out of writes.
       if (!Object.prototype.hasOwnProperty.call(source, key)) {
-        if (writeDefault !== undefined && Object.prototype.hasOwnProperty.call(writeDefault, key)) {
-          result[key] = (writeDefault as Record<string, unknown>)[key];
-        }
         continue;
       }
       const spec = this.relationIdFields.get(key)?.();

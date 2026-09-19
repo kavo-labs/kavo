@@ -341,24 +341,32 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     expect(() => makeCrud({ operations: { [id]: { schema } } } as never)).toThrowError(ConfigurationException);
   });
 
-  describe("a validator in a write slot keeps the create.fields/update.fields allowlist", () => {
-    // A lenient validator: passes every key through untouched.
-    const lenient = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
-
-    it("createOne drops a field create.fields excludes", async () => {
+  describe("a class-shaped schema.input.create/update allowlist narrows the write body", () => {
+    it("createOne drops a field schema.input.create's { fields } shorthand excludes", async () => {
       const { crud, adapter } = makeCrud({
-        create: { fields: ["name", "email"] },
-        schema: { input: { create: lenient } },
+        schema: { input: { create: { fields: ["name", "email"] } } },
       } as never);
       await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
       expect(adapter.rows[0]?.age).not.toBe(99);
       expect(adapter.rows[0]).toMatchObject({ name: "Ada" });
     });
 
-    it("updateOne and patchOne drop a field update.fields excludes", async () => {
+    it("createOne writes nothing at all when schema.input.create is an empty allowlist ({ fields: [] } or bare [])", async () => {
       const { crud, adapter } = makeCrud({
-        update: { fields: ["name"] },
-        schema: { input: { update: lenient } },
+        schema: { input: { create: [] } },
+      } as never);
+      await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
+      // Every writable field the client sent is ignored — the row stays at
+      // whatever the adapter's own `create()` default produces, not what
+      // was in the body.
+      expect(adapter.rows[0]?.name).not.toBe("Ada");
+      expect(adapter.rows[0]?.email).not.toBe("a@b.c");
+      expect(adapter.rows[0]?.age).not.toBe(99);
+    });
+
+    it("updateOne and patchOne drop a field schema.input.update's { fields } shorthand excludes", async () => {
+      const { crud, adapter } = makeCrud({
+        schema: { input: { update: { fields: ["name"] } } },
       } as never);
       const created = await crud.createOne({ name: "Ada", email: "a@b.c" } as never);
       await crud.updateOne(created.id, { name: "Bea", email: "x@y.z" } as never);
@@ -367,12 +375,24 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
     });
 
     it("a per-operation validator override does not widen the allowlist", async () => {
+      const lenient = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
       const { crud, adapter } = makeCrud({
-        create: { fields: ["name", "email"] },
+        schema: { input: { create: { fields: ["name", "email"] } } },
         operations: { createOne: { schema: { input: lenient } } },
       } as never);
       await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
       expect(adapter.rows[0]?.age).not.toBe(99);
+    });
+
+    it("a per-operation validator override on patchOne does not widen the update allowlist", async () => {
+      const lenient = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
+      const { crud, adapter } = makeCrud({
+        schema: { input: { update: { fields: ["name"] } } },
+        operations: { createOne: true, patchOne: { schema: { input: lenient } } },
+      } as never);
+      const created = await crud.createOne({ name: "Ada", email: "a@b.c" } as never);
+      await crud.patchOne(created.id, { name: "Grace", email: "widened@example.com" } as never);
+      expect(adapter.rows[0]?.email).not.toBe("widened@example.com");
     });
   });
 

@@ -21,7 +21,7 @@ import type {
   ResolvedSelectConfig,
   ResolvedSortConfig,
 } from "./resolved-entity-config.js";
-import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
+import type { EntityMetadata } from "../metadata/entity-metadata.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { FilterExpression, FilterOperator, FilterOperatorToken } from "../query/filter.js";
@@ -35,11 +35,10 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
-import type { WriteApply, WriteFieldsConfig } from "./write-fields.js";
+import type { SetConfig, WriteApply } from "./write-fields.js";
 import type { SchemaClass } from "../schema/schema-class.js";
 import { isSchemaClass } from "../schema/schema-class.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
-import { schemaClassFromFields } from "../schema/schema-fields-shorthand.js";
 import { DefaultSchemaResolver, normalizeEntitySchema } from "../schema/entity-schema.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
@@ -111,25 +110,13 @@ export function resolveEntityConfig<Entity extends object>(
   globalPolicy?: Policy,
 ): ResolvedEntityConfig<Entity> {
   const entityName = metadata.name;
-  // The `{ exclude }` form of `create.fields`/`update.fields` (issue #397)
-  // is resolved to a concrete array here, against the same writable-field
-  // universe `DefaultDeserializer` enforces — so the two never drift.
-  const writableUniverse = derivedWritableFieldNames(metadata);
-  const createFields = resolveWriteFields(entityName, "create.fields", entityConfig?.create, writableUniverse);
-  const updateFields = resolveWriteFields(entityName, "update.fields", entityConfig?.update, writableUniverse);
-  rejectDerivedWriteSchemaKeys(entityName, metadata, entityConfig, createFields, updateFields);
+  rejectDerivedWriteSchemaKeys(entityName, metadata, entityConfig);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
 
   const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig);
   const projection = resolveProjection(metadata, entityConfig, select);
 
-  const ownColumnNames = new Set(
-    metadata.fields.filter((field) => !field.generated).map((field) => field.name) as readonly string[],
-  );
-  const createDefault = resolveWriteDefault(entityName, "create.default", entityConfig?.create, ownColumnNames);
-  const updateDefault = resolveWriteDefault(entityName, "update.default", entityConfig?.update, ownColumnNames);
-  const createApply = resolveWriteApply(entityName, "create.apply", entityConfig?.create);
-  const updateApply = resolveWriteApply(entityName, "update.apply", entityConfig?.update);
+  const { createApply, updateApply } = resolveSet(entityName, entityConfig?.set);
 
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
@@ -190,20 +177,13 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
     identifierField,
-    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema, {
-      // The resolved arrays, not the raw config: an `{ exclude }` shorthand
-      // is already expanded to a concrete writable-field list here (#397).
-      create: createFields === undefined ? undefined : ({ fields: createFields } as WriteFieldsConfig<Entity>),
-      update: updateFields === undefined ? undefined : ({ fields: updateFields } as WriteFieldsConfig<Entity>),
-    }),
+    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema),
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
     realtimeTransports: Object.freeze([...realtimeTransports]),
     cacheStore,
     policy,
-    createDefault,
-    updateDefault,
     createApply,
     updateApply,
   };
@@ -211,58 +191,44 @@ export function resolveEntityConfig<Entity extends object>(
 }
 
 /**
- * Resolve `create.default`/`update.default`: a plain object of field values,
- * validated against the entity's own non-generated columns (the only
- * fields either slot's writable projection ever includes). `undefined`
- * resolves to a frozen empty object, so callers never have to guard against
- * a missing key.
+ * Resolve `set` (issue #476, supersedes the issue #391 `create.apply`/
+ * `update.apply`): a bare function forces the same values on both
+ * `createOne` and `updateOne`; a `{ create?, update? }` object lets the two
+ * diverge. Each resolved function is passed through unresolved — the same
+ * treatment `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+ * already get (ADR-0048), for the same reason: it is evaluated per request
+ * with an arbitrary runtime value, so there is nothing here to validate
+ * ahead of time beyond "is it callable at all," which catches a JS or
+ * dynamically-built config the type system can't see.
  */
-function resolveWriteDefault<Entity extends object>(
+function resolveSet<Entity extends object>(
   entityName: string,
-  scope: string,
-  writeConfig: WriteFieldsConfig<Entity> | undefined,
-  ownColumnNames: ReadonlySet<string>,
-): Readonly<Partial<Entity>> {
-  const value = writeConfig?.default;
+  value: SetConfig<Entity> | undefined,
+): { createApply: WriteApply<Entity> | undefined; updateApply: WriteApply<Entity> | undefined } {
   if (value === undefined) {
-    return EMPTY_WRITE_DEFAULT as Readonly<Partial<Entity>>;
+    return { createApply: undefined, updateApply: undefined };
+  }
+  if (typeof value === "function") {
+    return { createApply: value, updateApply: value };
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ConfigurationException(
       entityName,
-      scope,
-      `'${scope}' must be a plain object of field values, got '${typeof value}'.`,
+      "set",
+      `'set' must be a function, or a { create?, update? } object of functions, got '${typeof value}'.`,
     );
   }
-  for (const key of Object.keys(value)) {
-    if (!ownColumnNames.has(key)) {
-      throw new ConfigurationException(
-        entityName,
-        scope,
-        `unknown field '${key}' in '${scope}' — expected one of ${[...ownColumnNames].join(", ")}`,
-      );
-    }
-  }
-  return Object.freeze({ ...value }) as Readonly<Partial<Entity>>;
+  return {
+    createApply: resolveWriteApply(entityName, "set.create", value.create),
+    updateApply: resolveWriteApply(entityName, "set.update", value.update),
+  };
 }
 
-const EMPTY_WRITE_DEFAULT: Readonly<Record<string, never>> = Object.freeze({});
-
-/**
- * Resolve `create.apply`/`update.apply` (issue #391): a plain function
- * reference, passed through unresolved — the same treatment `filter.apply`/
- * `sort.apply`/`select.apply`/`include.apply` already get (ADR-0048), for
- * the same reason: it is evaluated per request with an arbitrary runtime
- * value, so there is nothing here to validate ahead of time beyond "is it
- * callable at all," which catches a JS or dynamically-built config the type
- * system can't see.
- */
 function resolveWriteApply<Entity extends object>(
   entityName: string,
   scope: string,
-  writeConfig: WriteFieldsConfig<Entity> | undefined,
+  value: WriteApply<Entity> | undefined,
 ): WriteApply<Entity> | undefined {
-  const value = writeConfig?.apply;
   if (value === undefined) {
     return undefined;
   }
@@ -274,67 +240,6 @@ function resolveWriteApply<Entity extends object>(
     );
   }
   return value;
-}
-
-/**
- * Resolve `create.fields`/`update.fields` (issue #397) to a concrete
- * writable-field list, or `undefined` to leave the entity-derived default
- * (`DefaultDeserializer`'s own writable projection) in place.
- *
- * The plain array form is passed through verbatim — a typo in it is caught
- * later, when the synthesized DTO's keys are checked — the same laxity it
- * has had since issue #388. The `{ exclude }` form follows
- * `resolveIncludableSelector`'s strict precedent, not `resolveFieldSelector`'s
- * lax one (which silently excludes nothing on a name that matches nothing):
- * the writable universe is fully known at bootstrap, so an `exclude` entry
- * that names nothing writable is a fixed-once declaration that can be judged
- * wrong here, and a silent no-op would be the wrong report.
- *
- * `{ exclude: [] }` — or any `{ exclude }` that removes nothing — resolves
- * to `undefined`, not the full universe. Returning the universe as an
- * explicit list would synthesize a DTO class, and `DefaultDeserializer`
- * drops the soft-delete marker column only on its *derived-default* path
- * (`explicit === null`), so an explicit full list would widen writes by that
- * one column versus omitting the key. This deliberately diverges from
- * `include.fields`, where `{ exclude: [] }` is the meaningful "opt
- * everything in" spelling.
- */
-function resolveWriteFields<Entity extends object>(
-  entityName: string,
-  scope: string,
-  writeConfig: WriteFieldsConfig<Entity> | undefined,
-  universe: readonly string[],
-): readonly string[] | undefined {
-  const value = writeConfig?.fields;
-  if (value === undefined) {
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    return Object.freeze([...(value as readonly string[])]);
-  }
-  if (typeof value !== "object" || value === null || !Array.isArray((value as { exclude?: unknown }).exclude)) {
-    throw new ConfigurationException(
-      entityName,
-      scope,
-      `'${scope}' must be a string array or { exclude: string[] }, got ${JSON.stringify(value)}`,
-    );
-  }
-  const exclude = (value as { readonly exclude: readonly string[] }).exclude;
-  const known = new Set(universe);
-  for (const name of exclude) {
-    if (!known.has(name)) {
-      throw new ConfigurationException(
-        entityName,
-        `${scope}.exclude`,
-        `'${name}' is not a writable field of ${entityName} (writable: ${universe.join(", ") || "none"})`,
-      );
-    }
-  }
-  const excluded = new Set(exclude);
-  if (excluded.size === 0) {
-    return undefined;
-  }
-  return Object.freeze(universe.filter((name) => !excluded.has(name)));
 }
 
 /**
@@ -430,19 +335,14 @@ function resolvePolicy<Entity extends object>(
  * OpenAPI generation for it either. A purely declarative class likewise
  * yields `null` from `schemaShapeKeys` and falls back to the derived
  * writable projection, which never contains a derived-field name. A
- * `{ fields }` shorthand — `schema.input.patch`'s own (issue #386), or the
- * top-level `create`/`update` shorthand (issue #388) — is resolved to its
- * synthesized class first, so its declared fields are checked the same
- * way. `create`/`update` check the registered `schema.input.<slot>` class
- * first, matching `DefaultSchemaResolver`'s own precedence: a registered
- * class wins over the top-level shorthand.
+ * `{ fields }` shorthand — `schema.input.patch`'s own (issue #386) — is
+ * resolved to its synthesized class first, so its declared fields are
+ * checked the same way.
  */
 function rejectDerivedWriteSchemaKeys<Entity extends object>(
   entityName: string,
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
-  createFields: readonly string[] | undefined,
-  updateFields: readonly string[] | undefined,
 ): void {
   const names = new Set(
     metadata.fields.filter((field) => field.derivedExpression !== undefined).map((field) => field.name),
@@ -451,21 +351,9 @@ function rejectDerivedWriteSchemaKeys<Entity extends object>(
     return;
   }
   const { input: map } = normalizeEntitySchema(entityConfig?.schema);
-  // `createFields`/`updateFields` are already `{ exclude }`-resolved (#397);
-  // a derived-field name can never be in the resolved list of an `{ exclude }`
-  // form (it has no writable storage), so this still only ever fires for a
-  // derived-field name written into the plain array form.
   const checks: readonly [slot: string, scope: string, schemaClass: SchemaClass | null][] = [
-    [
-      "create",
-      "schema.input.create",
-      isSchemaClass(map.create) ? map.create : createFields ? schemaClassFromFields(createFields) : null,
-    ],
-    [
-      "update",
-      "schema.input.update",
-      isSchemaClass(map.update) ? map.update : updateFields ? schemaClassFromFields(updateFields) : null,
-    ],
+    ["create", "schema.input.create", isSchemaClass(map.create) ? map.create : null],
+    ["update", "schema.input.update", isSchemaClass(map.update) ? map.update : null],
     ["patch", "schema.input.patch", isSchemaClass(map.patch) ? map.patch : null],
   ];
   for (const [slot, scope, schemaClass] of checks) {
