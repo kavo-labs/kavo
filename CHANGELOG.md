@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.23.0](https://github.com/kavo-labs/kavo/compare/v0.22.3...v0.23.0) (2026-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove dto config key; schema absorbs it ([#475](https://github.com/kavo-labs/kavo/issues/475))
+
+### Features
+
+* **core,next:** auto-discover entities from the root KavoInstance ([d011ac4](https://github.com/kavo-labs/kavo/commit/d011ac4d3944cc2f7620aa87a730e06631d68a58)), closes [#457](https://github.com/kavo-labs/kavo/issues/457)
+* **core:** add schema config as the source of truth for dto and validation ([18f7abf](https://github.com/kavo-labs/kavo/commit/18f7abf17f0c0fb99b21ddd6177e8b6a9ed07528)), closes [#464](https://github.com/kavo-labs/kavo/issues/464)
+* **core:** replace create/update config with a unified set shorthand ([439aa8a](https://github.com/kavo-labs/kavo/commit/439aa8a5bad5dffa341ad337c3762ec90963e126)), closes [#477](https://github.com/kavo-labs/kavo/issues/477)
+* **core:** support single-schema shorthand for schema.input/output ([b58fca2](https://github.com/kavo-labs/kavo/commit/b58fca2d4aa40ea9fdce8eff9b982c1b0ed6534a))
+* **core:** wire schema into config resolution and the engine pipeline ([#468](https://github.com/kavo-labs/kavo/issues/468)) ([9c35c5b](https://github.com/kavo-labs/kavo/commit/9c35c5bbe6edb32678b79f4b6f82bd76dd0720ee))
+* **example-next-prisma:** add Review entity with full per-slot schema config ([01b8481](https://github.com/kavo-labs/kavo/commit/01b8481f6ed3a06f76e825ca20802340cfa323a4))
+* **nest,graphql,mcp:** migrate OpenAPI/class-validator/graphql/mcp off dto onto schema ([#469](https://github.com/kavo-labs/kavo/issues/469)) ([f0ffd0b](https://github.com/kavo-labs/kavo/commit/f0ffd0b3e2e3ebf02718237324a6b46a6bf4f2ce))
+* **prisma:** generate marker classes and an entities export from the DMMF ([#461](https://github.com/kavo-labs/kavo/issues/461)) ([76fd5fe](https://github.com/kavo-labs/kavo/commit/76fd5fe0b096b0a1977a74983801294647162510))
+* remove dto config key; schema absorbs it ([#475](https://github.com/kavo-labs/kavo/issues/475)) ([d563ecb](https://github.com/kavo-labs/kavo/commit/d563ecbe6f9ad72a3b1c3fbd97054fabaec6172b))
+* **schema:** add author and book schemas with validation using zod ([d1f8a17](https://github.com/kavo-labs/kavo/commit/d1f8a17ac991c0a383dc588b5e27214b942650f3))
+
+
+### Refactoring
+
+* **api:** simplify handler creation by using kavo directly ([72bcc3c](https://github.com/kavo-labs/kavo/commit/72bcc3cbbd004a9f542ef8dd98e73f4a902f5c19))
+* **example-next-prisma:** use single-schema shorthand in author and book ([8a9c2aa](https://github.com/kavo-labs/kavo/commit/8a9c2aa85093b4ee707b2a372b91c00b8d577962))
+
+
+### Documentation
+
+* add design spec for removing dto in favor of schema ([6de5c8d](https://github.com/kavo-labs/kavo/commit/6de5c8d5c17eba1288ff011b0500f9939d0bd4c0))
+* add implementation plan for removing dto in favor of schema ([9ab352f](https://github.com/kavo-labs/kavo/commit/9ab352f667ec0f33742b58358c37e6df832f8aed))
+* prune superseded ADRs and fix stale computed-field references ([#471](https://github.com/kavo-labs/kavo/issues/471)) ([a49e33c](https://github.com/kavo-labs/kavo/commit/a49e33cd2e4d36e769c13510a5bba3d2c1e3293d))
+* restructure examples/next-prisma to idiomatic App Router layout ([#456](https://github.com/kavo-labs/kavo/issues/456)) ([1309af3](https://github.com/kavo-labs/kavo/commit/1309af3ac3b819a3122f60c9d98a16f5617392b7)), closes [#455](https://github.com/kavo-labs/kavo/issues/455)
+* sync architecture docs with the field-group config schema and add @kavo/next ([4d47d93](https://github.com/kavo-labs/kavo/commit/4d47d9344cfe4423f6844e1d099322935f3921d4)), closes [#473](https://github.com/kavo-labs/kavo/issues/473)
+
+
+### Tests
+
+* **nest,mcp:** cover schema-driven branches PR [#469](https://github.com/kavo-labs/kavo/issues/469) left untested ([#472](https://github.com/kavo-labs/kavo/issues/472)) ([5a248c7](https://github.com/kavo-labs/kavo/commit/5a248c7c49a754de542fd398ae42f4c9af2662c4))
+
 ## [0.22.3](https://github.com/kavo-labs/kavo/compare/v0.22.2...v0.22.3) (2026-09-17)
 
 
