@@ -20,10 +20,10 @@ later work never needs to mutate `@kavo/core` types.
 | `TListDto`   | Element type inside `ListResultDto.items`                      | `TItemDto` (follows `item`)                                                       | `schema: { output: { list: UserListDto } }` — leaner list projection |
 | `TOps`       | The `operations` config's inferred literal type (issue #131)   | `OperationsConfig<...>` — no operation overrides anything                         | `operations: { findOne: { schema: { output: UserProfileDto } } }`    |
 
-`TOps` is unlike the rest of the table: it is not a DTO type itself, and no
+`TOps` is unlike the rest of the table: it is not a schema type itself, and no
 one ever writes it by hand. It exists only so `KavoService`'s per-method
 positions (`SchemaInputOf<TOps, "createOne", TCreateDto>`, and the `output`/
-`query` equivalents, doc 4 §8) can read back the literal DTO classes a
+`query` equivalents, doc 4 §8) can read back the literal schema classes a
 caller registered under `operations.<id>.dto`, falling back to the slot
 generic above when that operation declares no override of its own — the
 same "constrain, don't fix" shape `EntityConfig.select.fields`
@@ -45,11 +45,11 @@ TypeScript keeping the caller's literal at all.
 Design rule: **every parameter defaults from the ones before it**, so type
 inference is a feature — a consumer rarely writes a generic argument by
 hand. `createCrud(UserEntity)` yields a fully typed service with zero
-manual arguments; registering a DTO class narrows exactly one slot and
+manual arguments; registering a schema class narrows exactly one slot and
 everything downstream (envelope, service returns) follows.
 
 The chain `TEntity → TUpdateDto → TPatchDto` and `TItemDto → TListDto`
-mirrors the runtime DTO resolution rules (doc 4), so static defaults and
+mirrors the runtime schema resolution rules (doc 4), so static defaults and
 runtime derivation never disagree about _which slot follows which_.
 
 ### `EntityInput` — the write-shape default
@@ -66,13 +66,13 @@ the entity's **scalar** properties, **all optional**.
   carries none of a to-many relation's ambiguity. A `json`/`jsonb` column
   (`Record<string, unknown>`) stays excluded — at the type level it is
   indistinguishable from a to-one relation, so admitting one would admit
-  the other; a registered `create` DTO is the escape hatch for either.
+  the other; a registered `create` schema is the escape hatch for either.
 - **Every key is optional** because only ORM metadata knows which columns
   are generated, defaulted or nullable, and the type system cannot see it.
   Requiring every key made the zero-config write path unusable:
   `createCrud(User).createOne({ name })` demanded `id` and every relation.
 - The looseness is the _static_ default only. The runtime derivation
-  (doc 4) still drops generated columns, and registering a `create` DTO
+  (doc 4) still drops generated columns, and registering a `create` schema
   restores full strictness — which is what a configured setup does.
 
 The generic parameters are also inferred by `@Kavo(Entity, config)`, whose
@@ -222,7 +222,7 @@ signatures" is precisely the failure an exemption would have allowed.
 | Persistence   | `EntityReader`, `EntityWriter`, `RepositoryAdapter`                                                                                                                                                                                  |
 | Transactions  | `TransactionManager`, `TransactionContext`, `TransactionOptions` — not implemented, see below                                                                                                                                        |
 | Query         | `Filter*`, `FilterExpression`, `Sort`, `Pagination`, `OffsetPagination`, `CursorPagination`, `isCursorPagination`, `PaginationStrategy`, `FieldSelection`, `QueryContext`, `NormalizedQueryContext`, `FilterParser`, `FilterBuilder` |
-| Schema / DTO  | `KavoSchema`, `SchemaClass`, `SchemaLike`, `EntitySchema`, `SchemaResolver`, `ListResultDto`, `ListMetaDto`, `BulkResultDto` (bulk reserved)                                                                                         |
+| Schema        | `KavoSchema`, `SchemaClass`, `SchemaLike`, `EntitySchema`, `SchemaResolver`, `ListResultDto`, `ListMetaDto`, `BulkResultDto` (bulk reserved)                                                                                         |
 | Errors        | `KavoExceptionShape`, `KavoErrorCode`, `ErrorHandler`, `ProblemDetailsDto`                                                                                                                                                           |
 | Config        | `KavoSettings` (+ per-area settings), `GlobalConfig`, `EntityConfig`, `OperationConfig`, `ResolvedEntityConfig`                                                                                                                      |
 | Operations    | `OperationId`, `OperationHandler`, `OperationMetadata`, `OperationDescriptor`, `OperationRegistry`                                                                                                                                   |

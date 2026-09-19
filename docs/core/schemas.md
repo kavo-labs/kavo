@@ -1,6 +1,6 @@
-# Schemas and DTOs
+# Schemas
 
-Every request/response shape in Kavo is optional. Zero config means an entity-derived default. A `schema` entry narrows exactly one **slot** without touching the others. A slot takes a plain **DTO class** (shape only) or a **validator** such as a Zod schema (shape and validation).
+Every request/response shape in Kavo is optional. Zero config means an entity-derived default. A `schema` entry narrows exactly one **slot** without touching the others. A slot takes a plain **schema class** (shape only) or a **validator** such as a Zod schema (shape and validation).
 
 ## The six slots
 
@@ -17,7 +17,7 @@ There's no separate `patch` schema to write. It derives from `update`. Configuri
 
 ```ts
 @Kavo(Book, {
-  schema: { input: { create: CreateBookDto, update: UpdateBookDto }, output: { item: BookItemDto, list: BookListDto } },
+  schema: { input: { create: CreateBookSchema, update: UpdateBookSchema }, output: { item: BookItemSchema, list: BookListSchema } },
 })
 ```
 
@@ -29,7 +29,7 @@ Each slot accepts either of these:
 - **A validator**: any object with `safeParse(input): SchemaParseResult<Output>`, the shape a Zod schema already has. `@kavo/core` has no `zod` dependency (ADR-0005).
 
 ```ts
-class BookListDto {
+class BookListSchema {
   id = 0;
   title = "";
 } // projects { id, title }
@@ -105,17 +105,17 @@ The six slots above are entity-wide: every operation that reads `create` reads t
 
 ```ts
 @Kavo(Book, {
-  schema: { output: { item: BookItemDto } }, // entity-wide default for every read
+  schema: { output: { item: BookItemSchema } }, // entity-wide default for every read
   operations: {
     // Naming any operation makes `operations` an exclusive whitelist (see
     // [Operations](/guides/configuration/operations#operations)) — narrowing
     // findOne alone only if every other standard operation is also named.
-    findOne: { schema: { output: BookDetailDto } }, // findOne only
+    findOne: { schema: { output: BookDetailSchema } }, // findOne only
   },
 })
 ```
 
-Fallback order per field: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the entity-derived default. Which fields apply depends on the operation: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne`; naming a field the operation lacks throws a `ConfigurationException` at `createCrud`. See [Entity config](/guides/configuration/entity-config) and [Operations](/guides/configuration/operations#operations) for the field-by-field mechanics, and [Schema system](/internals/architecture/04-dto-system) for the full derivation and fallback rules.
+Fallback order per field: `operations.<id>.schema.<field>` → the entity's root `schema.input.<slot>`/`schema.output.<slot>` → the entity-derived default. Which fields apply depends on the operation: `input`/`output` on a write, `output`/`query` on a read, neither on `deleteOne`/`purgeOne`; naming a field the operation lacks throws a `ConfigurationException` at `createCrud`. See [Entity config](/guides/configuration/entity-config) and [Operations](/guides/configuration/operations#operations) for the field-by-field mechanics, and [Schema system](/internals/architecture/04-schema-system) for the full derivation and fallback rules.
 
 ## OpenAPI and validation pipes
 

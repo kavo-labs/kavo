@@ -24,7 +24,7 @@ Per-operation overrides, keyed by operation id. A key that names one of the eigh
 
 An `OperationConfig` object accepts:
 
-- **`handler`** (`OperationHandler<Entity>`): a replacement handler function, keeping the default DTO/serialization scaffolding around it.
+- **`handler`** (`OperationHandler<Entity>`): a replacement handler function, keeping the default schema/serialization scaffolding around it.
 - **`meta`** (`OperationMetadata`): an opaque bag consumed by the framework layer; in `@kavo/nest` this is `{ routes: KavoRouteOptions }`.
 - **`schema`** (`{ input?, output?, query? }`): overrides the entity's root `schema` slot for this operation only, see below.
 - **any settings key** (same shape as global `KavoSettings`): overrides that apply to this operation only, one level above the entity's own settings — merged with, not replacing, the entity/global settings it doesn't mention.
@@ -33,15 +33,15 @@ An `OperationConfig` object accepts:
 
 ```ts
 @Kavo(Book, {
-  schema: { output: { item: BookItemDto } }, // entity-wide default for every read
+  schema: { output: { item: BookItemSchema } }, // entity-wide default for every read
   operations: {
-    findOne: { schema: { output: BookDetailDto } }, // findOne only
-    createOne: { schema: { input: CreateBookRequestDto, output: BookCreatedDto } },
+    findOne: { schema: { output: BookDetailSchema } }, // findOne only
+    createOne: { schema: { input: CreateBookRequestSchema, output: BookCreatedSchema } },
   },
 })
 ```
 
-Fallback order per field: `operations.<id>.schema.<field>`, then the entity's root `schema.input.<slot>`/`schema.output.<slot>`, then the entity-derived default. Setting a field an operation doesn't have (`schema.query` on `createOne`, say) is a bootstrap `ConfigurationException`. See [Schema system §8](/internals/architecture/04-dto-system#8-per-operation-override-issue-131) for the full applicability table and the fallback chain in the engine.
+Fallback order per field: `operations.<id>.schema.<field>`, then the entity's root `schema.input.<slot>`/`schema.output.<slot>`, then the entity-derived default. Setting a field an operation doesn't have (`schema.query` on `createOne`, say) is a bootstrap `ConfigurationException`. See [Schema system §8](/internals/architecture/04-schema-system#8-per-operation-override-issue-131) for the full applicability table and the fallback chain in the engine.
 
 **`operations.<id>.meta.routes`** (`@kavo/nest`'s `KavoRouteOptions`) accepts:
 
@@ -54,7 +54,7 @@ See [NestJS integration](/internals/architecture/10-nestjs-integration) for how 
 
 ## Custom operations
 
-An `operations` key that is not one of the eight standard ids declares an operation of your own. It's an ordinary registry entry, so it gets the same pipeline every built-in route gets: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
+An `operations` key that is not one of the eight standard ids declares an operation of your own. It's an ordinary registry entry, so it gets the same pipeline every built-in route gets: schema resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
 
 A custom id is exempt from the whitelist rule above — it's always registered when present — but declaring one still counts as declaring `operations`, so it still silences every standard operation you don't also name. The example below is deliberately CRUD-only-plus-one: if `Order` also needs `findOne`/`findMany`/etc., they need naming here too.
 
@@ -87,7 +87,7 @@ A custom-operation entry accepts:
 - **`kind`** (`"read"` | `"write"`, default: `"write"`): a read runs query resolution and takes no request body; the generated route binds `@Query` instead of `@Body`.
 - **`cardinality`** (`"one"` | `"many"`, default: `"one"`): `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way a `findMany` handler does.
 - **`enabled`** (`boolean`, default: `true`): `false` registers the entry inert: no route, and calling it answers `405 KAVO_OPERATION_DISABLED`.
-- **`schema`** (`{ input?, output?, query? }`): `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root DTO slot of its own, so this is where it gets a shape.
+- **`schema`** (`{ input?, output?, query? }`): `input`/`output` on a write, `output`/`query` on a read. A custom operation has no root schema slot of its own, so this is where it gets a shape.
 - **`meta`** (`OperationMetadata`, default: `{}`): the route, as above. Without it the operation is routed `POST /<operation id>`.
 - **`realtimeEvent`** (`RealtimeEventId`, unset by default): which of the five standard event ids this operation's write publishes as ([Realtime events](/features/realtime-events)). Only valid on `kind: "write"`, `cardinality: "one"` — declaring it on a read or a `"many"` write is a bootstrap error. Unset, the operation publishes nothing.
 - **any settings key** (same shape as global `KavoSettings`): the operation scope of the precedence chain, exactly as for a standard id.
@@ -117,7 +117,7 @@ Worth knowing before you reach for one:
 - **The handler is built at decoration time** ([ADR-0012](/internals/adr/0012-decoration-time-route-generation)), like everything else in a `@Kavo` config, so it's a plain object with nothing in scope but its arguments. Data access comes from `context.repository` (above), and anything else it needs has to be reachable from module scope.
 - **`@Override(id)` can be the whole implementation.** A DI-aware custom operation — one that needs another Nest provider, or a cross-entity transaction — cannot be expressed as a config-level `handler`; write it as an `@Override(id)` method instead and leave `handler` off the config entry entirely (issue #424). `@kavo/nest` resolves the override ahead of the generated route, so the config-level handler is never reached. Omitting both is caught at `KavoModule`'s bind time (`onModuleInit`), not silently: `ConfigurationException` names the operation and says it needs one or the other. See [`@Override`](/reference/decorators#override-operationid).
 - **`If-Match` is refused, not ignored.** Nothing in the schema says which row a custom operation targets, so a conditional request against one answers `412 KAVO_PRECONDITION_UNSUPPORTED` rather than writing unguarded ([ADR-0020](/internals/adr/0020-content-hash-etags-and-the-engine-read-seam)).
-- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `schema.output`, the handler's return value is filtered to the entity's own columns (plus any opted-in virtual field), exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its own shape needs a DTO:
+- **The result is projected through the entity, unless you say otherwise.** A custom operation goes through the whole pipeline, and that includes serialization: with no `schema.output`, the handler's return value is filtered to the entity's own columns (plus any opted-in virtual field), exactly as a `findOne` response would be. A result that is a narrower entity shape is served as-is. A result with its own shape needs a schema:
 
   ```ts
   class ImportOutcomeDto {
@@ -134,7 +134,7 @@ Worth knowing before you reach for one:
 
   Every field needs a runtime initializer, since an uninitialized class field erases and the class then narrows nothing.
 
-  A result the projection empties raises, rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of three mistakes it is: no DTO and no field in common with the entity, a registered DTO the handler's keys don't match, or a registered DTO with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array (the last being what a handler that meant `cardinality: "many"` and left it at the default returns). It does not fire under an explicit `select=`, which can empty a projection on its own.
+  A result the projection empties raises, rather than serving `{}`. `KAVO_CONFIG_INVALID` names the operation and says which of three mistakes it is: no schema and no field in common with the entity, a registered schema the handler's keys don't match, or a registered schema with no runtime fields. It fires on a plain object, on a class instance whose values are accessors, and on an array (the last being what a handler that meant `cardinality: "many"` and left it at the default returns). It does not fire under an explicit `select=`, which can empty a projection on its own.
 
   Two things follow from it being a request-time refusal. The handler has already run, so a write it made through `context.repository` stands. And a partial strip, a result mixing entity fields with its own, is still silent, because that's what a projection is for.
 
@@ -144,7 +144,7 @@ Custom operations are a REST and programmatic feature only: the GraphQL and MCP 
 
 ## Custom list metadata
 
-The list envelope's `meta` bag (`ListResultDto.meta`) is the place for anything about the list that isn't a row: facet counts, a freshness stamp, a cursor. It doesn't need a DTO or a config key. Whatever the `findMany` handler returns as `meta` is what the client receives.
+The list envelope's `meta` bag (`ListResultDto.meta`) is the place for anything about the list that isn't a row: facet counts, a freshness stamp, a cursor. It doesn't need a schema or a config key. Whatever the `findMany` handler returns as `meta` is what the client receives.
 
 It's the envelope's one optional field. Until a handler fills it, the key is absent from the response, not `{}`, so the common zero-config list doesn't carry an empty bag on every request; a contributor that returns `{}` leaves it absent too. Type it and read it accordingly: `body.meta?.inStock`.
 
@@ -190,7 +190,7 @@ export class BookController {}
 - **Contributor input**: the wrapped handler's whole result (`entities`, `total`, and any `meta` it already set) plus the request `KavoContext`. It may be `async`.
 - **Merge precedence**: the contributor's keys win. The inner handler's `meta` is the base and the contributor merges over it, so the outermost wrap owns any key it names; keys it doesn't name pass through.
 - **Overriding that**: the inner bag is in hand, so return `{ ...mine, ...result.meta }` to let the inner handler win instead.
-- **Serialization**: none. `meta` is your data, not entity data: no DTO projection, no `select=` selection, no renaming. It must be JSON-serializable.
+- **Serialization**: none. `meta` is your data, not entity data: no schema projection, no `select=` selection, no renaming. It must be JSON-serializable.
 - **Nothing contributed**: the key is left off the response entirely. Judged on the merged bag, so `{}` from a contributor is the same as no contributor at all.
 - **Wrong-shaped handler**: wrapping a handler that doesn't return `{ entities, total }` raises `ConfigurationException` (`KAVO_CONFIG_INVALID`) naming the operation, rather than serving a malformed envelope.
 

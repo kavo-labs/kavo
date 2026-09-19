@@ -42,7 +42,7 @@ With no config, Kavo derives everything it needs from the entity's own metadata:
 - **Filterable, sortable, and selectable fields**: every scalar column, unless you narrow one of the [allowed](/features/allowed) explicitly.
 - **Includable relations**: none, until you name one in `include.fields`. This is the one allowlist that defaults closed rather than open ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 
-None of this requires a DTO class, a service, or a repository. See [DTOs](/core/dtos) for what registering one narrows, and [Quick start](/getting-started/quick-start) for the end-to-end walkthrough.
+None of this requires a schema class, a service, or a repository. See [Schemas](/core/schemas) for what registering one narrows, and [Quick start](/getting-started/quick-start) for the end-to-end walkthrough.
 
 ## What Kavo needs from an entity
 

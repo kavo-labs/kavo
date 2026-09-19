@@ -48,7 +48,7 @@ The batch counterparts (`createMany`, `updateMany`, …) are reserved in the reg
 
 ## Per-operation configuration
 
-Beyond enable/disable, any standard operation accepts a full override object: a replacement handler, route options, a narrower DTO, or settings that apply to that operation only.
+Beyond enable/disable, any standard operation accepts a full override object: a replacement handler, route options, a narrower schema, or settings that apply to that operation only.
 
 ```ts
 @Kavo(Book, {

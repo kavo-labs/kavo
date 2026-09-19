@@ -97,11 +97,11 @@ even a loss — SQLite's own `LIKE` is already ASCII case-insensitive.
   is the same hole `@kavo/prisma` and `@kavo/mongoose` have (only
   `@kavo/typeorm` escapes it, because `@DeleteDateColumn` is detectable and
   therefore markable), and the fix belongs in core. Until then, register an
-  explicit `update`/`patch` DTO that omits the marker.
+  explicit `update`/`patch` schema that omits the marker.
 - **A non-auto-increment primary key is client-writable.**
   `@PrimaryKey() id: string = v4()` carries none of MikroORM's generated
   flags, so a `PATCH` can rewrite a row's identity. A numeric `@PrimaryKey()`
-  is auto-increment and safe. Name the write DTOs explicitly for any entity
+  is auto-increment and safe. Name the write schemas explicitly for any entity
   with a caller-assigned key.
 - **`hidden` and `lazy` properties are dropped from Kavo entirely.** Not
   merely hidden from responses — excluding them from the metadata seam is

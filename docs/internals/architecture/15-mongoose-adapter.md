@@ -94,7 +94,7 @@ described identically.
 Mongoose's `__v` is storage bookkeeping the caller never declared, so it
 stays out of the entity description. Because the default serializer
 projects onto `metadata.fields` (doc 04 §5), excluding it there is also
-what keeps it out of every derived DTO and every response.
+what keeps it out of every derived schema and every response.
 
 **`select: false` is excluded for the same reason, and it matters more.**
 That flag is Mongoose's own "never return this" — the idiomatic home of a

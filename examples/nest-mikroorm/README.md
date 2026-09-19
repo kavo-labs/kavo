@@ -4,7 +4,7 @@ The same Pet domain as [`nest-typeorm`](../nest-typeorm) — single-table
 inheritance (`Cat`/`Dog` over one `pet` table), an `Owner` relation both ways, a
 one-to-one `Address`, and a many-to-many `Tag` edge — served over HTTP by the
 real stack: `@Kavo(...)`-generated NestJS routes → CRUD engine →
-`@kavo/mikroorm` → a real database, with filtering, sorting, pagination, DTO
+`@kavo/mikroorm` → a real database, with filtering, sorting, pagination, schema
 projections (`item` vs. leaner `list`), layered config, Swagger docs, and RFC
 9457 problem-details errors.
 
@@ -46,7 +46,7 @@ That one config line is what enables soft delete _and_ what puts
 `PATCH /owners/:id/restore` on the router.
 
 It also means the marker is not automatically un-writable, which is why every
-`Owner` DTO slot omits `deletedAt` and every allowlist excludes it. With
+`Owner` schema slot omits `deletedAt` and every allowlist excludes it. With
 `purgeOne` enabled, a stampable marker would be a path to a permanent delete —
 see doc 17 §7, and the e2e test that pins it down.
 

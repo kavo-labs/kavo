@@ -1,6 +1,6 @@
 # Kavo
 
-> A production-grade CRUD framework for TypeScript: define an entity once (via TypeORM, Prisma, Mongoose, or MikroORM) and get the full REST CRUD surface — filtering, sorting, pagination, nested includes, field selection, optional per-operation DTOs, transactions, and problem-details errors — behind generated NestJS routes, configurable at global → entity → operation → per-call scope. GraphQL and MCP bindings expose the same engine over other protocols.
+> A production-grade CRUD framework for TypeScript: define an entity once (via TypeORM, Prisma, Mongoose, or MikroORM) and get the full REST CRUD surface — filtering, sorting, pagination, nested includes, field selection, optional per-operation schemas, transactions, and problem-details errors — behind generated NestJS routes, configurable at global → entity → operation → per-call scope. GraphQL and MCP bindings expose the same engine over other protocols.
 
 Source: https://github.com/kavo-labs/kavo
 
@@ -15,7 +15,7 @@ Source: https://github.com/kavo-labs/kavo
 
 - [Entities](https://kavo.js.org/core/entities): Defining an entity and its infrastructure seam
 - [CRUD Operations](https://kavo.js.org/core/crud-operations): The standard operation registry (createOne/createMany, findOne/findMany, updateOne, patchOne, deleteOne)
-- [DTOs](https://kavo.js.org/core/dtos): create/update/patch/query/item/list DTO slots and derivation
+- [Schemas](https://kavo.js.org/core/schemas): create/update/patch/query/item/list schema slots and derivation
 - [Services](https://kavo.js.org/core/services): The typed DefaultKavoService programmatic front door
 - [Routes & Controllers](https://kavo.js.org/core/routes-and-controllers): Decoration-time route generation and manual-method-wins
 - [Custom Operations](https://kavo.js.org/core/custom-operations): Adding, overriding, or disabling operations

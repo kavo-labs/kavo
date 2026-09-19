@@ -16,7 +16,7 @@ A validator actually validates an incoming body
 (`SchemaValidationException`, `KAVO_SCHEMA_INVALID`); a failing
 `schema.output` validator falls back to the projected value, so it shapes
 but is not a security boundary. Full detail:
-`docs/internals/architecture/04-dto-system.md` and `docs/core/dtos.md`.
+`docs/internals/architecture/04-schema-system.md` and `docs/core/schemas.md`.
 Config-side wiring (`@Kavo(Entity, { schema: {...} })`) is in the
 `kavo-decorator` skill.
 

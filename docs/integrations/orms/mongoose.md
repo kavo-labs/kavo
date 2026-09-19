@@ -87,7 +87,7 @@ export class AppModule {}
 
 ### Ids are strings
 
-MongoDB's primary key is `_id`, and `@kavo/mongoose` renders every `ObjectId` as a hex string at the adapter boundary. Responses are keyed by `_id`, not a numeric `id`, so DTOs declare `_id = ""`. A malformed id is a 404, not a 500.
+MongoDB's primary key is `_id`, and `@kavo/mongoose` renders every `ObjectId` as a hex string at the adapter boundary. Responses are keyed by `_id`, not a numeric `id`, so schemas declare `_id = ""`. A malformed id is a 404, not a 500.
 
 ### Soft delete is declared, not inferred
 

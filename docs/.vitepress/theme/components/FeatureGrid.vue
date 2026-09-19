@@ -38,7 +38,7 @@ const features = [
   },
   {
     index: "05",
-    name: "Per-operation DTOs",
+    name: "Per-operation schemas",
     desc: "Optional create, update, patch, query, item, and list shapes, derived or hand-written.",
   },
   {

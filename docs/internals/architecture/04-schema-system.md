@@ -175,10 +175,10 @@ one operation on one entity:
 
 ```ts
 createCrud(User, {
-  schema: { output: { item: UserItemDto } }, // entity-wide default
+  schema: { output: { item: UserItemSchema } }, // entity-wide default
   operations: {
-    findOne: { schema: { output: UserProfileDto } }, // findOne only
-    createOne: { schema: { input: CreateUserRequestDto, output: UserCreatedDto } },
+    findOne: { schema: { output: UserProfileSchema } }, // findOne only
+    createOne: { schema: { input: CreateUserRequestSchema, output: UserCreatedSchema } },
   },
 });
 ```

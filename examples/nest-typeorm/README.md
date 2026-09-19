@@ -2,19 +2,19 @@
 
 The checkpoint app: a small Pet domain served over HTTP by the real stack
 — `@Kavo(...)`-generated NestJS routes → CRUD engine → `@kavo/typeorm` →
-a real database — with filtering, sorting, pagination, DTO projections
+a real database — with filtering, sorting, pagination, schema projections
 (`item` vs. leaner `list`), layered config, Swagger docs, and RFC 9457
 problem-details errors. `Cat` and `Dog` are single-table-inheritance
 subtypes of `Pet`; `Owner` is the relation side, and is soft-deletable.
 
-The entities, DTOs, and controllers are entirely database-agnostic through
+The entities, schemas, and controllers are entirely database-agnostic through
 `@kavo/typeorm` — only `DatabaseModule`/`AppModule` (both dynamic modules,
 via `.forRoot(...)`) pick a driver, so the same app runs against any of the
 databases below unchanged.
 
 Every entity but `Dog` also validates its write bodies with `class-validator`
-— Kavo's own DTOs are shapes only, with no validation subsystem of their
-own (see `docs/internals/architecture/04-dto-system.md`), so this app's own
+— Kavo's own schemas are shapes only, with no validation subsystem of their
+own (see `docs/internals/architecture/04-schema-system.md`), so this app's own
 `ValidationPipe` (`app.module.ts`) plus each entity's registered
 `dto.create`/`update`/`patch` class is what a validation layer looks like
 bolted onto Kavo from application code, with no framework changes — a plain

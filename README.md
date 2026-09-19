@@ -52,7 +52,7 @@ for the full walkthrough, including NestJS wiring and a soft-delete example.
 
 Built with Claude Code, and shipped with skills so your agent moves just as
 fast. [`extensions`](extensions) has ready-made skills for the whole surface —
-`@Kavo()`, global config, the query grammar, DTOs, errors, soft delete,
+`@Kavo()`, global config, the query grammar, schemas, errors, soft delete,
 Swagger, the GraphQL and MCP bindings, and per-ORM wiring for each supported
 adapter — published as a plugin via this repo's own marketplace:
 

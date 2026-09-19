@@ -59,7 +59,7 @@ references: [id])`) — the [documented best
 practice](https://www.prisma.io/docs/orm/prisma-schema/data-model/relations)
 for any 1:1/1:n relation. An **implicit many-to-many** relation (no
 scalar field on either side, Prisma manages the join table itself) has no
-foreign key for a DTO to expose, so it cannot be associated through the
+foreign key for a schema to expose, so it cannot be associated through the
 normal write path — a custom operation handler reaching for the raw
 Prisma Client is the escape hatch, same as any write shape Kavo doesn't
 model directly.

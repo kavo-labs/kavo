@@ -61,7 +61,7 @@ Every field it named was served. The one it refused to name was served too.
 registered DTO projects by the own enumerable properties of `new Dto()`, and
 TypeScript erases an uninitialized field, so `id!: string` declares nothing
 at runtime and the class falls back to the full entity. That is documented
-and deliberate (`docs/internals/architecture/04-dto-system.md`
+and deliberate (`docs/internals/architecture/04-schema-system.md`
 §4), and it is the same failure direction: the config looks like narrowing,
 nothing complains, the response is wide.
 
@@ -207,5 +207,5 @@ applied after the projection resolves, so it can only subset what
   makes true.
 - ADR-0021 §2 (cursor sort keys must be on `selectable`), whose security
   argument depended on this being true.
-- `docs/internals/architecture/04-dto-system.md` §4, on DTO
+- `docs/internals/architecture/04-schema-system.md` §4, on DTO
   runtime shapes.

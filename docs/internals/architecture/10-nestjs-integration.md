@@ -360,7 +360,7 @@ a tag that is not already there, so ours wins.
 Being innermost also means the tag is set before any outer interceptor
 can rewrite the body. An app interceptor that redacts fields per role
 therefore emits a hash of the _unredacted_ representation; redaction
-belongs in the operation's `item` DTO, which the engine serializes
+belongs in the operation's `item` schema, which the engine serializes
 through before hashing.
 
 ## 3. Exception mapping
@@ -376,7 +376,7 @@ Optional and zero-cost when absent (`createRequire` probe, cached).
 When `@nestjs/swagger` is installed, generated routes get: operation ids
 (`User_findMany`), a `tags: [entity.name]` entry, `x-kavo-entity`/
 `x-kavo-operation` vendor extensions on the operation object, the `:id`
-param, the query params documented on list routes (doc 5), registered DTO
+param, the query params documented on list routes (doc 5), registered schema
 classes as body schemas (`ApiBody`), problem-details response schemas for
 400/404, and the conditional-request surface (ADR-0020) — the `ETag`
 response header, `If-None-Match` + `304` on single-item reads, `If-Match` +
@@ -389,7 +389,7 @@ route, a custom operation (issue #145), and an `@Override`d route —
 client generators like Orval and `openapi-generator` key file/module
 splitting off `tags` (with none, every operation across every entity lands
 in one flat client module), and because nothing else in the document links
-an operation, or a generated DTO schema, back to the Kavo entity/operation
+an operation, or a generated schema, back to the Kavo entity/operation
 it came from. Every inline schema this module builds — `schemaFromDto`
 request/response bodies, a list envelope's element, the `issue #264`
 fallback body/response schemas, and each `oneOf` variant (schema hints,
@@ -443,7 +443,7 @@ the guide can't say:
 The success-response schema is chosen by the descriptor's cardinality
 rather than by a list of operation ids, matching what `mapResponse`
 actually branches on: a `"many"` operation is documented as the list
-envelope, everything else as the resolved `item` DTO, and a `204` as no
+envelope, everything else as the resolved `item` schema, and a `204` as no
 body at all. That is what gives a custom operation (issue #145) a real
 documented response instead of a blank one.
 
@@ -452,7 +452,7 @@ A `"many"` operation wraps its `list` element in `listEnvelopeSchema`, whose
 `meta`, which the engine omits unless a handler contributed (doc 07 §3.1),
 so a generated client must treat it as optional. `meta` is also the one
 envelope field with nothing to enumerate: `items` is projected through the
-`list` DTO, so `schemaFromDto` reads real fields off it, whereas
+`list` schema, so `schemaFromDto` reads real fields off it, whereas
 `ListMetaDto` is an open `[key: string]: unknown` bag filled at request
 time by handler code Kavo never sees. It is therefore published as
 `additionalProperties: true` with a prose description rather than a bare
@@ -463,7 +463,7 @@ whether it is merely documentation or an enforced projection; the GraphQL
 binding has the same open question (doc 13 §"Out of scope").
 
 The `issue #264` fallback body/response schemas — synthesized at bind time
-for a route with no explicit DTO, from `metadata.fields` narrowed to the
+for a route with no explicit schema, from `metadata.fields` narrowed to the
 resolved `creatable`/`updatable` (bodies) or `select.fields` (responses)
 allowlist — also emit a `required` array off column nullability: a
 non-`nullable` column is listed in `required`, a nullable column (an
@@ -511,7 +511,7 @@ in ADR-0045):
   `registerKavoSchemas` then rewrites each marker, in a post-pass over
   every registered component, to `{ $ref: "#/components/schemas/<Target>Item" }`
   — or, when the target published no synthesized item schema (its own read
-  route registered an explicit `item` DTO, or it has no read route), to a
+  route registered an explicit `item` schema, or it has no read route), to a
   plain `{ type: "object" }` with a prose description, so the document never
   carries a dangling `$ref`. Nested `include=a.b.c` types transitively this
   way, and `$ref` cycles (mutual or self relations) are valid OpenAPI 3.x
@@ -534,7 +534,7 @@ the unprojected row; a `select=`-narrowed read (ADR-0026) returns a
 subset, so a strict client validating that response against `<Entity>Item`
 would see "missing required" — expected, the same way `select=` already
 diverges from the full schema's `properties`. The request side mirrors the
-explicit-DTO path, where `@nestjs/swagger` + class-validator derive
+explicit-schema path, where `@nestjs/swagger` + class-validator derive
 `required` themselves.
 
 ### Serving the document (`setupKavoSwagger`)
@@ -629,8 +629,8 @@ of every route collapsing onto the shared `KavoProblemDetails`. It does
 refuses `additionalProperties: false`), and a `description` listing the
 resolved write/query allowlist would both disagree with the request-body
 schema on the same route — projected through the resolved `create`/`update`
-DTO, which _replaces_ the allowlist (`DefaultDeserializer`, ADR-0026's
-precedent) — and disclose internal column names the DTO boundary exists to
+Schema, which _replaces_ the allowlist (`DefaultDeserializer`, ADR-0026's
+precedent) — and disclose internal column names the schema boundary exists to
 hide. An app with no `KavoModule.forRoot`/`forRootAsync` never reaches that
 pass, so its `400`s stay bare and hoist to `KavoProblemDetails`.
 
@@ -650,7 +650,7 @@ an `x-kavo-query-schemas` extension on every enabled read route
 (`pagination`/`sort` on list routes only, `include` on every read);
 `registerKavoSchemas` reads that blob, names each entry
 `<Entity><Slot-in-PascalCase>` off the operation's own `x-kavo-entity`,
-hoists it through the same registry as the DTO schemas — structurally
+hoists it through the same registry as the schemas — structurally
 identical repeats across an entity's read routes collapse onto one
 component — and deletes the extension, leaving no plumbing in the published
 document. A document that never runs `registerKavoSchemas` keeps the raw
@@ -708,7 +708,7 @@ that component; a genuinely different shape wanting a taken name gets `_2`,
 `_3`, … in `document.paths` order. That order is deterministic within one
 build but shifts when an entity is added or `controllers: [...]` is
 reordered, so a `_2` in the output is a prompt to disambiguate with an
-explicit DTO class, not a name to rely on — and after the operation-aware
+explicit schema class, not a name to rely on — and after the operation-aware
 naming above a real clash needs two entities whose names collide
 (`AdListItem` the entity vs `Ad`'s list element). The same shape requested
 under _different_ names is emitted under each — `<Entity>Update` /

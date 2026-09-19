@@ -6,7 +6,7 @@ CRUD surface — `createOne` … `purgeOne`, the `*Many` batch variants
 (contracted and registered, but disabled: bulk is the optional half of
 soft delete and this build dropped it) — with filtering, sorting,
 pagination, nested includes, field selection, optional per-operation
-DTOs, serialization, transactions, and error handling, configurable at
+Schemas, serialization, transactions, and error handling, configurable at
 global, entity, operation, and per-call scope.
 
 v6 scope is deliberately narrow: no validation subsystem, no
@@ -38,7 +38,7 @@ flowchart TB
     subgraph core["@kavo/core — the hub (zero dependencies)"]
         E["KavoEngine (request lifecycle)"]
         Q[Query model: filter AST, pagination, sort, select]
-        D[DTO resolution + serialization]
+        D[schema resolution + serialization]
         CF[Layered configuration]
         R["Operation registry (dispatch table)"]
         X[Exception hierarchy + error catalog]
@@ -101,17 +101,17 @@ references — an illegal import fails CI, not code review.
 
 ## 3. Package overview
 
-| Package          | Owns                                                                                    | Must never depend on          |
-| ---------------- | --------------------------------------------------------------------------------------- | ----------------------------- |
-| `@kavo/core`     | Contracts, type system, engine, query model, DTO resolution, config merging, exceptions | anything (zero runtime deps)  |
-| `@kavo/typeorm`  | `RepositoryAdapter`/`FilterBuilder` over TypeORM; error mapping; relation loading       | NestJS, `@kavo/nest`          |
-| `@kavo/prisma`   | The same contracts over a Prisma Client delegate; marker classes (ADR-0017)             | NestJS, `@kavo/nest`          |
-| `@kavo/mongoose` | The same contracts over a Mongoose model; `ObjectId` conversion (ADR-0018)              | NestJS, `@kavo/nest`          |
-| `@kavo/mikroorm` | The same contracts over a MikroORM `EntityManager`; per-operation forks (doc 17)        | NestJS, `@kavo/nest`          |
-| `@kavo/graphql`  | `GraphQLSchema` over a `createCrud` service (ADR-0016)                                  | any ORM or framework package  |
-| `@kavo/mcp`      | MCP tools over a `createCrud` service's standard operations (ADR-0016, doc 16)          | any ORM or framework package  |
-| `@kavo/nest`     | `@Kavo` decorator, module wiring, route generation, exception filter, Swagger           | any ORM adapter               |
-| `@kavo/next`     | Request-time route dispatch for the Next.js App Router (ADR-0054, doc 19)               | any ORM adapter, `@kavo/nest` |
+| Package          | Owns                                                                                       | Must never depend on          |
+| ---------------- | ------------------------------------------------------------------------------------------ | ----------------------------- |
+| `@kavo/core`     | Contracts, type system, engine, query model, schema resolution, config merging, exceptions | anything (zero runtime deps)  |
+| `@kavo/typeorm`  | `RepositoryAdapter`/`FilterBuilder` over TypeORM; error mapping; relation loading          | NestJS, `@kavo/nest`          |
+| `@kavo/prisma`   | The same contracts over a Prisma Client delegate; marker classes (ADR-0017)                | NestJS, `@kavo/nest`          |
+| `@kavo/mongoose` | The same contracts over a Mongoose model; `ObjectId` conversion (ADR-0018)                 | NestJS, `@kavo/nest`          |
+| `@kavo/mikroorm` | The same contracts over a MikroORM `EntityManager`; per-operation forks (doc 17)           | NestJS, `@kavo/nest`          |
+| `@kavo/graphql`  | `GraphQLSchema` over a `createCrud` service (ADR-0016)                                     | any ORM or framework package  |
+| `@kavo/mcp`      | MCP tools over a `createCrud` service's standard operations (ADR-0016, doc 16)             | any ORM or framework package  |
+| `@kavo/nest`     | `@Kavo` decorator, module wiring, route generation, exception filter, Swagger              | any ORM adapter               |
+| `@kavo/next`     | Request-time route dispatch for the Next.js App Router (ADR-0054, doc 19)                  | any ORM adapter, `@kavo/nest` |
 
 ORM independence inside core began as a structural discipline when only
 TypeORM existed; the Prisma, Mongoose, and MikroORM adapters are what
@@ -127,7 +127,7 @@ Request
  → Config Resolution        frozen ResolvedEntityConfig (bootstrap-merged)
  → Query Resolution         GET only: query → filter AST (+ IncludeTree, doc 12)
  → Policy                   resolved `policy` function, if any (ADR-0037)
- → DTO Resolution           explicit DTO, else entity-derived default
+ → schema Resolution           explicit schema, else entity-derived default
  → Deserialization
  → Repository Adapter call  transactional via the adapter-level hook ⟨reserved⟩
  → Response Mapping         result → item or ListResultDto envelope
@@ -197,13 +197,13 @@ sequenceDiagram
     participant A as TypeOrmRepositoryAdapter
     participant S as Serializer
     C->>E: execute("createOne", body)
-    E->>E: registry lookup + resolved config + DTO resolution
+    E->>E: registry lookup + resolved config + schema resolution
     E->>D: deserialize(body, CreateDto)
     D-->>E: create input
     E->>A: create(data, ctx)
     A-->>E: entity (or mapped KavoException)
     E->>S: serializeItem(entity, ItemDto, ctx)
-    S-->>C: item DTO (201)
+    S-->>C: item schema (201)
 ```
 
 ### findMany
@@ -240,7 +240,7 @@ sequenceDiagram
     E->>E: resolve + deserialize(body, UpdateDto)
     E->>A: update(id, data, ctx)
     alt row exists
-        A-->>E: entity → serialized item DTO (200)
+        A-->>E: entity → serialized item schema (200)
     else missing
         A-->>E: null → NotFoundException → problem details (404)
     end
@@ -268,7 +268,7 @@ Kavo is **not**:
 - a query language beyond the CRUD surface — no aggregations, projections
   beyond sparse fieldsets, or raw-SQL passthrough;
 - a GraphQL layer;
-- a validation subsystem — DTOs are shapes; teams wire NestJS's own
+- a validation subsystem — schemas are shapes; teams wire NestJS's own
   `ValidationPipe` if they want validation;
 - a role/permission modeling or policy-evaluation _engine_ — `policy`
   (ADR-0037) enforces a rule an application already declared, it does not

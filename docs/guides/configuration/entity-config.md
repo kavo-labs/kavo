@@ -8,7 +8,7 @@ Configures a class or validator per slot, split into `input` and `output`. Every
 
 ```ts
 @Kavo(Book, {
-  schema: { input: { create: CreateBookDto, update: UpdateBookDto }, output: { item: BookItemDto, list: BookListDto } },
+  schema: { input: { create: CreateBookSchema, update: UpdateBookSchema }, output: { item: BookItemSchema, list: BookListSchema } },
 })
 ```
 
@@ -21,7 +21,7 @@ Configures a class or validator per slot, split into `input` and `output`. Every
 | `item`   | Entity, subject to field selection                  |
 | `list`   | Same as `item`'s resolved type                      |
 
-There's no `patch` schema to write on its own; it derives from `update`. See [Schemas and DTOs](/core/dtos) and [Schema system](/internals/architecture/04-dto-system) for full derivation rules.
+There's no `patch` schema to write on its own; it derives from `update`. See [Schemas](/core/schemas) and [Schema system](/internals/architecture/04-schema-system) for full derivation rules.
 
 ## filter / sort / select / search / include
 
