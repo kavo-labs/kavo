@@ -9,14 +9,20 @@ import type { FieldPath } from "../types/field-path.js";
  * downstream consumers (`@kavo/nest`'s Swagger generation) can tell it apart
  * from a hand-registered class.
  *
- * `create`/`update` don't accept this shorthand directly (issue #388) —
- * their writable-field list is the top-level `EntityConfig.create.fields` /
- * `EntityConfig.update.fields` (`config/entity-config.ts`) instead.
- * `patch`/`item`/`list` accept it here.
+ * Every `schema` position accepts it, `create`/`update` included; those two
+ * keep the top-level `EntityConfig.create.fields`/`update.fields`
+ * (`config/entity-config.ts`) as the richer form (`apply`, `default`,
+ * `{ exclude }`), and a schema-position list wins over it like any class.
  */
 export interface FieldsShorthand<Entity> {
   readonly fields: readonly FieldPath<Entity, 1>[];
 }
+
+/**
+ * Any field-list spelling a schema position accepts: the `{ fields: [...] }`
+ * object, or the bare array `[...]` (same meaning, fewer braces).
+ */
+export type FieldsInput<Entity> = FieldsShorthand<Entity> | readonly FieldPath<Entity, 1>[];
 
 const SHORTHAND_FIELDS = new WeakMap<object, readonly string[]>();
 
@@ -28,8 +34,11 @@ export function shorthandFieldsOf(schemaClass: SchemaLike<object> | null): reado
   return SHORTHAND_FIELDS.get(schemaClass) ?? null;
 }
 
-export function isFieldsShorthand(value: unknown): value is FieldsShorthand<unknown> {
-  return typeof value === "object" && value !== null && Array.isArray((value as { fields?: unknown }).fields);
+export function isFieldsShorthand(value: unknown): value is FieldsInput<unknown> {
+  return (
+    Array.isArray(value) ||
+    (typeof value === "object" && value !== null && Array.isArray((value as { fields?: unknown }).fields))
+  );
 }
 
 /** Synthesizes a `SchemaClass` from a field list — same key set a hand-written class with those fields would produce. */
@@ -47,7 +56,7 @@ export function schemaClassFromFields(fields: readonly string[]): SchemaClass {
 
 /** Resolve one class-shaped schema slot entry — a class, a `{ fields }` shorthand, or unset — to a `SchemaClass | null`. */
 export function resolveSchemaClassSlot<Entity>(
-  entry: SchemaClass | FieldsShorthand<Entity> | undefined,
+  entry: SchemaClass | FieldsInput<Entity> | undefined,
 ): SchemaClass | null {
   if (entry === undefined) {
     return null;
@@ -55,5 +64,7 @@ export function resolveSchemaClassSlot<Entity>(
   if (typeof entry === "function") {
     return entry;
   }
-  return schemaClassFromFields(entry.fields as readonly string[]);
+  return schemaClassFromFields(
+    (Array.isArray(entry) ? entry : (entry as FieldsShorthand<Entity>).fields) as readonly string[],
+  );
 }

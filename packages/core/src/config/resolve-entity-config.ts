@@ -39,8 +39,8 @@ import type { WriteApply, WriteFieldsConfig } from "./write-fields.js";
 import type { SchemaClass } from "../schema/schema-class.js";
 import { isSchemaClass } from "../schema/schema-class.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
-import { schemaClassFromFields, resolveSchemaClassSlot } from "../schema/schema-fields-shorthand.js";
-import { DefaultSchemaResolver } from "../schema/entity-schema.js";
+import { schemaClassFromFields } from "../schema/schema-fields-shorthand.js";
+import { DefaultSchemaResolver, normalizeEntitySchema } from "../schema/entity-schema.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
 import { ConfigurationException } from "../errors/exceptions.js";
@@ -450,8 +450,7 @@ function rejectDerivedWriteSchemaKeys<Entity extends object>(
   if (names.size === 0) {
     return;
   }
-  const input = entityConfig?.schema as { input?: Record<string, unknown> } | undefined;
-  const map = input?.input ?? {};
+  const { input: map } = normalizeEntitySchema(entityConfig?.schema);
   // `createFields`/`updateFields` are already `{ exclude }`-resolved (#397);
   // a derived-field name can never be in the resolved list of an `{ exclude }`
   // form (it has no writable storage), so this still only ever fires for a
@@ -460,22 +459,14 @@ function rejectDerivedWriteSchemaKeys<Entity extends object>(
     [
       "create",
       "schema.input.create",
-      isSchemaClass(map.create)
-        ? (map.create as SchemaClass)
-        : createFields
-          ? schemaClassFromFields(createFields)
-          : null,
+      isSchemaClass(map.create) ? map.create : createFields ? schemaClassFromFields(createFields) : null,
     ],
     [
       "update",
       "schema.input.update",
-      isSchemaClass(map.update)
-        ? (map.update as SchemaClass)
-        : updateFields
-          ? schemaClassFromFields(updateFields)
-          : null,
+      isSchemaClass(map.update) ? map.update : updateFields ? schemaClassFromFields(updateFields) : null,
     ],
-    ["patch", "schema.input.patch", resolveSchemaClassSlot(map.patch as Parameters<typeof resolveSchemaClassSlot>[0])],
+    ["patch", "schema.input.patch", isSchemaClass(map.patch) ? map.patch : null],
   ];
   for (const [slot, scope, schemaClass] of checks) {
     const declared = schemaShapeKeys(schemaClass)?.find((key) => names.has(key));

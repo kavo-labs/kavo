@@ -89,7 +89,20 @@ The explicit form, with the fallbacks marked:
 
 `schema.input`'s shorthand never reaches `query`, which has its own shape and no natural single-schema reading. A shorthand `schema.output` is typed against the input side's output type only: a failing output schema falls back to the projected value, so a create schema narrower than the full entity still works as the output shorthand.
 
-A slot also takes `{ fields: [...] }` to synthesize a class from a field list, the same key set a hand-written class with those fields would give.
+## Field lists
+
+Anywhere a schema goes, a plain list of field names works too, as a bare array or as `{ fields: [...] }`. Kavo synthesizes a class from it, the same key set a hand-written class with those fields would give:
+
+```ts
+@Kavo(Book, { schema: ['title', 'year'] }) // input and output
+@Kavo(Book, { schema: { input: ['title', 'year'] } }) // create, update, patch
+@Kavo(Book, { schema: { input: { create: ['title'], update: ['title', 'year'] } } })
+@Kavo(Book, { schema: { output: { item: ['id', 'title'], list: ['id'] } } })
+```
+
+Field names are type-checked against the entity, own columns only (depth 1). Like a class, a list only shapes; it never rejects a body. On the write side it wins over the top-level `create.fields`/`update.fields`, which stay the place for `apply`, `default` and `{ exclude }`. A per-operation `operations.<id>.schema` override takes a class or validator only.
+
+So one `schema` can hold all three kinds: a Zod (or any `safeParse`) validator, a class (with `class-validator` decorators if you run a `ValidationPipe`), or a field list.
 
 ## Included relations
 

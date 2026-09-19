@@ -6,7 +6,8 @@ import type { OperationEntryOf } from "../operations/operation-entry.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { FieldsShorthand, WriteFieldsConfig } from "../config/write-fields.js";
+import type { WriteFieldsConfig } from "../config/write-fields.js";
+import type { FieldsInput } from "./schema-fields-shorthand.js";
 import { schemaClassFromFields } from "./schema-fields-shorthand.js";
 
 /**
@@ -42,10 +43,11 @@ export type SchemaOutputSlot = "item" | "list";
  */
 export type SchemaInputMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut> =
   | SchemaSlot<CreateOut>
+  | FieldsInput<Entity>
   | {
-      readonly create?: SchemaSlot<CreateOut>;
-      readonly update?: SchemaSlot<UpdateOut>;
-      readonly patch?: SchemaSlot<PatchOut> | FieldsShorthand<Entity>;
+      readonly create?: SchemaSlot<CreateOut> | FieldsInput<Entity>;
+      readonly update?: SchemaSlot<UpdateOut> | FieldsInput<Entity>;
+      readonly patch?: SchemaSlot<PatchOut> | FieldsInput<Entity>;
       readonly query?: SchemaSlot<QueryOut>;
     };
 
@@ -56,9 +58,10 @@ export type SchemaInputMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut> =
  */
 export type SchemaOutputMap<Entity, ItemOut, ListOut> =
   | SchemaSlot<ItemOut>
+  | FieldsInput<Entity>
   | {
-      readonly item?: SchemaSlot<ItemOut> | FieldsShorthand<Entity>;
-      readonly list?: SchemaSlot<ListOut> | FieldsShorthand<Entity>;
+      readonly item?: SchemaSlot<ItemOut> | FieldsInput<Entity>;
+      readonly list?: SchemaSlot<ListOut> | FieldsInput<Entity>;
     };
 
 /**
@@ -108,7 +111,57 @@ export type EntitySchema<
   QueryOut = QueryContext<Entity>,
   ItemOut = Entity,
   ListOut = ItemOut,
-> = SchemaSlot<CreateOut> | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
+> =
+  | SchemaSlot<CreateOut>
+  | FieldsInput<Entity>
+  | EntitySchemaMap<Entity, CreateOut, UpdateOut, PatchOut, QueryOut, ItemOut, ListOut>;
+
+type NormalizedSlot = KavoSchema<unknown> | SchemaClass | undefined;
+
+/**
+ * Canonicalizes every spelling `schema` accepts (a bare validator/class, a
+ * bare `['a', 'b']` array or `{ fields }` object at the whole-schema,
+ * `input`/`output`, or per-slot level) into per-slot values: a validator, a
+ * class, or unset. A field list is synthesized into one `SchemaClass` per
+ * position — once, because `shorthandFieldsOf` is keyed on class identity, so
+ * resolving one shorthand twice would read back inconsistently downstream.
+ * `input`'s whole-position shorthand covers `create`/`update`/`patch`, never
+ * `query`; `output`'s covers `item`/`list`.
+ */
+export function normalizeEntitySchema(schema: EntitySchema<any> | undefined): {
+  readonly input: Partial<Record<SchemaInputSlot, NormalizedSlot>>;
+  readonly output: Partial<Record<SchemaOutputSlot, NormalizedSlot>>;
+} {
+  const resolveSlot = (value: unknown): NormalizedSlot =>
+    isFieldsShorthand(value) ? (resolveSchemaClassSlot(value) ?? undefined) : (value as NormalizedSlot);
+  const whole = isSchemaShorthand(schema) || isFieldsShorthand(schema) ? resolveSlot(schema) : undefined;
+  const map = (whole !== undefined ? { input: whole, output: whole } : (schema ?? {})) as EntitySchemaMap<
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown,
+    unknown
+  >;
+  const inputWhole = isSchemaShorthand(map.input) || isFieldsShorthand(map.input) ? resolveSlot(map.input) : undefined;
+  const outputWhole =
+    isSchemaShorthand(map.output) || isFieldsShorthand(map.output) ? resolveSlot(map.output) : undefined;
+  const inputMap = (inputWhole !== undefined ? {} : (map.input ?? {})) as Partial<Record<SchemaInputSlot, unknown>>;
+  const outputMap = (outputWhole !== undefined ? {} : (map.output ?? {})) as Partial<Record<SchemaOutputSlot, unknown>>;
+  return {
+    input: {
+      create: inputWhole ?? resolveSlot(inputMap.create),
+      update: inputWhole ?? resolveSlot(inputMap.update),
+      patch: inputWhole ?? resolveSlot(inputMap.patch),
+      query: resolveSlot(inputMap.query),
+    },
+    output: {
+      item: outputWhole ?? resolveSlot(outputMap.item),
+      list: outputWhole ?? resolveSlot(outputMap.list),
+    },
+  };
+}
 
 /**
  * Structural check: is `value` the whole-map shorthand (a bare validator or
@@ -189,29 +242,11 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
   private readonly writeAllowlist: Readonly<Record<"create" | "update" | "patch", SchemaClass | null>>;
 
   constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
-    const map: EntitySchemaMap<Entity, unknown, unknown, unknown, unknown, unknown, unknown> = isSchemaShorthand(schema)
-      ? { input: schema, output: schema }
-      : (schema ?? {});
-    const input = isSchemaShorthand(map.input)
-      ? { create: map.input, update: map.input, patch: map.input }
-      : (map.input ?? {});
-    const output = isSchemaShorthand(map.output) ? { item: map.output, list: map.output } : (map.output ?? {});
-    // A `{ fields }` shorthand slot resolves to a synthesized `SchemaClass`
-    // once; a non-shorthand slot (a `KavoSchema` validator or a hand-written
-    // class, or unset) passes through unchanged. Resolving once and reusing
-    // the result for the `patch`→`update` / `list`→`item` fallback chains
-    // matters: `resolveSchemaClassSlot` synthesizes a fresh class per call,
-    // and `shorthandFieldsOf`'s `WeakMap` is keyed on class identity, so
-    // resolving the same shorthand twice would produce two classes that
-    // read back inconsistently downstream.
-    const resolveSlot = (value: unknown): KavoSchema<unknown> | SchemaClass | undefined =>
-      isFieldsShorthand(value)
-        ? (resolveSchemaClassSlot(value) ?? undefined)
-        : (value as KavoSchema<unknown> | SchemaClass | undefined);
-    const patch = resolveSlot(input.patch);
-    const update = resolveSlot(input.update);
-    const item = resolveSlot(output.item);
-    const list = resolveSlot(output.list);
+    const { input, output } = normalizeEntitySchema(schema);
+    const patch = input.patch;
+    const update = input.update;
+    const item = output.item;
+    const list = output.list;
     const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
     const createAllowlist = writableFieldsToSchemaClass(writable.create?.fields);
     const updateAllowlist = writableFieldsToSchemaClass(writable.update?.fields);
