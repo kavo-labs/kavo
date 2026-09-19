@@ -1,6 +1,6 @@
 # Entity config
 
-`@Kavo(Entity, config)` accepts every `KavoSettings` field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity and never merge through the scope chain: `schema`, `policy` (below, an entity-wide default), `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)), and the per-axis query blocks `filter`, `sort`, `select`, `search`, and `include` — each holding that axis's `fields` allowlist, its `default` for an omitted request, its `apply` server-side override (ADR-0048), and (for `filter`/`include`) its request-cost `limits`. The write-side siblings are `create` and `update`. Per-relation read tuning and array-mutation write policy is `relations`. [Allowed](/features/allowed) covers the `fields` allowlists in full; [Config keys](/reference/config-keys) is the field-by-field table for all of them.
+`@Kavo(Entity, config)` accepts every `KavoSettings` field from [Settings](/guides/configuration/settings) one level above global, plus fields that only make sense per entity and never merge through the scope chain: `schema`, `set` (below, the write-side sibling of `apply`), `policy` (below, an entity-wide default), `operations` (its own page, see [Operations](/guides/configuration/operations#operations-1)), and the per-axis query blocks `filter`, `sort`, `select`, `search`, and `include` — each holding that axis's `fields` allowlist, its `default` for an omitted request, its `apply` server-side override (ADR-0048), and (for `filter`/`include`) its request-cost `limits`. Per-relation read tuning and array-mutation write policy is `relations`. [Allowed](/features/allowed) covers the `fields` allowlists in full — including `schema.input.create`/`schema.input.update`'s own `{ fields }` shorthand, the write side's allowlist — and [Config keys](/reference/config-keys) is the field-by-field table for all of them.
 
 ## schema
 
@@ -22,6 +22,25 @@ Configures a class or validator per slot, split into `input` and `output`. Every
 | `list`   | Same as `item`'s resolved type                      |
 
 There's no `patch` schema to write on its own; it derives from `update`. See [Schemas](/core/schemas) and [Schema system](/internals/architecture/04-schema-system) for full derivation rules.
+
+## set
+
+Forces field values into a `createOne`/`updateOne` body, overwriting whatever the client sent for that key — the write-side sibling of `filter.apply`/`sort.apply`/`select.apply`/`include.apply` (ADR-0048, ADR-0049). A bare function applies the same values to both operations; a `{ create?, update? }` object lets them diverge:
+
+```ts
+@Kavo(Order, {
+  set: ({ context }) => ({ tenantId: context.app.tenantId }), // same value on create and update
+})
+
+@Kavo(Order, {
+  set: {
+    create: ({ context }) => ({ tenantId: context.app.tenantId }),
+    update: ({ context }) => ({ tenantId: context.app.tenantId }),
+  },
+})
+```
+
+`set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged," not "reset it." It composes with `schema.input.create`/`update`'s writable-field allowlist rather than replacing it: the allowlist narrows what the client's own body may set, `set` unconditionally overwrites a field regardless of what the allowlist let through or the client sent. See [Apply](/features/apply) for the full argument shape and composition rules.
 
 ## filter / sort / select / search / include
 
