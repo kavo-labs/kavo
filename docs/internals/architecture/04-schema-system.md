@@ -90,17 +90,15 @@ the defaults derive from:
   naming the id or the soft-delete marker in the plain array form has no
   effect; and a hand-written write schema class occupying that same slot
   wins outright, exactly as a configured `item`/`list` schema wins over
-  `select.fields` — where you register
-  one, it, not the allowlist, is the narrowing statement. It also accepts
-  the `{ exclude: [...] }` form (issue #397) — "every writable field except
-  these" — resolved at bootstrap against that same base; there, unlike the
-  array form and unlike `filter.fields`/`sort.fields`/`select.fields`/
-  `search.fields`'s lax `{ exclude }`, a name that is not in
-  the base set is a bootstrap `ConfigurationException` rather than a no-op,
-  matching `include.fields`'s strict `{ exclude }`. Unconfigured — or an
-  `{ exclude }` that removes nothing — both default to the same base
-  described above, so an entity that never sets either sees no change
-  (issue #259).
+  `select.fields` — where you register one, it, not the allowlist, is the
+  narrowing statement. Unlike `filter.fields`/`sort.fields`/`select.fields`/
+  `search.fields`/`include.fields`, it has no `{ exclude: [...] }` form —
+  only the plain allowlist array (issue #476 removed the top-level
+  `create.fields`/`update.fields` config that form belonged to, along with
+  the config-level `default` gap-filler; `set` is the only tool left for
+  forcing a value, and it is unconstrained by this allowlist). Unconfigured,
+  both default to the same base described above, so an entity that never
+  sets either sees no change (issue #259).
 
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.

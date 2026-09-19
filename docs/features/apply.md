@@ -142,7 +142,7 @@ A `{ create?, update? }` object lets the two diverge, when they need to:
 })
 ```
 
-Same `ApplyArgs<Entity>` argument every other `apply` takes; the return shape is `Partial<Entity> | undefined` instead of a query-axis type. Composition is the write-side version of the same rule: a forced field **overwrites** whatever the client sent for it, the opposite of `create`/`update`'s own `default`, which only fills a field the client omitted. Configuring both `default` and `set` for the same field is legal — `set` wins, since it's the unconditional constraint and `default` only a fallback for an absent value.
+Same `ApplyArgs<Entity>` argument every other `apply` takes; the return shape is `Partial<Entity> | undefined` instead of a query-axis type. A forced field **overwrites** whatever the client sent for it — unconditional, the same relationship `filter.apply` has with the client's own filter, just applied to an object merge instead of an `AND`. `set` is also the only tool left for defaulting a write-body field at all: issue #476 removed `create`/`update`'s own config-level `default` (fill a field the body omits) along with the top-level `create`/`update` keys it lived on, so there is nothing left for `set` to compose against — `set`'s result simply wins.
 
 `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged" rather than "reset it."
 

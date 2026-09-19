@@ -211,7 +211,7 @@ function resolveSet<Entity extends object>(
   if (typeof value === "function") {
     return { createApply: value, updateApply: value };
   }
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ConfigurationException(
       entityName,
       "set",

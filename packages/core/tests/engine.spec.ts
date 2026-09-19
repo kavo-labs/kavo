@@ -370,6 +370,17 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
       expect(adapter.rows[0]?.age).not.toBe(99);
     });
+
+    it("a per-operation validator override on patchOne does not widen the update allowlist", async () => {
+      const lenient = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
+      const { crud, adapter } = makeCrud({
+        schema: { input: { update: { fields: ["name"] } } },
+        operations: { createOne: true, patchOne: { schema: { input: lenient } } },
+      } as never);
+      const created = await crud.createOne({ name: "Ada", email: "a@b.c" } as never);
+      await crud.patchOne(created.id, { name: "Grace", email: "widened@example.com" } as never);
+      expect(adapter.rows[0]?.email).not.toBe("widened@example.com");
+    });
   });
 
   it("treats an explicitly undefined dto key as unset, not as an inapplicable override", () => {

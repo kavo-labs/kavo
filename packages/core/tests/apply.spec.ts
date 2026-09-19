@@ -8,7 +8,14 @@ import type {
   NormalizedQueryContext,
   OperationId,
 } from "@kavo/core";
-import { NotFoundException, QueryNormalizer, createKavo, hasKeyset, resolveEntityConfig } from "@kavo/core";
+import {
+  ConfigurationException,
+  NotFoundException,
+  QueryNormalizer,
+  createKavo,
+  hasKeyset,
+  resolveEntityConfig,
+} from "@kavo/core";
 import {
   Author,
   Comment,
@@ -622,14 +629,46 @@ describe("set — force write-body values the client cannot override (issue #476
 
 describe("set — bootstrap validation", () => {
   it("rejects a non-function, non-object set", () => {
-    expect(() => makeCrud({ set: "nope" } as never)).toThrow(/'set'/);
+    try {
+      makeCrud({ set: "nope" } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "set" });
+    }
+  });
+
+  it("rejects an array set — Array.isArray(value) is truthy 'object' but not a { create?, update? } shape", () => {
+    try {
+      makeCrud({ set: [] } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "set" });
+    }
   });
 
   it("rejects a non-function set.create", () => {
-    expect(() => makeCrud({ set: { create: "nope" } } as never)).toThrow(/set\.create/);
+    try {
+      makeCrud({ set: { create: "nope" } } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "set.create" });
+    }
   });
 
   it("rejects a non-function set.update", () => {
-    expect(() => makeCrud({ set: { update: "nope" } } as never)).toThrow(/set\.update/);
+    try {
+      makeCrud({ set: { update: "nope" } } as never);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ConfigurationException);
+      expect((error as ConfigurationException).code).toBe("KAVO_CONFIG_INVALID");
+      expect((error as ConfigurationException).messageParams).toMatchObject({ path: "set.update" });
+    }
   });
 });
