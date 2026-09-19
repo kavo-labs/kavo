@@ -5,7 +5,7 @@ query string and the SQL is documented here.
 
 ```ts
 @Kavo(Owner, {
-  allowed: { includable: ["pets"] },
+  include: { fields: ["pets"] },
 })
 ```
 
@@ -14,14 +14,14 @@ metadata supplies the shape of a relation (name, target, cardinality) and
 config supplies permission, which metadata can never know. A relation
 nobody opted in is a 400, never a silent omission. Permission, default
 inclusion, and loading tuning are three different config keys (ADR-0028,
-ADR-0046): `allowed.includable` (entity-config.ts) grants `include=` access,
-one relation segment at a time from the root; `defaults.include`
-(settings.ts) names which includable relations load even when the client's
+ADR-0046): `include.fields` (entity-config.ts) grants `include=` access,
+one relation segment at a time from the root; `include.default`
+(entity-config.ts) names which includable relations load even when the client's
 `include=` doesn't ask; `EntityConfig.relations.<name>.read` (entity-config.ts,
 issue #404 — formerly `KavoSettings.relations.edges.<name>`) only tunes
 `maxDepth`/`strategy` for a relation once it is already includable — naming
 a relation there grants nothing by itself, and naming one in
-`defaults.include` still requires the matching `allowed.includable` grant.
+`include.default` still requires the matching `include.fields` grant.
 
 ## 1. The registry
 
@@ -31,13 +31,13 @@ a relation there grants nothing by itself, and naming one in
 | Key                             | Source                   | Default                                                                                             |
 | ------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
 | `name`, `target`, `cardinality` | metadata                 | —                                                                                                   |
-| `includable`                    | `allowed.includable`     | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
-| `defaultInclude`                | `defaults.include`       | `false`                                                                                             |
-| `maxDepth`                      | `relations.<name>.read`  | inherit `limits.includeDepth`                                                                       |
+| `includable`                    | `include.fields`         | `false` — unconfigured means no relation is includable, unlike every other allowlist key (ADR-0028) |
+| `defaultInclude`                | `include.default`        | `false`                                                                                             |
+| `maxDepth`                      | `relations.<name>.read`  | inherit `include.limits.maxDepth`                                                                   |
 | `strategy`                      | `relations.<name>.read`  | `auto`                                                                                              |
 | `write`                         | `relations.<name>.write` | `undefined` — resolved `ArrayMutationStrategy`; opt-in only, to-many only                           |
 
-A name in `allowed.includable`, `defaults.include`, or `relations`
+A name in `include.fields`, `include.default`, or `relations`
 that the entity does not have is a bootstrap `ConfigurationException`: an
 allowlist typo that silently permits nothing looks exactly like working
 config until the first client asks.
@@ -48,9 +48,9 @@ config until the first client asks.
    and `posts.comments` produce one `posts` node with a `comments` child.
 2. **Validate** each edge against the registry of the entity that _owns_
    it — unknown or non-includable → `KAVO_QUERY_INVALID_FIELD` (400).
-3. **Limit**: `limits.includeDepth` (default 2) as a budget spent
+3. **Limit**: `include.limits.maxDepth` (default 2) as a budget spent
    per level, a relation's own `maxDepth` replacing that budget for its
-   subtree, and `limits.includedNodes` (default 10) across the whole
+   subtree, and `include.limits.maxNodes` (default 10) across the whole
    tree → `KAVO_QUERY_LIMIT_EXCEEDED`.
 4. **Cycle guard is depth, and only depth.** `manager.manager.manager` is
    legal until the budget runs out. Visited-type tracking would forbid a
@@ -95,8 +95,8 @@ already a column on the parent row. It is rejected at bootstrap on a
 to-many edge and on an inverse `@OneToOne` (neither has a local FK —
 `RelationDescriptor.ownsForeignKey`, set by each adapter from its ORM's
 metadata), grants no permission of its own (the edge is still includable
-only via `allowed.includable`, ADR-0028), and its returned id is the
-literal value on the parent row — the target's `selectable` allowlist and
+only via `include.fields`, ADR-0028), and its returned id is the
+literal value on the parent row — the target's `select.fields` allowlist and
 soft-delete state have no say, unlike `join`/`batch`.
 
 Unlike `join`/`batch`, every adapter acts on `key`, and how cheap it is
@@ -138,7 +138,7 @@ and a second query is pure overhead:
 
 ```ts
 joinedBlogs = kavo.createCrud(Blog, {
-  allowed: { includable: ["articles"] },
+  include: { fields: ["articles"] },
   relations: { articles: { read: { strategy: "join" } } },
 });
 ```
@@ -189,8 +189,8 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
   target's derived default. A relation key on the _parent's_ DTO is
   documentation, not a load: it stays absent until the node is included.
 - **No parent-side ceiling (ADR-0045):** an included relation's projection
-  is the target entity's own `selectable` (or its derived default). The
-  including entity's `allowed.selectable` takes root paths only — a
+  is the target entity's own `select.fields` (or its derived default). The
+  including entity's `select.fields` takes root paths only — a
   relation-dotted entry is a bootstrap error, in the array and the
   `{ exclude }` form alike. ADR-0044's ceiling mechanism is fully removed.
 - **Soft delete:** soft-deleted related rows are excluded from
@@ -285,9 +285,9 @@ it, since there is no static route table for a dynamic per-relation id).
   entity, but — unlike `add`/`remove`/`replace<Relation>`, which keep the
   ordinary "parent only, nothing grafted on" contract byte-for-byte — with
   the relation itself forced onto the response through the existing
-  include-projection machinery, bypassing `allowed.includable`: the
+  include-projection machinery, bypassing `include.fields`: the
   operation's entire purpose is showing that relation's current membership,
-  so a relation opted into `write` but never into `includable` must still
+  so a relation opted into `write` but never into `include.fields` must still
   appear here even though it can never be reached with `?include=`.
 - `add<Relation>`/`remove<Relation>` each take a single scalar id or `{id}`
   reference as the body — never an array (that shape is `replace`'s own

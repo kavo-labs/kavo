@@ -48,7 +48,7 @@ the defaults derive from:
 
 - **Readable projection** (`item`/`list` default): every scalar column,
   plus every derived field the entity declares (§7), **intersected with
-  `allowed.selectable` when that key is configured explicitly**
+  `select.fields` when that key is configured explicitly**
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
   which is how a column is kept out of every response without configuring a
   schema at all. Relation properties
@@ -83,17 +83,18 @@ the defaults derive from:
   schema at all, by `create.fields` (for `createOne`) and
   `update.fields` (for `updateOne`/`patchOne` — the two share one
   list, since both mutate an existing row) — the write-side counterpart to
-  `allowed.selectable` above, and subject to the same rules: it can only
+  `select.fields` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the
   soft-delete marker in the plain array form has no effect; and a
   configured write schema class with a runtime shape wins outright, exactly as a
-  configured `item`/`list` schema wins over `selectable` — where you register
+  configured `item`/`list` schema wins over `select.fields` — where you register
   one, it, not the allowlist, is the narrowing statement. It also accepts
   the `{ exclude: [...] }` form (issue #397) — "every writable field except
   these" — resolved at bootstrap against that same base; there, unlike the
-  array form and unlike `allowed`'s lax `{ exclude }`, a name that is not in
+  array form and unlike `filter.fields`/`sort.fields`/`select.fields`/
+  `search.fields`'s lax `{ exclude }`, a name that is not in
   the base set is a bootstrap `ConfigurationException` rather than a no-op,
-  matching `allowed.includable`'s strict `{ exclude }`. Unconfigured — or an
+  matching `include.fields`'s strict `{ exclude }`. Unconfigured — or an
   `{ exclude }` that removes nothing — both default to the same base
   described above, so an entity that never sets either sees no change
   (issue #259).
@@ -148,8 +149,8 @@ A field with no backing column is declared on the **ORM** side — a
 field (Prisma), or a schema virtual (Mongoose) — not on the Kavo config.
 The adapter reports it to core as an ordinary `FieldMetadata` entry
 carrying a `derivedExpression` marker; core treats it exactly like a
-column wherever the adapter can make that true (`allowed.selectable`,
-and — on TypeORM/MikroORM only — `filterable`/`sortable`). See
+column wherever the adapter can make that true (`select.fields`,
+and — on TypeORM/MikroORM only — `filter.fields`/`sort.fields`). See
 [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for
 the full design, including per-adapter differences and why a derived
 value cannot vary by caller.

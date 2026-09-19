@@ -23,9 +23,9 @@ Configures a class or validator per slot, split into `input` and `output`. Every
 
 There's no `patch` schema to write on its own; it derives from `update`. See [Schemas and DTOs](/core/dtos) and [Schema system](/internals/architecture/04-dto-system) for full derivation rules.
 
-## allowed
+## filter / sort / select / search / include
 
-Moved to [Allowed](/features/allowed). Response fields with no backing storage column come from the ORM's own virtual/generated-column mechanism instead of a config key — see [Virtual fields](/features/virtual-fields).
+See [Allowed](/features/allowed) for the `fields` allowlists in full. Response fields with no backing storage column come from the ORM's own virtual/generated-column mechanism instead of a config key — see [Virtual fields](/features/virtual-fields).
 
 ## policy
 

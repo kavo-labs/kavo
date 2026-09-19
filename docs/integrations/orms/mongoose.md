@@ -114,7 +114,7 @@ POST /books  {"author":"<id>"}        # writable by id (ADR-0014)
 Mark it includable the same way as any other relation:
 
 ```ts
-@Kavo(Book, { allowed: { includable: ["author"] } })
+@Kavo(Book, { include: { fields: ["author"] } })
 ```
 
 ### Virtual fields
@@ -128,7 +128,7 @@ bookSchema.virtual("displayTitle").get(function () {
 });
 ```
 
-This is **invisible to Kavo entirely**. `@kavo/mongoose` builds `FieldMetadata` from `schema.paths` only, and Mongoose keeps a virtual in `schema.virtuals`, a separate map — so `displayTitle` produces no metadata entry at all. Naming it in `allowlists.filterable`/`sortable`/`selectable` is a bootstrap error, the same as naming a nonexistent path. Nor does it survive at the adapter boundary even for a plain response: every row this adapter hands to core has already gone through `document.toObject({ getters: false, virtuals: false, ... })` (see [Mongoose adapter](/internals/architecture/15-mongoose-adapter)), which drops both getters and virtuals on purpose — a hydrated `Document`'s own getters are not something core should ever see accidentally, unlike TypeORM's class instances.
+This is **invisible to Kavo entirely**. `@kavo/mongoose` builds `FieldMetadata` from `schema.paths` only, and Mongoose keeps a virtual in `schema.virtuals`, a separate map — so `displayTitle` produces no metadata entry at all. Naming it in `filter.fields`/`sort.fields`/`select.fields` is a bootstrap error, the same as naming a nonexistent path. Nor does it survive at the adapter boundary even for a plain response: every row this adapter hands to core has already gone through `document.toObject({ getters: false, virtuals: false, ... })` (see [Mongoose adapter](/internals/architecture/15-mongoose-adapter)), which drops both getters and virtuals on purpose — a hydrated `Document`'s own getters are not something core should ever see accidentally, unlike TypeORM's class instances.
 
 To surface a virtual over HTTP, reach for a **custom operation** that reads the hydrated Mongoose document directly (`context.repository` gives you the model through `@kavo/mongoose`'s own seam, or inject the model separately) and returns its own shape (`schema.output`). See [Virtual fields](/features/virtual-fields) for the full picture (including the two ORMs that _can_ push a derived field into `WHERE`/`ORDER BY`) and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
 

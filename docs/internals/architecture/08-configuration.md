@@ -9,10 +9,15 @@ built-in defaults → global (createKavo) → entity (createCrud)
 
 ## 1. Schema and built-in defaults
 
-The request-cost ceilings (filter depth, `IN` array length, `like` pattern
-length, include depth/breadth) are grouped under `limits`, and `search` is a
-top-level key, both following the `false`-disables-the-subtree convention
-`cache`/`delete`/`realtime` already use ([ADR-0047](/internals/adr/0047-settings-tree-groups-limits-and-lifts-search)).
+`KavoSettings` is narrower than it once was. Issue #386 pulled the
+request-cost ceilings (filter depth, `IN` array length, `like` pattern
+length, include depth/breadth), `search`, and the per-axis `defaults`
+(`sort`/`select`/`include`) out of this merged tree entirely — they are
+now part of the entity-scope-only `filter`/`sort`/`select`/`search`/
+`include` blocks on `EntityConfig` (§4 below), each with its own built-in
+fallback and no global default. What remains in `KavoSettings` is exactly
+what still makes sense to merge through global → entity → operation →
+per-call.
 
 `BUILT_IN_DEFAULTS` (`core/src/config/defaults.ts`):
 
@@ -21,19 +26,19 @@ top-level key, both following the `false`-disables-the-subtree convention
 | `pagination.defaultLimit` / `maxLimit`                             | 20 / 100                               | `defaultLimit ≤ maxLimit` enforced                                                                                                                                                                                                                                                                                                        |
 | `pagination.strategy`                                              | `"offset"`                             | `"page"` built in; custom via `paginationStrategies`                                                                                                                                                                                                                                                                                      |
 | `pagination.count`                                                 | `true`                                 | `false` skips the count query; envelope reports `total: null`                                                                                                                                                                                                                                                                             |
-| `limits.filterDepth` / `inValues` / `likePattern`                  | 3 / 100 / 200                          |                                                                                                                                                                                                                                                                                                                                           |
-| `limits.includeDepth` / `includedNodes`                            | 2 / 10                                 | include depth budget and total node cap                                                                                                                                                                                                                                                                                                   |
-| `search`                                                           | `false`                                | `false` or `{ mode, driver }`; `search[query]` is a 400 until a scope sets an object (issue #156, doc 05 §4). `mode`/`driver` backfill from their defaults when a partial re-enables it                                                                                                                                                   |
-| `search.mode`                                                      | `"substring"`                          | `"substring"` \| `"words"`; per-call override via `search[mode]`                                                                                                                                                                                                                                                                          |
-| `search.driver`                                                    | `"orm"`                                | reserved discriminator — the only value accepted today; config-only, no wire counterpart                                                                                                                                                                                                                                                  |
 | `errors.exposeInternals`                                           | `false`                                | leak driver detail into responses                                                                                                                                                                                                                                                                                                         |
-| `defaults.sort` / `select` / `include`                             | `[]` / unset / `[]`                    | what a request looks like when the client specifies nothing (issue #375); see below                                                                                                                                                                                                                                                       |
 | `cache.ttl` / `etag`                                               | unset / `true`                         | TTL result cache for `findOne`/`findMany` (a positive `ttl` turns it on, omitted = off, `ttl: 0` fails validation, `ttl: false` overrides an inherited `ttl` back off — no separate `enabled` key) + ETag on single-item responses with `If-None-Match`/`If-Match`; the result cache's backing store is **not** here (ADR-0020, ADR-0031) |
 | `delete.field` / `strategy`                                        | `"deletedAt"` / `"auto"`               | `auto` = soft when the entity has the marker field, `false` disables                                                                                                                                                                                                                                                                      |
 | `identifier.field`                                                 | unset (`EntityMetadata.idField`)       | retargets `…One` route/`findOneById` lookup to a non-PK scalar column (ADR-0052); global → entity only, excluded from every operation's `Allowed` union; rejected at bootstrap on a composite-key entity, an unknown/relation/derived field, a non-`string`/`number` kind, or an adapter that doesn't implement `supportsIdentifierField` |
 | `realtime` / `.events` / `.subscribableFields` / `.onPublishError` | `false` / `{}` (unset) / unset / unset | `false` disables the subtree; any object turns it on — no separate `enabled` key; per-operation event toggles + field allowlist; registered transports are **not** here (ADR-0023)                                                                                                                                                        |
 | `operations.<id>`                                                  | `{}` (unset)                           | global operation-enablement default (issue #38); see below                                                                                                                                                                                                                                                                                |
-| `bulk.mode` / `maxBatchSize`                                       | `"atomic"` / 500                       | reserved (bulk is not built)                                                                                                                                                                                                                                                                                                              |
+
+`filter.limits`/`include.limits`, `search`, and `sort.default`/
+`select.default`/`include.default` each carry their own built-in fallback
+(`BUILT_IN_FILTER_LIMITS`, etc.) resolved directly from `EntityConfig` by
+`resolve-entity-config.ts` (issue #386) — see §4. `bulk` is not a config
+key at all today: bulk operations are contracted and registered but
+disabled, with nothing yet to configure.
 
 **Schema extensibility rule:** new features add keys to this schema —
 they never add a second config mechanism. The reserved keys above are
@@ -60,8 +65,8 @@ is the explicit sentinel for overriding an _inherited_ `ttl` back off
 without disabling `etag` at that scope; `ttl: 0` is rejected at bootstrap
 rather than treated as off.
 
-An `EntityConfig` mixes settings keys with structural keys (`schema`,
-`allowed`, `relations`, `operations`); only the settings subset
+An `EntityConfig` mixes settings keys with structural keys (`schema`, `filter`, `sort`, `select`, `search`, `include`, `create`,
+`update`, `policy`, `relations`, `operations`); only the settings subset
 participates in the merge. `relations` (per-relation `read` loading tuning and `write.strategy`
 array-mutation policy) is entity-scope-only for the same reason — resolved
 by `DefaultRelationRegistry` at bootstrap, no global default; it folded the
@@ -151,7 +156,7 @@ deep-frozen `ResolvedEntityConfig`: entity-scope settings, precomputed
 per-operation views behind `settingsFor(operation)`, resolved allowlists
 (explicit, or derived from own scalar columns plus any selectable computed
 fields), the default response `projection` (`null` unless
-`allowed.selectable` was configured explicitly —
+`select.fields` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
 the cached `SchemaResolver`, the resolved
 `policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
@@ -191,31 +196,31 @@ if a caller still passes one — fails at bootstrap with a
 `ConfigurationException` naming the entity and the scope's path, the same
 bar every other entry in this section holds to.
 
-### `defaults.sort`
+### `sort.default`
 
 Order applied when a request supplies no `sort` at all — a client- or
 caller-supplied `sort`, when present, always wins outright; the two never
 merge. Each entry is the same wire shorthand `sort=` accepts (`-field` for
 descending), not the internal `Sort` AST — `QueryNormalizer.defaultSortOf`
 parses each token with the same per-token logic `parseSort` uses for the
-wire param (issue #375). It resolves through the full precedence chain like
-every other setting, so it can be set globally, per entity, per operation,
-or per call. Fields are checked against the same sortable allowlist
-client-supplied `sort` fields are checked against, but as soon as the value
-is set rather than when a request uses it: at **bootstrap**
-(`resolveEntityConfig`) for global/entity/operation scope, and when a
-per-call override is merged (`KavoEngine.configViewFor`) for per-call scope
-— so a bad default fails fast at the scope that introduced it instead of
-producing a broken `ORDER BY` on the first request that hits it. Doc 05
-covers the request-time semantics (client `sort` vs. this fallback).
+wire param (issue #375, moved onto `EntityConfig.sort` by issue #386).
+Unlike a `KavoSettings` key, `sort.default` is entity-scope-only structural
+config: no global default, no per-operation or per-call override — it
+resolves once, at bootstrap, alongside the rest of `EntityConfig.sort`.
+Fields are checked against `sort.fields`, the same allowlist client-supplied
+`sort` fields are checked against, at that same bootstrap pass
+(`resolveEntityConfig`) — so a bad default fails fast rather than producing
+a broken `ORDER BY` on the first request that hits it. Doc 05 covers the
+request-time semantics (client `sort` vs. this fallback).
 
-### `defaults.select` / `defaults.include`
+### `select.default` / `include.default`
 
-The other two `defaults` keys (issue #375), same posture: applied only on
-omission, checked against the resolved allowlist at the same two points
-`defaults.sort` is. `defaults.select` fields are checked against
-`selectable`; absent, the projection is unchanged (every selectable field).
-`defaults.include` names are checked against `includable`
+The other two per-axis `default` keys (issue #375, moved onto `EntityConfig`
+by issue #386), same posture: entity-scope-only, applied only on omission,
+checked against that axis's own `fields` allowlist at the same bootstrap
+pass `sort.default` is. `select.default` fields are checked against
+`select.fields`; absent, the projection is unchanged (every selectable
+field). `include.default` names are checked against `include.fields`
 ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists),
 [ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)) — the
 replacement for the old per-relation `relations.edges.<name>.defaultInclude`
@@ -223,24 +228,25 @@ boolean, now one flat entity-wide list. (Per-relation loading tuning and
 the array-mutation write strategy that also lived on `relations.edges`
 became `EntityConfig.relations.<name>.read` / `.write` in issue #404.)
 
-### `allowed.searchable`
+### `search.fields`
 
-Same `QueryFieldSelector` shape and resolution as `filterable`/`sortable`/
-`selectable`, but its zero-config default is narrower: every own
-**string-kind** column, not every own column — a non-string column has
-nothing an `ILIKE` fragment can usefully match. Relation paths are
-permitted (unlike `filterable`/`sortable`), reusing the per-path join
-machinery `filter[...]` already resolves for relation filters. See doc 05
-§4 for the wire grammar it gates.
+Same `QueryFieldSelector` shape and resolution as `filter.fields`/
+`sort.fields`/`select.fields`, but its zero-config default is narrower:
+every own **string-kind** column, not every own column — a non-string
+column has nothing an `ILIKE` fragment can usefully match. Relation paths
+are permitted (unlike `filter.fields`/`sort.fields`), reusing the per-path
+join machinery `filter[...]` already resolves for relation filters. See
+doc 05 §4 for the wire grammar it gates.
 
-A name in `defaults.include` absent from `allowed.includable` is a bootstrap
+A name in `include.default` absent from `include.fields` is a bootstrap
 `ConfigurationException` — it would load a relation clients cannot ask for
 ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
 `validateSettings` only ever sees `KavoSettings`, which does not carry
-`allowed`, so this cross-check runs separately, in `validateDefaults`
-(`resolve-entity-config.ts`, renamed from `validateDefaultSort`), once
-`allowed` has resolved — the same reason `pagination.since.field` is checked
-outside `validateSettings` too.
+`filter`/`sort`/`select`/`search`/`include`, so this cross-check runs
+separately, in `validateDefaults` (`resolve-entity-config.ts`, renamed from
+`validateDefaultSort`), once those per-axis blocks have resolved — the
+same reason `pagination.since.field` is checked outside `validateSettings`
+too.
 
 ## 5. Root factory and framework skin
 
@@ -254,6 +260,6 @@ route concerns via the `OperationMetadata` augmentation (ADR-0007).
 ## 6. Debug dump
 
 `kavo.describe(entityName)` (backed by `describeResolvedConfig`) returns
-the frozen result for one entity — settings, allowed, the declared
-computed-field names, relations, and every per-operation view — as a plain
-printable object.
+the frozen result for one entity — settings, the resolved `filter`/`sort`/
+`select`/`search`/`include` allowlists, the declared computed-field names,
+relations, and every per-operation view — as a plain printable object.

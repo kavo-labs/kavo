@@ -246,6 +246,7 @@ const config = defineConfig({
               { text: "Configuration", link: "/internals/architecture/08-configuration" },
               { text: "TypeORM adapter", link: "/internals/architecture/09-typeorm-adapter" },
               { text: "NestJS integration", link: "/internals/architecture/10-nestjs-integration" },
+              { text: "Next.js integration", link: "/internals/architecture/19-nextjs-integration" },
             ],
           },
           {
