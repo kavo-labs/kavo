@@ -120,6 +120,12 @@ describe("DefaultSerializer — response projection", () => {
     expect(serializer.serializeItem(partial, null, contextStub())).toEqual({ id: 1, name: "Ada" });
   });
 
+  it("an empty schema.output.item { fields: [] } shorthand narrows the response to nothing, not the entity-derived default", () => {
+    const config = resolveEntityConfig(userMetadata, { schema: { output: { item: { fields: [] } } } }, undefined);
+    const itemSchema = config.schema.resolveOutput("item", "findOne");
+    expect(serializer.serializeItem(ada(), itemSchema, contextStub())).toEqual({});
+  });
+
   it("narrows serializeItem's projection using a class-shaped schema", () => {
     class ItemSchema {
       id = 0;
@@ -449,6 +455,34 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
       writeContext("createOne", config),
     );
     expect(payload).toEqual({ name: "Ada", email: "ada@example.com" });
+  });
+
+  it("an empty schema.input.create { fields: [] } shorthand closes writes entirely, rather than falling back to the derived default", () => {
+    // A shorthand-synthesized class with zero fields is a *known* empty
+    // allowlist, not "shape unknown" — `shorthandFieldsOf` distinguishes it
+    // from a hand-written declarative class with no initializers, which
+    // still falls back (schema-shape.spec.ts).
+    const config = resolveEntityConfig(userMetadata, { schema: { input: { create: { fields: [] } } } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const dto = config.schema.resolveInput("create", "createOne");
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      dto,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({});
+  });
+
+  it("a bare empty array shorthand (schema.input.create: []) closes writes the same way as { fields: [] }", () => {
+    const config = resolveEntityConfig(userMetadata, { schema: { input: { create: [] } } }, undefined);
+    const deserializer = new DefaultDeserializer<User>(userMetadata);
+    const dto = config.schema.resolveInput("create", "createOne");
+    const payload = deserializer.deserialize(
+      { name: "Ada", email: "ada@example.com" },
+      dto,
+      writeContext("createOne", config),
+    );
+    expect(payload).toEqual({});
   });
 
   it("narrows createOne's derived projection via the schema.input.create { fields } shorthand", () => {

@@ -351,6 +351,19 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       expect(adapter.rows[0]).toMatchObject({ name: "Ada" });
     });
 
+    it("createOne writes nothing at all when schema.input.create is an empty allowlist ({ fields: [] } or bare [])", async () => {
+      const { crud, adapter } = makeCrud({
+        schema: { input: { create: [] } },
+      } as never);
+      await crud.createOne({ name: "Ada", email: "a@b.c", age: 99 } as never);
+      // Every writable field the client sent is ignored — the row stays at
+      // whatever the adapter's own `create()` default produces, not what
+      // was in the body.
+      expect(adapter.rows[0]?.name).not.toBe("Ada");
+      expect(adapter.rows[0]?.email).not.toBe("a@b.c");
+      expect(adapter.rows[0]?.age).not.toBe(99);
+    });
+
     it("updateOne and patchOne drop a field schema.input.update's { fields } shorthand excludes", async () => {
       const { crud, adapter } = makeCrud({
         schema: { input: { update: { fields: ["name"] } } },

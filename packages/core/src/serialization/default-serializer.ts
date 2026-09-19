@@ -4,6 +4,7 @@ import type { EntityCatalog } from "../metadata/entity-catalog.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
 import { isSchemaClass, type SchemaLike } from "../schema/schema-class.js";
+import { shorthandFieldsOf } from "../schema/schema-fields-shorthand.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
 import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
@@ -190,7 +191,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     // other entity included `user`.
     return {
       keys:
-        (isSchemaClass(schema) ? schemaShapeKeys(schema) : null) ??
+        (isSchemaClass(schema) ? (shorthandFieldsOf(schema) ?? schemaShapeKeys(schema)) : null) ??
         (targetProjection === null
           ? info.metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name)
           : narrowToProjection(
@@ -232,7 +233,7 @@ function narrowToSchema(projection: Projection, schema: SchemaLike<object> | nul
   if (schema === null || !isSchemaClass(schema)) {
     return projection;
   }
-  const keys = schemaShapeKeys(schema);
+  const keys = shorthandFieldsOf(schema) ?? schemaShapeKeys(schema);
   return keys === null ? projection : { ...projection, keys };
 }
 
@@ -325,7 +326,14 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return {} as Shape;
     }
-    const explicit = isSchemaClass(schema) ? schemaShapeKeys(schema) : null;
+    // `shorthandFieldsOf` first: a `{ fields: [] }`/`[]` shorthand is a
+    // *known* empty allowlist, not "shape unknown" — `schemaShapeKeys`
+    // alone can't tell the two apart (a class with zero own keys, whether
+    // from an empty shorthand or an uninitialized declarative class, looks
+    // identical at the instance level), so consulting the shorthand's own
+    // tracked field list first is what lets an explicit empty allowlist
+    // actually close writes instead of silently falling back.
+    const explicit = isSchemaClass(schema) ? (shorthandFieldsOf(schema) ?? schemaShapeKeys(schema)) : null;
     // A class-shaped `create`/`update`/`patch` schema — including one
     // synthesized from the `{ fields }` shorthand (issue #386,
     // `schema-fields-shorthand.ts`) — *replaces* the derived writable

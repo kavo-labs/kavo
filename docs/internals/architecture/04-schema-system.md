@@ -124,6 +124,17 @@ default — the response is still correct, just not narrowed. This keeps
 schema classes plain (no decorators, no reflection library) at the cost of
 requiring initializers for narrowing; the tradeoff is documented API.
 
+`schemaShapeKeys` alone cannot tell "declares zero fields on purpose" apart
+from "shape unknown" — both are a fresh instance with zero own keys. The
+`{ fields }` shorthand's own synthesized class carries that intent
+separately (`shorthandFieldsOf`, `schema-fields-shorthand.ts`), which every
+consumer that needs the distinction — `DefaultDeserializer.deserialize`,
+`DefaultSerializer`'s `narrowToSchema`/include projection — checks first,
+falling back to `schemaShapeKeys` only when the slot holds no shorthand
+tag. `{ fields: [] }` (or its bare-array spelling) therefore narrows to
+nothing, on both the read and write side, rather than degrading to the
+derived default the way an equivalently-empty hand-written class does.
+
 A **validator-shaped** slot has no static key set: the engine `safeParse`s
 the deserialized body (`schema.input`, raising `SchemaValidationException`
 on failure) or the projected response (`schema.output`, falling back to the
