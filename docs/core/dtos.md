@@ -56,11 +56,34 @@ A validator differs in these ways:
 
 ```ts
 @Kavo(Book, {
-  schema: { input: CreateBookSchema }, // same as { create, update, patch: CreateBookSchema }
+  schema: { input: CreateBookSchema }, // same as { create, update, patch: CreateBookSchema }; no output
 })
 
 @Kavo(Book, {
-  schema: CreateBookSchema, // same as { input: CreateBookSchema, output: CreateBookSchema }
+  schema: { output: BookItemSchema }, // same as { item, list: BookItemSchema }; no input validation
+})
+
+@Kavo(Book, {
+  schema: BookSchema, // same as { input: BookSchema, output: BookSchema }
+})
+```
+
+The explicit form, with the fallbacks marked:
+
+```ts
+@Kavo(Book, {
+  schema: {
+    input: {
+      create: CreateBookSchema,
+      update: UpdateBookSchema,
+      patch: UpdateBookSchema, // or omit: falls back to update
+      query: BookQuerySchema,
+    },
+    output: {
+      item: BookItemSchema,
+      list: BookListSchema, // or omit: falls back to item
+    },
+  },
 })
 ```
 
