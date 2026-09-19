@@ -21,9 +21,10 @@ kavo.createCrud(Author, {
 // Empty exclude — accepted (resolves to the entity-derived default).
 kavo.createCrud(Author, { create: { fields: { exclude: [] } } });
 
-// `{ exclude }` composes with `default` / `apply` on the same slot.
+// `{ exclude }` / `default` on the write slot compose with the top-level `set`.
 kavo.createCrud(Author, {
-  update: { fields: { exclude: ["name"] }, default: { name: "anon" }, apply: () => ({ name: "anon" }) },
+  update: { fields: { exclude: ["name"] }, default: { name: "anon" } },
+  set: { update: () => ({ name: "anon" }) },
 });
 
 kavo.createCrud(Author, {

@@ -155,14 +155,20 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `create.fields`  | `FieldPath<Entity,1>[] \| { exclude: FieldPath<Entity,1>[] }` | every non-generated own column except the id, plus every relation |
 | `create.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
-| `create.apply`   | `(args) => Partial<EntityInput<Entity>> \| undefined`         | unset                                                             |
 | `update.fields`  | same shape as `create.fields`                                 | same default as `create.fields`                                   |
 | `update.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
-| `update.apply`   | same shape as `create.apply`                                  | unset                                                             |
 
 Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A class-shaped `schema.input.create`/`update` with a runtime shape **replaces** this projection and wins over `fields`.
 
-`default` fills in a value for a writable field the body doesn't set — a body that does send the field wins outright (the same one-way relationship a client value has with `sort.default`). `default` is `createOne`- and `updateOne`-only, never `patchOne`: a PATCH that omits a field means "leave it unchanged". `apply` (issue #391, ADR-0048's write-side sibling) is the opposite composition rule — it forces field values into a `createOne`/`updateOne` body, overwriting whatever the client sent. See [Allowed](/features/allowed).
+`default` fills in a value for a writable field the body doesn't set — a body that does send the field wins outright (the same one-way relationship a client value has with `sort.default`). `default` is `createOne`- and `updateOne`-only, never `patchOne`: a PATCH that omits a field means "leave it unchanged". See [Allowed](/features/allowed).
+
+### set
+
+| Key   | Type                                                                                                                  | Default |
+| ----- | --------------------------------------------------------------------------------------------------------------------- | ------- |
+| `set` | `(args) => Partial<EntityInput<Entity>> \| undefined \| { create?: WriteApply<Entity>; update?: WriteApply<Entity> }` | unset   |
+
+Issue #476, ADR-0048's write-side sibling ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)); supersedes the former `create.apply`/`update.apply`. A bare function forces the same values on both `createOne` and `updateOne`; a `{ create?, update? }` object lets the two diverge. The opposite composition rule from `create`/`update`'s own `default` — it forces field values into the body, overwriting whatever the client sent, rather than only filling a gap. `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, matching `update.default`'s own scope. See [Apply](/features/apply).
 
 ### policy
 

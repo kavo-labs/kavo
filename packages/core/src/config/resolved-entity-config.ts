@@ -162,15 +162,16 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly updateDefault: Readonly<Partial<Entity>>;
   /**
-   * `create.apply` (issue #391), passed through unresolved — the write-side
-   * sibling of `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
-   * (ADR-0048): forces field values into `createOne`'s body, overwriting
-   * whatever the client sent. `undefined` when unconfigured.
+   * `set`/`set.create` (issue #476, supersedes the issue #391
+   * `create.apply`), passed through unresolved — the write-side sibling of
+   * `filter.apply`/`sort.apply`/`select.apply`/`include.apply` (ADR-0048):
+   * forces field values into `createOne`'s body, overwriting whatever the
+   * client sent. `undefined` when unconfigured.
    */
   readonly createApply?: WriteApply<Entity>;
   /**
-   * `update.apply` — same idea, `updateOne` only (never `patchOne`, matching
-   * {@link ResolvedEntityConfig.updateDefault}'s own scope).
+   * `set`/`set.update` — same idea, `updateOne` only (never `patchOne`,
+   * matching {@link ResolvedEntityConfig.updateDefault}'s own scope).
    */
   readonly updateApply?: WriteApply<Entity>;
 }

@@ -1010,7 +1010,7 @@ export class KavoEngine<Entity extends object> {
       createDefault: config.createDefault,
       updateDefault: config.updateDefault,
       // Same reasoning: a per-call override cannot loosen the unconditional
-      // constraint `create.apply`/`update.apply` forces (issue #391).
+      // constraint `set` forces (issue #476).
       createApply: config.createApply,
       updateApply: config.updateApply,
     };
@@ -1104,8 +1104,8 @@ export class KavoEngine<Entity extends object> {
   }
 
   /**
-   * `create.apply`/`update.apply` (issue #391, ADR-0048's write-side
-   * sibling): evaluated once per `createOne`/`updateOne`, after
+   * `set` (issue #476, ADR-0048's write-side sibling): evaluated once per
+   * `createOne`/`updateOne`, after
    * `resolveInput` has already produced the deserialized body, so its
    * result can overwrite whatever the client sent for a forced field —
    * `default` only fills a gap, `apply` always wins. `patchOne` never

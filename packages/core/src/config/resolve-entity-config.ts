@@ -35,7 +35,7 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
-import type { WriteApply, WriteFieldsConfig } from "./write-fields.js";
+import type { SetConfig, WriteApply, WriteFieldsConfig } from "./write-fields.js";
 import type { SchemaClass } from "../schema/schema-class.js";
 import { isSchemaClass } from "../schema/schema-class.js";
 import { schemaShapeKeys } from "../schema/schema-shape.js";
@@ -128,8 +128,7 @@ export function resolveEntityConfig<Entity extends object>(
   );
   const createDefault = resolveWriteDefault(entityName, "create.default", entityConfig?.create, ownColumnNames);
   const updateDefault = resolveWriteDefault(entityName, "update.default", entityConfig?.update, ownColumnNames);
-  const createApply = resolveWriteApply(entityName, "create.apply", entityConfig?.create);
-  const updateApply = resolveWriteApply(entityName, "update.apply", entityConfig?.update);
+  const { createApply, updateApply } = resolveSet(entityName, entityConfig?.set);
 
   const entitySettings = mergeSettings(
     BUILT_IN_DEFAULTS,
@@ -249,20 +248,44 @@ function resolveWriteDefault<Entity extends object>(
 const EMPTY_WRITE_DEFAULT: Readonly<Record<string, never>> = Object.freeze({});
 
 /**
- * Resolve `create.apply`/`update.apply` (issue #391): a plain function
- * reference, passed through unresolved — the same treatment `filter.apply`/
- * `sort.apply`/`select.apply`/`include.apply` already get (ADR-0048), for
- * the same reason: it is evaluated per request with an arbitrary runtime
- * value, so there is nothing here to validate ahead of time beyond "is it
- * callable at all," which catches a JS or dynamically-built config the type
- * system can't see.
+ * Resolve `set` (issue #476, supersedes the issue #391 `create.apply`/
+ * `update.apply`): a bare function forces the same values on both
+ * `createOne` and `updateOne`; a `{ create?, update? }` object lets the two
+ * diverge. Each resolved function is passed through unresolved — the same
+ * treatment `filter.apply`/`sort.apply`/`select.apply`/`include.apply`
+ * already get (ADR-0048), for the same reason: it is evaluated per request
+ * with an arbitrary runtime value, so there is nothing here to validate
+ * ahead of time beyond "is it callable at all," which catches a JS or
+ * dynamically-built config the type system can't see.
  */
+function resolveSet<Entity extends object>(
+  entityName: string,
+  value: SetConfig<Entity> | undefined,
+): { createApply: WriteApply<Entity> | undefined; updateApply: WriteApply<Entity> | undefined } {
+  if (value === undefined) {
+    return { createApply: undefined, updateApply: undefined };
+  }
+  if (typeof value === "function") {
+    return { createApply: value, updateApply: value };
+  }
+  if (typeof value !== "object" || value === null) {
+    throw new ConfigurationException(
+      entityName,
+      "set",
+      `'set' must be a function, or a { create?, update? } object of functions, got '${typeof value}'.`,
+    );
+  }
+  return {
+    createApply: resolveWriteApply(entityName, "set.create", value.create),
+    updateApply: resolveWriteApply(entityName, "set.update", value.update),
+  };
+}
+
 function resolveWriteApply<Entity extends object>(
   entityName: string,
   scope: string,
-  writeConfig: WriteFieldsConfig<Entity> | undefined,
+  value: WriteApply<Entity> | undefined,
 ): WriteApply<Entity> | undefined {
-  const value = writeConfig?.apply;
   if (value === undefined) {
     return undefined;
   }

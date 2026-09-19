@@ -1,6 +1,21 @@
-# ADR-0049 — `create.apply`/`update.apply` force write-body values
+# ADR-0049 — `set` forces write-body values
 
 **Status:** accepted
+
+> **Amendment (issue #476):** the config surface below shipped as
+> `create.apply`/`update.apply` on `WriteFieldsConfig`. It has since been
+> renamed to a single top-level `EntityConfig.set` key — a bare function
+> forces the same values on both `createOne` and `updateOne`; a
+> `{ create?, update? }` object lets the two diverge, replacing the two
+> separately-named callbacks. Kavo is pre-1.0, so this shipped as a straight
+> rename rather than a deprecation window. The semantics this ADR argues for
+> — unconditional, composes by overwrite not merge, `createOne`/`updateOne`
+> only, never `patchOne`, not bootstrap-validated — are unchanged; only the
+> key names moved. Examples below use the pre-#476 `create.apply`/
+> `update.apply` names for the historical record; see
+> [`docs/features/apply.md`](/features/apply#writing-forced-values-set) and
+> [`docs/reference/config-keys.md`](/reference/config-keys#set) for the
+> current `set` config.
 
 ## Context
 

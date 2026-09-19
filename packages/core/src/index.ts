@@ -51,7 +51,7 @@ export type { FilterBuilder } from "./query/filter-builder.js";
 export { evaluateFilter } from "./query/filter-evaluator.js";
 
 // ── Schema (ADR-0055) ────────────────────────────────────────────────
-export type { FieldsShorthand, WriteApply, WriteFieldsConfig } from "./config/write-fields.js";
+export type { FieldsShorthand, SetConfig, WriteApply, WriteFieldsConfig } from "./config/write-fields.js";
 export { shorthandFieldsOf } from "./schema/schema-fields-shorthand.js";
 export type { KavoSchema, SchemaIssue, SchemaOutput, SchemaParseResult } from "./schema/kavo-schema.js";
 export type { SchemaClass, SchemaLike } from "./schema/schema-class.js";

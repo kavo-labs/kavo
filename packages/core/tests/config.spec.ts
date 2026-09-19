@@ -428,11 +428,14 @@ describe("resolveEntityConfig — bootstrap", () => {
     }
   });
 
-  it("still composes create.default / create.apply with the { exclude } fields form", () => {
+  it("still composes create.default / set.create with the { exclude } fields form", () => {
     const apply = () => ({ status: "active" as const });
     const config = resolveEntityConfig(
       userMetadata,
-      { create: { fields: { exclude: ["age"] }, default: { status: "pending" as const }, apply } },
+      {
+        create: { fields: { exclude: ["age"] }, default: { status: "pending" as const } },
+        set: { create: apply },
+      },
       undefined,
     );
     expect(Object.keys(new (config.schema.resolveInput("create", "createOne") as new () => object)())).toEqual([

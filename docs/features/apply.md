@@ -1,6 +1,6 @@
 # Apply
 
-`apply` is a mandatory, context-dependent constraint evaluated on every request and composed with whatever the client itself supplied, never replaced by it. It's the seam for row scoping: user ownership, tenant isolation, published-only records, and similar server-side restrictions that must hold regardless of what a caller asks for. It comes in two forms: one on each of the four query axes — `filter`, `sort`, `select`, `include` ([ADR-0048](/internals/adr/0048-apply-server-side-query-constraint)) — and one on `create`/`update`, forcing values into the write body itself ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)).
+`apply` is a mandatory, context-dependent constraint evaluated on every request and composed with whatever the client itself supplied, never replaced by it. It's the seam for row scoping: user ownership, tenant isolation, published-only records, and similar server-side restrictions that must hold regardless of what a caller asks for. It comes in two forms: one on each of the four query axes — `filter`, `sort`, `select`, `include` ([ADR-0048](/internals/adr/0048-apply-server-side-query-constraint)) — and the top-level `set`, forcing values into the `createOne`/`updateOne` write body itself ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)).
 
 ```ts
 import type { FilterApply } from "@kavo/core";
@@ -121,24 +121,30 @@ filter: {
 },
 ```
 
-## Writing forced values: `create.apply`/`update.apply`
+## Writing forced values: `set`
 
-The four query axes above scope which rows a request may read or reach by id — they say nothing about the values a `createOne`/`updateOne` body may set. A tenant-scoped entity with `filter.apply` restricting every read and existing-row write to `tenantId = context.app.tenantId` still lets a client `POST` a body naming a different `tenantId` outright, since there's no existing row for `filter.apply` to scope on `createOne`. `create.apply`/`update.apply` close that gap, living next to `create`/`update`'s own `default`:
+The four query axes above scope which rows a request may read or reach by id — they say nothing about the values a `createOne`/`updateOne` body may set. A tenant-scoped entity with `filter.apply` restricting every read and existing-row write to `tenantId = context.app.tenantId` still lets a client `POST` a body naming a different `tenantId` outright, since there's no existing row for `filter.apply` to scope on `createOne`. The top-level `set` key closes that gap. A bare function forces the same values on both `createOne` and `updateOne`:
 
 ```ts
 @Kavo(Order, {
-  create: {
-    apply: ({ context }) => ({ tenantId: context.app.tenantId }),
-  },
-  update: {
-    apply: ({ context }) => ({ tenantId: context.app.tenantId }),
+  set: ({ context }) => ({ tenantId: context.app.tenantId }),
+})
+```
+
+A `{ create?, update? }` object lets the two diverge, when they need to:
+
+```ts
+@Kavo(Order, {
+  set: {
+    create: ({ context }) => ({ tenantId: context.app.tenantId }),
+    update: ({ context }) => ({ tenantId: context.app.tenantId }),
   },
 })
 ```
 
-Same `ApplyArgs<Entity>` argument every other `apply` takes; the return shape is `Partial<Entity> | undefined` instead of a query-axis type. Composition is the write-side version of the same rule: a forced field **overwrites** whatever the client sent for it, the opposite of `default`, which only fills a field the client omitted. Configuring both `default` and `apply` for the same field is legal — `apply` wins, since it's the unconditional constraint and `default` only a fallback for an absent value.
+Same `ApplyArgs<Entity>` argument every other `apply` takes; the return shape is `Partial<Entity> | undefined` instead of a query-axis type. Composition is the write-side version of the same rule: a forced field **overwrites** whatever the client sent for it, the opposite of `create`/`update`'s own `default`, which only fills a field the client omitted. Configuring both `default` and `set` for the same field is legal — `set` wins, since it's the unconditional constraint and `default` only a fallback for an absent value.
 
-Scope matches `default`'s own: `create.apply` runs on `createOne`, `update.apply` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged" rather than "reset it," the same reasoning that already keeps `update.default` off `patchOne`.
+Scope matches `default`'s own: `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged" rather than "reset it," the same reasoning that already keeps `update.default` off `patchOne`.
 
 ## Non-goals
 

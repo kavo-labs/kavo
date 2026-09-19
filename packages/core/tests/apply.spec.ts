@@ -6,6 +6,7 @@ import type {
   KavoContext,
   KavoOptions,
   NormalizedQueryContext,
+  OperationId,
 } from "@kavo/core";
 import { NotFoundException, QueryNormalizer, createKavo, hasKeyset, resolveEntityConfig } from "@kavo/core";
 import {
@@ -462,18 +463,18 @@ describe("QueryNormalizer — composing a resolved apply result directly (both e
   });
 });
 
-describe("create.apply/update.apply — force write-body values the client cannot override (issue #391)", () => {
-  it("createOne: forces a value the client never sent", async () => {
+describe("set — force write-body values the client cannot override (issue #476, supersedes #391's create.apply/update.apply)", () => {
+  it("createOne: object form forces a value the client never sent", async () => {
     const { crud, adapter } = makeCrud({
-      create: { apply: () => ({ authorId: 7 }) },
+      set: { create: () => ({ authorId: 7 }) },
     } as never);
     await crud.createOne({ title: "hello" } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 7 });
   });
 
-  it("createOne: overwrites a value the client did send", async () => {
+  it("createOne: object form overwrites a value the client did send", async () => {
     const { crud, adapter } = makeCrud({
-      create: { apply: () => ({ authorId: 7 }) },
+      set: { create: () => ({ authorId: 7 }) },
     } as never);
     await crud.createOne({ title: "hello", authorId: 999 } as never);
     expect(adapter.rows[0]).toMatchObject({ authorId: 7 });
@@ -482,8 +483,8 @@ describe("create.apply/update.apply — force write-body values the client canno
   it("createOne: receives the same ApplyArgs shape filter.apply gets, with a null id", async () => {
     let seen: ApplyArgs<Post> | undefined;
     const { crud } = makeCrud({
-      create: {
-        apply: (args: ApplyArgs<Post>) => {
+      set: {
+        create: (args: ApplyArgs<Post>) => {
           seen = args;
           return undefined;
         },
@@ -496,9 +497,9 @@ describe("create.apply/update.apply — force write-body values the client canno
     expect(appOf(seen?.context as KavoContext<Post>).userId).toBe("u-1");
   });
 
-  it("updateOne: forces a value the client never sent, alongside the fields it did", async () => {
+  it("updateOne: object form forces a value the client never sent, alongside the fields it did", async () => {
     const { crud, adapter } = makeCrud({
-      update: { apply: () => ({ authorId: 7 }) },
+      set: { update: () => ({ authorId: 7 }) },
     } as never);
     adapter.rows.push(
       ...posts([{ id: 1, title: "old", authorId: 1 as never, author: null, comments: [], deletedAt: null }]),
@@ -507,9 +508,9 @@ describe("create.apply/update.apply — force write-body values the client canno
     expect(adapter.rows[0]).toMatchObject({ title: "new", authorId: 7 });
   });
 
-  it("updateOne: overwrites a value the client did send", async () => {
+  it("updateOne: object form overwrites a value the client did send", async () => {
     const { crud, adapter } = makeCrud({
-      update: { apply: () => ({ authorId: 7 }) },
+      set: { update: () => ({ authorId: 7 }) },
     } as never);
     adapter.rows.push(
       ...posts([{ id: 1, title: "old", authorId: 1 as never, author: null, comments: [], deletedAt: null }]),
@@ -521,8 +522,8 @@ describe("create.apply/update.apply — force write-body values the client canno
   it("updateOne: receives the coerced id in params, unlike createOne", async () => {
     let seen: ApplyArgs<Post> | undefined;
     const { crud, adapter } = makeCrud({
-      update: {
-        apply: (args: ApplyArgs<Post>) => {
+      set: {
+        update: (args: ApplyArgs<Post>) => {
           seen = args;
           return undefined;
         },
@@ -535,9 +536,9 @@ describe("create.apply/update.apply — force write-body values the client canno
     expect(seen?.params.id).toBe(1);
   });
 
-  it("patchOne never consults update.apply, matching update.default's own scope", async () => {
+  it("patchOne never consults set.update, matching update.default's own scope", async () => {
     const { crud, adapter } = makeCrud({
-      update: { apply: () => ({ authorId: 7 }) },
+      set: { update: () => ({ authorId: 7 }) },
     } as never);
     adapter.rows.push(
       ...posts([{ id: 1, title: "old", authorId: 1 as never, author: null, comments: [], deletedAt: null }]),
@@ -546,10 +547,12 @@ describe("create.apply/update.apply — force write-body values the client canno
     expect(adapter.rows[0]).toMatchObject({ title: "new", authorId: 1 });
   });
 
-  it("create.apply is never consulted on updateOne, and update.apply never on createOne", async () => {
+  it("set.create is never consulted on updateOne, and set.update never on createOne", async () => {
     const { crud, adapter } = makeCrud({
-      create: { apply: () => ({ authorId: 1 }) },
-      update: { apply: () => ({ authorId: 2 }) },
+      set: {
+        create: () => ({ authorId: 1 }),
+        update: () => ({ authorId: 2 }),
+      },
     } as never);
     adapter.rows.push(
       ...posts([{ id: 1, title: "old", authorId: 9 as never, author: null, comments: [], deletedAt: null }]),
@@ -560,40 +563,42 @@ describe("create.apply/update.apply — force write-body values the client canno
     expect(adapter.rows[1]).toMatchObject({ authorId: 1 });
   });
 
-  it("a key apply returns undefined for is left alone rather than reset", async () => {
+  it("a key set returns undefined for is left alone rather than reset", async () => {
     const { crud, adapter } = makeCrud({
-      create: { apply: () => undefined },
+      set: { create: () => undefined },
     } as never);
     await crud.createOne({ title: "hello", authorId: 3 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 3 });
   });
 
-  it("apply wins over default when both configure the same field", async () => {
+  it("set wins over create.default when both configure the same field", async () => {
     const { crud, adapter } = makeCrud({
-      create: { default: { authorId: 1 }, apply: () => ({ authorId: 2 }) },
+      create: { default: { authorId: 1 } },
+      set: { create: () => ({ authorId: 2 }) },
     } as never);
     await crud.createOne({ title: "hello" } as never);
     expect(adapter.rows[0]).toMatchObject({ authorId: 2 });
   });
 
-  it("an unconfigured apply changes nothing (backward compatible)", async () => {
+  it("an unconfigured set changes nothing (backward compatible)", async () => {
     const { crud, adapter } = makeCrud();
     await crud.createOne({ title: "hello", authorId: 5 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 5 });
   });
 
   it("still forces a value for a field create.fields's { exclude } removed from the body allowlist (issue #397)", async () => {
-    // The "clients can't set it, the server does" idiom: `apply` runs after
+    // The "clients can't set it, the server does" idiom: `set` runs after
     // deserialization (kavo-engine's `applyWriteApply`), so it reaches the
     // adapter even though `authorId` is stripped from the client body.
     const { crud, adapter } = makeCrud({
-      create: { fields: { exclude: ["authorId"] }, apply: () => ({ authorId: 7 }) },
+      create: { fields: { exclude: ["authorId"] } },
+      set: { create: () => ({ authorId: 7 }) },
     } as never);
     await crud.createOne({ title: "hello", authorId: 999 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 7 });
   });
 
-  it("does NOT fill a field create.fields's { exclude } removed via create.default — apply is the tool for that", async () => {
+  it("does NOT fill a field create.fields's { exclude } removed via create.default — set is the tool for that", async () => {
     // `default` is applied inside the deserializer's loop over the writable
     // allowlist, so a field the allowlist no longer contains is never
     // filled. Pre-existing for the plain array form; `{ exclude }` just
@@ -604,14 +609,47 @@ describe("create.apply/update.apply — force write-body values the client canno
     await crud.createOne({ title: "hello" } as never);
     expect(adapter.rows[0]).not.toHaveProperty("authorId");
   });
-});
 
-describe("create.apply/update.apply — bootstrap validation", () => {
-  it("rejects a non-function create.apply", () => {
-    expect(() => makeCrud({ create: { apply: "nope" } } as never)).toThrow(/create\.apply/);
+  it("bare-function shorthand forces the same values on both createOne and updateOne", async () => {
+    const { crud, adapter } = makeCrud({
+      set: () => ({ authorId: 7 }),
+    } as never);
+    await crud.createOne({ title: "hello", authorId: 999 } as never);
+    expect(adapter.rows[0]).toMatchObject({ authorId: 7 });
+    adapter.rows.push(
+      ...posts([{ id: 2, title: "old", authorId: 1 as never, author: null, comments: [], deletedAt: null }]),
+    );
+    await crud.updateOne(2, { title: "new", authorId: 999 } as never);
+    expect(adapter.rows[1]).toMatchObject({ authorId: 7 });
   });
 
-  it("rejects a non-function update.apply", () => {
-    expect(() => makeCrud({ update: { apply: "nope" } } as never)).toThrow(/update\.apply/);
+  it("bare-function shorthand receives operation-specific ApplyArgs on each call", async () => {
+    const seen: OperationId[] = [];
+    const { crud, adapter } = makeCrud({
+      set: (args: ApplyArgs<Post>) => {
+        seen.push(args.operation);
+        return undefined;
+      },
+    } as never);
+    adapter.rows.push(
+      ...posts([{ id: 1, title: "old", authorId: 1 as never, author: null, comments: [], deletedAt: null }]),
+    );
+    await crud.createOne({ title: "hello" } as never);
+    await crud.updateOne(1, { title: "new" } as never);
+    expect(seen).toEqual(["createOne", "updateOne"]);
+  });
+});
+
+describe("set — bootstrap validation", () => {
+  it("rejects a non-function, non-object set", () => {
+    expect(() => makeCrud({ set: "nope" } as never)).toThrow(/'set'/);
+  });
+
+  it("rejects a non-function set.create", () => {
+    expect(() => makeCrud({ set: { create: "nope" } } as never)).toThrow(/set\.create/);
+  });
+
+  it("rejects a non-function set.update", () => {
+    expect(() => makeCrud({ set: { update: "nope" } } as never)).toThrow(/set\.update/);
   });
 });

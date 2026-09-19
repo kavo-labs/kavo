@@ -4,7 +4,7 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { WriteFieldsConfig } from "./write-fields.js";
+import type { SetConfig, WriteFieldsConfig } from "./write-fields.js";
 import type { EntitySchema, OperationSchemaOverride } from "../schema/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
@@ -786,6 +786,31 @@ export interface EntityConfig<
    * matches PUT's own replace-the-whole-resource semantics.
    */
   readonly update?: WriteFieldsConfig<Entity>;
+  /**
+   * Forces field values into a `createOne`/`updateOne` body, overwriting
+   * whatever the client sent for that key (issue #476, ADR-0048's
+   * write-side sibling; supersedes the issue #391 `create.apply`/
+   * `update.apply`). A bare function applies the same values to both
+   * `createOne` and `updateOne`; the `{ create?, update? }` form lets the
+   * two diverge:
+   *
+   * ```ts
+   * // same forced values on create and update
+   * set: (args) => ({ tenantId: args.context.app?.tenantId }),
+   *
+   * // create and update diverge
+   * set: {
+   *   create: (args) => ({ tenantId: args.context.app?.tenantId }),
+   *   update: (args) => ({ tenantId: args.context.app?.tenantId }),
+   * },
+   * ```
+   *
+   * `patchOne` never consults it, the same scope `update.default` has: a
+   * `PATCH` omitting a field means "leave it unchanged", not "reset it."
+   * Not bootstrap-validated against the entity's writable columns — see
+   * {@link WriteFieldsConfig}'s doc for why.
+   */
+  readonly set?: SetConfig<Entity>;
   /**
    * Default authorization for every operation on this entity (ADR-0037): a
    * single function, not a per-operation map — a map invited "which of the

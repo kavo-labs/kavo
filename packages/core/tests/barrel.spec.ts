@@ -251,6 +251,7 @@ const PUBLIC_SURFACE: readonly string[] = [
   "IncludeConfig",
   "IncludeLimits",
   "Serializer",
+  "SetConfig",
   "SincePagination",
   "SoftDeletable",
   "SoftDeleteMode",
