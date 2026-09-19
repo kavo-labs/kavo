@@ -91,53 +91,54 @@ for an omitted request, its `apply` server-side override (ADR-0048), and,
 for `filter`/`include`, its request-cost `limits`. A key belongs in a block
 like these — not in `KavoSettings` — when its job is to name a **subset of
 the entity's own fields or relations a request may touch**, or to shape one
-query axis, rather than to tune a global behavior. The write-side siblings
-are the top-level `create`/`update` config objects (`fields`/`default`/
-`apply`, `WriteFieldsConfig`), narrowing the writable projection for
-`createOne`/`updateOne`/`patchOne` (issue #388). Adding a field or sub-key
-to one of these blocks:
+query axis, rather than to tune a global behavior. The write side has no
+equivalent block of its own (issue #476 removed the top-level `create`/
+`update` config objects it used to have): writable-field narrowing for
+`createOne`/`updateOne`/`patchOne` lives on `schema.input.create`/
+`schema.input.update`'s own `{ fields: [...] }` shorthand instead (a schema
+position, `schema/schema-fields-shorthand.ts`, not a `KavoSettings`-style
+field-group), and forcing a value regardless of what the client sent is
+`EntityConfig.set` (`WriteApply`, `config/write-fields.ts`, ADR-0048/0049),
+not a field-group key either. Adding a field or sub-key to one of the
+five read-side blocks:
 
 1. **The raw type** (`packages/core/src/config/entity-config.ts`) — extend
    the block's own interface (`FilterConfig`, `SortConfig`, `SelectConfig`,
-   `SearchConfig`, `IncludeConfig`) or `WriteFieldsConfig` in `config/write-fields.ts`.
-   A `fields`-style selector is an array-or-`{ exclude }` shape typed
-   against the right path depth: `QueryFieldSelector<Entity>`
-   (`FieldPath<Entity>`, dotted relation paths allowed) for `filter`/`sort`;
-   `SelectableFieldSelector<Entity>` (depth 1) for `select`;
-   `RelationFieldSelector<Entity>` (depth-1 `IncludePath`) for `include`.
-   Document the new key's default posture (defaults to "every own column"
-   like `filter.fields`, or opt-in like `include.fields`?) and its
+   `SearchConfig`, `IncludeConfig`). A `fields`-style selector is an
+   array-or-`{ exclude }` shape typed against the right path depth:
+   `QueryFieldSelector<Entity>` (`FieldPath<Entity>`, dotted relation paths
+   allowed) for `filter`/`sort`; `SelectableFieldSelector<Entity>` (depth 1)
+   for `select`; `RelationFieldSelector<Entity>` (depth-1 `IncludePath`) for
+   `include`. Document the new key's default posture (defaults to "every own
+   column" like `filter.fields`, or opt-in like `include.fields`?) and its
    narrowing/precedence relationship to any nearby DTO-based override.
 2. **The resolved type** (`resolved-entity-config.ts`) — add the frozen,
    always-array/always-present field to the block's `Resolved*Config`
    (`ResolvedFilterConfig`, `ResolvedSortConfig`, …).
 3. **The resolver** (`resolve-entity-config.ts`) — `resolveFieldGroups`
    drives the per-axis resolvers (`resolveFilterFields`, `resolveSortDefault`,
-   `resolveSearchConfig`, `resolveWriteFields`, …). Compute the key's **base
-   set** (what it means unconfigured) from `EntityMetadata`, and resolve a
-   configured selector against that base with `resolveFieldSelector` (generic
-   over the path type). If the key can never legally name an ORM-derived
-   field (as `create.fields`/`update.fields` can't — a derived field has no
-   writable storage, ADR-0050), reject one at bootstrap with a
+   `resolveSearchConfig`, …). Compute the key's **base set** (what it means
+   unconfigured) from `EntityMetadata`, and resolve a configured selector
+   against that base with `resolveFieldSelector` (generic over the path
+   type). If the key can never legally name an ORM-derived field (as
+   `schema.input.create`/`update`'s `{ fields }` shorthand can't — a derived
+   field has no writable storage, ADR-0050), reject one at bootstrap with a
    `ConfigurationException`, the way `search.fields` already rejects one
    unconditionally.
 4. **Where the resolved value actually gates something** — a field-group key
-   is inert until some consumer reads it. The write-field lists resolve onto
-   `ResolvedEntityConfig` and are read in `DefaultDeserializer.deserialize`
-   (per call, off `context.config`, keyed by `context.operation`); the query
-   blocks are read by the query normalizer and the include/select resolvers.
-   Find or add the analogous read site, and decide the new key's **DTO
-   precedence**: does a registered DTO with a runtime shape still win
-   outright (the `select`-vs-`schema.output.item` precedent, ADR-0026), or does the
-   new key gate something no DTO already governs?
+   is inert until some consumer reads it; the query blocks are read by the
+   query normalizer and the include/select resolvers. Find or add the
+   analogous read site, and decide the new key's **DTO precedence**: does a
+   registered DTO with a runtime shape still win outright (the
+   `select`-vs-`schema.output.item` precedent, ADR-0026), or does the new
+   key gate something no DTO already governs?
 5. **The core barrel** (`index.ts`) — a new selector or config type is a new
    public type; add it to the explicit list (ADR-0010), and to
    `tests/barrel.spec.ts`'s manifest.
 6. **Docs** — `docs/features/allowed.md` (the adopter-facing guide for the
    `fields` allowlists) and the relevant `## filter`/`## sort`/`## select`/
-   `## search`/`## include`/`## create / update` section of
-   `docs/reference/config-keys.md`, not `08-configuration.md` — that
-   document is `KavoSettings` only.
+   `## search`/`## include` section of `docs/reference/config-keys.md`, not
+   `08-configuration.md` — that document is `KavoSettings` only.
 
 Tests follow the same shape as `write-tests` describes for a `KavoSettings`
 key, minus the per-call/operation-override cases that don't apply here: the

@@ -65,8 +65,8 @@ is the explicit sentinel for overriding an _inherited_ `ttl` back off
 without disabling `etag` at that scope; `ttl: 0` is rejected at bootstrap
 rather than treated as off.
 
-An `EntityConfig` mixes settings keys with structural keys (`schema`, `filter`, `sort`, `select`, `search`, `include`, `create`,
-`update`, `policy`, `relations`, `operations`); only the settings subset
+An `EntityConfig` mixes settings keys with structural keys (`schema`, `set`, `filter`, `sort`, `select`, `search`, `include`,
+`policy`, `relations`, `operations`); only the settings subset
 participates in the merge. `relations` (per-relation `read` loading tuning and `write.strategy`
 array-mutation policy) is entity-scope-only for the same reason — resolved
 by `DefaultRelationRegistry` at bootstrap, no global default; it folded the

@@ -21,7 +21,7 @@ A `relations` entry tunes an already-includable relation and/or opts a to-many r
 
 `write: { strategy }` opts a to-many relation into array-mutation writes and names the strategy in one statement — `"replace"`, `"resource"`, or `"jsonPatch"`, all implemented. There is no entity-level default and no boolean form: since [issue #404](/internals/adr/0029-array-relations-may-opt-into-replace-writes) each relation that wants writes names its own strategy, and omitting `write` is how a relation stays non-array-mutable. Two relations on the same entity may use two different strategies.
 
-`write` on a to-one relation is a bootstrap error (association by id already covers those). `write` is independent of `include.fields`: a relation can be write-opted without being read-includable, or the other way around. Write **permission** for a relation is the `create`/`update` field lists and registered write schemas, not this key.
+`write` on a to-one relation is a bootstrap error (association by id already covers those). `write` is independent of `include.fields`: a relation can be write-opted without being read-includable, or the other way around. Write **permission** for a relation is `schema.input.create`/`schema.input.update`'s own field list or registered write schema, not this key.
 
 ```ts
 @Kavo(Book, {
