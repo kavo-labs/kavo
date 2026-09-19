@@ -151,17 +151,6 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly policy: Readonly<Partial<Record<StandardOperationId, Policy<Entity>>>>;
   /**
-   * `create.default`: values filled in for a writable field `createOne`'s
-   * body doesn't set. An explicit value in the body always wins outright —
-   * this only fills a gap, never overrides one. Empty when unconfigured.
-   */
-  readonly createDefault: Readonly<Partial<Entity>>;
-  /**
-   * `update.default` — same idea, `updateOne` only (never `patchOne`, whose
-   * omission means "leave unchanged" rather than "reset").
-   */
-  readonly updateDefault: Readonly<Partial<Entity>>;
-  /**
    * `set`/`set.create` (issue #476, supersedes the issue #391
    * `create.apply`), passed through unresolved — the write-side sibling of
    * `filter.apply`/`sort.apply`/`select.apply`/`include.apply` (ADR-0048):
@@ -170,8 +159,8 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly createApply?: WriteApply<Entity>;
   /**
-   * `set`/`set.update` — same idea, `updateOne` only (never `patchOne`,
-   * matching {@link ResolvedEntityConfig.updateDefault}'s own scope).
+   * `set`/`set.update` — same idea, `updateOne` only (never `patchOne`, whose
+   * omission means "leave unchanged" rather than "reset").
    */
   readonly updateApply?: WriteApply<Entity>;
 }

@@ -92,11 +92,9 @@ export interface EntityMetadata<Entity = unknown> {
  * `generated` is.
  *
  * This is the exact set `DefaultDeserializer` strips an unknown write key
- * against, and the universe `EntityConfig.create.fields`/`update.fields`'s
- * `{ exclude }` form subtracts from (issue #397). The two must not drift,
- * so both derive it here rather than each rebuilding it. The soft-delete
- * marker column is deliberately *not* excluded here — `DefaultDeserializer`
- * drops it separately, and only on its derived-default path.
+ * against. The soft-delete marker column is deliberately *not* excluded
+ * here — `DefaultDeserializer` drops it separately, and only on its
+ * derived-default path.
  */
 export function derivedWritableFieldNames<Entity>(metadata: EntityMetadata<Entity>): readonly string[] {
   const columns = metadata.fields

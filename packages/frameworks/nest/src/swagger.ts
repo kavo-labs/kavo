@@ -219,15 +219,12 @@ function schemaDocFor(schema: SchemaLike<object> | null | undefined, entityName:
  * overrides (`descriptor.schemaInput`/`schemaOutput`) are read directly off
  * the descriptor by the caller — this resolver only ever answers the
  * entity's own root `schema.input.<slot>`/`schema.output.<slot>`. Needs only
- * the schema map and the top-level `create`/`update` shorthand, both legal
- * at decoration time (ADR-0012); the slot fallbacks (`patch`→`update`,
- * `list`→`item`) belong to the core resolver, not to this file.
+ * the schema map, legal at decoration time (ADR-0012); the slot fallbacks
+ * (`patch`→`update`, `list`→`item`) belong to the core resolver, not to
+ * this file.
  */
 function schemaResolverFor(config: EntityConfig<object> | undefined): SchemaResolver<object> {
-  return new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined, {
-    create: config?.create,
-    update: config?.update,
-  });
+  return new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined);
 }
 
 export function applySwaggerMetadata(

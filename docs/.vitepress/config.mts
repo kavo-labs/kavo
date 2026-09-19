@@ -431,7 +431,7 @@ const config = defineConfig({
                 link: "/internals/adr/0048-apply-server-side-query-constraint",
               },
               {
-                text: "0049 — create.apply/update.apply force write-body values",
+                text: "0049 — set forces write-body values",
                 link: "/internals/adr/0049-write-apply-forces-create-update-body-values",
               },
               {

@@ -45,7 +45,7 @@ A validator differs in these ways:
 
 - **`schema.input` validates.** The engine runs `safeParse` on the deserialized body and raises `SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) on failure, with one `errors[]` entry per issue. On success the schema's own `data` replaces the body, so a transform (trim a string, default a field) takes effect.
 - **`schema.output` shapes but is never re-validated.** A `safeParse` failure falls back to the already-projected value rather than rejecting a response Kavo itself produced, so a validator is not a confidentiality boundary. Use a class, `{ fields }`, or `select.fields` to keep a column off the wire.
-- **`create.fields`/`update.fields` still apply.** The body is narrowed by that allowlist first and the validator judges what is left, so a lenient validator can't widen what those keys excluded.
+- **A per-operation validator override still narrows against the entity-scope allowlist.** A class-shaped `schema.input.create`/`update` at entity scope sets the writable-field allowlist; an `operations.<id>.schema` validator override replaces only the judging step, so a lenient validator can't widen what that allowlist excluded.
 - **Nested rows ignore it.** An included relation is shaped only by its target's class-shaped `schema.output`; a validator there does not narrow nested rows.
 
 **Schema mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved schema already projects. Selection never widens a projection past what the schema or the `select.fields` allowlist allows.
@@ -100,7 +100,7 @@ Anywhere a schema goes, a plain list of field names works too, as a bare array o
 @Kavo(Book, { schema: { output: { item: ['id', 'title'], list: ['id'] } } })
 ```
 
-Field names are type-checked against the entity, own columns only (depth 1). Like a class, a list only shapes; it never rejects a body. On the write side it wins over the top-level `create.fields`/`update.fields`, which stay the place for `apply`, `default` and `{ exclude }`. A per-operation `operations.<id>.schema` override takes a class or validator only.
+Field names are type-checked against the entity, own columns only (depth 1). Like a class, a list only shapes; it never rejects a body. On the write side, `schema.input.create`'s/`update`'s `{ fields }` shorthand is the writable-field allowlist itself — there is no separate top-level `create`/`update` key any more (issue #476). A per-operation `operations.<id>.schema` override takes a class or validator only.
 
 So one `schema` can hold all three kinds: a Zod (or any `safeParse`) validator, a class (with `class-validator` decorators if you run a `ValidationPipe`), or a field list.
 

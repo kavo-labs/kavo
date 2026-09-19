@@ -144,7 +144,7 @@ A `{ create?, update? }` object lets the two diverge, when they need to:
 
 Same `ApplyArgs<Entity>` argument every other `apply` takes; the return shape is `Partial<Entity> | undefined` instead of a query-axis type. Composition is the write-side version of the same rule: a forced field **overwrites** whatever the client sent for it, the opposite of `create`/`update`'s own `default`, which only fills a field the client omitted. Configuring both `default` and `set` for the same field is legal — `set` wins, since it's the unconditional constraint and `default` only a fallback for an absent value.
 
-Scope matches `default`'s own: `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged" rather than "reset it," the same reasoning that already keeps `update.default` off `patchOne`.
+`set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged" rather than "reset it."
 
 ## Non-goals
 

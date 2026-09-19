@@ -4,7 +4,7 @@ import type { DeepPartial } from "../types/utility.js";
 import type { FieldPath } from "../types/field-path.js";
 import type { IncludePath } from "../types/include-path.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { SetConfig, WriteFieldsConfig } from "./write-fields.js";
+import type { SetConfig } from "./write-fields.js";
 import type { EntitySchema, OperationSchemaOverride } from "../schema/entity-schema.js";
 import type { EntityInput } from "../types/utility.js";
 import type { OperationHandler, OperationMetadata } from "../operations/operation-handler.js";
@@ -736,56 +736,18 @@ export interface EntityConfig<
   /**
    * A per-slot, input/output-split map of `KavoSchema` validators or plain
    * shape-only classes (ADR-0055): `create`/`update`/`patch`/`item`/`list`
-   * each accept a registered class; `patch`/`item`/`list` additionally
-   * accept an inline `{ fields: [...] }` shorthand (issue #386) that
-   * derives a projection/writable-field list without a hand-written class.
-   * `create`/`update` do not accept that shorthand here — their writable-
-   * field list is the top-level `create`/`update` keys below (issue #388),
-   * keeping this map class-only for the two write slots. A validator-shaped
-   * slot (a `KavoSchema`, rather than a plain class) additionally drives
-   * input validation (`schema.input.<slot>.safeParse`, raising
-   * `SchemaValidationException` on failure) and narrows/shapes the response
-   * at `schema.output.<slot>`.
+   * each accept a registered class, or an inline `{ fields: [...] }`
+   * shorthand (issue #386) that derives a projection/writable-field list
+   * without a hand-written class — the only way to narrow what `createOne`/
+   * `updateOne` may write, now that the top-level `create`/`update` keys
+   * (issue #388) are gone (issue #476). Omitted, every non-generated scalar
+   * column except the primary key, plus every relation, by association, is
+   * open (ADR-0014). A validator-shaped slot (a `KavoSchema`, rather than a
+   * plain class) additionally drives input validation
+   * (`schema.input.<slot>.safeParse`, raising `SchemaValidationException`
+   * on failure) and narrows/shapes the response at `schema.output.<slot>`.
    */
   readonly schema?: EntitySchema<Entity, CreateDto, UpdateDto, PatchDto, QueryDto, ItemDto, ListDto>;
-  /**
-   * What `createOne` (and `createMany`, once #137 lands) may write. A
-   * `{ fields: [...] }` allowlist (the shorthand `schema.input.patch`/`schema.output.item`/
-   * `schema.output.list` also accept, issue #386), or the inverse `{ fields: { exclude:
-   * [...] } }` form the read-side field groups take (issue #397) — "every
-   * writable field except these", resolved at bootstrap against the ADR-0014
-   * writable projection, with an `exclude` entry that names nothing writable
-   * a bootstrap error. Moved to its own top-level key (issue #388) so
-   * `schema.input.create` stays reserved for a registered DTO class. Omitted — or an
-   * `{ exclude }` that removes nothing — every own writable field is open:
-   * every non-generated scalar column except the primary key, plus every
-   * relation, by association (ADR-0014). A
-   * registered `schema.input.create` class with a runtime shape **replaces** this
-   * projection rather than intersecting with it, and wins over this key —
-   * where you register one, it, not this key, is the narrowing statement.
-   *
-   * `default` fills in a value for a writable field the request body
-   * doesn't set (`createOne` only) — a body that *does* send the field
-   * always wins outright, the same one-way relationship a client value has
-   * with `sort.default`/`select.default`/`include.default`. Validated at
-   * bootstrap against the entity's own writable columns.
-   */
-  readonly create?: WriteFieldsConfig<Entity>;
-  /**
-   * What `updateOne`/`patchOne` (and their `*Many` forms, once #137 lands)
-   * may write. `update` (PUT) and `patch` (PATCH) share this one list
-   * rather than each getting its own — both mutate an existing row, so the
-   * set of fields open to being overwritten is the same question either
-   * way. Same default posture, narrowing behaviour, and DTO precedence as
-   * {@link EntityConfig.create} — see its note.
-   *
-   * `default` is `updateOne`-only, never `patchOne`: a `PATCH` omitting a
-   * field means "leave it unchanged", so filling it in there would
-   * silently overwrite a value the caller never touched. `updateOne` (PUT)
-   * is a full replacement, so a value it omits filling in from `default`
-   * matches PUT's own replace-the-whole-resource semantics.
-   */
-  readonly update?: WriteFieldsConfig<Entity>;
   /**
    * Forces field values into a `createOne`/`updateOne` body, overwriting
    * whatever the client sent for that key (issue #476, ADR-0048's
@@ -805,10 +767,11 @@ export interface EntityConfig<
    * },
    * ```
    *
-   * `patchOne` never consults it, the same scope `update.default` has: a
-   * `PATCH` omitting a field means "leave it unchanged", not "reset it."
-   * Not bootstrap-validated against the entity's writable columns — see
-   * {@link WriteFieldsConfig}'s doc for why.
+   * `patchOne` never consults it: a `PATCH` omitting a field means "leave
+   * it unchanged", not "reset it." Not bootstrap-validated against the
+   * entity's writable columns — evaluated per request with an arbitrary
+   * runtime value, so there is nothing to check ahead of time beyond "is
+   * it callable at all."
    */
   readonly set?: SetConfig<Entity>;
   /**

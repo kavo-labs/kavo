@@ -6,9 +6,7 @@ import type { OperationEntryOf } from "../operations/operation-entry.js";
 import type { OperationId } from "../operations/operation.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { WriteFieldsConfig } from "../config/write-fields.js";
 import type { FieldsInput } from "./schema-fields-shorthand.js";
-import { schemaClassFromFields } from "./schema-fields-shorthand.js";
 
 /**
  * The slot-position union `KavoSchema<T> | SchemaClass<T>` for an
@@ -198,42 +196,14 @@ export interface SchemaResolver<_Entity = unknown> {
   resolveInput(slot: SchemaInputSlot, operation: OperationId): SchemaLike<object> | null;
   resolveOutput(slot: SchemaOutputSlot, operation: OperationId): SchemaLike<object> | null;
   /**
-   * The writable-field allowlist synthesized from the top-level
-   * `create.fields`/`update.fields` config, independent of whether a
-   * validator occupies the slot. The deserializer narrows the body with it
-   * first; a validator only then judges the narrowed body, so a lenient
-   * validator can never widen what `create.fields` excluded. `patch` shares
-   * `update`'s list. `null` when no `fields` list is configured.
+   * The writable-field allowlist synthesized from a registered class-shaped
+   * `schema.input.create`/`.update`/`.patch` slot, independent of whether a
+   * validator occupies it. The deserializer narrows the body with it first;
+   * a validator only then judges the narrowed body. `patch` shares
+   * `update`'s list. `null` when the slot holds no class (a validator, or
+   * nothing registered at all).
    */
   resolveWriteAllowlist(slot: "create" | "update" | "patch"): SchemaClass | null;
-}
-
-/**
- * `schema.input.create`/`.update`'s writable-fields fallback source — the
- * same top-level `create.fields`/`update.fields` config `resolveEntityConfig`
- * already resolves and passes to `DefaultSchemaResolver`.
- */
-export interface WritableSchemaFieldsConfig<Entity> {
-  readonly create?: WriteFieldsConfig<Entity>;
-  readonly update?: WriteFieldsConfig<Entity>;
-}
-
-/**
- * Synthesizes a `SchemaClass` from a `WriteFieldsConfig`'s `fields` array —
- * the create/update writable-fields fallback. Only the plain
- * array form is accepted here: the `{ exclude }` form is resolved to a
- * concrete array by `resolveEntityConfig` before it ever reaches this
- * resolver (the same division of labor as here), so
- * anything else (including the raw `{ exclude }` shape, if it somehow
- * arrives unresolved) yields no fallback rather than a wrong one.
- */
-function writableFieldsToSchemaClass<Entity>(
-  fields: WriteFieldsConfig<Entity>["fields"] | undefined,
-): SchemaClass | null {
-  if (fields === undefined || !Array.isArray(fields)) {
-    return null;
-  }
-  return schemaClassFromFields(fields as readonly string[]);
 }
 
 export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<Entity> {
@@ -241,22 +211,19 @@ export class DefaultSchemaResolver<Entity = unknown> implements SchemaResolver<E
   private readonly output: Readonly<Record<SchemaOutputSlot, SchemaLike<object> | null>>;
   private readonly writeAllowlist: Readonly<Record<"create" | "update" | "patch", SchemaClass | null>>;
 
-  constructor(schema?: EntitySchema<Entity>, writable: WritableSchemaFieldsConfig<Entity> = {}) {
+  constructor(schema?: EntitySchema<Entity>) {
     const { input, output } = normalizeEntitySchema(schema);
     const patch = input.patch;
     const update = input.update;
     const item = output.item;
     const list = output.list;
-    const resolvedUpdate = update ?? writableFieldsToSchemaClass(writable.update?.fields) ?? undefined;
-    const createAllowlist = writableFieldsToSchemaClass(writable.create?.fields);
-    const updateAllowlist = writableFieldsToSchemaClass(writable.update?.fields);
+    const createAllowlist = isSchemaClass(input.create) ? input.create : null;
+    const updateAllowlist = isSchemaClass(update) ? update : null;
     this.writeAllowlist = Object.freeze({ create: createAllowlist, update: updateAllowlist, patch: updateAllowlist });
     this.input = Object.freeze({
-      create: (input.create ??
-        writableFieldsToSchemaClass(writable.create?.fields) ??
-        null) as SchemaLike<object> | null,
-      update: (resolvedUpdate ?? null) as SchemaLike<object> | null,
-      patch: (patch ?? resolvedUpdate ?? null) as SchemaLike<object> | null,
+      create: (input.create ?? null) as SchemaLike<object> | null,
+      update: (update ?? null) as SchemaLike<object> | null,
+      patch: (patch ?? update ?? null) as SchemaLike<object> | null,
       query: (input.query ?? null) as SchemaLike<object> | null,
     });
     this.output = Object.freeze({

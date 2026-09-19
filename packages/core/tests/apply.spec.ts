@@ -536,7 +536,7 @@ describe("set — force write-body values the client cannot override (issue #476
     expect(seen?.params.id).toBe(1);
   });
 
-  it("patchOne never consults set.update, matching update.default's own scope", async () => {
+  it("patchOne never consults set.update — a PATCH omitting a field means leave it unchanged", async () => {
     const { crud, adapter } = makeCrud({
       set: { update: () => ({ authorId: 7 }) },
     } as never);
@@ -571,43 +571,23 @@ describe("set — force write-body values the client cannot override (issue #476
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 3 });
   });
 
-  it("set wins over create.default when both configure the same field", async () => {
-    const { crud, adapter } = makeCrud({
-      create: { default: { authorId: 1 } },
-      set: { create: () => ({ authorId: 2 }) },
-    } as never);
-    await crud.createOne({ title: "hello" } as never);
-    expect(adapter.rows[0]).toMatchObject({ authorId: 2 });
-  });
-
   it("an unconfigured set changes nothing (backward compatible)", async () => {
     const { crud, adapter } = makeCrud();
     await crud.createOne({ title: "hello", authorId: 5 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 5 });
   });
 
-  it("still forces a value for a field create.fields's { exclude } removed from the body allowlist (issue #397)", async () => {
+  it("still forces a value for a field a schema.input.create allowlist removed from the body (issue #397 follow-on)", async () => {
     // The "clients can't set it, the server does" idiom: `set` runs after
     // deserialization (kavo-engine's `applyWriteApply`), so it reaches the
-    // adapter even though `authorId` is stripped from the client body.
+    // adapter even though `authorId` is stripped from the client body by
+    // the narrowed `schema.input.create` allowlist.
     const { crud, adapter } = makeCrud({
-      create: { fields: { exclude: ["authorId"] } },
+      schema: { input: { create: { fields: ["title"] } } },
       set: { create: () => ({ authorId: 7 }) },
     } as never);
     await crud.createOne({ title: "hello", authorId: 999 } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "hello", authorId: 7 });
-  });
-
-  it("does NOT fill a field create.fields's { exclude } removed via create.default — set is the tool for that", async () => {
-    // `default` is applied inside the deserializer's loop over the writable
-    // allowlist, so a field the allowlist no longer contains is never
-    // filled. Pre-existing for the plain array form; `{ exclude }` just
-    // makes it easy to reach. Documented in docs/features/allowed.md.
-    const { crud, adapter } = makeCrud({
-      create: { fields: { exclude: ["authorId"] }, default: { authorId: 7 } },
-    } as never);
-    await crud.createOne({ title: "hello" } as never);
-    expect(adapter.rows[0]).not.toHaveProperty("authorId");
   });
 
   it("bare-function shorthand forces the same values on both createOne and updateOne", async () => {

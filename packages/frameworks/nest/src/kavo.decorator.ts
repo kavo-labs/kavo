@@ -593,10 +593,7 @@ function defineRoute(
     writable: true,
     configurable: true,
   });
-  const schemaResolver = new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined, {
-    create: config?.create,
-    update: config?.update,
-  });
+  const schemaResolver = new DefaultSchemaResolver(config?.schema as EntitySchemaMap<object> | undefined);
   applyRouteDecorators(prototype, methodName, descriptor, route, schemaResolver);
 }
 
