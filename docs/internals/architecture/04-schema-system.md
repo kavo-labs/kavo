@@ -1,9 +1,12 @@
-# 04 — Optional DTO System
+# 04 — Schema System (formerly the DTO system)
 
 Every REST verb has an independent, optional data contract. Zero config
-means entity-derived defaults; registering a class narrows exactly one
-slot. DTOs in v6 are shapes for **typing, serialization, and Swagger
-docs** — there is no validation subsystem attached to them.
+means entity-derived defaults; configuring a `schema` slot narrows exactly
+one slot. A slot takes either a plain **class** — a shape for typing,
+serialization, and Swagger docs, with no validation attached — or a
+**validator** (`KavoSchema`, one `safeParse` method), which additionally
+validates request bodies ([ADR-0055](/internals/adr/0055-schema-is-the-source-of-truth-for-dto-and-validation)).
+There is no separate `dto` config key: `schema` absorbed it.
 
 ## 1. The six slots and their defaults
 
@@ -20,18 +23,20 @@ Restore reuses `item`/`list`; no additional slots exist. §8 below adds a
 second, narrower tier of override — one per _operation_, not per slot —
 without introducing a slot of its own. The list
 envelope's `meta` bag is deliberately **not** a slot: it carries the
-caller's own data rather than entity data, so it has no DTO and never
-passes through the serializer (doc 07 §3.1). Having no DTO is also why it
+caller's own data rather than entity data, so it has no schema and never
+passes through the serializer (doc 07 §3.1). Having no schema is also why it
 is the envelope's one optional field — with nothing to project there is
 nothing to emit until a handler contributes, so the key stays off the
 response rather than shipping as `{}`.
 
 ## 2. Resolution algorithm
 
-`DefaultDtoResolver` (`core/src/dto/default-dto-resolver.ts`) resolves
+`DefaultSchemaResolver` (`core/src/schema/entity-schema.ts`) resolves
 each slot **independently at bootstrap** and caches the result on the
-resolved config — never per request. Resolution returns the registered
-class or `null`, where `null` means "use the entity-derived default".
+resolved config (`config.schema`) — never per request. Resolution returns
+the registered class or validator, or `null`, where `null` means "use the
+entity-derived default". It also folds the top-level `create.fields`/
+`update.fields` shorthand into a synthesized class for `create`/`update`.
 The fallback chains `patch → update` and `list → item` are baked in at
 construction, mirroring the static generic defaults (doc 03 §1), so the
 type level and the runtime never disagree about which slot follows which.
@@ -45,12 +50,12 @@ the defaults derive from:
   plus every derived field the entity declares (§7), **intersected with
   `select.fields` when that key is configured explicitly**
   ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)) —
-  which is how a column is kept out of every response without registering a
-  DTO at all. Relation properties
+  which is how a column is kept out of every response without configuring a
+  schema at all. Relation properties
   are excluded unless the request includes them deliberately; a class
   getter or method never appears on its own unless the adapter reports it
   as a derived field (§7) — it is not a column.
-  A registered DTO wins outright over the allowlist rather than
+  A configured `schema.output` slot wins outright over the allowlist rather than
   intersecting with it: it is the narrower, more specific statement.
 - **Writable projection** (`create`/`update`/`patch` default): every
   scalar column with `generated: false`, plus every relation (associable
@@ -68,21 +73,21 @@ the defaults derive from:
   columns (auto ids, `@CreateDateColumn`, versions) can never be written
   from a request body either — the default deserializer silently strips
   all of these, which is the safe posture in a system with no validation
-  stage. An explicit write DTO can still name the id or the marker field (a
+  stage. An explicit write schema class can still name the id or the marker field (a
   legitimate opt-in for a caller-assigned key); `update`/`patch` write
   paths additionally strip both from the payload before persisting, as
   defence in depth against reassigning an _existing_ row's identity or
   soft-delete state that way.
 
-  This default projection can be narrowed further, without registering a
-  DTO at all, by `create.fields` (for `createOne`) and
+  This default projection can be narrowed further, without configuring a
+  schema at all, by `create.fields` (for `createOne`) and
   `update.fields` (for `updateOne`/`patchOne` — the two share one
   list, since both mutate an existing row) — the write-side counterpart to
   `select.fields` above, and subject to the same rules: it can only
   narrow the derived projection, never widen it, so naming the id or the
   soft-delete marker in the plain array form has no effect; and a
-  registered write DTO with a runtime shape wins outright, exactly as a
-  registered `item`/`list` DTO wins over `select.fields` — where you register
+  configured write schema class with a runtime shape wins outright, exactly as a
+  configured `item`/`list` schema wins over `select.fields` — where you register
   one, it, not the allowlist, is the narrowing statement. It also accepts
   the `{ exclude: [...] }` form (issue #397) — "every writable field except
   these" — resolved at bootstrap against that same base; there, unlike the
@@ -97,40 +102,45 @@ the defaults derive from:
 - **Embedded objects** map to a `json`-kind column and travel as one
   opaque value; they are not flattened into sub-fields.
 
-## 4. Explicit DTO classes and `dtoShapeKeys`
+## 4. Class-shaped slots and `schemaShapeKeys`
 
 A registered class projects by its **runtime key set**: the own
-enumerable properties of `new Dto()` (`dto-shape.ts`, cached per class).
+enumerable properties of `new Schema()` (`schema-shape.ts`, cached per class).
 TypeScript fields only exist at runtime when initialized, so:
 
 ```ts
-class UserListDto {
+class UserListSchema {
   id = 0;
   name = "";
 } // projects [id, name]
-class BadDto {
+class BadSchema {
   id!: number;
 } // no runtime keys → falls back
 ```
 
 A class with no initialized fields degrades to the entity-derived
 default — the response is still correct, just not narrowed. This keeps
-DTO classes plain (no decorators, no reflection library) at the cost of
+schema classes plain (no decorators, no reflection library) at the cost of
 requiring initializers for narrowing; the tradeoff is documented API.
+
+A **validator-shaped** slot has no static key set: the engine `safeParse`s
+the deserialized body (`schema.input`, raising `SchemaValidationException`
+on failure) or the projected response (`schema.output`, falling back to the
+projected value on failure), and projection narrowing does not apply to it.
 
 ## 5. Serialization order (normative)
 
-**DTO mapping first, then field selection.** `select=id,name` can only
-narrow what the resolved DTO exposes — selection never widens a
+**Schema mapping first, then field selection.** `select=id,name` can only
+narrow what the resolved schema exposes — selection never widens a
 projection. Implemented in `DefaultSerializer.serializeItem`:
 projection ∩ selection, applied to every item and list element.
 
 ## 6. Included relations
 
 When a response embeds an included relation, the node's shape resolves
-from the **target entity's own registered `item`/`list` DTOs** when that
+from the **target entity's own configured `schema.output.item`/`list`** when that
 entity has a Kavo config, else its entity-derived default. There is no
-per-include DTO slot — the related resource owns its own contract.
+per-include schema slot — the related resource owns its own contract.
 
 ## 7. Derived fields
 
@@ -153,33 +163,31 @@ projection from the target's own resolved config through the
 Static typing of the response is unaffected: the entity-derived `ItemDto`
 does not grow the key, and neither does the generated OpenAPI response
 schema, which falls back to the entity class when no `item`/`list` slot is
-registered. Registering an `item`/`list` DTO that names it is how a caller
+registered. Configuring an `item`/`list` schema that names it is how a caller
 gets it statically typed — and documented — as for any other narrowing.
 
 ## 8. Per-operation override (issue #131)
 
 The six slots above are entity-wide: every operation that reads `create`
-reads the _same_ `create` DTO. `operations.<id>.dto` adds a narrower tier
+reads the _same_ `create` schema. `operations.<id>.schema` adds a narrower tier
 in front of them — a request body, response, or query contract specific to
 one operation on one entity:
 
 ```ts
 createCrud(User, {
-  dto: { item: UserItemDto }, // entity-wide default
+  schema: { output: { item: UserItemSchema } }, // entity-wide default
   operations: {
-    findOne: { dto: { output: UserProfileDto } }, // findOne only
-    createOne: { dto: { input: CreateUserRequestDto, output: UserCreatedDto } },
+    findOne: { schema: { output: UserProfileSchema } }, // findOne only
+    createOne: { schema: { input: CreateUserRequestSchema, output: UserCreatedSchema } },
   },
 });
 ```
 
-**Fallback order**, per field: `operations.<id>.dto.<field>` → the root
-`dto.<slot>` → the entity-derived default. This is the same chain
-`KavoEngine.mapResponse` already partially walked for `output`
-(`descriptor.output ?? config.dto.resolve(...)`); the change is populating
-`descriptor.input`/`output`/`query` from config instead of leaving them
-`null`, and reaching the same `descriptor.<field> ?? resolve(...)` order
-everywhere a slot is read — including the `If-Match` canonical-read ETag
+**Fallback order**, per field: `operations.<id>.schema.<field>` → the root
+`schema.input.<slot>`/`schema.output.<slot>` → the entity-derived default.
+The registry populates `descriptor.schemaInput`/`schemaOutput`/`schemaQuery`
+from config, and the engine reads `descriptor.<field> ?? config.schema.resolve…(...)`
+in that order everywhere a slot is read — including the `If-Match` canonical-read ETag
 (doc 20), which now hashes what `findOne`'s own override actually serves.
 
 **Which fields apply to which operation** — `input` only where there is a
@@ -198,41 +206,38 @@ anywhere there is a non-void result:
 | custom, `kind: "read"`   |         |        ✓         |    ✓    |
 
 A field outside this table is a bootstrap `ConfigurationException` — never
-a silent drop — and for the standard eight it is also unrepresentable at
-the type level: `EntityConfig`'s `operations` field is typed through
-`StandardOperationsConfig`, which `Pick`s only the applicable
-`OperationDtoOverride` fields per operation id, so e.g. `deleteOne` has no
-`dto` key to set at all. The runtime check exists for the same reason
-`resolveAllowed` and `rejectComputedWriteDtoKeys` keep one: a config
-built from an erased or cast type has no compiler to catch it.
+a silent drop. Unlike the old `dto` override, this is a runtime check only:
+`OperationSchemaOverride` offers all three fields on every operation, so the
+mismatch (e.g. `deleteOne: { schema: { output } }`) is caught at `createCrud`,
+not by the compiler.
 
 A custom operation (issue #145) is the one place the rule is runtime-only.
 Which fields apply follows from its declared `kind`, which is a value in
 the same object rather than a fact about the key, so `CustomOperationConfig`
 offers all three and the mismatch is caught at bootstrap. It also has no
-root `dto` slot of its own: `output` falls back to the entity's
+root `schema` slot of its own: `output` falls back to the entity's
 `item`/`list` slot and `input` to the entity's writable projection, which
-is what makes `dto` the only way to give it a shape of its own.
+is what makes `operations.<id>.schema` the only way to give it a shape of its own.
 
 That fallback is the right default for a result that _is_ a row, and a trap
 for one that is not: a handler returning `{ applied, skus }` against an
 entity with neither column serialized to `{}`, silently, while the static
 types promised the shape (#181). The engine now refuses a **custom**
 operation whose non-empty result projects to zero keys, naming the
-operation and pointing at `dto.output` (doc 07 §1a). A result that is a
+operation and pointing at `schema.output` (doc 07 §1a). A result that is a
 narrower entity shape is still served as-is; only zero intersection is
 treated as a declaration mistake.
 
 `query`'s effect is **typing only**, like the root `query` slot (§1): there
 is no validation subsystem, and the query normalizer parses wire params
-structurally against the allowlists regardless of which DTO class is
-registered. Both slots exist so a programmatic caller
+structurally against the allowlists regardless of which schema is
+configured. Both slots exist so a programmatic caller
 (`KavoService.findOne`/`findMany`) gets a precise parameter type, and so
 `@kavo/nest` can build accurate `@ApiBody`/`@ApiResponse` schemas —
-`operations.<id>.dto.input`/`output` change what `descriptor.input`/
-`output` documents, ahead of the root slot, the same way they change what
+`operations.<id>.schema.input`/`output` change what `descriptor.schemaInput`/
+`schemaOutput` documents, ahead of the root slot, the same way they change what
 the engine actually deserializes and serializes.
 
-This is per-entity and per-operation only, matching the rest of the DTO
+This is per-entity and per-operation only, matching the rest of the schema
 system: no global default, and no override shared across entities or
 across operations.

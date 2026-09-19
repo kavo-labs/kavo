@@ -1,6 +1,6 @@
 # Services
 
-`@Kavo(Entity, config)` and `createCrud(Entity, config)` both return the same thing: a `DefaultKavoService<Entity, ...>` instance, typed from the entity and whatever DTOs you registered. It's the programmatic front door. Every generated HTTP route is this service's method, called for you; nothing about it is HTTP-specific.
+`@Kavo(Entity, config)` and `createCrud(Entity, config)` both return the same thing: a `DefaultKavoService<Entity, ...>` instance, typed from the entity and whatever schemas you registered. It's the programmatic front door. Every generated HTTP route is this service's method, called for you; nothing about it is HTTP-specific.
 
 ```ts
 const books = createCrud(Book);
@@ -22,7 +22,7 @@ findOne(id: Id, query?: QueryDto, options?: KavoCallOptions): Promise<ItemDto>;
 findMany(query?: QueryDto, options?: KavoCallOptions): Promise<ListResultDto<ListDto>>;
 ```
 
-Every generic parameter defaults from the entity, so the zero-config path needs no manual type arguments: `createCrud(Book)` alone yields a fully typed service. Registering a DTO class narrows exactly the corresponding parameter, and everything downstream (the envelope, every method's return type) follows from that one change. See [DTOs](/core/dtos) for how a slot is registered, and [core contracts](/internals/architecture/03-core-contracts-and-type-system) for the full generic-parameter table.
+Every generic parameter defaults from the entity, so the zero-config path needs no manual type arguments: `createCrud(Book)` alone yields a fully typed service. Registering a schema class narrows exactly the corresponding parameter, and everything downstream (the envelope, every method's return type) follows from that one change. See [Schemas](/core/schemas) for how a slot is registered, and [core contracts](/internals/architecture/03-core-contracts-and-type-system) for the full generic-parameter table.
 
 ## `KavoCallOptions`
 
@@ -46,7 +46,7 @@ An operation outside the standard eight (see [Custom operations](/core/custom-op
 await service.run("markPaidOne", { id: 7, body: { reference: "INV-42" } });
 ```
 
-`run`'s result and argument types come from the operation's own `dto` override, or, failing that, from its handler's own signature. That's the same type inference the eight named methods get.
+`run`'s result and argument types come from the operation's own `schema` override, or, failing that, from its handler's own signature. That's the same type inference the eight named methods get.
 
 ## Reaching the engine directly
 

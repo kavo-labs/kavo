@@ -73,7 +73,7 @@ beforeAll(() => {
   }) as DefaultKavoService<Invoice>;
   coupons = kavo.createCrud(Coupon, {
     delete: { field: "retiredAt" },
-    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+    schema: { input: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto } },
   }) as DefaultKavoService<Coupon>;
 });
 

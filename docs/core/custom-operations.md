@@ -1,6 +1,6 @@
 # Custom operations
 
-Kavo has no separate lifecycle-hook system, no `beforeCreate`/`afterUpdate`. The two extension points below cover that ground: replace a standard operation's behavior, or declare an entirely new operation of your own. Both go through the exact same pipeline every built-in route does: DTO resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
+Kavo has no separate lifecycle-hook system, no `beforeCreate`/`afterUpdate`. The two extension points below cover that ground: replace a standard operation's behavior, or declare an entirely new operation of your own. Both go through the exact same pipeline every built-in route does: schema resolution, deserialization, serialization, the `ETag`, problem-details errors, and the module's `app` context.
 
 ## Replacing a standard operation's handler
 
@@ -30,7 +30,7 @@ An `operations` key that isn't one of the standard eight declares a whole new op
 @Kavo(Order, {
   operations: {
     markPaidOne: {
-      dto: { input: MarkPaidDto },
+      schema: { input: MarkPaidDto },
       handler: {
         async execute({ id, body }: { id: number; body: MarkPaidDto }, context) {
           const order = await context.repository.findOneById(id, null, context);
@@ -52,7 +52,7 @@ A custom entry needs a `handler` (there's no built-in to fall back to) and accep
 
 - **`kind`** (`"read"` | `"write"`, default `"write"`): a read runs query resolution and takes no body; a write takes one.
 - **`cardinality`** (`"one"` | `"many"`, default `"one"`): `"many"` returns the list envelope, so the handler must return `{ entities, total }` the way `findMany` does.
-- **`dto`**: since a custom operation has no root `dto` slot, this is the only way to give it a shape. With no `dto.output`, the result is projected through the entity's own columns. A result sharing nothing with them raises a `KAVO_CONFIG_INVALID` naming the operation, rather than silently serializing to `{}`.
+- **`schema`**: since a custom operation has no root `schema` slot, this is the only way to give it a shape. With no `schema.output`, the result is projected through the entity's own columns. A result sharing nothing with them raises a `KAVO_CONFIG_INVALID` naming the operation, rather than silently serializing to `{}`.
 - **`meta.routes`**: same route options every standard operation gets. With none, the route defaults to `POST /<operation id>`.
 - **`realtimeEvent`** (one of `RealtimeEventId`, unset by default): which realtime event this operation's write publishes as — see [Realtime events](/features/realtime-events). Only valid on `kind: "write"`, `cardinality: "one"`; declaring it anywhere else is a bootstrap error. Unset, the operation publishes nothing.
 
@@ -70,6 +70,6 @@ await service.run("markPaidOne", { id: 7, body: { reference: "INV-42" } });
 - **Custom routes are matched first.** Registered ahead of the standard table, so a custom `GET /orders/pending` reaches its own handler rather than falling through to `GET /orders/:id`.
 - **A handler that needs an injected application service, not just the database, is a case for `@Override` or a hand-written route instead.** A config-level handler is a plain object with no `this` and nothing to inject into.
 - **Realtime events are keyed by standard operation id.** A custom operation emits nothing, however it changes a row. See [Realtime events](/features/realtime-events).
-- **A custom operation reaches GraphQL/MCP only when it declares `dto.output`.** Both bindings walk the same operation registry route generation reads (issue #153) — there's no second, protocol-specific list — but a custom id has no entity-derived DTO fallback the way the standard eight do, so an enabled operation with no declared output shape has nothing to build even a loose schema from, and is left out. `@kavo/mcp` then needs nothing further: an eligible id gets a `<entity>.<operationId>` tool with JSON Schema loose enough not to need a class-derived shape. `@kavo/graphql` needs one more thing, because a typed field needs a real `GraphQLOutputType` (and, for a write with a body, a `GraphQLInputObjectType`) that nothing can derive automatically: the operation's id also has to be named in that schema's `operations` option, with those types supplied by hand — the same "declare what you want" shape `createInputType`/`updateInputType` already have for the standard mutations.
+- **A custom operation reaches GraphQL/MCP only when it declares `schema.output`.** Both bindings walk the same operation registry route generation reads (issue #153) — there's no second, protocol-specific list — but a custom id has no entity-derived schema fallback the way the standard eight do, so an enabled operation with no declared output shape has nothing to build even a loose schema from, and is left out. `@kavo/mcp` then needs nothing further: an eligible id gets a `<entity>.<operationId>` tool with JSON Schema loose enough not to need a class-derived shape. `@kavo/graphql` needs one more thing, because a typed field needs a real `GraphQLOutputType` (and, for a write with a body, a `GraphQLInputObjectType`) that nothing can derive automatically: the operation's id also has to be named in that schema's `operations` option, with those types supplied by hand — the same "declare what you want" shape `createInputType`/`updateInputType` already have for the standard mutations.
 
 See [Guides/Configuration/Operations](/guides/configuration/operations#custom-operations) for the full field reference, including custom list metadata (adding data to `findMany`'s `meta` bag without replacing the whole handler), and [CRUD engine](/internals/architecture/07-crud-engine) for the pipeline internals.

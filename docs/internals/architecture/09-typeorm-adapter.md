@@ -47,7 +47,7 @@ filterable when explicitly allowlisted.
 - **Writes → Repository**: entity hydration, column defaults, and
   cascades matter; no dynamic SQL is needed. `update` and `patch` share
   one load-merge-save primitive — the _shape_ of the payload differs at
-  the DTO layer (full body vs. sparse), not the persistence mechanics.
+  the schema layer (full body vs. sparse), not the persistence mechanics.
 
 **Soft delete** (doc 11) rides on both halves.
 `buildEntityMetadata` reports `@DeleteDateColumn` as

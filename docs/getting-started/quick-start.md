@@ -45,7 +45,7 @@ That's it. No config object, no service, no repository wiring in the controller.
 | `PATCH`  | `/books/:id` | Partially update a book                    |
 | `DELETE` | `/books/:id` | Delete a book                              |
 
-Requests and responses are shaped straight from `Book`'s own columns. There's no DTO to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting, for example:
+Requests and responses are shaped straight from `Book`'s own columns. There's no schema to write until you want to narrow or reshape what's exposed. The list route (`GET /books`) already understands query-string filtering and sorting, for example:
 
 ```http
 GET /books?filter[author][eq]=Tolkien&sort=-title&limit=10&offset=0

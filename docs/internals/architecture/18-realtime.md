@@ -80,7 +80,7 @@ otherwise (core has no ambient logger — ADR-0005).
 | `id`         | The written row's id.                                                                                                     |
 | `channel`    | `<entity>.<id>` — the **item channel** (§3).                                                                              |
 | `occurredAt` | ISO-8601, set once by the engine so every transport agrees on it.                                                         |
-| `item`       | The same output-DTO serialization already computed for the REST response — no second pass. `null` on `"deleted"`.         |
+| `item`       | The same output-schema serialization already computed for the REST response — no second pass. `null` on `"deleted"`.      |
 | `changed`    | `"updated"`/`"patched"` only — the field names present in the write payload, not a diff against the row's previous value. |
 
 ## 3. Channels: item-level and collection-level

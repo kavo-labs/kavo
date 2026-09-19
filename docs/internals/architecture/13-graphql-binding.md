@@ -101,7 +101,7 @@ scale past a couple of entities and needs updating every time one is
 added. `registerKavoGraphQLTypes`/`getKavoGraphQLTypes` is a small,
 process-wide registry — the GraphQL counterpart of `@kavo/nest`'s `@Kavo`
 registry — so an entity declares its GraphQL types once, next to its
-DTOs:
+Schemas:
 
 ```ts
 // owner.graphql-types.ts
@@ -247,7 +247,7 @@ GraphQL at all.
 ## 7. What's out of scope (by design, for now)
 
 - Schema derivation from `EntityMetadata` — `itemType`/`createInputType`/etc.
-  are hand-written per entity, the same status core's DTOs were before
+  are hand-written per entity, the same status core's schemas were before
   derivation existed for those.
 - Registry-driven mutation exposure (§2) — this binding trusts the caller's
   `restoreOne: true`/etc. flags rather than cross-checking `OperationRegistry`.

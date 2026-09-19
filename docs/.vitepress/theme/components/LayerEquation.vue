@@ -16,7 +16,7 @@
         <span class="eq-op eq-op--equals">=</span>
         <div class="eq-card">
           <span class="eq-label">REST + GraphQL API</span>
-          <span class="eq-desc">Filtering, sorting, pagination, includes, DTOs, errors.</span>
+          <span class="eq-desc">Filtering, sorting, pagination, includes, schemas, errors.</span>
         </div>
       </div>
     </div>

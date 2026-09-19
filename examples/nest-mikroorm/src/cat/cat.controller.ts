@@ -15,12 +15,7 @@ import { CreateCatDto, UpdateCatDto, CatItemDto, CatListDto } from "./cat.dtos.j
  * array of ids.
  */
 @Kavo(Cat, {
-  dto: {
-    create: CreateCatDto,
-    update: UpdateCatDto,
-    item: CatItemDto,
-    list: CatListDto,
-  },
+  schema: { input: { create: CreateCatDto, update: UpdateCatDto }, output: { item: CatItemDto, list: CatListDto } },
   pagination: { defaultLimit: 10, maxLimit: 50 },
   // Explicit include-lists (the plain form, contrast Owner's `{ exclude }`):
   // `indoor`, `livesLeft`, and `createdAt` are still returned in every

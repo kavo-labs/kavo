@@ -13,7 +13,8 @@ resolution, query parsing) is layered in separately.
 src/
 ├─ types/          EntityId, FieldPath, shared type utilities
 ├─ query/          Filter AST, pagination, sort, field selection, contexts
-├─ dto/            DTO slots, list envelope, bulk envelope
+├─ schema/         schema slots (class or validator), resolver
+├─ dto/            list envelope, bulk envelope
 ├─ errors/         KavoExceptionShape, error codes, problem details
 ├─ config/         Settings schema, global/entity config, resolved config
 ├─ operations/     Operation ids, handler contract, registry

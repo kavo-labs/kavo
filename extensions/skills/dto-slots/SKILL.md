@@ -1,29 +1,24 @@
 ---
 name: dto-slots
-description: Reference for Kavo's six optional DTO slots (create/update/patch/query/item/list) — entity-derived defaults, the dtoShapeKeys narrowing rule, and serialization order. Use when registering a DTO class on @Kavo's dto option, or answering "why isn't my field showing/hiding" or "what shape does this response have" questions.
+description: Reference for Kavo's six optional schema slots (create/update/patch/query/item/list) — entity-derived defaults, the schemaShapeKeys narrowing rule, and serialization order. Use when configuring a DTO class or validator on @Kavo's schema option, or answering "why isn't my field showing/hiding" or "what shape does this response have" questions.
 ---
 
-# DTO slots reference
+# Schema slots reference
 
 Every REST verb has an independent, **optional** data contract. Zero config
-means entity-derived defaults; registering a class narrows exactly one slot.
-DTOs are shapes for **typing and serialization only** — there is no
-validation subsystem attached to them (that's the caller's own pipe/guard,
-e.g. Nest's `ValidationPipe`, or the `schema` key below). Full detail:
-`docs/internals/architecture/04-dto-system.md`. Config-side wiring
-(`@Kavo(Entity, { dto: {...} })`) is in the `kavo-decorator` skill.
-
-**`schema` (ADR-0055) is the current mechanism for validation and OpenAPI
-docs**, landed alongside `dto` rather than replacing it: a per-slot
-`schema.input.<slot>`/`schema.output.<slot>` (any object satisfying the
-structural `KavoSchema<Output>` contract — a Zod schema qualifies natively)
-actually validates an incoming body (`SchemaValidationException`,
-`KAVO_SCHEMA_INVALID`) and, where both are configured for the same slot,
-wins over `dto` for `@kavo/nest`'s OpenAPI generation and
-`@kavo/graphql`/`@kavo/mcp`'s type derivation too — see
-`docs/core/dtos.md`'s "Migrating to `schema`" section. `dto` stays the
-right tool for shape/serialization narrowing with no validation or docs
-generation attached to it.
+means entity-derived defaults; configuring a `schema` slot narrows exactly
+one slot. The single config key is `schema` (ADR-0055; the old `dto` key is
+gone), split into `schema.input.<slot>` and `schema.output.<slot>`. A slot
+takes either a plain **class** (a shape for typing, serialization and docs,
+never validated) or a **validator** — any object satisfying the structural
+`KavoSchema<Output>` contract, which a Zod schema qualifies for natively.
+A validator actually validates an incoming body
+(`SchemaValidationException`, `KAVO_SCHEMA_INVALID`); a failing
+`schema.output` validator falls back to the projected value, so it shapes
+but is not a security boundary. Full detail:
+`docs/internals/architecture/04-schema-system.md` and `docs/core/schemas.md`.
+Config-side wiring (`@Kavo(Entity, { schema: {...} })`) is in the
+`kavo-decorator` skill.
 
 ## The six slots
 
@@ -57,10 +52,10 @@ resolved config — never re-derived per request. `patch → update` and
 - **Embedded objects** map to a `json`-kind column and travel as one opaque
   value; they are not flattened into sub-fields.
 
-## Registering an explicit DTO class — the `dtoShapeKeys` rule
+## Class-shaped slots — the `schemaShapeKeys` rule
 
 A registered class projects by its **runtime key set**: the own enumerable
-properties of `new Dto()`. TypeScript field declarations only exist at
+properties of `new Schema()`. TypeScript field declarations only exist at
 runtime once **initialized**:
 
 ```ts
@@ -81,7 +76,7 @@ value if you want them to actually constrain the projection.
 
 ## Serialization order (normative)
 
-**DTO mapping happens first, then field selection.**
+**Schema mapping happens first, then field selection.**
 `fields=id,name` can only narrow what the resolved DTO already exposes —
 selection never widens a projection. If a field isn't on the `item`/`list`
 DTO, `fields=` can't bring it back. (Implemented as
@@ -90,7 +85,7 @@ DTO, `fields=` can't bring it back. (Implemented as
 ## Included relations have no separate DTO slot
 
 When a response embeds an included relation (`include=pets`), the node's
-shape comes from the **target entity's own registered `item`/`list` DTOs**
+shape comes from the **target entity's own configured `schema.output.item`/`list`** (class-shaped only; a validator there does not narrow nested rows)
 (falling back to that entity's own derived default) — never a DTO
 registered on the parent. The relation is a full resource in its own right;
 see the `kavo-decorator` skill's "relations" section for how inclusion

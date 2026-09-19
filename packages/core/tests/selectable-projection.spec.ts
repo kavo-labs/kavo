@@ -197,7 +197,7 @@ describe("allowed.selectable narrows the response projection", () => {
     }
     const { crud, id } = await seeded({
       select: { fields: ["id", "name"] },
-      dto: { item: UserItemDto },
+      schema: { output: { item: UserItemDto } },
     } as never);
     expect(await crud.findOne(id)).toEqual({ id, email: "ada@example.com" });
   });

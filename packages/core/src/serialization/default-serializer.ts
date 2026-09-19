@@ -1,9 +1,9 @@
 import type { KavoContext } from "../context/kavo-context.js";
-import type { DtoClass } from "../dto/dto.js";
 import type { Deserializer, Serializer } from "./serializer.js";
 import type { EntityCatalog } from "../metadata/entity-catalog.js";
 import type { IncludeNode, IncludeTree } from "../relations/include-tree.js";
-import { dtoShapeKeys } from "../dto/dto-shape.js";
+import { schemaShapeKeys } from "../schema/schema-shape.js";
+import { isSchemaClass, type SchemaLike } from "../schema/schema-class.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
 import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
 import { AssociationInvalidShapeException } from "../errors/exceptions.js";
@@ -92,12 +92,12 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
 
   serializeItem<ItemDto>(
     entity: Entity,
-    dto: DtoClass<ItemDto & object> | null,
+    schema: SchemaLike<ItemDto & object> | null,
     context: KavoContext<Entity>,
   ): ItemDto {
     return this.project(
       entity,
-      narrowToDto(this.rootProjection, dto),
+      narrowToSchema(this.rootProjection, schema),
       selectionSet(context.query?.select.root as readonly string[] | null | undefined),
       context.query?.include ?? {},
       context,
@@ -112,10 +112,10 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
    */
   serializeList<ListDto>(
     entities: readonly Entity[],
-    dto: DtoClass<ListDto & object> | null,
+    schema: SchemaLike<ListDto & object> | null,
     context: KavoContext<Entity>,
   ): readonly ListDto[] {
-    const projection = narrowToDto(this.rootProjection, dto as DtoClass | null);
+    const projection = narrowToSchema(this.rootProjection, schema as SchemaLike<object> | null);
     const selection = selectionSet(context.query?.select.root as readonly string[] | null | undefined);
     const include = context.query?.include ?? {};
     return entities.map((entity) => this.project(entity, projection, selection, include, context) as ListDto);
@@ -181,7 +181,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     if (info === undefined) {
       return { keys: null, relations: NO_RELATIONS };
     }
-    const dto = info.config.dto.resolve(node.relation.cardinality === "many" ? "list" : "item", "findMany");
+    const schema = info.config.schema.resolveOutput(node.relation.cardinality === "many" ? "list" : "item", "findMany");
     const targetProjection = info.config.projection as readonly string[] | null;
     // The target's own `select.fields`, not the root's: an include never
     // widens what its target exposes, and that has to hold for the
@@ -190,7 +190,7 @@ export class DefaultSerializer<Entity = unknown> implements Serializer<Entity> {
     // other entity included `user`.
     return {
       keys:
-        dtoShapeKeys(dto) ??
+        (isSchemaClass(schema) ? schemaShapeKeys(schema) : null) ??
         (targetProjection === null
           ? info.metadata.fields.filter((field) => field.derivedExpression === undefined).map((field) => field.name)
           : narrowToProjection(
@@ -224,10 +224,15 @@ function narrowToProjection(derived: readonly string[], projection: readonly str
  * DTO mapping, step one of the normative order: a registered class with a
  * runtime shape replaces the projection's key set and nothing else — the
  * relation table still describes the same entity, so a DTO that omits a
- * field narrows it away like any other field.
+ * field narrows it away like any other field. A validator-shaped schema
+ * contributes no narrowing at this layer — that's the engine's own
+ * `safeParse` step (Task 10), not response projection.
  */
-function narrowToDto(projection: Projection, dto: DtoClass | null): Projection {
-  const keys = dtoShapeKeys(dto);
+function narrowToSchema(projection: Projection, schema: SchemaLike<object> | null): Projection {
+  if (schema === null || !isSchemaClass(schema)) {
+    return projection;
+  }
+  const keys = schemaShapeKeys(schema);
   return keys === null ? projection : { ...projection, keys };
 }
 
@@ -318,17 +323,21 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     this.writableProjection = derivedWritableFieldNames(metadata);
   }
 
-  deserialize<Shape>(raw: unknown, dto: DtoClass<Shape & object> | null, context: KavoContext<Entity>): Shape {
+  deserialize<Shape>(raw: unknown, schema: SchemaLike<Shape & object> | null, context: KavoContext<Entity>): Shape {
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return {} as Shape;
     }
-    const explicit = dtoShapeKeys(dto);
-    // A registered `create`/`update`/`patch` DTO — including one synthesized
-    // from the `{ fields }` shorthand (issue #386, `dto-fields-shorthand.ts`)
-    // — *replaces* the derived writable projection rather than narrowing it
-    // (ADR-0026's `select.fields`-vs-`dto.item` precedent): `creatable`/
-    // `updatable` are reached through `dto.create`/`dto.update`'s shorthand
-    // now, not a separate allowlist key.
+    const explicit = isSchemaClass(schema) ? schemaShapeKeys(schema) : null;
+    // A class-shaped `create`/`update`/`patch` schema — including one
+    // synthesized from the `{ fields }` shorthand (issue #386,
+    // `schema-fields-shorthand.ts`) — *replaces* the derived writable
+    // projection rather than narrowing it (ADR-0026's `select.fields`-vs-
+    // `schema.output.item` precedent); a validator-shaped schema contributes no
+    // explicit allowlist here (the derived writable projection is still
+    // used, and the engine's `safeParse` step separately validates/reshapes
+    // afterward). `creatable`/`updatable` are reached through
+    // `schema.input.create`/`schema.input.update`'s shorthand now, not a separate allowlist
+    // key.
     const allowed = explicit ?? this.writableProjection;
     // Only the derived default excludes the marker — an explicit DTO's own
     // key set is deliberately left alone, same as the id (see class doc).

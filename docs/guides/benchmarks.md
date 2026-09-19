@@ -4,7 +4,7 @@ Kavo ships two benchmark suites in `tools/benchmark/`. They measure different th
 
 ## Engine micro-benchmarks
 
-Measures raw `engine.execute()` throughput — no HTTP layer, no NestJS, no ORM. Uses an in-memory fake adapter with 1 000 pre-seeded `Todo` records. This isolates Kavo's own overhead: config resolution, DTO derivation, query normalization, serialization.
+Measures raw `engine.execute()` throughput — no HTTP layer, no NestJS, no ORM. Uses an in-memory fake adapter with 1 000 pre-seeded `Todo` records. This isolates Kavo's own overhead: config resolution, schema derivation, query normalization, serialization.
 
 ```bash
 pnpm benchmark:engine

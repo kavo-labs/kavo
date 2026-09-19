@@ -10,7 +10,6 @@ import type {
 import {
   AssociationInvalidShapeException,
   DefaultDeserializer,
-  DefaultDtoResolver,
   DefaultEntityCatalog,
   DefaultSerializer,
   createKavoContext,
@@ -119,6 +118,20 @@ describe("DefaultSerializer — response projection", () => {
     // partially loaded row indistinguishable from a null column.
     const partial = { id: 1, name: "Ada" } as User;
     expect(serializer.serializeItem(partial, null, contextStub())).toEqual({ id: 1, name: "Ada" });
+  });
+
+  it("narrows serializeItem's projection using a class-shaped schema", () => {
+    class ItemSchema {
+      id = 0;
+    }
+    const result = serializer.serializeItem(ada(), ItemSchema, contextStub());
+    expect(result).toEqual({ id: 1 });
+  });
+
+  it("does not narrow serializeItem's projection for a validator-shaped schema (narrowing happens at the engine layer)", () => {
+    const validator = { safeParse: () => ({ success: true, data: {} }) };
+    const result = serializer.serializeItem(ada(), validator as never, contextStub()) as object;
+    expect(Object.keys(result)).toEqual(COLUMNS);
   });
 
   it("applies the same rules element-wise across a list", () => {
@@ -441,7 +454,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("narrows createOne's derived projection via the top-level create.fields shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       dto,
@@ -453,7 +466,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("leaves updateOne/patchOne unaffected by a create-only shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const updateDto = config.dto.resolve("update", "updateOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
     const updatePayload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       updateDto,
@@ -466,8 +479,8 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
     const body = { name: "Ada", email: "ada@example.com" };
-    const updateDto = config.dto.resolve("update", "updateOne");
-    const patchDto = config.dto.resolve("patch", "patchOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
+    const patchDto = config.schema.resolveInput("patch", "patchOne");
     expect(deserializer.deserialize(body, updateDto, writeContext("updateOne", config))).toEqual({ name: "Ada" });
     expect(deserializer.deserialize(body, patchDto, writeContext("patchOne", config))).toEqual({ name: "Ada" });
   });
@@ -475,7 +488,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
   it("leaves createOne unaffected by an update-only shorthand", () => {
     const config = resolveEntityConfig(userMetadata, { update: { fields: ["name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const createDto = config.dto.resolve("create", "createOne");
+    const createDto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize(
       { name: "Ada", email: "ada@example.com" },
       createDto,
@@ -491,7 +504,7 @@ describe("DefaultDeserializer — creatable/updatable narrowing (issue #259)", (
     // key unconditionally (commit 8aa8d65).
     const config = resolveEntityConfig(userMetadata, { create: { fields: ["id" as never, "name"] } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize({ id: 5, name: "Ada" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ id: 5, name: "Ada" });
   });
@@ -568,8 +581,8 @@ describe("DefaultDeserializer — create.default/update.default", () => {
   it("fills a field updateOne's body omits, but never patchOne's", () => {
     const config = resolveEntityConfig(userMetadata, { update: { default: { status: "pending" } } }, undefined);
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const updateDto = config.dto.resolve("update", "updateOne");
-    const patchDto = config.dto.resolve("patch", "patchOne");
+    const updateDto = config.schema.resolveInput("update", "updateOne");
+    const patchDto = config.schema.resolveInput("patch", "patchOne");
     expect(deserializer.deserialize({ name: "Ada" }, updateDto, writeContext("updateOne", config))).toEqual({
       name: "Ada",
       status: "pending",
@@ -603,7 +616,7 @@ describe("DefaultDeserializer — create.default/update.default", () => {
       undefined,
     );
     const deserializer = new DefaultDeserializer<User>(userMetadata);
-    const dto = config.dto.resolve("create", "createOne");
+    const dto = config.schema.resolveInput("create", "createOne");
     const payload = deserializer.deserialize({ name: "Ada" }, dto, writeContext("createOne", config));
     expect(payload).toEqual({ name: "Ada" });
   });
@@ -627,78 +640,6 @@ describe("resolveEntityConfig — create.default/update.default bootstrap valida
     expect(() => resolveEntityConfig(userMetadata, { update: { default: "nope" as never } }, undefined)).toThrow(
       /update\.default/,
     );
-  });
-});
-
-describe("DefaultDtoResolver — slot resolution", () => {
-  class CreateUserDto {}
-  class UpdateUserDto {}
-  class PatchUserDto {}
-  class UserQueryDto {}
-  class UserItemDto {}
-  class UserListDto {}
-
-  it("resolves every slot to null when nothing is registered", () => {
-    // `null` is not "no DTO": it means "use the entity-derived default",
-    // which the serializer/deserializer builds from metadata.
-    const resolver = new DefaultDtoResolver<User>();
-    for (const slot of ["create", "update", "patch", "query", "item", "list"] as const) {
-      expect(resolver.resolve(slot, "findOne")).toBeNull();
-    }
-  });
-
-  it("returns the registered class for each slot it was given", () => {
-    const resolver = new DefaultDtoResolver<User>({
-      create: CreateUserDto,
-      update: UpdateUserDto,
-      patch: PatchUserDto,
-      query: UserQueryDto,
-      item: UserItemDto,
-      list: UserListDto,
-    } as never);
-    expect(resolver.resolve("create", "createOne")).toBe(CreateUserDto);
-    expect(resolver.resolve("update", "updateOne")).toBe(UpdateUserDto);
-    expect(resolver.resolve("patch", "patchOne")).toBe(PatchUserDto);
-    expect(resolver.resolve("query", "findMany")).toBe(UserQueryDto);
-    expect(resolver.resolve("item", "findOne")).toBe(UserItemDto);
-    expect(resolver.resolve("list", "findMany")).toBe(UserListDto);
-  });
-
-  it("falls patch back to the registered update class", () => {
-    const resolver = new DefaultDtoResolver<User>({ update: UpdateUserDto } as never);
-    expect(resolver.resolve("patch", "patchOne")).toBe(UpdateUserDto);
-  });
-
-  it("prefers an explicit patch class over the update fallback", () => {
-    const resolver = new DefaultDtoResolver<User>({ update: UpdateUserDto, patch: PatchUserDto } as never);
-    expect(resolver.resolve("patch", "patchOne")).toBe(PatchUserDto);
-  });
-
-  it("falls list back to the registered item class", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto } as never);
-    expect(resolver.resolve("list", "findMany")).toBe(UserItemDto);
-  });
-
-  it("prefers an explicit list class over the item fallback", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto, list: UserListDto } as never);
-    expect(resolver.resolve("list", "findMany")).toBe(UserListDto);
-  });
-
-  it("chains no other slot — update keeps its own derived default", () => {
-    // The table's "update: same default as create" means the same
-    // *derived* default, not the class someone registered for create.
-    const resolver = new DefaultDtoResolver<User>({ create: CreateUserDto } as never);
-    expect(resolver.resolve("create", "createOne")).toBe(CreateUserDto);
-    expect(resolver.resolve("update", "updateOne")).toBeNull();
-    expect(resolver.resolve("patch", "patchOne")).toBeNull();
-  });
-
-  it("resolves by slot alone — restore and custom operations reuse item and list", () => {
-    const resolver = new DefaultDtoResolver<User>({ item: UserItemDto, list: UserListDto } as never);
-    for (const operation of ["findOne", "createOne", "restoreOne", "activate"]) {
-      expect(resolver.resolve("item", operation)).toBe(UserItemDto);
-      expect(resolver.resolve("list", operation)).toBe(UserListDto);
-    }
   });
 });
 

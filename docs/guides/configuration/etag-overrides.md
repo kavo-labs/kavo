@@ -2,11 +2,11 @@
 
 Details on how `cache.etag` (see [Settings](/guides/configuration/settings#cache)) interacts with `@Override`'d routes and redacted responses. Read [Caching & ETags](/features/caching-and-etags) first for the wire-level behavior; this page covers the configuration edge cases.
 
-## Redact in the DTO, not in an interceptor
+## Redact in the schema, not in an interceptor
 
 Kavo's `KavoResponseInterceptor` is method-scoped, so it runs innermost: it sets the `ETag` before any controller- or app-level interceptor runs. An outer interceptor that strips fields per role would ship a hash of the unredacted representation next to a redacted body. A client's `If-Match` built from that body would then never match.
 
-Shape the response with a per-operation `item` DTO instead. The engine serializes through it before hashing, so the tag matches what the client actually receives.
+Shape the response with a per-operation `item` schema instead. The engine serializes through it before hashing, so the tag matches what the client actually receives.
 
 ## What an `@Override` gets for free
 

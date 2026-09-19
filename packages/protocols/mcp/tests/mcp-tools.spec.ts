@@ -233,7 +233,7 @@ describe("custom operations reach MCP (issue #153)", () => {
                 return context.repository.update(id, { done: true }, context);
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,
@@ -290,7 +290,7 @@ describe("custom operations reach MCP (issue #153)", () => {
                 return context.repository.update(id, { title: body.title }, context);
               },
             },
-            dto: { input: Todo, output: Todo },
+            schema: { input: Todo, output: Todo },
           },
         },
       } as never,
@@ -331,8 +331,8 @@ describe("custom operations reach MCP (issue #153)", () => {
                 return { entities: adapter.rows, total: adapter.rows.length };
               },
             },
-            dto: { output: Todo },
             schema: {
+              output: Todo,
               // Reshapes the raw args into a distinguishable `{ parsed: true }`
               // — proves `execute` receives `schema.safeParse`'s own `data`,
               // not the raw MCP tool args passed straight through.
@@ -368,7 +368,7 @@ describe("custom operations reach MCP (issue #153)", () => {
                 return context.repository.findOneById(input as number, null, context);
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,
@@ -405,7 +405,7 @@ describe("custom operations reach MCP (issue #153)", () => {
       Todo,
       {
         operations: {
-          markDoneOne: { handler: { async execute() {} }, dto: { output: Todo }, enabled: false },
+          markDoneOne: { handler: { async execute() {} }, schema: { output: Todo }, enabled: false },
         },
       } as never,
       { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
@@ -432,7 +432,7 @@ describe("custom operations reach MCP (issue #153)", () => {
                 return { entities: rows, total: rows.length };
               },
             },
-            dto: { output: Todo },
+            schema: { output: Todo },
           },
         },
       } as never,

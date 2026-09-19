@@ -39,7 +39,7 @@ export type SchemaParseResult<Output> =
  * `z.toJSONSchema(schema)`) opts into being documented from its own shape;
  * one that does not still validates and narrows at runtime exactly as
  * before, and `@kavo/nest` falls back to deriving the component from the
- * entity's own ORM metadata (the same fallback `dto`'s absence already
+ * entity's own ORM metadata (the same fallback `schema`'s absence already
  * takes) rather than leaving the route undocumented.
  */
 export interface KavoSchema<Output> {

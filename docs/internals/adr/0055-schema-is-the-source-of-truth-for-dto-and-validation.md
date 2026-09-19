@@ -145,3 +145,26 @@ optional, not a precondition for docs to exist.
 - `@kavo/graphql` and `@kavo/mcp` both read DTO metadata off `createCrud`
   today and are not addressed by this ADR — their migration is separate
   follow-up work.
+
+## Update (2026-09-19)
+
+`dto` is now fully removed, not just superseded — see
+`docs/superpowers/specs/2026-09-18-remove-dto-design.md`. The follow-ups
+this ADR deferred are resolved as follows:
+
+- `schema` slots accept either a `KavoSchema` validator or a plain class
+  (`SchemaClass`, narrowed by its runtime key set, never validated). The
+  `SchemaLike` union is the one slot type; `EntityConfig.dto`,
+  `OperationConfig.dto`, `DefaultDtoResolver`, and the `Dto*Of` inference
+  helpers are deleted, and `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`
+  no longer fall back to them.
+- The `{ fields }` shorthand and the `create.fields`/`update.fields` writable
+  fallback moved onto `DefaultSchemaResolver`.
+- The engine `safeParse`s only validator-shaped slots; a class-shaped slot
+  narrows in the serializer/deserializer and is otherwise left alone.
+- `@kavo/nest` writes `design:paramtypes` (so a global `ValidationPipe` can
+  bind) only for a class-shaped `schema.input.<slot>`; OpenAPI reflects a
+  class's key set and calls a validator's optional `toJSONSchema()`.
+- A per-operation override naming a field the operation lacks
+  (`deleteOne: { schema: { output } }`) is now rejected at bootstrap only;
+  the old type-level `Pick` narrowing is gone.

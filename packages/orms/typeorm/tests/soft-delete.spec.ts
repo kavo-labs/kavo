@@ -108,7 +108,7 @@ beforeAll(async () => {
   receipts = kavo.createCrud(Receipt) as DefaultKavoService<Receipt>;
   coupons = kavo.createCrud(Coupon, {
     delete: { field: "retiredAt" },
-    dto: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto },
+    schema: { input: { create: UpdateCouponDto, update: UpdateCouponDto, patch: UpdateCouponDto } },
   }) as DefaultKavoService<Coupon>;
 });
 

@@ -20,11 +20,11 @@ KavoRequest
                           single-row writes additionally gate their id lookup on filter.apply,
                           if configured → 404 before existence ever leaks (ADR-0048)
  → Precondition Check     If-Match writes only: pre-read + hash → 412 / 404 (ADR-0020)
- → DTO Resolution         descriptor.input/output else the doc-4 slot default
+ → schema Resolution         descriptor.input/output else the doc-4 slot default
  → Deserialization        writes only: body → allowed-key projection
  → Handler Execution      OperationHandler from the registry (built-in, overridden, or custom)
  → Response Mapping       item / ListResultDto envelope / void, by descriptor.cardinality
- → Serialization          DTO mapping → field selection
+ → Serialization          schema mapping → field selection
  → ETag                   single-item responses: hash the representation; If-None-Match → notModified
 KavoResponse
 ```
@@ -66,19 +66,19 @@ createCrud(Order, {
 | `kind`        | no       | `"write"` | `"read"` runs query resolution and takes no body; `@kavo/nest` binds `@Query` instead of `@Body`.                                                                                                                              |
 | `cardinality` | no       | `"one"`   | `"many"` maps the result through the list envelope, so the handler returns a `FindManyResult`.                                                                                                                                 |
 | `enabled`     | no       | `true`    | `false` registers the entry inert, exactly as it does for a standard id.                                                                                                                                                       |
-| `dto`         | no       | —         | `input`/`output` on a write, `output`/`query` on a read. The wrong field for the resolved `kind` is a bootstrap `ConfigurationException`.                                                                                      |
+| `schema`      | no       | —         | `input`/`output` on a write, `output`/`query` on a read. The wrong field for the resolved `kind` is a bootstrap `ConfigurationException`.                                                                                      |
 | `meta`        | no       | `{}`      | Framework metadata; in `@kavo/nest` the route (doc 10).                                                                                                                                                                        |
 | settings keys | no       | —         | The operation scope of the precedence chain, narrowed by `kind`/`cardinality` (issue #415): `errors`/`cache` always, `delete` on a `kind: "read"`, `pagination` also on `kind: "read", cardinality: "many"`; `realtime` never. |
 
 Everything downstream treats the entry as ordinary. The engine dispatches it
-through the same lifecycle; DTO resolution falls back to the entity's own
-`item`/`list` slot and writable projection when `dto` names nothing; the
+through the same lifecycle; schema resolution falls back to the entity's own
+`item`/`list` slot and writable projection when `schema` names nothing; the
 response is serialized, ETagged and conditionally answered like any other.
 `If-Match` is the one thing a custom operation cannot have evaluated for it:
 nothing in the schema says which row it targets, so the request is refused
 rather than performed unguarded (§3a).
 
-That DTO fallback is where the genericity has a sharp edge, and it is worth
+That schema fallback is where the genericity has a sharp edge, and it is worth
 naming rather than leaving as an inference. A standard operation's result
 _is_ the entity, so falling back to the entity's projection loses nothing. A
 custom operation's result is whatever its handler returns, so the same
@@ -90,7 +90,7 @@ did not carry (#181).
 
 `mapResponse` now refuses that case: a **custom** id whose result carried
 something and projects to zero keys raises `ConfigurationException`
-(`operations.<id>.dto.output`). Four details decide what it catches and what
+(`operations.<id>.schema.output`). Four details decide what it catches and what
 the message says.
 
 **What counts as "carried something"** is deliberately wider than "has own
@@ -107,9 +107,9 @@ narrowing is exactly what the projection is for, so a result mixing entity
 fields with its own is still stripped silently.
 
 **The message names what the result was projected _through_.** With no
-`dto.output` it names the entity and says to declare one. With one registered
+`schema.output` it names the entity and says to declare one. With one registered
 it names that class and its keys, because the entity's fields are irrelevant
-and telling an author to declare a DTO they already declared sends them to
+and telling an author to declare a schema they already declared sends them to
 fix the thing they got right. With one registered that has **no runtime
 shape** — the declared-only class `@kavo/nest` supports on purpose, so
 Swagger's decorators can answer — it names the missing initializers, since
@@ -118,7 +118,7 @@ the projection has silently fallen back to the entity.
 **Two scopings.** The guard is skipped under an explicit `select=`, which can
 empty a projection on its own and would make the message blame the wrong
 thing; and it is scoped to custom ids, because a standard operation's empty
-projection is a different bug that `dto.output` does not fix.
+projection is a different bug that `schema.output` does not fix.
 
 The pattern is `withListMeta`'s: a handler that returned a shape the envelope
 cannot use fails at request time, keyed to the operation, rather than
@@ -129,7 +129,7 @@ and it fires _after_ the handler ran, so a write it made through
 
 In code it is called through `service.run("markPaidOne", { id, body })`,
 which is the same `engine.execute` the eight named methods make, typed from
-the operation's own `dto` override or, failing that, from the registered
+the operation's own `schema` override or, failing that, from the registered
 handler's signature.
 
 The handler reads and writes through `context.repository`, its entity's own
@@ -216,7 +216,7 @@ is that response mapping **merges** what it finds there rather than
 discarding it (issue #122): an overriding or wrapping `findMany` handler
 returns `meta` alongside `entities`/`total`, and it lands on
 `ListResultDto.meta` verbatim. `meta` is caller data, not entity data, so
-it never passes through the serializer — no DTO projection, no `select=`
+it never passes through the serializer — no schema projection, no `select=`
 selection, no renaming.
 
 `ListResultDto.meta` is the envelope's one **optional** field, and the
@@ -259,7 +259,7 @@ reaches a response body.
 
 `cache.etag` (doc 08, default on) makes every single-item response
 carry a strong `ETag` — a SHA-256 of the **canonicalized serialized
-representation**, keys sorted so a DTO field reorder is not a spurious
+representation**, keys sorted so a schema field reorder is not a spurious
 cache miss. Collection responses carry none. The tag and a
 `notModified` flag ride on `KavoResponse`, so any transport can act on
 them; `@kavo/nest` turns them into the `ETag` header and a `304`.
@@ -294,7 +294,7 @@ compare-and-swap; the race window is real and stated in the ADR.
 
 `cache` (doc 08, default off) short-circuits `findOne`/`findMany` before
 the handler: a hit serves the response without the adapter, the serializer,
-or a DTO. The lookup sits **after** `checkIfMatch` — a failed `If-Match` on
+or a schema. The lookup sits **after** `checkIfMatch` — a failed `If-Match` on
 a write never becomes a stale cache read — and **before** the handler.
 Only the two standard reads are cached; a custom read is never cached
 however cheap its handler, and write responses are never stored. The store

@@ -1,6 +1,6 @@
 # Result cache
 
-`cache` is a TTL cache of `findOne` and `findMany` responses: a repeated read with the same query is served from a store without touching the adapter, the serializer, or a DTO. The pipeline short-circuits after preconditions. Reads only: write responses are never cached.
+`cache` is a TTL cache of `findOne` and `findMany` responses: a repeated read with the same query is served from a store without touching the adapter, the serializer, or a schema. The pipeline short-circuits after preconditions. Reads only: write responses are never cached.
 
 Enable it by setting a TTL. `ttl`'s **presence** is the switch, with no separate `enabled` key to spell, so one key is enough:
 

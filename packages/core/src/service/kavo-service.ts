@@ -2,7 +2,7 @@ import type { EntityId } from "../types/entity-id.js";
 import type { EntityInput } from "../types/utility.js";
 import type { QueryContext } from "../query/query-context.js";
 import type { ListResultDto } from "../dto/list-result.js";
-import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../dto/entity-schema.js";
+import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../schema/entity-schema.js";
 import type { KavoCallOptions } from "./kavo-call-options.js";
 import type {
   CustomOperationBody,
@@ -22,7 +22,7 @@ import type {
  *
  * `Ops` is `EntityConfig`'s inferred `operations` literal (issue #131): each
  * method position reads it through `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`
- * (`dto.ts`), which fall back to the entity-wide generic above when that
+ * (`entity-schema.ts`), which fall back to the entity-wide generic above when that
  * operation declares no override — so `findOne`'s response can be typed
  * differently from `createOne`'s even though both default to `ItemDto`.
  *
@@ -75,8 +75,8 @@ export interface KavoService<
   deleteOne(id: Id, options?: KavoCallOptions): Promise<void>;
 
   /**
-   * Un-deletes a soft-deleted row. Reuses the `item` DTO slot by default —
-   * no dedicated restore shape — but `operations.restoreOne.dto.output`
+   * Un-deletes a soft-deleted row. Reuses the `item` schema slot by default
+   * — no dedicated restore shape — but `operations.restoreOne.schema.output`
    * still narrows it independently (issue #131). Enabled when the entity
    * config declares soft delete.
    */
@@ -98,7 +98,7 @@ export interface KavoService<
    * Everything else is identical: same engine, same lifecycle, same
    * envelope. `request` carries whichever of `id`/`body`/`query` the
    * operation uses, and the result is typed from the operation's own
-   * `dto` override or, failing that, from its registered handler's
+   * `schema` override or, failing that, from its registered handler's
    * signature.
    *
    * Calling an id that is not registered raises

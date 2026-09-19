@@ -293,7 +293,11 @@ describe("If-Match on a write", () => {
     const crud = createKavo().createCrud(
       User,
       {
-        operations: { createOne: true, updateOne: true, findOne: { enabled: true, dto: { output: UserProfileDto } } },
+        operations: {
+          createOne: true,
+          updateOne: true,
+          findOne: { enabled: true, schema: { output: UserProfileDto } },
+        },
       } as never,
       { adapter, metadata: userMetadata },
     );

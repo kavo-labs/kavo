@@ -65,8 +65,7 @@ is the explicit sentinel for overriding an _inherited_ `ttl` back off
 without disabling `etag` at that scope; `ttl: 0` is rejected at bootstrap
 rather than treated as off.
 
-An `EntityConfig` mixes settings keys with structural keys (`dto`,
-`schema`, `filter`, `sort`, `select`, `search`, `include`, `create`,
+An `EntityConfig` mixes settings keys with structural keys (`schema`, `filter`, `sort`, `select`, `search`, `include`, `create`,
 `update`, `policy`, `relations`, `operations`); only the settings subset
 participates in the merge. `relations` (per-relation `read` loading tuning and `write.strategy`
 array-mutation policy) is entity-scope-only for the same reason — resolved
@@ -159,7 +158,7 @@ per-operation views behind `settingsFor(operation)`, resolved allowlists
 fields), the default response `projection` (`null` unless
 `select.fields` was configured explicitly —
 [ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)),
-the cached `DtoResolver`, the resolved
+the cached `SchemaResolver`, the resolved
 `policy` map (ADR-0037), and the relation registry. There is no runtime mutation API — per-call
 overrides (`KavoCallOptions.settings`) are merged as _parameters_ onto
 the operation view inside the engine, validated, and discarded with the
@@ -171,7 +170,7 @@ transports (live objects, not data) are resolved separately, on
 `ResolvedEntityConfig.realtimeTransports` from `KavoOptions.
 realtimeTransports`, and the result-cache store the same way, on
 `ResolvedEntityConfig.cacheStore` from `KavoOptions.cacheStore` (ADR-0031)
-— the same structural relationship `dto`/
+— the same structural relationship `schema`/
 `relations` already have to `settings` (ADR-0023).
 
 ## 4. Bootstrap validation

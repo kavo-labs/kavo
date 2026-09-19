@@ -166,9 +166,9 @@ MikroORM nests relation paths in its own query language, so `filter[author.name]
 
 MikroORM cannot attach an `ESCAPE` clause, so `\` escaping a literal `%`/`_` works on PostgreSQL and MySQL (which default to backslash) but not on SQLite.
 
-### `@Property({ hidden: true })` wins over a Kavo DTO
+### `@Property({ hidden: true })` wins over a Kavo schema
 
-Rows are converted with MikroORM's own `toObject()`, so a hidden property is gone before core sees it, even if a DTO names it.
+Rows are converted with MikroORM's own `toObject()`, so a hidden property is gone before core sees it, even if a schema names it.
 
 A complete, runnable app using all of the above lives in [`examples/nest-mikroorm`](https://github.com/kavo-labs/kavo/tree/main/examples/nest-mikroorm), the same Pet domain `examples/nest-typeorm` serves, under this adapter.
 

@@ -2,7 +2,7 @@
 
 Every key `createKavo`, `@Kavo`, and `createCrud` accept, with its type, default, and where it's consulted. [Guides/Configuration](/guides/configuration/) covers the same schema as task-based prose ("how do I configure X"). This page is the exhaustive lookup form for when you already know the key and want its type and default.
 
-Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `dto`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, `create`/`update`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
+Two groups of keys sit under `@Kavo(Entity, config)` / `createCrud(Entity, config)`. The first is `KavoSettings` — merged through the [precedence chain](/guides/configuration/) (built-in defaults → global `KavoModule` → entity `@Kavo` → `operations.<id>` → per-call), each scope overriding the one before it for the fields it sets. The second is structural `EntityConfig` — `schema`, `policy`, the per-axis `filter`/`sort`/`select`/`search`/`include` blocks, `relations`, `create`/`update`, and the per-entity `operations` map — resolved once at bootstrap, entity scope only, never merged through that chain and with no global default.
 
 ## KavoSettings
 
@@ -72,7 +72,7 @@ Global → entity scope only — never per-operation, never per-call. Retargets 
 | ---------------------------------- | --------- | -------------------------------------------- |
 | `operations.<standardOperationId>` | `boolean` | see [CRUD operations](/core/crud-operations) |
 
-Global scope only — a boolean map keyed by the standard operation ids. Coarser than the per-entity `EntityConfig.operations` (below), which also carries `handler`/`meta`/`dto`/`policy` and always wins over this map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
+Global scope only — a boolean map keyed by the standard operation ids. Coarser than the per-entity `EntityConfig.operations` (below), which also carries `handler`/`meta`/`schema`/`policy` and always wins over this map. See [Guides/Configuration/Settings §operations](/guides/configuration/settings#operations-global-scope-only).
 
 ## EntityConfig — structural, entity scope only
 
@@ -109,7 +109,7 @@ Not `KavoSettings`. Declared on `EntityConfig` directly, so there is no global d
 | `select.default` | `FieldPath<Entity,1>[]`                                       | unset — every selectable field |
 | `select.apply`   | `(args) => fields \| undefined`                               | unset                          |
 
-`fields` is depth 1 — `select=` addresses the entity's own columns, and an included relation is projected through `select[<relation>]=` against the target's own `select.fields` (ADR-0045); a relation-dotted entry neither type-checks nor boots. `fields` also closes the response body: a column left off is not served, which is what makes it a confidentiality control and not just a validation list (ADR-0026). A registered `dto.item`/`dto.list` with a runtime shape **replaces** the projection and wins even where wider. `default` is the projection for a request that sends no `select=`, validated against `fields` at bootstrap. `apply` (ADR-0048) is additive only, never a mask. See [Field selection](/querying/field-selection).
+`fields` is depth 1 — `select=` addresses the entity's own columns, and an included relation is projected through `select[<relation>]=` against the target's own `select.fields` (ADR-0045); a relation-dotted entry neither type-checks nor boots. `fields` also closes the response body: a column left off is not served, which is what makes it a confidentiality control and not just a validation list (ADR-0026). A class-shaped `schema.output.item`/`list` with a runtime shape **replaces** the projection and wins even where wider. `default` is the projection for a request that sends no `select=`, validated against `fields` at bootstrap. `apply` (ADR-0048) is additive only, never a mask. See [Field selection](/querying/field-selection).
 
 ### search
 
@@ -147,7 +147,7 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 
 `read` tunes how an already-includable relation loads — whether a relation is includable at all is `include.fields` (ADR-0028), which includable relations load by default is `include.default`, neither of which lives here. `read.strategy: "key"` is owning-side to-one only (a to-many or an inverse `@OneToOne` has no local FK — bootstrap error): it materializes the edge as `{ <pk>: value }` read from the parent row's own foreign-key column, no join, `null` when the FK is null.
 
-`write.strategy` opts a to-many relation into array-mutation writes and names the strategy in one statement — there is no entity-level default and no boolean form; omitting `write` is how a relation stays non-array-mutable. `"replace"` (whole-array `PUT :id/<relation>`), `"jsonPatch"` (`PATCH /entity/:id` with an RFC 6902 array body), and `"resource"` (four per-relation sub-collection routes — `GET`/`POST`/`DELETE`/`PUT` `:id/<relation>`) are all implemented (ADR-0029). `write` on a to-one relation is a bootstrap error — association by id already covers those (ADR-0014). Write **permission** for a relation is the `create`/`update` field lists and registered write DTOs, not this key. See [Relations](/features/relations).
+`write.strategy` opts a to-many relation into array-mutation writes and names the strategy in one statement — there is no entity-level default and no boolean form; omitting `write` is how a relation stays non-array-mutable. `"replace"` (whole-array `PUT :id/<relation>`), `"jsonPatch"` (`PATCH /entity/:id` with an RFC 6902 array body), and `"resource"` (four per-relation sub-collection routes — `GET`/`POST`/`DELETE`/`PUT` `:id/<relation>`) are all implemented (ADR-0029). `write` on a to-one relation is a bootstrap error — association by id already covers those (ADR-0014). Write **permission** for a relation is the `create`/`update` field lists and registered write schemas, not this key. See [Relations](/features/relations).
 
 ### create / update
 
@@ -160,7 +160,7 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 | `update.default` | `Partial<EntityInput<Entity>>`                                | unset                                                             |
 | `update.apply`   | same shape as `create.apply`                                  | unset                                                             |
 
-Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A registered `dto.create`/`dto.update` class with a runtime shape **replaces** this projection and wins over `fields`.
+Their own top-level objects rather than nested under a shared `allowed` block (issue #388), since they gate what `createOne`/`updateOne`/`patchOne` may **write** rather than what a request may read. `update` is shared by `updateOne` (PUT) and `patchOne` (PATCH) — both overwrite an existing row, so the writable set is the same question either way. A class-shaped `schema.input.create`/`update` with a runtime shape **replaces** this projection and wins over `fields`.
 
 `default` fills in a value for a writable field the body doesn't set — a body that does send the field wins outright (the same one-way relationship a client value has with `sort.default`). `default` is `createOne`- and `updateOne`-only, never `patchOne`: a PATCH that omits a field means "leave it unchanged". `apply` (issue #391, ADR-0048's write-side sibling) is the opposite composition rule — it forces field values into a `createOne`/`updateOne` body, overwriting whatever the client sent. See [Allowed](/features/allowed).
 
@@ -172,17 +172,17 @@ Their own top-level objects rather than nested under a shared `allowed` block (i
 
 A single entity-default authorization function (ADR-0037), not a per-operation map. Resolved by its own "nearest scope wins" walk: falls back to `GlobalConfig.policy` (`createKavo({ policy })`), overridden per operation by `operations.<id>.policy`, including `operations.<id>.policy: false` to opt one operation out. No per-call override. Absent every scope, the operation runs unrestricted. See [CRUD operations](/core/crud-operations).
 
-### dto / operations (entity scope)
+### schema / operations (entity scope)
 
-| Key                       | Type                                                                                            |
-| ------------------------- | ----------------------------------------------------------------------------------------------- |
-| `dto.create`              | DTO class                                                                                       |
-| `dto.update`              | DTO class                                                                                       |
-| `dto.patch`               | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `dto.query`               | DTO class                                                                                       |
-| `dto.item`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `dto.list`                | DTO class \| `{ fields: FieldPath<Entity,1>[] }`                                                |
-| `operations.<standardId>` | `boolean \| { handler?, meta?, dto?, policy?, + narrowed settings }`                            |
-| `operations.<customId>`   | `{ handler?, kind?, cardinality?, dto?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
+| Key                       | Type                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------- |
+| `schema.input.create`     | schema class \| validator \| field list                                                            |
+| `schema.input.update`     | schema class \| validator                                                                          |
+| `schema.input.patch`      | schema class \| validator \| field list                                                            |
+| `schema.input.query`      | schema class \| validator                                                                          |
+| `schema.output.item`      | schema class \| validator \| field list                                                            |
+| `schema.output.list`      | schema class \| validator \| field list                                                            |
+| `operations.<standardId>` | `boolean \| { handler?, meta?, schema?, policy?, + narrowed settings }`                            |
+| `operations.<customId>`   | `{ handler?, kind?, cardinality?, schema?, enabled?, realtimeEvent?, meta?, + narrowed settings }` |
 
-`dto.create`/`dto.update` accept a registered class only — their writable-field list is the top-level `create`/`update` keys above (issue #388). `patch`/`item`/`list` additionally accept the inline `{ fields }` shorthand (issue #386). A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [DTOs](/core/dtos) and [CRUD operations](/core/crud-operations).
+Every `schema` position also accepts a field list, as a bare array (`['title', 'age']`) or `{ fields: [...] }` (issue #386). `create`/`update` keep the top-level `create`/`update` keys above as the richer form (`apply`, `default`, `{ exclude }`); a schema-position list wins over them like any class. A per-operation `operations.<id>.schema` override takes a class or validator only. A per-`operations.<id>` entry carries only the `KavoSettings` keys that operation's engine stages read (`pagination` on `findMany` alone, `realtime` on the writes, `delete` on the reads and the delete family, `cache`/`errors` on all — issue #415); naming any other is a compile error. A custom id (anything outside the standard eight) declares a custom operation: `kind` defaults to `"write"`, `cardinality` to `"one"`, and `realtimeEvent` names which of the five `RealtimeEventId`s a `kind: "write"`, `cardinality: "one"` operation publishes. See [Schemas](/core/schemas) and [CRUD operations](/core/crud-operations).

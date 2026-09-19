@@ -149,20 +149,20 @@ export class Book {
 }
 ```
 
-A getter carries no `FieldMetadata` — Kavo's metadata seam only ever sees `@Column`/`@VirtualColumn`, so there is nothing to opt into `filter.fields`/`sort.fields`/`select.fields` and no way to filter or sort on it. It reaches a response only through a **registered DTO** that names it:
+A getter carries no `FieldMetadata` — Kavo's metadata seam only ever sees `@Column`/`@VirtualColumn`, so there is nothing to opt into `filter.fields`/`sort.fields`/`select.fields` and no way to filter or sort on it. It reaches a response only through a **registered schema** that names it:
 
 ```ts
-class BookItemDto {
+class BookItemSchema {
   id = 0;
   title = "";
   displayTitle = ""; // the initializer's value is never used — see below
 }
 
-@Kavo(Book, { dto: { item: BookItemDto } })
+@Kavo(Book, { schema: { output: { item: BookItemSchema } } })
 ```
 
-The DTO's own `displayTitle = ""` initializer only registers the **key**: `DefaultSerializer` reads the _value_ straight off the real `Book` instance at response time (`source.displayTitle`), which is what invokes the getter. Leave `displayTitle` off the DTO and it never appears — with no DTO at all, the entity-derived default projection is `metadata.fields` only, and a getter is never in `metadata.fields`.
+The schema's own `displayTitle = ""` initializer only registers the **key**: `DefaultSerializer` reads the _value_ straight off the real `Book` instance at response time (`source.displayTitle`), which is what invokes the getter. Leave `displayTitle` off the schema and it never appears — with no schema at all, the entity-derived default projection is `metadata.fields` only, and a getter is never in `metadata.fields`.
 
-Reach for `@VirtualColumn` when the value needs to be filterable/sortable, or you want it without hand-writing an `item`/`list` DTO. Reach for a plain getter when it's genuinely response-only and you already have (or want) an explicit DTO. See [Virtual fields](/features/virtual-fields) for the full picture (including a correlated-subquery example for a relation count) and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
+Reach for `@VirtualColumn` when the value needs to be filterable/sortable, or you want it without hand-writing an `item`/`list` schema. Reach for a plain getter when it's genuinely response-only and you already have (or want) an explicit schema. See [Virtual fields](/features/virtual-fields) for the full picture (including a correlated-subquery example for a relation count) and [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata) for the design.
 
 A complete, runnable app using all of the above lives in [`examples/nest-typeorm`](https://github.com/kavo-labs/kavo/tree/main/examples/nest-typeorm).

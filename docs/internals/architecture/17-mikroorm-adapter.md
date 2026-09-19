@@ -104,7 +104,7 @@ child per inner column, carrying an `embedded: [parent, child]`
 back-reference and a name that is an implementation detail (`address~city`
 when stored as an object, `billing_city` when inlined). Only the parent is
 addressable on the wire, so the children are filtered out rather than
-leaked into derived DTOs or any allowlist. The parent is reported as `json`.
+leaked into derived schemas or any allowlist. The parent is reported as `json`.
 
 ## 2. Query translation (Filter AST → MikroORM `FilterQuery`)
 
@@ -227,14 +227,14 @@ an unpopulated relation collapses to its primary key (harmless — core emits
 a relation key only for an included node), and **MikroORM's own property
 options apply before core sees the row**, so a
 `@Property({ hidden: true })` is dropped and a custom `serializer` runs
-first. The ORM's declaration wins there, even over a Kavo DTO that names
+first. The ORM's declaration wins there, even over a Kavo schema that names
 the property.
 
 Writes go through the Unit of Work — `em.create` / `wrap(entity).assign`
 then `flush` — so lifecycle hooks, `onUpdate` properties, and relation
 diffing behave as they would in a hand-written application. `update` and
 `patch` share one load-merge-flush primitive; the _shape_ of the payload
-differs because the DTO layer differs, not the persistence mechanics. The
+differs because the schema layer differs, not the persistence mechanics. The
 row is loaded first regardless, to turn a missing id into a 404, so the
 merge costs no extra query. The soft-delete marker writes and the hard
 deletes use `nativeUpdate`/`nativeDelete`, whose affected-row count is what
@@ -325,13 +325,13 @@ none of MikroORM's generated flags either. `DefaultDeserializer` excludes
 `metadata.idField` and the resolved `delete.field` from its derived
 default regardless of `generated`, so a client cannot rewrite a row's
 identity or soft-delete/revive it through a plain `PATCH`/`PUT` when the
-entity has no explicit write DTO. `mergeAndFlush` additionally strips both
+entity has no explicit write schema. `mergeAndFlush` additionally strips both
 keys from the payload before `assign`, as defence in depth against an
-explicit write DTO that names either field: `create` may still assign a
+explicit write schema that names either field: `create` may still assign a
 caller-chosen id (a legitimate use for a non-auto-increment key), but an
 `update`/`patch` against an _existing_ row never reassigns its id or its
-soft-delete state, whatever the registered DTO declares. The one thing this
-does not do is let a `PATCH` revive a soft-deleted row even if a DTO wanted
+soft-delete state, whatever the registered schema declares. The one thing this
+does not do is let a `PATCH` revive a soft-deleted row even if a schema wanted
 to — writes stay scoped to the live set, so a soft-deleted row 404s on
 `PUT`/`PATCH` regardless.
 

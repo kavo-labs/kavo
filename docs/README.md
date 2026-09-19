@@ -12,7 +12,7 @@ These documents and the [ADRs](internals/adr/) are authoritative.
 
 ## Walking skeleton
 
-- [architecture/04-dto-system.md](internals/architecture/04-dto-system.md) — the six slots, derivation rules, resolution, serialization order
+- [architecture/04-schema-system.md](internals/architecture/04-schema-system.md) — the schema system: the six slots, derivation rules, resolution, serialization order
 - [architecture/05-query-grammar.md](internals/architecture/05-query-grammar.md) — the query-string grammar reference: operators, rules, limits, coercion
 - [architecture/06-error-handling.md](internals/architecture/06-error-handling.md) — exception hierarchy, error-code catalog, problem details
 - [architecture/07-crud-engine.md](internals/architecture/07-crud-engine.md) — request lifecycle, context, built-in handlers, root factory

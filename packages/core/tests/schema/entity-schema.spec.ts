@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { KavoSchema, SchemaParseResult } from "@kavo/core";
-import { SchemaValidationException, createKavo } from "@kavo/core";
-import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
+import { DefaultSchemaResolver, SchemaValidationException, createKavo } from "@kavo/core";
+import { InMemoryUserAdapter, User, userMetadata } from "../support/user-fixture.js";
+import type { SchemaClass } from "../../src/schema/schema-class.js";
+import { schemaShapeKeys } from "../../src/schema/schema-shape.js";
 
 /**
  * ADR-0055: `schema` wires a `KavoSchema` into the engine's deserialization
  * (input) and response-mapping (output) stages, alongside `dto` — landed
- * additively per issue #466 (see `dto/entity-schema.ts`'s module doc for
+ * additively per issue #466 (see `schema/entity-schema.ts`'s module doc for
  * why `dto` itself isn't removed yet).
  */
 
@@ -159,5 +161,166 @@ describe("EntityConfig.schema (ADR-0055)", () => {
     // schema instance here — the input side stamps the stored value once,
     // the output side stamps the response a second time.
     expect(created).toMatchObject({ name: "Ada (validated) (validated)" });
+  });
+});
+
+describe("DefaultSchemaResolver with a SchemaClass slot", () => {
+  it("resolves a class-shaped schema.input.create unchanged", () => {
+    class CreateUserSchema {
+      name = "";
+    }
+    const resolver = new DefaultSchemaResolver<{ name: string }>({ input: { create: CreateUserSchema } });
+    // `resolveInput` is still typed `KavoSchema<unknown> | null` (Task 9
+    // widens it once `kavo-engine.ts` branches on kind) — cast to assert
+    // the class-shaped value the constructor actually stored.
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(CreateUserSchema);
+  });
+
+  it("does not confuse a class-shaped shorthand with the { input, output } map", () => {
+    class WholeEntitySchema {
+      name = "";
+    }
+    const resolver = new DefaultSchemaResolver<{ name: string }>(WholeEntitySchema);
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(WholeEntitySchema);
+    expect(resolver.resolveOutput("item", "findOne") as unknown).toBe(WholeEntitySchema);
+  });
+});
+
+describe("DefaultSchemaResolver — class-shaped slot fallbacks", () => {
+  class CreateS {}
+  class UpdateS {}
+  class PatchS {}
+  class ItemS {}
+  class ListS {}
+  type Any = { name: string };
+
+  it("resolves every slot to null when nothing is configured", () => {
+    const resolver = new DefaultSchemaResolver<Any>();
+    for (const slot of ["create", "update", "patch", "query"] as const) {
+      expect(resolver.resolveInput(slot, "findOne")).toBeNull();
+    }
+    for (const slot of ["item", "list"] as const) {
+      expect(resolver.resolveOutput(slot, "findOne")).toBeNull();
+    }
+  });
+
+  it("falls patch back to update, and prefers an explicit patch", () => {
+    expect(
+      new DefaultSchemaResolver<Any>({ input: { update: UpdateS } } as never).resolveInput("patch", "patchOne"),
+    ).toBe(UpdateS);
+    expect(
+      new DefaultSchemaResolver<Any>({ input: { update: UpdateS, patch: PatchS } } as never).resolveInput(
+        "patch",
+        "patchOne",
+      ),
+    ).toBe(PatchS);
+  });
+
+  it("falls list back to item, and prefers an explicit list", () => {
+    expect(new DefaultSchemaResolver<Any>({ output: { item: ItemS } } as never).resolveOutput("list", "findMany")).toBe(
+      ItemS,
+    );
+    expect(
+      new DefaultSchemaResolver<Any>({ output: { item: ItemS, list: ListS } } as never).resolveOutput(
+        "list",
+        "findMany",
+      ),
+    ).toBe(ListS);
+  });
+
+  it("chains no other slot — a create class does not leak into update or patch", () => {
+    const resolver = new DefaultSchemaResolver<Any>({ input: { create: CreateS } } as never);
+    expect(resolver.resolveInput("create", "createOne")).toBe(CreateS);
+    expect(resolver.resolveInput("update", "updateOne")).toBeNull();
+    expect(resolver.resolveInput("patch", "patchOne")).toBeNull();
+  });
+
+  it("resolves by slot alone — restore and custom operations reuse item and list", () => {
+    const resolver = new DefaultSchemaResolver<Any>({ output: { item: ItemS, list: ListS } } as never);
+    for (const operation of ["findOne", "restoreOne", "activate"]) {
+      expect(resolver.resolveOutput("item", operation)).toBe(ItemS);
+      expect(resolver.resolveOutput("list", operation)).toBe(ListS);
+    }
+  });
+});
+
+describe("DefaultSchemaResolver.resolveWriteAllowlist", () => {
+  const validator = { safeParse: () => ({ success: true as const, data: {} }) };
+
+  it("returns the create/update fields class even when a validator occupies the slot", () => {
+    const resolver = new DefaultSchemaResolver<{ name: string; email: string }>(
+      { input: { create: validator, update: validator } } as never,
+      { create: { fields: ["name"] } as never, update: { fields: ["email"] } as never },
+    );
+    expect(resolver.resolveInput("create", "createOne")).toBe(validator);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("create"))).toEqual(["name"]);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("update"))).toEqual(["email"]);
+    expect(schemaShapeKeys(resolver.resolveWriteAllowlist("patch"))).toEqual(["email"]);
+  });
+
+  it("is null when no fields list is configured", () => {
+    expect(new DefaultSchemaResolver().resolveWriteAllowlist("create")).toBeNull();
+  });
+});
+
+describe("DefaultSchemaResolver with the { fields } shorthand", () => {
+  it("resolves schema.output.item's { fields } shorthand to a synthesized class", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      output: { item: { fields: ["id"] } },
+    });
+    const resolved = resolver.resolveOutput("item", "findOne");
+    expect(schemaShapeKeys(resolved as unknown as SchemaClass)).toEqual(["id"]);
+  });
+
+  it("resolves schema.input.patch's { fields } shorthand", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      input: { patch: { fields: ["name"] } },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
+  });
+
+  it("schema.output.list falls back to schema.output.item's { fields } shorthand, reusing the same synthesized class", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>({
+      output: { item: { fields: ["id"] } },
+    });
+    const item = resolver.resolveOutput("item", "findOne");
+    const list = resolver.resolveOutput("list", "findMany");
+    expect(list).toBe(item);
+    expect(schemaShapeKeys(list as unknown as SchemaClass)).toEqual(["id"]);
+  });
+});
+
+describe("DefaultSchemaResolver's create/update writable-fields fallback", () => {
+  it("falls back to a class synthesized from the top-level create.fields when schema.input.create is unset", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      create: { fields: ["name"] },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("create", "createOne") as unknown as SchemaClass)).toEqual(["name"]);
+  });
+
+  it("a registered schema.input.create wins over the top-level create.fields fallback", () => {
+    class CreateSchema {
+      id = 0;
+    }
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(
+      { input: { create: CreateSchema } },
+      { create: { fields: ["name"] } },
+    );
+    expect(resolver.resolveInput("create", "createOne") as unknown).toBe(CreateSchema);
+  });
+
+  it("ignores a { exclude } form (not a plain array) for the fallback", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      create: { fields: { exclude: ["id"] } } as never,
+    });
+    expect(resolver.resolveInput("create", "createOne")).toBeNull();
+  });
+
+  it("schema.input.patch inherits the update.fields fallback synthesized for schema.input.update", () => {
+    const resolver = new DefaultSchemaResolver<{ id: number; name: string }>(undefined, {
+      update: { fields: ["name"] },
+    });
+    expect(schemaShapeKeys(resolver.resolveInput("update", "updateOne") as unknown as SchemaClass)).toEqual(["name"]);
+    expect(schemaShapeKeys(resolver.resolveInput("patch", "patchOne") as unknown as SchemaClass)).toEqual(["name"]);
   });
 });

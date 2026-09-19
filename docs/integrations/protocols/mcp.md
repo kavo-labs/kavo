@@ -27,22 +27,22 @@ The default controller uses the SDK's Streamable HTTP transport, run stateless. 
 
 `crudTools` always produces the same eight tools per entity, unconditionally, with no per-entity config:
 
-| Tool                  | Args                                              |
-| --------------------- | ------------------------------------------------- |
-| `<entity>.findOne`    | `{ id }`                                          |
-| `<entity>.findMany`   | `{ limit?, offset?, sort?, filter? }`             |
-| `<entity>.createOne`  | any fields (forwarded straight to the create DTO) |
-| `<entity>.updateOne`  | `{ id, ...anyFields }`                            |
-| `<entity>.patchOne`   | `{ id, ...anyFields }`                            |
-| `<entity>.deleteOne`  | `{ id }`                                          |
-| `<entity>.restoreOne` | `{ id }`                                          |
-| `<entity>.purgeOne`   | `{ id }`                                          |
+| Tool                  | Args                                                 |
+| --------------------- | ---------------------------------------------------- |
+| `<entity>.findOne`    | `{ id }`                                             |
+| `<entity>.findMany`   | `{ limit?, offset?, sort?, filter? }`                |
+| `<entity>.createOne`  | any fields (forwarded straight to the create schema) |
+| `<entity>.updateOne`  | `{ id, ...anyFields }`                               |
+| `<entity>.patchOne`   | `{ id, ...anyFields }`                               |
+| `<entity>.deleteOne`  | `{ id }`                                             |
+| `<entity>.restoreOne` | `{ id }`                                             |
+| `<entity>.purgeOne`   | `{ id }`                                             |
 
 An entity that never declared soft delete still gets `restoreOne` and `purgeOne` tools. Calling either surfaces `OperationDisabledException` as a normal `isError` tool result, exactly like the equivalent disabled REST route would. `findMany`'s `filter` and `sort` args use the same raw-AST/`-field` convention [GraphQL](/integrations/protocols/graphql) does.
 
 ## Custom operations
 
-A [custom operation](/core/custom-operations) reaches this toolset too, with no per-entity config: `crudTools` walks the same operation registry route generation reads, so an enabled custom id gets a `<entity>.<operationId>` tool as long as its `operations.<id>.dto.output` is declared — a custom id has no entity-derived DTO fallback the way the standard eight do, so one with nothing declared has nothing to build even a loose schema from, and is left out. The tool's schema follows the same shape the standard eight use: `{ id }` when the operation is single-row and declares no `dto.input`, `{ id, ...anyFields }` when it also declares one, and the equivalent id-less shapes for a many-cardinality operation.
+A [custom operation](/core/custom-operations) reaches this toolset too, with no per-entity config: `crudTools` walks the same operation registry route generation reads, so an enabled custom id gets a `<entity>.<operationId>` tool as long as its `operations.<id>.schema.output` is declared — a custom id has no entity-derived schema fallback the way the standard eight do, so one with nothing declared has nothing to build even a loose schema from, and is left out. The tool's schema follows the same shape the standard eight use: `{ id }` when the operation is single-row and declares no `schema.input`, `{ id, ...anyFields }` when it also declares one, and the equivalent id-less shapes for a many-cardinality operation.
 
 A successful call returns `{ content: [{ type: "text", text: JSON.stringify(result) }] }`. A `KavoException` (not found, disabled operation, a conflict) is caught and turned into `isError: true` with `${code}: ${detail}` as the text, MCP's own convention for an expected domain failure. Anything the engine didn't itself raise still propagates as a protocol-level error.
 
@@ -127,7 +127,7 @@ See [Peer dependencies](/reference/peer-dependencies) for the full version table
 
 ## What's not covered yet
 
-- Every tool's `inputSchema` for `createOne`, `updateOne`, and `patchOne` is deliberately unconstrained (`{ type: "object" }`) rather than a real per-DTO JSON Schema.
+- Every tool's `inputSchema` for `createOne`, `updateOne`, and `patchOne` is deliberately unconstrained (`{ type: "object" }`) rather than a real per-schema JSON Schema.
 - There's no per-entity opt-out. Every `@Kavo` entity gets the full toolset.
 - Stateful MCP sessions (resumable streams, server-initiated notifications) aren't supported by the default controller, though a hand-written one can still wire a stateful transport itself.
 

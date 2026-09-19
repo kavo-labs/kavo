@@ -2,8 +2,7 @@ import type { OperationDescriptor, OperationRegistry } from "./operation-registr
 import type { OperationCardinality, OperationId, OperationKind, StandardOperationId } from "./operation.js";
 import type { OperationHandler } from "./operation-handler.js";
 import type { CustomOperationConfig, EntityConfig } from "../config/entity-config.js";
-import type { DtoClass } from "../dto/dto.js";
-import type { KavoSchema } from "../dto/kavo-schema.js";
+import type { SchemaLike } from "../schema/schema-class.js";
 import { ConfigurationException } from "../errors/exceptions.js";
 
 /**
@@ -128,7 +127,7 @@ export type StandardHandlerFactory<Entity> = (id: StandardOperationId) => Operat
 type DtoOverrideField = "input" | "output" | "query";
 
 /**
- * Which `dto.<field>` overrides (issue #131) are meaningful on each
+ * Which `schema.<field>` overrides (issue #131) are meaningful on each
  * standard operation — `StandardOperationsConfig` (`config/entity-config.ts`)
  * makes the same rule unrepresentable at the type level via `Pick`; this
  * is its runtime mirror, for configs built from an erased or cast type
@@ -148,7 +147,7 @@ const DTO_OVERRIDE_FIELDS: Readonly<Record<StandardOperationId, readonly DtoOver
 });
 
 /**
- * Which `dto.<field>` overrides a **custom** operation supports, derived
+ * Which `schema.<field>` overrides a **custom** operation supports, derived
  * from its declared `kind` rather than looked up by id (issue #145). Same
  * rule the standard table above encodes, stated once: a read has no
  * request body to narrow, a write runs no query resolution.
@@ -159,47 +158,9 @@ const CUSTOM_DTO_OVERRIDE_FIELDS: Readonly<Record<OperationKind, readonly DtoOve
 });
 
 /**
- * Validates one entry's `operations.<id>.dto` against the fields that
- * operation actually has, and returns the three descriptor fields it
- * resolves to (`null` for an unset or inapplicable field).
- */
-function resolveDtoOverride(
-  entityName: string,
-  id: OperationId,
-  allowed: readonly DtoOverrideField[],
-  settings: { readonly dto?: unknown } | undefined,
-): Pick<OperationDescriptor, "input" | "output" | "query"> {
-  const dto = settings?.dto as Readonly<Partial<Record<DtoOverrideField, DtoClass>>> | undefined;
-  const resolved: Record<DtoOverrideField, DtoClass | null> = { input: null, output: null, query: null };
-  if (dto === undefined) {
-    return resolved;
-  }
-
-  for (const field of Object.keys(dto) as DtoOverrideField[]) {
-    if (dto[field] === undefined) {
-      continue;
-    }
-    if (!allowed.includes(field)) {
-      throw new ConfigurationException(
-        entityName,
-        `operations.${id}.dto.${field}`,
-        allowed.length === 0
-          ? `'${id}' has a void result and no query, so a 'dto.${field}' override has nothing to narrow — remove it`
-          : `'${id}' has no '${field}' position — it only supports ${allowed.map((f) => `'${f}'`).join(", ")}`,
-      );
-    }
-    resolved[field] = dto[field] as DtoClass;
-  }
-  return resolved;
-}
-
-/**
  * Validates one entry's `operations.<id>.schema` against the fields that
  * operation actually has, and returns the three descriptor fields it
- * resolves to (`null` for an unset or inapplicable field) — the
- * `schema`-typed sibling of `resolveDtoOverride` above, since
- * `OperationSchemaOverride` (unlike `OperationDtoOverride`) is not narrowed
- * per operation id at the type level.
+ * resolves to (`null` for an unset or inapplicable field).
  */
 function resolveSchemaOverride(
   entityName: string,
@@ -207,12 +168,12 @@ function resolveSchemaOverride(
   allowed: readonly DtoOverrideField[],
   settings: { readonly schema?: unknown } | undefined,
 ): {
-  schemaInput: KavoSchema<unknown> | null;
-  schemaOutput: KavoSchema<unknown> | null;
-  schemaQuery: KavoSchema<unknown> | null;
+  schemaInput: SchemaLike<object> | null;
+  schemaOutput: SchemaLike<object> | null;
+  schemaQuery: SchemaLike<object> | null;
 } {
-  const schema = settings?.schema as Readonly<Partial<Record<DtoOverrideField, KavoSchema<unknown>>>> | undefined;
-  const resolved: Record<DtoOverrideField, KavoSchema<unknown> | null> = { input: null, output: null, query: null };
+  const schema = settings?.schema as Readonly<Partial<Record<DtoOverrideField, SchemaLike<object>>>> | undefined;
+  const resolved: Record<DtoOverrideField, SchemaLike<object> | null> = { input: null, output: null, query: null };
   if (schema === undefined) {
     return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
   }
@@ -229,7 +190,7 @@ function resolveSchemaOverride(
           : `'${id}' has no '${field}' position — it only supports ${allowed.map((f) => `'${f}'`).join(", ")}`,
       );
     }
-    resolved[field] = schema[field] as KavoSchema<unknown>;
+    resolved[field] = schema[field] as SchemaLike<object>;
   }
   return { schemaInput: resolved.input, schemaOutput: resolved.output, schemaQuery: resolved.query };
 }
@@ -389,7 +350,6 @@ export function createOperationRegistry<Entity extends object>(
         ? operationConfig
         : isListed
       : (globalOperations?.[id] ?? byDefault);
-    const dtoOverride = resolveDtoOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     const schemaOverride = resolveSchemaOverride(scope, id, DTO_OVERRIDE_FIELDS[id], settings);
     registry.register({
       id,
@@ -400,7 +360,6 @@ export function createOperationRegistry<Entity extends object>(
         settings?.handler ??
         handlers?.(id) ??
         (unboundHandler(id, entityName ?? "entity") as unknown as OperationHandler<Entity>),
-      ...dtoOverride,
       ...schemaOverride,
       meta: settings?.meta ?? {},
     });
@@ -495,7 +454,6 @@ function registerCustomOperation<Entity extends object>(
     cardinality,
     enabled: custom.enabled ?? true,
     handler,
-    ...resolveDtoOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     ...resolveSchemaOverride(entityName, id, CUSTOM_DTO_OVERRIDE_FIELDS[kind], custom),
     meta: custom.meta ?? {},
     ...(custom.realtimeEvent !== undefined ? { realtimeEvent: custom.realtimeEvent } : {}),

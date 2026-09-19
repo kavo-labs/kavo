@@ -72,7 +72,7 @@ Every issue across the tree is collected before throwing: one round trip,
 all problems, like the rest of the query pipeline.
 
 Nested levels read the **target entity's own resolved config** through the
-`EntityCatalog` — its allowlists, DTOs, delete strategy, and further
+`EntityCatalog` — its allowlists, schemas, delete strategy, and further
 relations. That is the mechanism behind the rule that _a relation never
 widens what its target exposes_. Lookup is per-request, not a bootstrap
 snapshot, because `createCrud(Owner)` may run before `createCrud(Pet)` and
@@ -184,9 +184,9 @@ case, and `auto` resolves it to `join` exactly like `Pet.owner`.
   stripped at serialization — "kept internally, stripped late". Root
   `select=` selects the root's own columns; relation shapes are selected
   through `select[<path>]`.
-- **DTOs:** an included node is projected through the target's registered
-  `item` DTO (`list` for a to-many, which falls back to `item`), else the
-  target's derived default. A relation key on the _parent's_ DTO is
+- **schemas:** an included node is projected through the target's registered
+  `item` schema (`list` for a to-many, which falls back to `item`), else the
+  target's derived default. A relation key on the _parent's_ schema is
   documentation, not a load: it stays absent until the node is included.
 - **No parent-side ceiling (ADR-0045):** an included relation's projection
   is the target entity's own `select.fields` (or its derived default). The
@@ -256,7 +256,7 @@ ADR-0014, with partial mutation disabled — no `{ add: [...] }`/
   replace), and a write-opted relation on an adapter without
   `EntityWriter.replaceRelation` also fails at `createCrud` — the ORM
   caveat ADR-0014 already states for association by id applies here too.
-- The response is the parent entity (its own `item` DTO slot), not the
+- The response is the parent entity (its own `item` schema slot), not the
   relation's own member list.
 
 ### `resource` (ADR-0029's resource amendment)
@@ -321,8 +321,8 @@ it, since there is no static route table for a dynamic per-relation id).
 `jsonPatch` does not add a route. It reuses `patchOne`'s existing
 `PATCH /<entity>/:id` and tells its two legal body shapes apart
 structurally: an **object** body is `patchOne`'s ordinary partial-update
-DTO, unchanged; a bare **array** body is parsed as an RFC 6902 patch
-document instead — the one shape an ordinary patch DTO body never is. An
+Schema, unchanged; a bare **array** body is parsed as an RFC 6902 patch
+document instead — the one shape an ordinary patch schema body never is. An
 entity that never opts into `jsonPatch` sees no change at all: an array
 body there still degrades to `{}`, exactly as `DefaultDeserializer` has
 always treated a non-object body.
@@ -335,7 +335,7 @@ shapes, not by a denylist:
   non-generated column (the id field is never one). `remove` on this shape
   is rejected: there is nothing to literally delete from a partial-update
   payload. The resulting `{ [field]: value, … }` object is fed through the
-  same `patch` DTO deserializer an ordinary object body already goes
+  same `patch` schema deserializer an ordinary object body already goes
   through, so field-level validation is unchanged.
 - `{ "op": "add" | "remove", "path": "/<relation>/-", "value": … }` — a
   relation with `write: true`. `value` is a scalar id or an `{id}`

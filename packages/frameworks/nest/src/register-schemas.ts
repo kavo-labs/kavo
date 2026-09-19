@@ -30,7 +30,7 @@
  * | `<Entity>Sort`          | the sortable keys, `-` = descending (issue #313)  |
  * | `<Entity>Filter`        | the structured filter predicate (issue #314, ADR-0042) |
  * | `<Entity>Query`         | the documented-only `filter`+`sort`+`pagination`+`select`+`include`+`search` aggregate (issue #314, ADR-0042) |
- * | `<Entity><Operation>`   | a per-operation `dto.output` (issue #131) or a custom op's own output shape — single-row |
+ * | `<Entity><Operation>`   | a per-operation `schema.output` (issue #131) or a custom op's own output shape — single-row |
  * | `<Entity><Operation>List` | the same, `many` — plus `…ListItem` / `…ListMeta` |
  * | `KavoProblemDetails`    | shared RFC 9457 error body (400/404/409/412)      |
  * | `KavoProblemDetailError`| one entry of that body's `errors[]` array         |
@@ -38,7 +38,7 @@
  *
  * Only inline schemas Kavo actually constructed are moved: the filter is
  * "carries `x-kavo-entity` or `x-kavo-error`". A schema that is already a
- * `$ref` is left untouched — which is exactly the `{ type: DtoClass }`
+ * `$ref` is left untouched — which is exactly the `{ type: SchemaClass }`
  * introspection-fallback path (`@nestjs/swagger` registers that class as its
  * own component), so a decorated/declarative DTO keeps the name Swagger gave
  * it and this helper does not double it up.
@@ -49,7 +49,7 @@
  * that serve the same shape collapse onto one component. A response flagged
  * `x-kavo-operation-scoped` (by `successBodyFor`, when `descriptor.output`
  * is set — a per-operation override or a custom operation's own
- * `dto.output`) is named `<Entity><Operation>` instead, so a genuinely
+ * `schema.output`) is named `<Entity><Operation>` instead, so a genuinely
  * different shape gets a meaningful stable name rather than racing the root
  * one for `<Entity>Item` and losing to a positional `_2`.
  *
@@ -62,7 +62,7 @@
  * class, not a name to depend on. Structurally identical schemas requested
  * under the same name (five routes serving `<Entity>Item`) collapse onto one
  * component; the same shape under two names (`<Entity>Update` /
- * `<Entity>Patch` when no `dto.patch` is set) is emitted under both.
+ * `<Entity>Patch` when no `schema.input.patch` is set) is emitted under both.
  *
  * **Includable-relation `$ref`s (issue #356).** `applyResponseSchemaDocs`
  * leaves an `x-kavo-includable-ref: "<Target>"` marker on every includable
@@ -310,7 +310,7 @@ function hoistResponses(
     }
 
     // A per-operation output shape — an `item`/`list` override (issue #131)
-    // or a custom operation's own `dto.output`, flagged
+    // or a custom operation's own `schema.output`, flagged
     // `x-kavo-operation-scoped` by `successBodyFor` — is named for its
     // operation (`<Entity><Operation>`) so it never competes with the
     // entity's root `item`/`list` component and lose to a positional `_2`.

@@ -19,7 +19,7 @@ import type { JsonSchema } from "./json-schema.js";
  * Unlike `@kavo/nest`, there is no decorator/reflection story here (no
  * `reflect-metadata`, no `@nestjs/swagger`) — every shape is derived from
  * `EntityMetadata` and `ResolvedEntityConfig` alone, the same ORM-independent
- * data every adapter already supplies. A configured `dto.create`/`item`/…
+ * data every adapter already supplies. A configured `schema.input.create`/`item`/…
  * class's *actual* field shape is not introspected (there is nothing
  * portable to introspect it with outside a decorator convention); what is
  * built here is the entity's own derived shape, the same fallback

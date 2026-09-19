@@ -269,7 +269,7 @@ describe("ORM-derived fields — filter/sort/select (issue #373)", () => {
       displayName = "";
     }
     const gettersAuthors = kavo.createCrud(Author, {
-      dto: { item: AuthorItemDto as never },
+      schema: { output: { item: AuthorItemDto as never } },
     }) as DefaultKavoService<Author>;
     await seed();
     const ada = await dataSource.getRepository(Author).findOneByOrFail({ email: "ada@x.io" });

@@ -16,12 +16,7 @@ import { CreateTagDto, UpdateTagDto, PatchTagDto, TagItemDto, TagListDto } from 
  * type — see `owner.controller.ts`'s own validation note for why.
  */
 @Kavo(Tag, {
-  dto: {
-    create: CreateTagDto,
-    update: UpdateTagDto,
-    item: TagItemDto,
-    list: TagListDto,
-  },
+  schema: { input: { create: CreateTagDto, update: UpdateTagDto }, output: { item: TagItemDto, list: TagListDto } },
   pagination: { strategy: "none" },
 })
 @Controller("tags")

@@ -80,7 +80,7 @@ edge.
 ## 2. Responsibility statements
 
 - **`@kavo/core`** exists to own every contract and all ORM/framework-
-  independent runtime (engine, config merging, query parsing, DTO
+  independent runtime (engine, config merging, query parsing, schema
   resolution, exceptions). It can't depend on **anything** — not TypeORM,
   not NestJS, not utility libraries. If core needs a helper, core writes it.
 - **`@kavo/typeorm`** exists to translate core's persistence contracts to

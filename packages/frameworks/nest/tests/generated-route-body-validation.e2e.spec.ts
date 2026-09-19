@@ -78,8 +78,8 @@ function server(): SupertestTarget {
 }
 
 describe("generated route body metatype (issue #281)", () => {
-  it("exposes the registered dto.create class to a global pipe, not Object", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+  it("exposes the class-shaped schema.input.create to a global pipe, not Object", async () => {
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class TodosController {}
 
@@ -89,8 +89,8 @@ describe("generated route body metatype (issue #281)", () => {
     expect(RecordingPipe.metatypes).toEqual([CreateTodoDto]);
   });
 
-  it("exposes the registered dto.update class on a generated PUT route", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto, update: UpdateTodoDto } })
+  it("exposes the class-shaped schema.input.update on a generated PUT route", async () => {
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto, update: UpdateTodoDto } } })
     @Controller("todos")
     class TodosController {}
 
@@ -102,7 +102,7 @@ describe("generated route body metatype (issue #281)", () => {
     expect(RecordingPipe.metatypes).toEqual([UpdateTodoDto]);
   });
 
-  it("leaves the metatype unresolved when no dto.create is registered", async () => {
+  it("leaves the metatype unresolved when no schema.input.create is configured", async () => {
     @Kavo(Todo)
     @Controller("todos")
     class TodosController {}
@@ -113,8 +113,29 @@ describe("generated route body metatype (issue #281)", () => {
     expect(RecordingPipe.metatypes).toEqual([undefined]);
   });
 
+  it("writes no metatype for a validator-shaped schema.input.create; the engine validates instead", async () => {
+    const validator = {
+      safeParse: (input: unknown) =>
+        typeof (input as { title?: unknown }).title === "string" && (input as { title: string }).title !== ""
+          ? { success: true as const, data: { title: (input as { title: string }).title.toUpperCase() } }
+          : { success: false as const, error: { issues: [{ path: ["title"], message: "required" }] } },
+    };
+
+    @Kavo(Todo, { schema: { input: { create: validator } } })
+    @Controller("todos")
+    class TodosController {}
+
+    await bootstrap([TodosController]);
+    const bad = await request(server()).post("/todos").send({ title: "" }).expect(400);
+    expect(bad.body.code ?? bad.body.type ?? JSON.stringify(bad.body)).toMatch(/SCHEMA_INVALID|schema/i);
+    const ok = await request(server()).post("/todos").send({ title: "x" }).expect(201);
+    // The validator's own `data` replaced the body.
+    expect(ok.body.title).toBe("X");
+    expect(RecordingPipe.metatypes).toEqual([undefined, undefined]);
+  });
+
   it("does not disturb an @Override()'d route's own real design:paramtypes", async () => {
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class TodosController {
       @Override()

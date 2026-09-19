@@ -837,7 +837,7 @@ describe("@Kavo custom operations (issue #145)", () => {
       operations: {
         publishOne: {
           handler: publishHandler([]),
-          dto: { output: TodoReceiptDto },
+          schema: { output: TodoReceiptDto },
           meta: { routes: { method: "POST", path: ":id/publish" } },
         },
       },
@@ -926,17 +926,10 @@ describe("@Kavo custom operations (issue #145)", () => {
   });
 
   /**
-   * ADR-0055 / issue #467: `registerKavoSchemas` documents `schema` ahead
-   * of `dto` when the registered schema implements the optional
-   * `toJSONSchema()` method — the same precedence `schema` already has at
-   * the engine's own deserialization/serialization stages. A `dto` also
-   * registered for the same slot is not consulted at all once `schema`
-   * wins.
+   * ADR-0055 / issue #467: `registerKavoSchemas` documents a validator-shaped
+   * `schema` slot from its optional `toJSONSchema()` method.
    */
-  it("documents createOne's request body from schema.input.create ahead of dto (issue #467)", async () => {
-    class TodoCreateDto {
-      title = "";
-    }
+  it("documents createOne's request body from schema.input.create (issue #467)", async () => {
     const createSchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({
@@ -946,7 +939,7 @@ describe("@Kavo custom operations (issue #145)", () => {
       }),
     };
 
-    @Kavo(Todo, { dto: { create: TodoCreateDto }, schema: { input: { create: createSchema } } })
+    @Kavo(Todo, { schema: { input: { create: createSchema } } })
     @Controller("todos")
     class SchemaDocumentedController {}
 
@@ -970,13 +963,10 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(schema).not.toHaveProperty("title", "TodoCreateDto");
   });
 
-  it("falls back to dto/ORM metadata when schema.input.create has no toJSONSchema (issue #467)", async () => {
-    class TodoCreateDto {
-      title = "";
-    }
+  it("falls back to ORM metadata when schema.input.create has no toJSONSchema (issue #467)", async () => {
     const untypedSchema = { safeParse: (input: unknown) => ({ success: true as const, data: input }) };
 
-    @Kavo(Todo, { dto: { create: TodoCreateDto }, schema: { input: { create: untypedSchema } } })
+    @Kavo(Todo, { schema: { input: { create: untypedSchema } } })
     @Controller("todos")
     class UntypedSchemaController {}
 
@@ -988,10 +978,10 @@ describe("@Kavo custom operations (issue #145)", () => {
         post?: { requestBody?: { content?: Record<string, { schema?: Record<string, unknown> }> } };
       }
     )?.post;
-    expect(operation?.requestBody?.content?.["application/json"]?.schema).toMatchObject({ title: "TodoCreateDto" });
+    expect(operation?.requestBody?.content?.["application/json"]?.schema).toMatchObject({ title: "TodoCreate" });
   });
 
-  it("marks a schema-documented single-row response x-kavo-operation-scoped when dto.output is also set (issue #467)", async () => {
+  it("marks a schema-documented single-row response x-kavo-operation-scoped when a per-operation schema.output is set (issue #467)", async () => {
     const findOneSchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({
@@ -999,14 +989,10 @@ describe("@Kavo custom operations (issue #145)", () => {
         properties: { id: { type: "number" }, title: { type: "string" } },
       }),
     };
-    class TodoFindOneOutputDto {
-      id = 0;
-      title = "";
-    }
 
     @Kavo(Todo, {
       operations: {
-        findOne: { dto: { output: TodoFindOneOutputDto }, schema: { output: findOneSchema } },
+        findOne: { schema: { output: findOneSchema } },
       },
     })
     @Controller("todos")
@@ -1094,7 +1080,7 @@ describe("@Kavo custom operations (issue #145)", () => {
     expect(schema).not.toHaveProperty("x-kavo-operation-scoped");
   });
 
-  it("marks a schema-documented list envelope x-kavo-operation-scoped when dto.output is also set (issue #467)", async () => {
+  it("marks a schema-documented list envelope x-kavo-operation-scoped when a per-operation schema.output is set (issue #467)", async () => {
     const findManySchema = {
       safeParse: (input: unknown) => ({ success: true as const, data: input }),
       toJSONSchema: () => ({
@@ -1102,14 +1088,10 @@ describe("@Kavo custom operations (issue #145)", () => {
         properties: { id: { type: "number" }, title: { type: "string" } },
       }),
     };
-    class TodoFindManyOutputDto {
-      id = 0;
-      title = "";
-    }
 
     @Kavo(Todo, {
       operations: {
-        findMany: { dto: { output: TodoFindManyOutputDto }, schema: { output: findManySchema } },
+        findMany: { schema: { output: findManySchema } },
       },
     })
     @Controller("todos")
@@ -2288,7 +2270,7 @@ describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
       slug = "";
     }
 
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class DerivedDtoController {}
 
@@ -2303,7 +2285,7 @@ describe("@Kavo ORM-derived fields over the wire (issue #373)", () => {
     };
     await expect(bind()).rejects.toMatchObject({
       code: "KAVO_CONFIG_INVALID",
-      messageParams: { entity: "Todo", path: "dto.create" },
+      messageParams: { entity: "Todo", path: "schema.input.create" },
     });
   });
 });
@@ -2339,11 +2321,11 @@ describe("@Kavo Swagger — per-operation DTO overrides are what gets documented
   }
 
   @Kavo(Todo, {
-    dto: { create: RootCreateDto, update: RootUpdateDto, item: RootItemDto },
+    schema: { input: { create: RootCreateDto, update: RootUpdateDto }, output: { item: RootItemDto } },
     operations: {
       findOne: true,
       updateOne: true,
-      createOne: { dto: { input: OverrideCreateDto, output: OverrideCreatedDto } },
+      createOne: { schema: { input: OverrideCreateDto, output: OverrideCreatedDto } },
     },
   })
   @Controller("todos")
@@ -2410,7 +2392,7 @@ describe("@Kavo Swagger request-body schemas", () => {
   }
 
   @Kavo(Todo, {
-    dto: { create: CreateTodoDto, item: TodoItemDto, list: TodoListDto },
+    schema: { input: { create: CreateTodoDto }, output: { item: TodoItemDto, list: TodoListDto } },
   })
   @Controller("todos")
   class DocumentedController {}
@@ -2473,7 +2455,7 @@ describe("@Kavo Swagger request-body schemas", () => {
       ratio = 1.5;
       ticket = 0n;
     }
-    @Kavo(Todo, { dto: { create: NumericDto } })
+    @Kavo(Todo, { schema: { input: { create: NumericDto } } })
     @Controller("todos")
     class NumericController {}
 
@@ -2502,7 +2484,7 @@ describe("@Kavo Swagger request-body schemas", () => {
       title = "";
       note = undefined;
     }
-    @Kavo(Todo, { dto: { create: LooseDto } })
+    @Kavo(Todo, { schema: { input: { create: LooseDto } } })
     @Controller("todos")
     class LooseController {}
 
@@ -2531,7 +2513,7 @@ describe("@Kavo Swagger request-body schemas", () => {
     class DeclaredOnlyDto {
       title!: string;
     }
-    @Kavo(Todo, { dto: { create: DeclaredOnlyDto } })
+    @Kavo(Todo, { schema: { input: { create: DeclaredOnlyDto } } })
     @Controller("todos")
     class DeclaredOnlyController {}
 
@@ -2934,7 +2916,7 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     class CreateTodoDto {
       title = "";
     }
-    @Kavo(Todo, { dto: { create: CreateTodoDto } })
+    @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
     class DtoController {}
     await bootstrap(DtoController);
@@ -3248,7 +3230,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       id = 0;
       title = "";
     }
-    @Kavo(Todo, { dto: { item: TodoItemDto }, select: { fields: ["id"] } })
+    @Kavo(Todo, { schema: { output: { item: TodoItemDto } }, select: { fields: ["id"] } })
     @Controller("todos")
     class DtoController {}
     await bootstrap(DtoController);
@@ -3365,7 +3347,7 @@ describe("@Kavo Swagger fallback success-response schema when no item/list DTO i
       title = "";
     }
     @Kavo(Todo, {
-      dto: { item: TodoItemDto },
+      schema: { output: { item: TodoItemDto } },
       select: { fields: ["id", "title", "titleUpper" as never] },
     })
     @Controller("todos")
@@ -3683,7 +3665,7 @@ describe("@Kavo Swagger recursive includable-relation $ref composition (issue #3
     @Kavo(Todo, { include: { fields: ["list"] } })
     @Controller("todos")
     class TodoC {}
-    @Kavo(TodoList, { dto: { item: TodoListItemDto } })
+    @Kavo(TodoList, { schema: { output: { item: TodoListItemDto } } })
     @Controller("lists")
     class ListC {}
 
@@ -3735,7 +3717,7 @@ describe("@Kavo Swagger DTO slot fallbacks", () => {
   // resolver falls `patch` back to `update` and `list` back to `item`, and
   // the docs must follow the same chain the engine will actually use —
   // otherwise the published schema advertises a shape the API never emits.
-  @Kavo(Todo, { dto: { update: UpdateTodoDto, item: TodoOnlyItemDto } })
+  @Kavo(Todo, { schema: { input: { update: UpdateTodoDto }, output: { item: TodoOnlyItemDto } } })
   @Controller("todos")
   class FallbackController {}
 
@@ -3793,7 +3775,7 @@ describe("@Kavo Swagger schema hints (enum, oneOf)", () => {
     children = oneOfArray<VariantA | VariantB>([VariantA, VariantB]);
   }
 
-  @Kavo(Todo, { dto: { create: CreateHintedDto, item: HintedItemDto } })
+  @Kavo(Todo, { schema: { input: { create: CreateHintedDto }, output: { item: HintedItemDto } } })
   @Controller("todos")
   class HintedController {}
 
@@ -3874,7 +3856,7 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     title = "";
   }
 
-  @Kavo(Todo, { dto: { create: CreateTodoDto, item: TodoItemDto, list: TodoListDto } })
+  @Kavo(Todo, { schema: { input: { create: CreateTodoDto }, output: { item: TodoItemDto, list: TodoListDto } } })
   @Controller("todos")
   class NamedSchemaController {}
 
@@ -3985,8 +3967,8 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
       headline = "";
     }
     @Kavo(Todo, {
-      dto: { item: TodoItemDto },
-      operations: { findOne: true, createOne: { dto: { output: SpotlightDto } } },
+      schema: { output: { item: TodoItemDto } },
+      operations: { findOne: true, createOne: { schema: { output: SpotlightDto } } },
     })
     @Controller("todos")
     class PerOpController {}
@@ -4013,7 +3995,7 @@ describe("@Kavo Swagger named component schemas (issue #310)", () => {
     class DeclaredOnlyDto {
       title!: string;
     }
-    @Kavo(Todo, { dto: { create: DeclaredOnlyDto } })
+    @Kavo(Todo, { schema: { input: { create: DeclaredOnlyDto } } })
     @Controller("todos")
     class DeclarativeController {}
     await app.close();

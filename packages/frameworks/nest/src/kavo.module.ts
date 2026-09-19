@@ -1,10 +1,10 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, EntityMetadata, KavoInstance, OperationDtoMap, OperationRegistry } from "@kavo/core";
+import type { ClassRef, EntityMetadata, EntitySchemaMap, KavoInstance, OperationRegistry } from "@kavo/core";
 import {
   ConfigurationException,
-  DefaultDtoResolver,
+  DefaultSchemaResolver,
   createKavo,
   isEtagEnabled,
   isUnboundOperationHandler,
@@ -41,9 +41,9 @@ export type KavoGraphQLOption = boolean | { readonly path?: string };
 
 /**
  * The entity-derived writable default `DefaultDeserializer` falls back to
- * when neither `dto.create`/`dto.update` names a real class nor the
+ * when neither `schema.input.create`/`schema.input.update` names a real class nor the
  * top-level `create`/`update` `{ fields }` shorthand (issue #388, formerly
- * `dto.create`/`dto.update`'s own shorthand, issue #386) is set: every
+ * `schema.input.create`/`schema.input.update`'s own shorthand, issue #386) is set: every
  * non-generated column except the primary key (kept for a composite key,
  * which has no single column to exclude), plus every relation, associable
  * by id (ADR-0014). Used only as a Swagger fallback — `applyBodySchemaDocs`'s
@@ -395,10 +395,13 @@ class KavoBinder implements OnModuleInit {
         readonly KavoConditionalDocEntry[] | undefined;
       if (conditionalDocs !== undefined) {
         const prototype = metatype.prototype as Record<string, unknown>;
-        const dtoResolver = new DefaultDtoResolver(metadata.config?.dto as OperationDtoMap<object> | undefined, {
-          create: metadata.config?.create,
-          update: metadata.config?.update,
-        });
+        const schemaResolver = new DefaultSchemaResolver(
+          metadata.config?.schema as EntitySchemaMap<object> | undefined,
+          {
+            create: metadata.config?.create,
+            update: metadata.config?.update,
+          },
+        );
         // The target entity's own metadata for each relation a synthesized
         // schema references — includable ones so `applyResponseSchemaDocs`
         // can name the `x-kavo-includable-ref` marker `registerKavoSchemas`
@@ -441,13 +444,13 @@ class KavoBinder implements OnModuleInit {
           // time had no DTO to document (`bodyDtoFor` resolved `null`
           // there too, from the same decoration-time config). The field
           // lists are read from the engine's *resolved* DTO resolver
-          // (`service.engine.config.dto`), not the decoration-time one: a
+          // (`service.engine.config.schema`), not the decoration-time one: a
           // `create.fields`/`update.fields` `{ exclude }` form (#397) can
           // only be expanded to concrete field names once ORM metadata
           // exists, which is now — so this documents the narrowed set the
           // engine actually enforces rather than the full writable base.
-          if (bodyDtoFor(descriptor, dtoResolver) === null) {
-            const resolvedDto = service.engine.config.dto;
+          if (bodyDtoFor(descriptor, schemaResolver) === null) {
+            const resolvedSchema = service.engine.config.schema;
             applyBodySchemaDocs(
               prototype,
               methodName,
@@ -455,10 +458,10 @@ class KavoBinder implements OnModuleInit {
               service.engine.metadata,
               {
                 creatable:
-                  shorthandFieldsOf(resolvedDto.resolve("create", descriptor.id)) ??
+                  shorthandFieldsOf(resolvedSchema.resolveInput("create", descriptor.id)) ??
                   writableBaseOf(service.engine.metadata),
                 updatable:
-                  shorthandFieldsOf(resolvedDto.resolve("update", descriptor.id)) ??
+                  shorthandFieldsOf(resolvedSchema.resolveInput("update", descriptor.id)) ??
                   writableBaseOf(service.engine.metadata),
               },
               relationTargetMetadata,
@@ -480,7 +483,7 @@ class KavoBinder implements OnModuleInit {
             service.engine.config.select.fields as readonly string[],
             service.engine.config.include.fields as readonly string[],
             relationTargetMetadata,
-            dtoResolver,
+            schemaResolver,
           );
           // `search[...]` Swagger docs (issue #156) — deferred for the same
           // reason as the conditional-request docs above (`applySearchQueryDocs`'s

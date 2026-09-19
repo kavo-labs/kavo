@@ -26,11 +26,9 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
  * `purgeOne` enabled, that would be a permanent delete.
  */
 @Kavo(Owner, {
-  dto: {
-    create: CreateOwnerDto,
-    update: UpdateOwnerDto,
-    item: OwnerItemDto,
-    list: OwnerListDto,
+  schema: {
+    input: { create: CreateOwnerDto, update: UpdateOwnerDto },
+    output: { item: OwnerItemDto, list: OwnerListDto },
   },
   delete: { field: "deletedAt" },
   filter: { fields: { exclude: ["deletedAt"] } },

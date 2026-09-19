@@ -58,7 +58,7 @@ An id that is not a valid `ObjectId` is answered with **404**, not 500 or
 exactly like a well-formed id that isn't there.
 
 Mongoose's `__v` version key is excluded from the entity description
-entirely, so it never reaches a DTO or a response.
+entirely, so it never reaches a schema or a response.
 
 So is any path declared `select: false` — Mongoose's own "never return
 this", where a password hash or API key lives. Excluding it, rather than
@@ -103,7 +103,7 @@ foreignField })` is invisible to `schema.paths`, so the metadata seam
   `PATCH` of it will soft-delete a document, bypassing `deleteOne`'s
   already-deleted check. It cannot _revive_ one: writes are scoped to the
   live set, so a soft-deleted document 404s on `PUT`/`PATCH`. The marker is
-  also on the default allowlists and in the derived response DTOs, so
+  also on the default allowlists and in the derived response schemas, so
   `deletedAt` is visible in zero-config responses (as it is under
   `@kavo/typeorm`).
 
@@ -119,7 +119,7 @@ foreignField })` is invisible to `schema.paths`, so the metadata seam
   `@kavo/prisma` shares the underlying hole (only `@kavo/typeorm` escapes
   it, because `@DeleteDateColumn` is detectable); the fix — excluding the
   resolved `delete.field` from the writable projection — belongs in
-  core. Until then, register an explicit `update`/`patch` DTO that omits the
+  core. Until then, register an explicit `update`/`patch` schema that omits the
   marker whenever you enable `purgeOne`.
 
 - **`BigInt`/`Decimal128` are returned with JS number precision**, so a

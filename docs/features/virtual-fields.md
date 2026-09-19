@@ -96,19 +96,19 @@ class Book {
 }
 ```
 
-A getter carries no `FieldMetadata` at all — there is nothing to opt into `filter.fields`/`sort.fields`/`select.fields`, and it is unconditionally response-only. It reaches a response only through a registered DTO that names it (the DTO's own initializer value is unused; `DefaultSerializer` reads the real value off the entity instance, which is what invokes the getter):
+A getter carries no `FieldMetadata` at all — there is nothing to opt into `filter.fields`/`sort.fields`/`select.fields`, and it is unconditionally response-only. It reaches a response only through a registered schema that names it (the schema's own initializer value is unused; `DefaultSerializer` reads the real value off the entity instance, which is what invokes the getter):
 
 ```ts
-class BookItemDto {
+class BookItemSchema {
   id = 0;
   displayTitle = ""; // registers the key; the getter supplies the value
 }
-@Kavo(Book, { dto: { item: BookItemDto } })
+@Kavo(Book, { schema: { output: { item: BookItemSchema } } })
 ```
 
 This only works on TypeORM. `@kavo/mikroorm` and `@kavo/mongoose` both convert an ORM row to a plain object at the adapter boundary before core ever sees it (`wrap(entity).toObject()`, `document.toObject({ getters: false, virtuals: false })`), which strips a plain getter or an unconfigured virtual either way; `@kavo/prisma` never has a class instance to put a getter on in the first place.
 
-The TypeORM and MikroORM forms are `FieldMetadata` entries Kavo sees and can serve through the ordinary `select=`/DTO path with no further configuration beyond opting them into `select.fields`. The Prisma and Mongoose forms are invisible to Kavo's metadata seam entirely — they exist only on the client's returned object — so surfacing one over HTTP means registering an explicit `item`/`list` DTO that names it, or a custom operation that reads the extended client / virtual directly.
+The TypeORM and MikroORM forms are `FieldMetadata` entries Kavo sees and can serve through the ordinary `select=`/schema path with no further configuration beyond opting them into `select.fields`. The Prisma and Mongoose forms are invisible to Kavo's metadata seam entirely — they exist only on the client's returned object — so surfacing one over HTTP means registering an explicit `item`/`list` schema that names it, or a custom operation that reads the extended client / virtual directly.
 
 ## (b) A filterable/sortable SQL-expression virtual
 
@@ -195,12 +195,12 @@ GET /posts?filter[commentCount][gt]=10
 
 ## Support matrix
 
-| ORM                                              | Response-only                                                                          | Filterable / sortable                                        | Selectable (opt-in)     |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------- |
-| `@kavo/typeorm` (`@VirtualColumn`)               | ✅                                                                                     | ✅ (inlined into `WHERE`/`ORDER BY`)                         | ✅                      |
-| `@kavo/mikroorm` (`@Formula`)                    | ✅                                                                                     | ✅ (MikroORM resolves the formula by property name natively) | ✅                      |
-| `@kavo/prisma` (client extension `result` field) | ✅ (via a registered DTO or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
-| `@kavo/mongoose` (`schema.virtual`)              | ✅ (via a registered DTO or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
+| ORM                                              | Response-only                                                                             | Filterable / sortable                                        | Selectable (opt-in)     |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------- |
+| `@kavo/typeorm` (`@VirtualColumn`)               | ✅                                                                                        | ✅ (inlined into `WHERE`/`ORDER BY`)                         | ✅                      |
+| `@kavo/mikroorm` (`@Formula`)                    | ✅                                                                                        | ✅ (MikroORM resolves the formula by property name natively) | ✅                      |
+| `@kavo/prisma` (client extension `result` field) | ✅ (via a registered schema or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
+| `@kavo/mongoose` (`schema.virtual`)              | ✅ (via a registered schema or custom operation only — invisible to Kavo's metadata seam) | ❌ (400, unknown field)                                      | ❌ (400, unknown field) |
 
 ## Caller-varying values
 
@@ -208,7 +208,7 @@ A virtual field's expression is evaluated by the database once per row —
 nothing about it can vary by the request reading the row. A value that
 needs to vary by caller (`context.app`) has no place in `allowed`/ORM
 metadata at all; reach for a custom operation, an explicit `item`/`list`
-DTO computed in application code, or a policy instead.
+Schema computed in application code, or a policy instead.
 
 See [ADR-0050](/internals/adr/0050-derived-fields-come-from-orm-metadata)
 for the full design.

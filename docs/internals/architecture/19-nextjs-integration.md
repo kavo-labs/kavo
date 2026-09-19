@@ -101,7 +101,7 @@ equivalent of `@kavo/nest`'s `registerKavoSchemas` — the identical
 `Include`/`Sort`, `<Entity>Filter`/`Query`, `<Entity>ValidationError`, plus
 the shared `KavoProblemDetails`/`KavoProblemDetailError`) — built entirely
 from `EntityMetadata` and the entity's resolved config, with no
-decorator/reflection story to introspect a configured DTO class's runtime
+decorator/reflection story to introspect a configured schema class's runtime
 shape. `resolveRoute`/`matchRoute` are exported alongside it so a caller
 who wants a full `paths` document can walk `engine.registry.all()` the
 same way `buildKavoSchemas` does internally.

@@ -2,7 +2,7 @@
 
 A small Blog domain served over HTTP by the real stack — `@Kavo(...)`-generated
 NestJS routes → CRUD engine → `@kavo/mongoose` → a real MongoDB — with
-filtering, sorting, pagination, DTO projections (`item` vs. leaner `list`),
+filtering, sorting, pagination, schema projections (`item` vs. leaner `list`),
 layered config, Swagger docs, and RFC 9457 problem-details errors. `Author` is
 the relation side; `Article` carries a `ref` edge, a scalar array, and
 config-declared soft delete.

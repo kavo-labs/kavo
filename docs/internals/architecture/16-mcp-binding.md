@@ -34,16 +34,16 @@ Each `KavoMcpToolBinding` pairs one MCP `Tool` definition with the handler
 that runs it. There is no per-entity config — `crudTools` always produces
 the full standard set, unconditionally:
 
-| Tool               | Args                                              |
-| ------------------ | ------------------------------------------------- |
-| `owner.findOne`    | `{ id }`                                          |
-| `owner.findMany`   | `{ limit?, offset?, sort?, filter? }`             |
-| `owner.createOne`  | any fields (forwarded straight to the create DTO) |
-| `owner.updateOne`  | `{ id, ...anyFields }`                            |
-| `owner.patchOne`   | `{ id, ...anyFields }`                            |
-| `owner.deleteOne`  | `{ id }`                                          |
-| `owner.restoreOne` | `{ id }`                                          |
-| `owner.purgeOne`   | `{ id }`                                          |
+| Tool               | Args                                                 |
+| ------------------ | ---------------------------------------------------- |
+| `owner.findOne`    | `{ id }`                                             |
+| `owner.findMany`   | `{ limit?, offset?, sort?, filter? }`                |
+| `owner.createOne`  | any fields (forwarded straight to the create schema) |
+| `owner.updateOne`  | `{ id, ...anyFields }`                               |
+| `owner.patchOne`   | `{ id, ...anyFields }`                               |
+| `owner.deleteOne`  | `{ id }`                                             |
+| `owner.restoreOne` | `{ id }`                                             |
+| `owner.purgeOne`   | `{ id }`                                             |
 
 This mirrors how `@Kavo` itself enables every standard operation by
 default: no hand-authored per-entity JSON Schema to keep in sync, and no
@@ -55,7 +55,7 @@ would. `createOne`/`updateOne`/`patchOne`'s `inputSchema` is deliberately
 unconstrained (`{ type: "object" }`, or `{ type: "object", properties: {
 id }, required: ["id"] }` for the two that also need an id) — JSON Schema
 permits additional properties by default, so whatever fields a caller
-sends land on the DTO as-is; the engine's own DTO layer is what actually
+sends land on the schema as-is; the engine's own schema layer is what actually
 validates them, the same trust boundary REST already has.
 
 `resolveKavoMcpTools` (`discovery.ts`) is the host-agnostic pipeline that
@@ -82,8 +82,8 @@ programmatic `QueryContext` surface, not REST's wire-string/camelCase form.
 **Update/patch args are flat, not wrapped.** GraphQL's mutations take `(id,
 input)` as two separate arguments because GraphQL has native argument
 lists; an MCP tool call takes one JSON object, so `owner.updateOne`'s
-`inputSchema` merges `id` directly into the DTO schema's own `properties`/
-`required` instead of nesting the DTO under an `input` key — one flat
+`inputSchema` merges `id` directly into the schema's own `properties`/
+`required` instead of nesting the schema under an `input` key — one flat
 object a caller fills in once.
 
 ## 3. Result shape and error mapping
@@ -234,9 +234,9 @@ SDK as a devDependency.
 
 ## 6. What's out of scope (by design, for now)
 
-- Constrained, per-DTO input schemas for `createOne`/`updateOne`/`patchOne`
+- Constrained, per-schema input schemas for `createOne`/`updateOne`/`patchOne`
   — every tool's `inputSchema` is deliberately unconstrained (§2); deriving
-  a real JSON Schema from `EntityMetadata` (or a hand-supplied DTO schema)
+  a real JSON Schema from `EntityMetadata` (or a hand-supplied schema)
   is real, scoped follow-up work, the same status `@kavo/graphql`'s
   `itemType`/`createInputType` are still in (doc 13, §7).
 - Per-entity opt-out — every `@Kavo` entity handed to `resolveKavoMcpTools`

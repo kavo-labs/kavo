@@ -64,7 +64,7 @@ registerKavoGraphQLTypes(Order, {
 });
 ```
 
-Naming an id there is not enough by itself: the operation still has to be enabled and declare a matching `dto` shape (`operations.markPaidOne.dto.output`, and `dto.input` if `inputType` is given) on the entity's own config — a custom id has no entity-derived DTO fallback the way the standard eight do, so there is nothing to build a typed field from otherwise. Naming an id here whose registry entry is missing, disabled, or missing the matching declared shape fails at schema-build time with a `ConfigurationException`, not a silently omitted field.
+Naming an id there is not enough by itself: the operation still has to be enabled and declare a matching `schema` shape (`operations.markPaidOne.schema.output`, and `schema.input` if `inputType` is given) on the entity's own config — a custom id has no entity-derived schema fallback the way the standard eight do, so there is nothing to build a typed field from otherwise. Naming an id here whose registry entry is missing, disabled, or missing the matching declared shape fails at schema-build time with a `ConfigurationException`, not a silently omitted field.
 
 The field's placement — `Query` or `Mutation` — follows the operation's registered `kind` (`"read"`/`"write"`), the same as everywhere else the registry decides that. A cardinality-`"one"` operation takes an `id` argument the way `update`/`delete`/etc. do; a cardinality-`"many"` one does not. The field name is `<lowerName><OperationId>` (`orderMarkPaidOne`), namespaced by the entity the same way the standard fields already are.
 

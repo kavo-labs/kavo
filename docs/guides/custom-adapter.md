@@ -51,7 +51,7 @@ Every method receives an already-validated, already-normalized query. Allowed, l
 
 ## The other half: `EntityMetadata`
 
-Kavo also needs an ORM-independent description of the entity (its columns, their kinds, its relations, its primary key) to derive DTO defaults, allowlist defaults, and coerce wire values:
+Kavo also needs an ORM-independent description of the entity (its columns, their kinds, its relations, its primary key) to derive schema defaults, allowlist defaults, and coerce wire values:
 
 ```ts
 interface EntityMetadata<Entity> {

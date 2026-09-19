@@ -35,11 +35,12 @@ import { STANDARD_OPERATION_IDS } from "../operations/operation.js";
 import { BUILT_IN_DEFAULTS } from "./defaults.js";
 import { deepFreeze, mergeSettings } from "./merge-settings.js";
 import { validateSettings } from "./validate-settings.js";
-import type { DtoClass, WriteApply, WriteFieldsConfig } from "../dto/dto.js";
-import { dtoShapeKeys } from "../dto/dto-shape.js";
-import { dtoClassFromFields, resolveDtoSlot } from "../dto/dto-fields-shorthand.js";
-import { DefaultDtoResolver } from "../dto/default-dto-resolver.js";
-import { DefaultSchemaResolver } from "../dto/entity-schema.js";
+import type { WriteApply, WriteFieldsConfig } from "./write-fields.js";
+import type { SchemaClass } from "../schema/schema-class.js";
+import { isSchemaClass } from "../schema/schema-class.js";
+import { schemaShapeKeys } from "../schema/schema-shape.js";
+import { schemaClassFromFields } from "../schema/schema-fields-shorthand.js";
+import { DefaultSchemaResolver, normalizeEntitySchema } from "../schema/entity-schema.js";
 import { DefaultRelationRegistry } from "../relations/default-relation-registry.js";
 import { resolveSoftDelete } from "../persistence/soft-delete.js";
 import { ConfigurationException } from "../errors/exceptions.js";
@@ -75,7 +76,7 @@ const SETTINGS_KEYS = [
 
 /**
  * An `EntityConfig`/`OperationConfig` mixes settings keys with structural
- * keys (`dto`, `filter`/`sort`/`select`/`search`/`include`, `handler`, …);
+ * keys (`schema`, `filter`/`sort`/`select`/`search`/`include`, `handler`, …);
  * only the settings subset participates in the merge algebra.
  */
 function pickSettings(config: Readonly<Record<string, unknown>> | undefined): DeepPartial<KavoSettings> | undefined {
@@ -116,7 +117,7 @@ export function resolveEntityConfig<Entity extends object>(
   const writableUniverse = derivedWritableFieldNames(metadata);
   const createFields = resolveWriteFields(entityName, "create.fields", entityConfig?.create, writableUniverse);
   const updateFields = resolveWriteFields(entityName, "update.fields", entityConfig?.update, writableUniverse);
-  rejectDerivedWriteDtoKeys(entityName, metadata, entityConfig, createFields, updateFields);
+  rejectDerivedWriteSchemaKeys(entityName, metadata, entityConfig, createFields, updateFields);
   const policy = resolvePolicy(entityName, entityConfig, globalPolicy);
 
   const { filter, sort, select, search, include, sortDefault } = resolveFieldGroups(metadata, entityConfig);
@@ -189,13 +190,12 @@ export function resolveEntityConfig<Entity extends object>(
     projection,
     delete: resolveSoftDelete(metadata, entitySettings),
     identifierField,
-    dto: new DefaultDtoResolver<Entity>(entityConfig?.dto, {
+    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema, {
       // The resolved arrays, not the raw config: an `{ exclude }` shorthand
       // is already expanded to a concrete writable-field list here (#397).
       create: createFields === undefined ? undefined : ({ fields: createFields } as WriteFieldsConfig<Entity>),
       update: updateFields === undefined ? undefined : ({ fields: updateFields } as WriteFieldsConfig<Entity>),
     }),
-    schema: new DefaultSchemaResolver<Entity>(entityConfig?.schema),
     relations,
     // Shallow-frozen: the array itself can't be mutated, but a transport's
     // own internal state is left alone (ADR-0023).
@@ -410,29 +410,34 @@ function resolvePolicy<Entity extends object>(
 }
 
 /**
- * A registered `create`/`update`/`patch` DTO naming an ORM-derived field
- * (`FieldMetadata.derivedExpression`) is a bootstrap error.
+ * A registered `schema.input.create`/`.update`/`.patch` class naming an
+ * ORM-derived field (`FieldMetadata.derivedExpression`) is a bootstrap
+ * error.
  *
  * `DefaultDeserializer` would strip the key anyway — that strip stays, as
  * the defence for anyone constructing a deserializer directly — but a
  * silent per-request drop is the wrong report for a declaration that can
  * be judged wrong once, at the moment it is made. It also has a wire
- * consequence the strip cannot reach: `@kavo/nest` builds `@ApiBody` from
- * the DTO's runtime shape, so OpenAPI would advertise a property the
- * engine unconditionally discards.
+ * consequence the strip cannot reach: `@kavo/nest` builds the request body
+ * from the schema class's runtime shape, so OpenAPI would advertise a
+ * property the engine unconditionally discards.
  *
- * Only classes with a runtime shape are checkable; a purely declarative
- * DTO yields `null` from `dtoShapeKeys` and falls back to the derived
+ * Only a class-shaped slot is checkable; a `KavoSchema` validator has no
+ * static shape `schemaShapeKeys` can read, so this skips the check
+ * entirely when the resolved slot value is a validator, not a class — a
+ * validator-configured slot can't leak a derived field into a generated
+ * OpenAPI body the same way, since there is no `schemaShapeKeys`-driven
+ * OpenAPI generation for it either. A purely declarative class likewise
+ * yields `null` from `schemaShapeKeys` and falls back to the derived
  * writable projection, which never contains a derived-field name. A
- * `{ fields }` shorthand — `dto.patch`'s own (issue #386), or the
- * top-level `create`/`update` shorthand that replaced `dto.create`/
- * `dto.update`'s (issue #388) — is resolved to its synthesized class
- * first, so its declared fields are checked the same way. `create`/
- * `update` check the registered `dto.<slot>` class first, matching
- * `DefaultDtoResolver`'s own precedence: a registered class wins over the
- * top-level shorthand.
+ * `{ fields }` shorthand — `schema.input.patch`'s own (issue #386), or the
+ * top-level `create`/`update` shorthand (issue #388) — is resolved to its
+ * synthesized class first, so its declared fields are checked the same
+ * way. `create`/`update` check the registered `schema.input.<slot>` class
+ * first, matching `DefaultSchemaResolver`'s own precedence: a registered
+ * class wins over the top-level shorthand.
  */
-function rejectDerivedWriteDtoKeys<Entity extends object>(
+function rejectDerivedWriteSchemaKeys<Entity extends object>(
   entityName: string,
   metadata: EntityMetadata<Entity>,
   entityConfig: EntityConfig<Entity> | undefined,
@@ -445,27 +450,35 @@ function rejectDerivedWriteDtoKeys<Entity extends object>(
   if (names.size === 0) {
     return;
   }
-  const dto = entityConfig?.dto as Readonly<Record<string, DtoClass | undefined>> | undefined;
+  const { input: map } = normalizeEntitySchema(entityConfig?.schema);
   // `createFields`/`updateFields` are already `{ exclude }`-resolved (#397);
   // a derived-field name can never be in the resolved list of an `{ exclude }`
   // form (it has no writable storage), so this still only ever fires for a
   // derived-field name written into the plain array form.
-  const checks: readonly [slot: string, scope: string, dtoClass: DtoClass | null][] = [
-    ["create", "dto.create", dto?.create ?? (createFields ? dtoClassFromFields(createFields) : null)],
-    ["update", "dto.update", dto?.update ?? (updateFields ? dtoClassFromFields(updateFields) : null)],
-    ["patch", "dto.patch", resolveDtoSlot(dto?.patch as Parameters<typeof resolveDtoSlot>[0])],
+  const checks: readonly [slot: string, scope: string, schemaClass: SchemaClass | null][] = [
+    [
+      "create",
+      "schema.input.create",
+      isSchemaClass(map.create) ? map.create : createFields ? schemaClassFromFields(createFields) : null,
+    ],
+    [
+      "update",
+      "schema.input.update",
+      isSchemaClass(map.update) ? map.update : updateFields ? schemaClassFromFields(updateFields) : null,
+    ],
+    ["patch", "schema.input.patch", isSchemaClass(map.patch) ? map.patch : null],
   ];
-  for (const [slot, scope, dtoClass] of checks) {
-    const declared = dtoShapeKeys(dtoClass)?.find((key) => names.has(key));
+  for (const [slot, scope, schemaClass] of checks) {
+    const declared = schemaShapeKeys(schemaClass)?.find((key) => names.has(key));
     if (declared === undefined) {
       continue;
     }
     throw new ConfigurationException(
       entityName,
       scope,
-      `the '${slot}' DTO declares '${declared}', which is an ORM-derived field on '${entityName}' — ` +
+      `the '${slot}' schema declares '${declared}', which is an ORM-derived field on '${entityName}' — ` +
         `a derived field has no writable storage behind it, so the value is stripped from every write ` +
-        `payload while the generated OpenAPI body still advertises the property; drop it from the DTO`,
+        `payload while the generated OpenAPI body may still advertise the property; drop it from the schema`,
     );
   }
 }

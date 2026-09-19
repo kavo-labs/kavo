@@ -145,8 +145,8 @@ export function registerArrayMutationOperations<Entity extends object>(
         handler:
           handlerFactory?.(name) ??
           (unboundArrayMutationHandler(operationId, name, entityName) as OperationHandler<Entity>),
-        input: null,
-        output: null,
+        schemaInput: null,
+        schemaOutput: null,
         meta: { arrayMutation: { relation: name, strategy, action } },
       };
       registry.register(descriptor);

@@ -46,7 +46,7 @@ column rather than a `@DeleteDateColumn` — is excluded from the derived
 precisely because the marker column cannot always be marked generated
 (`DefaultDeserializer`, doc 04 §3). Adapter write paths additionally strip
 the resolved marker (and the id field) from an `update`/`patch` payload as
-defence in depth, so it survives even a write DTO that names it explicitly.
+defence in depth, so it survives even a write schema that names it explicitly.
 
 Resolution runs at every settings scope, so an operation or a single call
 may narrow it (`operations: { deleteOne: { delete: { strategy: "hard" } } }`),
@@ -58,7 +58,7 @@ on that object — they never re-derive the decision.
 | Operation    | Behavior                                                                                                                         |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `deleteOne`  | Hard or soft per the resolved strategy. Soft-deleting a deleted row → 409 `KAVO_ALREADY_DELETED`.                                |
-| `restoreOne` | Clears the marker, returns the revived row in the **`item`** slot — no new DTO shape. A live row → 409 `KAVO_NOT_DELETED`.       |
+| `restoreOne` | Clears the marker, returns the revived row in the **`item`** slot — no new schema shape. A live row → 409 `KAVO_NOT_DELETED`.    |
 | `purgeOne`   | Permanently removes an already-soft-deleted row. A live row → 409 `KAVO_NOT_DELETED`. Under a hard strategy it is just a delete. |
 
 Enablement is config-declared, not metadata-driven (**ADR-0013**):

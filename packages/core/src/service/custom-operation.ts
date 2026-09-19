@@ -1,8 +1,8 @@
 import type { EntityId } from "../types/entity-id.js";
 import type { ListResultDto } from "../dto/list-result.js";
 import type { StandardOperationId } from "../operations/operation.js";
-import type { OperationEntryOf } from "../dto/dto.js";
-import type { SchemaInputOf, SchemaOutputOf } from "../dto/entity-schema.js";
+import type { OperationEntryOf } from "../operations/operation-entry.js";
+import type { SchemaInputOf, SchemaOutputOf } from "../schema/entity-schema.js";
 
 /**
  * The typed surface for a **custom** operation (issue #145) — everything
@@ -11,8 +11,8 @@ import type { SchemaInputOf, SchemaOutputOf } from "../dto/entity-schema.js";
  *
  * Every type here reads the `Ops` literal `EntityConfig.operations` was
  * inferred from, the same source `SchemaInputOf`/`SchemaOutputOf`/`SchemaQueryOf`
- * (`dto/dto.ts`) already read for the standard eight. Where those fall back
- * to an entity-wide DTO generic, these fall back to the **registered
+ * (`schema/entity-schema.ts`) already read for the standard eight. Where those
+ * fall back to an entity-wide DTO generic, these fall back to the **registered
  * handler's own signature**: a custom operation has no entity-wide slot of
  * its own, and the handler is the one place its shapes are stated.
  */
@@ -63,10 +63,10 @@ type DeclaredCustomIds<Ops> = Exclude<Extract<keyof Ops, string>, StandardOperat
 export type CustomOperationId<Ops> = [DeclaredCustomIds<Ops>] extends [never] ? string : DeclaredCustomIds<Ops>;
 
 /**
- * The request body a custom operation takes: its `dto.input` override when
- * it declares one (the class the engine deserializes into), else what its
- * handler declares — unwrapped from the `{ id, body }` pair the engine
- * hands an id-addressed operation, since `id` is passed separately here.
+ * The request body a custom operation takes: its `schema.input` override
+ * when it declares one, else what its handler declares — unwrapped from the
+ * `{ id, body }` pair the engine hands an id-addressed operation, since `id`
+ * is passed separately here.
  */
 export type CustomOperationBody<Ops, Id extends string> = SchemaInputOf<
   Ops,
@@ -75,8 +75,8 @@ export type CustomOperationBody<Ops, Id extends string> = SchemaInputOf<
 >;
 
 /**
- * What `run` resolves to: the `dto.output` override when declared, else the
- * handler's own return type — wrapped in the list envelope for a
+ * What `run` resolves to: the `schema.output` override when declared, else
+ * the handler's own return type — wrapped in the list envelope for a
  * `cardinality: "many"` operation, which is mapped through the same
  * `ListResultDto` path `findMany` is.
  */
@@ -95,7 +95,7 @@ export type CustomOperationResult<Ops, Id extends string> =
 export interface CustomOperationRequest<Id extends EntityId = EntityId, Body = unknown, Query = unknown> {
   /** The target row, for an operation routed under `:id`. */
   readonly id?: Id;
-  /** The write payload, deserialized through the operation's input DTO. */
+  /** The write payload, deserialized through the operation's input shape. */
   readonly body?: Body;
   /** The read query, normalized exactly as `findOne`/`findMany`'s is. */
   readonly query?: Query;

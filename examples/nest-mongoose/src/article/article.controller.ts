@@ -20,11 +20,9 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
  * refused rather than silently matching nothing — see doc 15 §2.
  */
 @Kavo(Article, {
-  dto: {
-    create: CreateArticleDto,
-    update: UpdateArticleDto,
-    item: ArticleItemDto,
-    list: ArticleListDto,
+  schema: {
+    input: { create: CreateArticleDto, update: UpdateArticleDto },
+    output: { item: ArticleItemDto, list: ArticleListDto },
   },
   delete: { field: "deletedAt" },
   operations: {

@@ -6,7 +6,7 @@ import type { EntityInput } from "../types/utility.js";
 import type { ListResultDto } from "../dto/list-result.js";
 import type { OperationId } from "../operations/operation.js";
 import type { QueryContext } from "../query/query-context.js";
-import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../dto/entity-schema.js";
+import type { SchemaInputOf, SchemaOutputOf, SchemaQueryOf } from "../schema/entity-schema.js";
 import type {
   CustomOperationBody,
   CustomOperationId,
