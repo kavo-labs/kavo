@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEmail,
   IsEnum,
@@ -14,6 +15,7 @@ import {
   IsNegative,
   IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUrl,
   IsUUID,
@@ -124,6 +126,12 @@ class WidgetDto {
 
   @IsNegative()
   offset = -1;
+
+  @IsBoolean()
+  active = false;
+
+  @IsPositive()
+  rank = 1;
 }
 
 describe("registerKavoSchemas — class-validator DTOs", () => {
@@ -141,6 +149,8 @@ describe("registerKavoSchemas — class-validator DTOs", () => {
     expect(properties.publishedAt).toMatchObject({ type: "string", format: "date-time" });
     expect(properties.code).toMatchObject({ minLength: 2, maxLength: 5 });
     expect(properties.offset).toMatchObject({ exclusiveMaximum: 0 });
+    expect(properties.active).toMatchObject({ type: "boolean" });
+    expect(properties.rank).toMatchObject({ exclusiveMinimum: 0 });
   });
 
   it("translates string/number/enum/pattern constraints into OpenAPI keywords", async () => {
@@ -361,6 +371,166 @@ describe("registerKavoSchemas — a real Zod schema.input.create", () => {
         required: ["street", "city"],
       },
     });
+  });
+});
+
+/**
+ * The response side of the same ADR-0055 / issue #467 seam: `successBodyFor`
+ * reads `schema.output.<slot>` through the identical `schemaDocFor` used for
+ * `schema.input.<slot>` above, so a real Zod validator's own constraints
+ * should carry straight through to the success response too, not just the
+ * request body.
+ */
+describe("registerKavoSchemas — a real Zod schema.output.item/list", () => {
+  it("documents a single-row response's own validation keywords verbatim", async () => {
+    const todoItemZodSchema = z.object({
+      title: z.string().min(1).max(80),
+      priority: z.enum(["low", "high"]),
+    });
+
+    @Kavo(Todo, { schema: { output: { item: todoItemZodSchema } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    expect(item.properties.title).toMatchObject({ type: "string", minLength: 1, maxLength: 80 });
+    expect(item.properties.priority).toMatchObject({ type: "string", enum: ["low", "high"] });
+    expect(item.required).toEqual(expect.arrayContaining(["title", "priority"]));
+  });
+
+  it("documents a list response's element validation keywords verbatim, inside the envelope", async () => {
+    const todoListZodSchema = z.object({
+      title: z.string().min(1).max(80),
+      tags: z.array(z.string().min(2)),
+    });
+
+    @Kavo(Todo, { schema: { output: { list: todoListZodSchema } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const element = schemaNamed(document, "TodoListItem");
+
+    expect(element.properties.title).toMatchObject({ type: "string", minLength: 1, maxLength: 80 });
+    expect(element.properties.tags).toMatchObject({ type: "array", items: { type: "string", minLength: 2 } });
+    expect(element.required).toEqual(expect.arrayContaining(["title", "tags"]));
+  });
+});
+
+/**
+ * `successBodyFor` resolves a hand-registered `schema.output.item` class
+ * through the same `schemaFromDto` that documents request bodies
+ * (`bodyDtoFor`) — a plain class, not a `toJSONSchema`-opted validator or the
+ * `{ fields }` shorthand — so a class-validator-decorated response DTO's
+ * array fields (plain `each: true` and `@ValidateNested({ each: true })`)
+ * should translate identically on the response side, not just on requests.
+ */
+class TodoOutputDto {
+  @IsString()
+  title = "";
+
+  @IsArray()
+  @IsString({ each: true })
+  tags: string[] = [];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AddressDto)
+  addresses: AddressDto[] = [];
+}
+
+describe("registerKavoSchemas — class-validator array fields on schema.output.item", () => {
+  it("narrows a plain each:true array field on the response the same way it does on the request", async () => {
+    @Kavo(Todo, { schema: { output: { item: TodoOutputDto } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    expect(item.properties.tags).toMatchObject({ type: "array", items: { type: "string" } });
+  });
+
+  it("expands a @ValidateNested({ each: true }) array field on the response into its nested DTO's own shape", async () => {
+    @Kavo(Todo, { schema: { output: { item: TodoOutputDto } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    expect(item.properties.addresses).toMatchObject({
+      type: "array",
+      items: {
+        type: "object",
+        properties: { street: { type: "string", minLength: 1 }, city: { type: "string" } },
+      },
+    });
+  });
+});
+
+describe("registerKavoSchemas — a `schema.input` field-array shorthand", () => {
+  it("types createOne's body from ORM metadata, narrowed to exactly the bare-array field list", async () => {
+    // The mirror of the `schema.output` shorthand test above (that test's
+    // own doc comment: "the same way `bodyDtoFor` already does for the
+    // equivalent `schema.input.create`/`update` shorthand") — pinned here in
+    // its own right rather than only implied by that comment.
+    @Kavo(Todo, { schema: { input: { create: ["title", "priority"] } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const schema = schemaNamed(document, "TodoCreate");
+
+    expect(schema.properties.title).toMatchObject({ type: "string" });
+    expect(schema.properties.priority).toMatchObject({ type: "number" });
+    // Narrowed to exactly the shorthand's own field list — `done` is on
+    // `Todo`'s own metadata and part of `creatable` by default, but
+    // deliberately left off this shorthand, and must stay off the body.
+    expect(schema.properties.done).toBeUndefined();
+  });
+
+  it("types updateOne's body the same way from the { fields } object spelling", async () => {
+    @Kavo(Todo, { schema: { input: { update: { fields: ["title", "done"] } } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const schema = schemaNamed(document, "TodoUpdate");
+
+    expect(schema.properties.title).toMatchObject({ type: "string" });
+    expect(schema.properties.done).toMatchObject({ type: "boolean" });
+    expect(schema.properties.priority).toBeUndefined();
+  });
+});
+
+/**
+ * A real Zod array field on a single-row response (`schema.output.item`),
+ * as distinct from the list-envelope element case above — `successBodyFor`
+ * takes a different branch for cardinality `"one"` than for `"many"`, so an
+ * array-typed property needs its own pin on the non-list path too.
+ */
+describe("registerKavoSchemas — a real Zod array field on schema.output.item", () => {
+  it("documents the array's own item type and validation keywords on a single-row response", async () => {
+    const todoItemZodSchema = z.object({
+      title: z.string(),
+      tags: z.array(z.string().min(2).max(10)),
+    });
+
+    @Kavo(Todo, { schema: { output: { item: todoItemZodSchema } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    expect(item.properties.tags).toMatchObject({
+      type: "array",
+      items: { type: "string", minLength: 2, maxLength: 10 },
+    });
+    expect(item.required).toEqual(expect.arrayContaining(["title", "tags"]));
   });
 });
 
