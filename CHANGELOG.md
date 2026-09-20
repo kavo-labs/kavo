@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.4](https://github.com/kavo-labs/kavo/compare/v0.23.3...v0.23.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **nest:** overlay entity class-validator constraints on schema.input's field-array body docs ([4303b5a](https://github.com/kavo-labs/kavo/commit/4303b5a036962ccc0bf9362e51f3751940908acd))
+
 ## [0.23.3](https://github.com/kavo-labs/kavo/compare/v0.23.2...v0.23.3) (2026-09-20)
 
 
