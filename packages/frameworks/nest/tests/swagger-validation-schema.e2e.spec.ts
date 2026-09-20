@@ -363,3 +363,53 @@ describe("registerKavoSchemas — a real Zod schema.input.create", () => {
     });
   });
 });
+
+describe("registerKavoSchemas — a `schema.output` field-array shorthand", () => {
+  it("types item/list properties from ORM metadata instead of documenting every field as `{}`", async () => {
+    // The shorthand synthesizes a real `SchemaClass` (issue #386) whose
+    // fields carry no runtime type of their own — every field is
+    // `undefined` on a fresh instance — so `applyResponseSchemaDocs` must
+    // treat it like "no registered output schema" and fall back to
+    // `metadata.fields`, the same way `bodyDtoFor` already does for the
+    // equivalent `schema.input.create`/`update` shorthand. Before that
+    // fix, `title`/`priority`/`done` below all documented as `{}`.
+    @Kavo(Todo, { schema: { output: ["id", "title", "priority", "done"] } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    expect(item.properties.title).toMatchObject({ type: "string" });
+    expect(item.properties.priority).toMatchObject({ type: "number" });
+    expect(item.properties.done).toMatchObject({ type: "boolean" });
+    // Narrowed to exactly the shorthand's own field list — `deletedAt`
+    // (on `Todo`'s own metadata, and part of `selectable` by default) is
+    // deliberately left off the `output` shorthand and must stay off the
+    // documented shape too.
+    expect(item.properties.deletedAt).toBeUndefined();
+
+    const list = schemaNamed(document, "TodoListItem");
+    expect(list.properties.title).toMatchObject({ type: "string" });
+    expect(list.properties.deletedAt).toBeUndefined();
+  });
+
+  it("still bails out for a hand-registered output class, leaving its own runtime-shape inference alone", async () => {
+    class TodoItemDto {
+      id = 0;
+      title = "";
+    }
+
+    @Kavo(Todo, { schema: { output: TodoItemDto } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const item = schemaNamed(document, "TodoItem");
+
+    // A real class's own runtime shape is authoritative — `done`/`priority`
+    // (present on `Todo`'s metadata but not on `TodoItemDto`) must not
+    // reappear via the metadata-driven fallback this class opted out of.
+    expect(Object.keys(item.properties)).toEqual(["id", "title"]);
+  });
+});

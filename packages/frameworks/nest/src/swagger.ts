@@ -1540,7 +1540,22 @@ export function applyResponseSchemaDocs(
   }
   const isList = descriptor.cardinality === "many";
   const slot: "item" | "list" = isList ? "list" : "item";
-  if ((descriptor.schemaOutput ?? null) !== null || schemaResolver.resolveOutput(slot, descriptor.id) !== null) {
+  const resolvedOutput = descriptor.schemaOutput ?? schemaResolver.resolveOutput(slot, descriptor.id);
+  // A `schema.output.<slot>` (or `descriptor.schemaOutput`) `{ fields }`/
+  // bare-array shorthand (issue #386) synthesizes a real `SchemaClass` so
+  // the engine treats it uniformly, but — same as `bodyDtoFor`'s identical
+  // check on the input side — it carries no type information of its own.
+  // Bailing out for it here (as for any other resolved output schema) means
+  // it never gets past decoration time's `schemaFromDto`, which reads
+  // `typeof new FieldsShorthandSchema().<field>` and finds every field
+  // `undefined` (the shorthand only ever assigns keys, never values),
+  // producing an all-`{}` response schema instead of the real, richer
+  // ORM-metadata-driven one this function builds. Only a *hand-registered*
+  // class (or a validator schema, already documented through `schemaDocFor`
+  // at decoration time) still bails — the metadata-driven pass below is not
+  // more correct than an actual custom class's own runtime shape.
+  const shorthandFields = shorthandFieldsOf(resolvedOutput);
+  if (resolvedOutput !== null && shorthandFields === null) {
     return;
   }
 
@@ -1555,10 +1570,16 @@ export function applyResponseSchemaDocs(
   }
   alreadyResponseSchemaDocumented.add(method);
 
+  // The shorthand's own field list narrows further than (and independently
+  // of) `selectable` — `output: ["id", "title"]` should document exactly
+  // those two fields even when `selectable` allows more for `fields=`
+  // query narrowing. No shorthand (the common case, nothing registered)
+  // keeps today's `selectable`-only narrowing.
+  const responseFields = shorthandFields ?? selectable;
   const properties: Record<string, object> = {};
   const required: string[] = [];
   for (const field of metadata.fields) {
-    if (!selectable.includes(field.name)) {
+    if (!responseFields.includes(field.name)) {
       continue;
     }
     properties[field.name] = fieldSchema(field);
