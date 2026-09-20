@@ -33,8 +33,6 @@ type SwaggerModule = {
   ApiExtension(extensionKey: string, extensionProperties: unknown): MethodDecorator;
 };
 
-let cached: SwaggerModule | null | undefined;
-
 /** The slice of class-validator's metadata storage this module reads. */
 interface ClassValidatorMetadata {
   readonly propertyName: string;
@@ -55,8 +53,6 @@ type ClassValidatorModule = {
   };
 };
 
-let cachedClassValidator: ClassValidatorModule | null | undefined;
-
 /** class-transformer's `@Type(() => Target)` metadata for one property. */
 interface ClassTransformerTypeMetadata {
   readonly typeFunction: () => Function;
@@ -68,72 +64,51 @@ type ClassTransformerModule = {
   };
 };
 
-let cachedClassTransformer: ClassTransformerModule | null | undefined;
+/** One `loadOptionalPeer` cache slot per module specifier it's been asked to load. */
+const optionalPeerCache = new Map<string, unknown>();
 
 /**
- * `@nestjs/swagger` is an *optional* peer: when it is installed, generated
- * routes are documented (operation ids, the `:id` param, the query
- * params on list routes, registered DTO classes as body schemas, and the
- * problem-details error responses from the error catalog); when it is
- * not, this whole module is a no-op — Kavo never forces the dependency.
+ * `@nestjs/swagger`, `class-validator`, and `class-transformer` are all
+ * *optional* peers: `@nestjs/swagger` documents generated routes at all;
+ * `class-validator` translates `@Is*`/`@Min*`/`@Max*`/etc. decorators on a
+ * hand-written DTO into OpenAPI validation keywords; `class-transformer`
+ * resolves the target class a `@ValidateNested()` field's `@Type(() =>
+ * Target)` names, so that field's own schema can be expanded instead of a
+ * bare `object`/`array`. None of the three is required — Kavo never forces
+ * any of these dependencies, and each's absence just means the schema it
+ * would have enriched falls back to plainer inference. `moduleSpecifier` is
+ * also the cache key, so each optional peer loads (and fails to load, if
+ * genuinely absent) at most once per process.
  */
+function loadOptionalPeer<T>(moduleSpecifier: string): T | null {
+  if (optionalPeerCache.has(moduleSpecifier)) {
+    return optionalPeerCache.get(moduleSpecifier) as T | null;
+  }
+  let loaded: T | null;
+  try {
+    const require = createRequire(import.meta.url);
+    loaded = require(moduleSpecifier) as T;
+  } catch {
+    loaded = null;
+  }
+  optionalPeerCache.set(moduleSpecifier, loaded);
+  return loaded;
+}
+
 function loadSwagger(): SwaggerModule | null {
-  if (cached !== undefined) {
-    return cached;
-  }
-  try {
-    const require = createRequire(import.meta.url);
-    cached = require("@nestjs/swagger") as SwaggerModule;
-  } catch {
-    cached = null;
-  }
-  return cached;
+  return loadOptionalPeer<SwaggerModule>("@nestjs/swagger");
 }
 
-/**
- * `class-validator` is an *optional* peer, same as `@nestjs/swagger` above:
- * when it's installed, `@Is*`/`@Min*`/`@Max*`/etc. decorators on a
- * hand-written DTO class are translated into OpenAPI validation keywords
- * (`classValidatorSchemaFor`); when it's not, decorated DTOs simply fall
- * back to the plain runtime-initializer inference `jsonSchemaForValue`
- * already did.
- */
 function loadClassValidator(): ClassValidatorModule | null {
-  if (cachedClassValidator !== undefined) {
-    return cachedClassValidator;
-  }
-  try {
-    const require = createRequire(import.meta.url);
-    cachedClassValidator = require("class-validator") as ClassValidatorModule;
-  } catch {
-    cachedClassValidator = null;
-  }
-  return cachedClassValidator;
+  return loadOptionalPeer<ClassValidatorModule>("class-validator");
 }
 
-/**
- * `class-transformer` is an *optional* peer too: `@ValidateNested()` alone
- * says a property must be validated recursively, but not which class to
- * validate it against — that comes from a separate `@Type(() => Target)`
- * decorator this library owns. Without it installed, a `@ValidateNested()`
- * field still gets a schema (bare `object`/`array`), just not one expanded
- * from the target class's own fields and constraints.
- */
+// `defaultMetadataStorage` isn't re-exported from class-transformer's
+// package root (its public surface is transform functions/decorators
+// only) — it lives at this internal subpath, which every published build
+// of the package carries regardless of module format.
 function loadClassTransformer(): ClassTransformerModule | null {
-  if (cachedClassTransformer !== undefined) {
-    return cachedClassTransformer;
-  }
-  try {
-    const require = createRequire(import.meta.url);
-    // `defaultMetadataStorage` isn't re-exported from the package root (its
-    // public surface is transform functions/decorators only) — it lives at
-    // this internal subpath, which every published build of the package
-    // carries regardless of module format.
-    cachedClassTransformer = require("class-transformer/cjs/storage") as ClassTransformerModule;
-  } catch {
-    cachedClassTransformer = null;
-  }
-  return cachedClassTransformer;
+  return loadOptionalPeer<ClassTransformerModule>("class-transformer/cjs/storage");
 }
 
 /**

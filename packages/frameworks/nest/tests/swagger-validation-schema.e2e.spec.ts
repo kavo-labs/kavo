@@ -6,12 +6,18 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   IsArray,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsIn,
   IsInt,
+  IsNegative,
+  IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
+  IsUUID,
+  Length,
   Matches,
   Max,
   MaxLength,
@@ -100,7 +106,43 @@ function schemaNamed(
   return schemas[name] as { properties: Record<string, Record<string, unknown>>; required?: string[] };
 }
 
+class WidgetDto {
+  @IsNumber()
+  score = 0;
+
+  @IsUrl()
+  homepage = "";
+
+  @IsUUID()
+  externalId = "";
+
+  @IsDateString()
+  publishedAt = "";
+
+  @Length(2, 5)
+  code = "";
+
+  @IsNegative()
+  offset = -1;
+}
+
 describe("registerKavoSchemas — class-validator DTOs", () => {
+  it("translates the remaining scalar/format/length keyword decorators", async () => {
+    @Kavo(Todo, { schema: { input: { create: WidgetDto } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const { properties } = schemaNamed(document, "TodoCreate");
+
+    expect(properties.score).toMatchObject({ type: "number" });
+    expect(properties.homepage).toMatchObject({ type: "string", format: "uri" });
+    expect(properties.externalId).toMatchObject({ type: "string", format: "uuid" });
+    expect(properties.publishedAt).toMatchObject({ type: "string", format: "date-time" });
+    expect(properties.code).toMatchObject({ minLength: 2, maxLength: 5 });
+    expect(properties.offset).toMatchObject({ exclusiveMaximum: 0 });
+  });
+
   it("translates string/number/enum/pattern constraints into OpenAPI keywords", async () => {
     @Kavo(Todo, { schema: { input: { create: CreateTodoDto } } })
     @Controller("todos")
