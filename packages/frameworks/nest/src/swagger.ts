@@ -35,6 +35,41 @@ type SwaggerModule = {
 
 let cached: SwaggerModule | null | undefined;
 
+/** The slice of class-validator's metadata storage this module reads. */
+interface ClassValidatorMetadata {
+  readonly propertyName: string;
+  readonly type?: string;
+  readonly name?: string;
+  readonly constraints: readonly unknown[];
+  readonly each: boolean;
+}
+
+type ClassValidatorModule = {
+  getMetadataStorage(): {
+    getTargetValidationMetadatas(
+      targetConstructor: Function,
+      targetSchema: string,
+      always: boolean,
+      strictGroups: boolean,
+    ): readonly ClassValidatorMetadata[];
+  };
+};
+
+let cachedClassValidator: ClassValidatorModule | null | undefined;
+
+/** class-transformer's `@Type(() => Target)` metadata for one property. */
+interface ClassTransformerTypeMetadata {
+  readonly typeFunction: () => Function;
+}
+
+type ClassTransformerModule = {
+  defaultMetadataStorage: {
+    findTypeMetadata(target: Function, propertyName: string): ClassTransformerTypeMetadata | undefined;
+  };
+};
+
+let cachedClassTransformer: ClassTransformerModule | null | undefined;
+
 /**
  * `@nestjs/swagger` is an *optional* peer: when it is installed, generated
  * routes are documented (operation ids, the `:id` param, the query
@@ -53,6 +88,52 @@ function loadSwagger(): SwaggerModule | null {
     cached = null;
   }
   return cached;
+}
+
+/**
+ * `class-validator` is an *optional* peer, same as `@nestjs/swagger` above:
+ * when it's installed, `@Is*`/`@Min*`/`@Max*`/etc. decorators on a
+ * hand-written DTO class are translated into OpenAPI validation keywords
+ * (`classValidatorSchemaFor`); when it's not, decorated DTOs simply fall
+ * back to the plain runtime-initializer inference `jsonSchemaForValue`
+ * already did.
+ */
+function loadClassValidator(): ClassValidatorModule | null {
+  if (cachedClassValidator !== undefined) {
+    return cachedClassValidator;
+  }
+  try {
+    const require = createRequire(import.meta.url);
+    cachedClassValidator = require("class-validator") as ClassValidatorModule;
+  } catch {
+    cachedClassValidator = null;
+  }
+  return cachedClassValidator;
+}
+
+/**
+ * `class-transformer` is an *optional* peer too: `@ValidateNested()` alone
+ * says a property must be validated recursively, but not which class to
+ * validate it against — that comes from a separate `@Type(() => Target)`
+ * decorator this library owns. Without it installed, a `@ValidateNested()`
+ * field still gets a schema (bare `object`/`array`), just not one expanded
+ * from the target class's own fields and constraints.
+ */
+function loadClassTransformer(): ClassTransformerModule | null {
+  if (cachedClassTransformer !== undefined) {
+    return cachedClassTransformer;
+  }
+  try {
+    const require = createRequire(import.meta.url);
+    // `defaultMetadataStorage` isn't re-exported from the package root (its
+    // public surface is transform functions/decorators only) — it lives at
+    // this internal subpath, which every published build of the package
+    // carries regardless of module format.
+    cachedClassTransformer = require("class-transformer/cjs/storage") as ClassTransformerModule;
+  } catch {
+    cachedClassTransformer = null;
+  }
+  return cachedClassTransformer;
 }
 
 /**
@@ -1568,7 +1649,8 @@ export function applyResponseSchemaDocs(
 function schemaFromDto(
   bodyDto: ClassRef,
   entityName: string,
-): { type: "object"; properties: Record<string, object> } | null {
+  seen: ReadonlySet<ClassRef> = new Set(),
+): { type: "object"; properties: Record<string, object>; required?: string[] } | null {
   let instance: Record<string, unknown>;
   try {
     instance = new (bodyDto as new () => Record<string, unknown>)();
@@ -1579,11 +1661,86 @@ function schemaFromDto(
   if (keys.length === 0) {
     return null;
   }
+  const metadatas = classValidatorMetadatasFor(bodyDto);
   const properties: Record<string, object> = {};
+  const required: string[] = [];
   for (const key of keys) {
-    properties[key] = jsonSchemaForValue(instance[key], entityName);
+    const own = metadatas.filter((metadata) => metadata.propertyName === key);
+    const nested = own.find((metadata) => metadata.type === "nestedValidation");
+    properties[key] =
+      nested !== undefined
+        ? nestedSchemaFor(bodyDto, key, nested.each, entityName, seen)
+        : mergeClassValidatorConstraints(jsonSchemaForValue(instance[key], entityName), own);
+    // A property class-validator decorates at all, and never with
+    // `@IsOptional()`, is one the validator rejects a request missing — so
+    // it belongs in `required` the same way a hand-written `.required`
+    // array would. Undecorated properties (a plain field, or every field of
+    // the `{ fields: [...] }` shorthand) carry no such signal either way.
+    if (own.length > 0 && !own.some((metadata) => metadata.name === "isOptional")) {
+      required.push(key);
+    }
   }
-  return { type: "object", properties };
+  return { type: "object", properties, ...(required.length > 0 ? { required } : {}) };
+}
+
+/**
+ * A `@ValidateNested()` property's schema: resolves the target class from
+ * `class-transformer`'s `@Type(() => Target)` metadata and recursively
+ * expands its own fields/constraints via `schemaFromDto`, rather than the
+ * bare `{ type: "object" }`/`{ type: "array", items: {} }` plain inference
+ * would give it. `each` (set by `@ValidateNested({ each: true })`, the
+ * array-of-nested-DTOs case) wraps the expanded schema in `items`.
+ *
+ * Falls back to a bare object/array schema when `class-transformer` isn't
+ * installed, the `@Type()` metadata is missing, or the target class is
+ * already on the `seen` chain (a self-referential DTO — expanding it again
+ * would recurse forever).
+ */
+function nestedSchemaFor(
+  bodyDto: ClassRef,
+  key: string,
+  each: boolean,
+  entityName: string,
+  seen: ReadonlySet<ClassRef>,
+): object {
+  const bareItem = { type: "object" as const };
+  const nestedClass = classTransformerTypeFor(bodyDto, key);
+  let itemSchema: object = bareItem;
+  if (nestedClass !== null && !seen.has(nestedClass)) {
+    const nestedResult = schemaFromDto(nestedClass, entityName, new Set(seen).add(bodyDto));
+    if (nestedResult !== null) {
+      itemSchema = withKavoEntity({ title: nestedClass.name, ...nestedResult }, entityName);
+    }
+  }
+  return each ? { type: "array", items: itemSchema } : itemSchema;
+}
+
+/** The `@Type(() => Target)` class `class-transformer` recorded for `bodyDto[key]`, or `null`. */
+function classTransformerTypeFor(bodyDto: ClassRef, key: string): ClassRef | null {
+  const classTransformer = loadClassTransformer();
+  if (classTransformer === null) {
+    return null;
+  }
+  try {
+    const metadata = classTransformer.defaultMetadataStorage.findTypeMetadata(bodyDto as unknown as Function, key);
+    const resolved = metadata?.typeFunction();
+    return typeof resolved === "function" ? (resolved as ClassRef) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `bodyDto`'s class-validator decorator metadata, or `[]` when unavailable. */
+function classValidatorMetadatasFor(bodyDto: ClassRef): readonly ClassValidatorMetadata[] {
+  const classValidator = loadClassValidator();
+  if (classValidator === null) {
+    return [];
+  }
+  try {
+    return classValidator.getMetadataStorage().getTargetValidationMetadatas(bodyDto, "", false, false);
+  } catch {
+    return [];
+  }
 }
 
 /** Infer a JSON-schema fragment from a DTO field's initializer value. */
@@ -1605,7 +1762,12 @@ function jsonSchemaForValue(value: unknown, entityName: string): object {
         return { type: "string", format: "date-time" };
       }
       if (Array.isArray(value)) {
-        return { type: "array", items: {} };
+        // A non-empty sample array documents its own element type; an empty
+        // one (the common `= []` default) carries no element-type
+        // information to read back, so `items` stays the open `{}` schema
+        // unless a class-validator `@IsString({ each: true })`-style
+        // decorator narrows it below.
+        return { type: "array", items: value.length > 0 ? jsonSchemaForValue(value[0], entityName) : {} };
       }
       if (value !== null) {
         return { type: "object" };
@@ -1614,6 +1776,80 @@ function jsonSchemaForValue(value: unknown, entityName: string): object {
     default:
       return {};
   }
+}
+
+/** Maps a class-validator decorator's `name` to the OpenAPI keyword(s) it documents. */
+function classValidatorKeyword(name: string | undefined, constraints: readonly unknown[]): object {
+  switch (name) {
+    case "isString":
+      return { type: "string" };
+    case "isNumber":
+      return { type: "number" };
+    case "isInt":
+      return { type: "integer" };
+    case "isBoolean":
+      return { type: "boolean" };
+    case "isArray":
+      return { type: "array" };
+    case "isEmail":
+      return { type: "string", format: "email" };
+    case "isUrl":
+      return { type: "string", format: "uri" };
+    case "isUuid":
+      return { type: "string", format: "uuid" };
+    case "isDateString":
+      return { type: "string", format: "date-time" };
+    case "minLength":
+      return { minLength: constraints[0] };
+    case "maxLength":
+      return { maxLength: constraints[0] };
+    case "isLength":
+      return {
+        ...(constraints[0] !== undefined ? { minLength: constraints[0] } : {}),
+        ...(constraints[1] !== undefined && constraints[1] !== null ? { maxLength: constraints[1] } : {}),
+      };
+    case "min":
+      return { minimum: constraints[0] };
+    case "max":
+      return { maximum: constraints[0] };
+    case "isPositive":
+      return { exclusiveMinimum: 0 };
+    case "isNegative":
+      return { exclusiveMaximum: 0 };
+    case "matches": {
+      const pattern = constraints[0];
+      return { pattern: pattern instanceof RegExp ? pattern.source : String(pattern) };
+    }
+    case "isEnum":
+      return { enum: constraints[1] };
+    case "isIn":
+      return { enum: constraints[0] };
+    default:
+      return {};
+  }
+}
+
+/**
+ * Overlay OpenAPI validation keywords translated from one property's
+ * class-validator decorators (`metadatas`, already filtered to that
+ * property) onto its inferred `base` schema (ADR pending — issue: "add
+ * validation rules to swagger for class-validator DTOs"). A no-op when
+ * `class-validator` isn't installed, or the property carries no decorators.
+ * A decorator declared `{ each: true }` (validates every array element)
+ * narrows `items` instead of the property itself.
+ */
+function mergeClassValidatorConstraints(base: object, metadatas: readonly ClassValidatorMetadata[]): object {
+  let result = base;
+  let items: object | undefined;
+  for (const metadata of metadatas) {
+    const keyword = classValidatorKeyword(metadata.name, metadata.constraints);
+    if (metadata.each) {
+      items = { ...(items ?? (result as { items?: object }).items), ...keyword };
+    } else {
+      result = { ...result, ...keyword };
+    }
+  }
+  return items !== undefined ? { ...result, items } : result;
 }
 
 /** Expand a schema hint (enum / oneOf array) into its OpenAPI fragment. */
