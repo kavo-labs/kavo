@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/kavo-labs/kavo/compare/v0.23.0...v0.23.1) (2026-09-20)
+
+
+### Features
+
+* **nest:** document array item types and class-validator/Zod rules in Swagger ([39e3038](https://github.com/kavo-labs/kavo/commit/39e30383e9bf797987810466bb7de839d036706d))
+
 ## [0.23.0](https://github.com/kavo-labs/kavo/compare/v0.22.3...v0.23.0) (2026-09-19)
 
 
