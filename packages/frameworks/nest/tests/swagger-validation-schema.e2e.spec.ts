@@ -13,6 +13,7 @@ import {
   IsIn,
   IsInt,
   IsNegative,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -151,6 +152,22 @@ describe("registerKavoSchemas — class-validator DTOs", () => {
     expect(properties.offset).toMatchObject({ exclusiveMaximum: 0 });
     expect(properties.active).toMatchObject({ type: "boolean" });
     expect(properties.rank).toMatchObject({ exclusiveMinimum: 0 });
+  });
+
+  it("translates @IsNotEmpty() into minLength: 1 — the only JSON-Schema keyword that expresses 'not blank'", async () => {
+    class RequiredNameDto {
+      @IsNotEmpty()
+      name = "";
+    }
+
+    @Kavo(Todo, { schema: { input: { create: RequiredNameDto } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const { properties } = schemaNamed(document, "TodoCreate");
+
+    expect(properties.name).toMatchObject({ type: "string", minLength: 1 });
   });
 
   it("translates string/number/enum/pattern constraints into OpenAPI keywords", async () => {
@@ -581,5 +598,42 @@ describe("registerKavoSchemas — a `schema.output` field-array shorthand", () =
     // (present on `Todo`'s metadata but not on `TodoItemDto`) must not
     // reappear via the metadata-driven fallback this class opted out of.
     expect(Object.keys(item.properties)).toEqual(["id", "title"]);
+  });
+});
+
+describe("registerKavoSchemas — a `schema.input` field-array shorthand", () => {
+  it("overlays the entity's own class-validator decorators onto the ORM-derived body schema", async () => {
+    // `applyBodySchemaDocs` (the field-array shorthand's fallback, same as
+    // the `schema.output` case above) previously documented only
+    // `metadata.fields`' ORM type/nullability — the entity's own
+    // `@MaxLength`/`@Matches` on `Todo.title` (see fake-infrastructure.ts)
+    // never reached the schema, unlike a registered DTO class's decorators
+    // (`schemaFromDto`'s own `classValidatorMetadatasFor` pass).
+    @Kavo(Todo, { schema: { input: ["title", "priority"] } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const create = schemaNamed(document, "TodoCreate");
+
+    expect(create.properties.title).toMatchObject({
+      type: "string",
+      maxLength: 80,
+      pattern: "^[a-z ]*$",
+    });
+    // `priority` carries no decorator on `Todo` — must stay exactly its
+    // ORM-derived shape, not gain constraints from an unrelated field.
+    expect(create.properties.priority).toEqual({ type: "number" });
+  });
+
+  it("narrows to exactly the shorthand's own field list, same as the output-side shorthand", async () => {
+    @Kavo(Todo, { schema: { input: ["title"] } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const create = schemaNamed(document, "TodoCreate");
+
+    expect(Object.keys(create.properties)).toEqual(["title"]);
   });
 });

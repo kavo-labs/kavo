@@ -2782,7 +2782,11 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
       // (associable by id, ADR-0014), so it must be documented, not dropped
       // (issue #339).
       expect(Object.keys(schema?.properties ?? {})).toEqual(["title", "done", "priority", "list"]);
-      expect(schema?.properties?.title).toEqual({ type: "string" });
+      // `title` also carries `Todo`'s own `@MaxLength`/`@Matches`
+      // (fake-infrastructure.ts) — the entity's class-validator decorators
+      // overlay the ORM-derived shape here the same way a registered DTO
+      // class's decorators already did via `schemaFromDto`.
+      expect(schema?.properties?.title).toEqual({ type: "string", maxLength: 80, pattern: "^[a-z ]*$" });
       expect(schema?.properties?.done).toEqual({ type: "boolean" });
       expect(schema?.properties?.priority).toEqual({ type: "number" });
       expect(schema?.properties?.list).toEqual({

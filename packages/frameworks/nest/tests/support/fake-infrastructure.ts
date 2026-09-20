@@ -8,14 +8,22 @@ import type {
   RepositoryAdapter,
 } from "@kavo/core";
 import { AlreadyDeletedException, NotDeletedException, NotFoundException, hasKeyset } from "@kavo/core";
+import { Matches, MaxLength } from "class-validator";
 
 /**
  * Test entity for binding tests — no ORM anywhere near this package. The
  * `deletedAt` marker makes it soft-deletable, which is what the
- * restore/purge route tests need.
+ * restore/purge route tests need. `title`'s decorators are inert at
+ * runtime (nothing in this package validates against them directly) —
+ * they exist so `swagger-validation-schema.e2e.spec.ts` can pin that a
+ * `schema.input`/`schema.output` field-array shorthand's fallback body/
+ * response docs pick up the *entity's own* class-validator constraints,
+ * not just its ORM-derived type/nullability.
  */
 export class Todo {
   id = 0;
+  @MaxLength(80)
+  @Matches(/^[a-z ]*$/)
   title = "";
   done = false;
   priority = 0;

@@ -1129,13 +1129,24 @@ export function applyBodySchemaDocs(
   }
   alreadyBodySchemaDocumented.add(method);
 
+  // The entity class itself, read via `class-validator`'s own metadata
+  // storage — not a registered DTO, so `mergeClassValidatorConstraints`
+  // (previously only reachable through `schemaFromDto`'s real-DTO path)
+  // overlays whatever `@MinLength`/`@Matches`/etc. decorate the *entity's*
+  // writable columns directly. Same rationale as `applyResponseSchemaDocs`'s
+  // `shorthandFieldsOf` fix on the output side: a field-array shorthand
+  // documents nothing of its own, so falling back to the richest available
+  // source (here, the entity's own decorators) beats leaving every
+  // constraint undocumented just because no dedicated DTO class exists.
+  const entityValidatorMetadatas = classValidatorMetadatasFor(metadata.entity as ClassRef);
   const properties: Record<string, object> = {};
   const required: string[] = [];
   for (const field of metadata.fields) {
     if (field.generated || !allowed.includes(field.name)) {
       continue;
     }
-    properties[field.name] = fieldSchema(field);
+    const own = entityValidatorMetadatas.filter((validator) => validator.propertyName === field.name);
+    properties[field.name] = own.length > 0 ? mergeClassValidatorConstraints(fieldSchema(field), own) : fieldSchema(field);
     if (!field.nullable) {
       required.push(field.name);
     }
@@ -1799,6 +1810,16 @@ function classValidatorKeyword(name: string | undefined, constraints: readonly u
       return { minLength: constraints[0] };
     case "maxLength":
       return { maxLength: constraints[0] };
+    // `@IsNotEmpty()` carries no length constraint of its own — it's a
+    // presence check that also happens to run against a decoded string —
+    // but `minLength: 1` is the only OpenAPI/JSON-Schema keyword that
+    // expresses "not blank" for a string, and every other decorator this
+    // switch handles is written for string fields the same way (isEmail,
+    // isUrl, isUuid, …), so this follows that same convention rather than
+    // leaving a `@IsNotEmpty`-only field with no documented constraint at
+    // all (a generated client's schema would otherwise accept "").
+    case "isNotEmpty":
+      return { minLength: 1 };
     case "isLength":
       return {
         ...(constraints[0] !== undefined ? { minLength: constraints[0] } : {}),
