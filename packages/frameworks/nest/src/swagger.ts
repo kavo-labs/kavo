@@ -1146,7 +1146,8 @@ export function applyBodySchemaDocs(
       continue;
     }
     const own = entityValidatorMetadatas.filter((validator) => validator.propertyName === field.name);
-    properties[field.name] = own.length > 0 ? mergeClassValidatorConstraints(fieldSchema(field), own) : fieldSchema(field);
+    properties[field.name] =
+      own.length > 0 ? mergeClassValidatorConstraints(fieldSchema(field), own) : fieldSchema(field);
     if (!field.nullable) {
       required.push(field.name);
     }
