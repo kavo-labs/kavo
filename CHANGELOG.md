@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/kavo-labs/kavo/compare/v0.23.1...v0.23.2) (2026-09-20)
+
+
+### Features
+
+* **nest:** add a reusable static-swagger.json generator ([93ff0ce](https://github.com/kavo-labs/kavo/commit/93ff0ce2664e198bd1384b46cff4ed5c00e213ee))
+
 ## [0.23.1](https://github.com/kavo-labs/kavo/compare/v0.23.0...v0.23.1) (2026-09-20)
 
 
