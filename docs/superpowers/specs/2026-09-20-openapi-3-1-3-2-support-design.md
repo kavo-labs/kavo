@@ -32,7 +32,7 @@ declares 3.1+, not stylistic mismatches:
   severity than `nullable`, but the same "declares 3.1, still speaks 3.0"
   gap. (The `Example Object` used at the parameter/media-type level —
   `ApiHeader`'s `ETAG_RESPONSE_HEADER`, etc. — is a different, unrelated
-  part of the spec and keeps `example` there; only *schema-level* `example`
+  part of the spec and keeps `example` there; only _schema-level_ `example`
   is in scope.)
 
 A survey of the rest of 3.1 (webhooks, `const`, `patternProperties`,
@@ -61,8 +61,7 @@ more pass to that same function, gated on `document.openapi`:
 
 ```ts
 const majorMinor = document.openapi.match(/^(\d+)\.(\d+)/);
-const targetsJsonSchemaDialect =
-  majorMinor !== null && (Number(majorMinor[1]) > 3 || Number(majorMinor[2]) >= 1);
+const targetsJsonSchemaDialect = majorMinor !== null && (Number(majorMinor[1]) > 3 || Number(majorMinor[2]) >= 1);
 ```
 
 `"3.0.x"` (or a missing/unparseable `openapi` field — `@nestjs/swagger`
@@ -146,7 +145,7 @@ New cases in `packages/frameworks/nest/tests/`, following the existing
   treatment to 3.1 (3.2 did not change the schema dialect from 3.1's).
 - A schema-level `example` that already exists in `swagger.ts` today —
   `PROBLEM_DETAILS_SCHEMA`'s `type`/`code` properties (`packages/frameworks/
-  nest/src/swagger.ts`) — becomes `examples: [value]` under
+nest/src/swagger.ts`) — becomes `examples: [value]` under
   `"3.1.0"`/`"3.2.0"`, and stays `example` under `"3.0.0"`.
 - The defensive `anyOf` fallback for an untyped-but-nullable schema, even
   though nothing in `swagger.ts` produces that shape today — a synthetic
