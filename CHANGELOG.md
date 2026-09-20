@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.23.3](https://github.com/kavo-labs/kavo/compare/v0.23.2...v0.23.3) (2026-09-20)
+
+
+### Bug Fixes
+
+* **nest:** type schema.output field-array shorthand from ORM metadata ([0dc72c4](https://github.com/kavo-labs/kavo/commit/0dc72c47d2a3968384563f2b15d9a9cbf380545a))
+
+
+### Documentation
+
+* add design spec for OpenAPI 3.1/3.2 support in @kavo/nest ([5be211c](https://github.com/kavo-labs/kavo/commit/5be211cfa49e501285514c689d5fdc34e62cf4cd))
+
+
+### Tests
+
+* **nest:** extend swagger validation-schema coverage ([9c737e8](https://github.com/kavo-labs/kavo/commit/9c737e8aea7b6be7f6d4ad73f8483a68d4de5677))
+
 ## [0.23.2](https://github.com/kavo-labs/kavo/compare/v0.23.1...v0.23.2) (2026-09-20)
 
 
