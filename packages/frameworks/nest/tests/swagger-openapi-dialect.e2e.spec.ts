@@ -49,6 +49,27 @@ function schemaNamed(document: Record<string, unknown>, name: string): Record<st
 }
 
 describe("registerKavoSchemas — OpenAPI 3.1/3.2 dialect upgrade", () => {
+  // Bypasses `SwaggerModule.createDocument`/`DocumentBuilder` entirely: the
+  // installed `@nestjs/swagger` already runs its own nullable-to-OAS-3.1
+  // conversion inside `createDocument`, so every other test in this file
+  // would still pass even if Kavo's own dialect-upgrade wiring were removed.
+  // This proves `registerKavoSchemas`'s own pass end to end, independent of
+  // any particular `@nestjs/swagger` version's document-generation behavior.
+  it("converts nullable via Kavo's own pass alone, independent of any @nestjs/swagger document-generation behavior", () => {
+    const document = registerKavoSchemas({
+      openapi: "3.1.0",
+      components: {
+        schemas: {
+          Widget: { type: "object", properties: { note: { type: "string", nullable: true } } },
+        },
+      },
+    });
+
+    const widget = (document.components as { schemas: Record<string, { properties: Record<string, unknown> }> })
+      .schemas.Widget!;
+    expect(widget.properties.note).toEqual({ type: ["string", "null"] });
+  });
+
   it("leaves nullable: true untouched when no openapi version is set (today's 3.0 default)", async () => {
     const document = await createDocument();
     const item = schemaNamed(document, "TodoItem") as { properties: Record<string, Record<string, unknown>> };

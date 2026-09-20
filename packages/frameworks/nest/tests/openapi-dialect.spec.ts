@@ -73,6 +73,26 @@ describe("upgradeToJsonSchemaDialect", () => {
     expect(schemas.Widget).toEqual({ anyOf: [{ enum: ["a", "b"] }, { type: "null" }] });
   });
 
+  it("appends null to an existing enum when converting a nullable enum schema", () => {
+    const schemas: Record<string, unknown> = {
+      Priority: { type: "string", enum: ["low", "high"], nullable: true },
+    };
+
+    upgradeToJsonSchemaDialect(schemas);
+
+    expect(schemas.Priority).toEqual({ type: ["string", "null"], enum: ["low", "high", null] });
+  });
+
+  it("does not duplicate null in an enum that already includes it", () => {
+    const schemas: Record<string, unknown> = {
+      Priority: { type: "string", enum: ["low", "high", null], nullable: true },
+    };
+
+    upgradeToJsonSchemaDialect(schemas);
+
+    expect(schemas.Priority).toEqual({ type: ["string", "null"], enum: ["low", "high", null] });
+  });
+
   it("converts a schema-level example into an examples array", () => {
     const schemas: Record<string, unknown> = {
       Code: { type: "string", example: "KAVO_NOT_FOUND" },

@@ -109,18 +109,21 @@ function walkDialectUpgrade(node: unknown): void {
  * `{ type: "null" }`, rather than guessing a `type`.
  */
 function upgradeNullable(schema: DialectSchema): void {
-  if (schema.nullable !== true) {
+  const nullable = schema.nullable;
+  delete schema.nullable;
+  if (nullable !== true) {
     return;
   }
-  delete schema.nullable;
   if (typeof schema.type === "string") {
     schema.type = [schema.type, "null"];
+    appendNullToEnum(schema);
     return;
   }
   if (Array.isArray(schema.type)) {
     if (!schema.type.includes("null")) {
       schema.type = [...schema.type, "null"];
     }
+    appendNullToEnum(schema);
     return;
   }
   const rest: DialectSchema = { ...schema };
@@ -128,6 +131,18 @@ function upgradeNullable(schema: DialectSchema): void {
     delete schema[key];
   }
   schema.anyOf = [rest, { type: "null" }];
+}
+
+/**
+ * `type`/`enum` are ANDed under JSON Schema 2020-12, so unioning `null` into
+ * `type` alone leaves a sibling `enum` still rejecting it — a self-
+ * contradictory schema. Append `null` to the enum too, mirroring
+ * `@nestjs/swagger`'s own OAS 3.1 conversion.
+ */
+function appendNullToEnum(schema: DialectSchema): void {
+  if (Array.isArray(schema.enum) && !schema.enum.includes(null)) {
+    schema.enum = [...schema.enum, null];
+  }
 }
 
 /** Schema-level `example` → the JSON Schema `examples` array OpenAPI 3.1 prefers. */
