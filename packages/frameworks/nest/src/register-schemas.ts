@@ -76,6 +76,14 @@
  * dangling `$ref`. `$ref` cycles from mutual/self relations are valid
  * OpenAPI 3.x and left as-is.
  *
+ * **OpenAPI 3.1/3.2 dialect upgrade.** After every schema is hoisted and
+ * every includable-relation marker resolved, `upgradeToJsonSchemaDialect`
+ * (`openapi-dialect.ts`) rewrites `nullable`/`example` into their JSON
+ * Schema 2020-12 equivalents when `document.openapi` declares 3.1 or 3.2 —
+ * see that module's own doc comment and the design spec
+ * (`docs/superpowers/specs/2026-09-20-openapi-3-1-3-2-support-design.md`)
+ * for why detection lives here rather than as new Kavo config.
+ *
  * The helper mutates and returns the document, so it composes inline:
  *
  * ```ts
@@ -88,6 +96,8 @@
  * plain document object — so it is safe to call whether or not the optional
  * peer is installed (with no peer, there is simply nothing to hoist).
  */
+
+import { targetsJsonSchemaDialect, upgradeToJsonSchemaDialect } from "./openapi-dialect.js";
 
 interface SchemaObject {
   $ref?: string;
@@ -122,6 +132,7 @@ interface OperationObject {
 }
 
 interface OpenApiDocument {
+  openapi?: unknown;
   paths?: Record<string, Record<string, OperationObject> | undefined>;
   components?: { schemas?: Record<string, SchemaObject> };
 }
@@ -175,6 +186,15 @@ export function registerKavoSchemas<T extends object>(document: T): T {
   // registered component so a marker on `<Entity>Item` and its structural
   // twin on `<Entity>ListItem` are both rewritten.
   resolveIncludableRefs(schemas, itemComponentByEntity);
+
+  // OpenAPI 3.1/3.2 dialect upgrade (nullable -> type union, example ->
+  // examples) — only when the caller's own DocumentBuilder declared one of
+  // those versions (`.setOpenAPIVersion`). See `openapi-dialect.ts`'s own
+  // doc comment and the design spec
+  // (docs/superpowers/specs/2026-09-20-openapi-3-1-3-2-support-design.md).
+  if (targetsJsonSchemaDialect(doc.openapi)) {
+    upgradeToJsonSchemaDialect(schemas);
+  }
 
   return document;
 }

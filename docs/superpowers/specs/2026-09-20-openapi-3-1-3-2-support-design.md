@@ -49,6 +49,18 @@ spec, not deferred by oversight — a future feature that actually needs one
 of them (e.g. `@kavo/sse` growing a webhook-shaped mode) should motivate its
 own spec instead of being smuggled in here.
 
+### Note on overlap with `@nestjs/swagger`'s own conversion (added in final review)
+
+`@nestjs/swagger@^11`/`^12` (unlike the `^8` peer Kavo also declares) already
+performs its own OAS 3.1 `nullable` conversion inside
+`SwaggerModule.createDocument`, before `registerKavoSchemas` ever runs. On
+those peer versions, Kavo's own `nullable` conversion is load-bearing chiefly
+for the `^8` peer and for schemas `@nestjs/swagger`'s own conversion doesn't
+reach (e.g. document objects built by hand rather than through
+`createDocument`). `example` → `examples` is unaffected by this overlap —
+`@nestjs/swagger`'s own pass explicitly excludes it. This was discovered
+during final review; it does not change the feature's scope or design.
+
 ## Decision
 
 ### Detection: read `document.openapi`, no new Kavo config
