@@ -38,8 +38,7 @@ describe("upgradeToJsonSchemaDialect", () => {
 
     upgradeToJsonSchemaDialect(schemas);
 
-    const deletedAt = (schemas.TodoItem as { properties: { deletedAt: Record<string, unknown> } }).properties
-      .deletedAt;
+    const deletedAt = (schemas.TodoItem as { properties: { deletedAt: Record<string, unknown> } }).properties.deletedAt;
     expect(deletedAt).toEqual({ type: ["string", "null"], format: "date-time" });
   });
 

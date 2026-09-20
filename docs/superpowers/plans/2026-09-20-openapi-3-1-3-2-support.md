@@ -78,8 +78,7 @@ describe("upgradeToJsonSchemaDialect", () => {
 
     upgradeToJsonSchemaDialect(schemas);
 
-    const deletedAt = (schemas.TodoItem as { properties: { deletedAt: Record<string, unknown> } }).properties
-      .deletedAt;
+    const deletedAt = (schemas.TodoItem as { properties: { deletedAt: Record<string, unknown> } }).properties.deletedAt;
     expect(deletedAt).toEqual({ type: ["string", "null"], format: "date-time" });
   });
 
@@ -481,24 +480,24 @@ interface OpenApiDocument {
 In `registerKavoSchemas`, add the new step right after the existing `resolveIncludableRefs` call and before `return document;`:
 
 ```ts
-  // Every `<Entity>Item` name is now known, so an includable-relation marker
-  // (`applyResponseSchemaDocs`) can be resolved to a
-  // `$ref` to its target's item component — or degraded to a plain object
-  // when that target has no synthesized item schema. Runs over every
-  // registered component so a marker on `<Entity>Item` and its structural
-  // twin on `<Entity>ListItem` are both rewritten.
-  resolveIncludableRefs(schemas, itemComponentByEntity);
+// Every `<Entity>Item` name is now known, so an includable-relation marker
+// (`applyResponseSchemaDocs`) can be resolved to a
+// `$ref` to its target's item component — or degraded to a plain object
+// when that target has no synthesized item schema. Runs over every
+// registered component so a marker on `<Entity>Item` and its structural
+// twin on `<Entity>ListItem` are both rewritten.
+resolveIncludableRefs(schemas, itemComponentByEntity);
 
-  // OpenAPI 3.1/3.2 dialect upgrade (nullable -> type union, example ->
-  // examples) — only when the caller's own DocumentBuilder declared one of
-  // those versions (`.setOpenAPIVersion`). See `openapi-dialect.ts`'s own
-  // doc comment and the design spec
-  // (docs/superpowers/specs/2026-09-20-openapi-3-1-3-2-support-design.md).
-  if (targetsJsonSchemaDialect(doc.openapi)) {
-    upgradeToJsonSchemaDialect(schemas);
-  }
+// OpenAPI 3.1/3.2 dialect upgrade (nullable -> type union, example ->
+// examples) — only when the caller's own DocumentBuilder declared one of
+// those versions (`.setOpenAPIVersion`). See `openapi-dialect.ts`'s own
+// doc comment and the design spec
+// (docs/superpowers/specs/2026-09-20-openapi-3-1-3-2-support-design.md).
+if (targetsJsonSchemaDialect(doc.openapi)) {
+  upgradeToJsonSchemaDialect(schemas);
+}
 
-  return document;
+return document;
 ```
 
 (The surrounding `resolveIncludableRefs` line and its comment already exist in the file — only the new `if (targetsJsonSchemaDialect(...))` block and its comment are additions.)

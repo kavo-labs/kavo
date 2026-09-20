@@ -65,8 +65,8 @@ describe("registerKavoSchemas — OpenAPI 3.1/3.2 dialect upgrade", () => {
       },
     });
 
-    const widget = (document.components as { schemas: Record<string, { properties: Record<string, unknown> }> })
-      .schemas.Widget!;
+    const widget = (document.components as { schemas: Record<string, { properties: Record<string, unknown> }> }).schemas
+      .Widget!;
     expect(widget.properties.note).toEqual({ type: ["string", "null"] });
   });
 
