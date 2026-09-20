@@ -23,7 +23,13 @@ export { ConditionalRequest, parseEntityTags } from "./conditional-request.decor
 export { flattenQuery } from "./flatten-query.js";
 export { KAVO_API_GUIDE } from "./swagger.js";
 export { registerKavoSchemas } from "./register-schemas.js";
-export { setupKavoSwagger, type KavoSwaggerOptions } from "./swagger-setup.js";
+export { setupKavoSwagger, buildSwaggerDocument, type KavoSwaggerOptions } from "./swagger-setup.js";
+export {
+  generateKavoSwaggerDocument,
+  writeKavoSwaggerFile,
+  type GenerateKavoSwaggerOptions,
+  type WriteKavoSwaggerFileOptions,
+} from "./swagger-export.js";
 export { enumProp, oneOfArray, type SchemaHint } from "./schema-hints.js";
 export type { KavoAppContextExtractor, KavoAppContextRequest } from "./app-context.js";
 export {

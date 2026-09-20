@@ -10,7 +10,8 @@
     "start": "node dist/main.js",
     "start:postgres": "node dist/main-postgres.js",
     "start:mariadb": "node dist/main-mariadb.js",
-    "start:cockroach": "node dist/main-cockroach.js"
+    "start:cockroach": "node dist/main-cockroach.js",
+    "swagger:json": "node dist/generate-swagger.js"
   },
   "dependencies": {
     "@kavo/core": "workspace:*",

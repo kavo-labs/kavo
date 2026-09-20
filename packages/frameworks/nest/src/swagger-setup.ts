@@ -121,6 +121,31 @@ function isAlreadyInitialised(app: INestApplication): boolean {
   return (app as { isInitialized?: boolean }).isInitialized === true;
 }
 
+/**
+ * Build the finished Kavo OpenAPI document for an already-`init()`ialised
+ * app — `SwaggerModule.createDocument` plus the `registerKavoSchemas`
+ * component-hoisting pass, with no route serving or file I/O attached. The
+ * shared core behind both `setupKavoSwagger` (serves it live) and
+ * `generateKavoSwaggerDocument`/`writeKavoSwaggerDocument`
+ * (`swagger-export.ts`, for a static `swagger.json` any Kavo app can
+ * generate at build/CI time) — one document-building code path, so a
+ * statically exported document and a live `/docs-json` never drift apart.
+ *
+ * Callable only once `KavoModule`'s discovery binder has run
+ * (`onModuleInit`, which fires inside `app.init()`/`app.listen()`) — the
+ * same ordering constraint `setupKavoSwagger`'s own doc comment explains.
+ * Throws the same descriptive `@nestjs/swagger`-missing error when the
+ * optional peer isn't installed.
+ */
+export function buildSwaggerDocument(app: INestApplication, options: KavoSwaggerOptions): object {
+  const loaded = loadSwaggerModule();
+  if (loaded === null) {
+    throw swaggerPeerMissingError();
+  }
+  const { SwaggerModule } = loaded;
+  return registerKavoSchemas(SwaggerModule.createDocument(app, options.config, options.documentOptions));
+}
+
 export function setupKavoSwagger(app: INestApplication, options: KavoSwaggerOptions): void {
   const path = options.path ?? "docs";
 

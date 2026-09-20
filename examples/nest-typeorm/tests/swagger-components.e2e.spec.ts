@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { KAVO_API_GUIDE, registerKavoSchemas } from "@kavo/nest";
+import { DocumentBuilder } from "@nestjs/swagger";
+import { KAVO_API_GUIDE, buildSwaggerDocument } from "@kavo/nest";
 import { AppModule } from "../src/app.module.js";
 
 /**
@@ -48,12 +48,13 @@ beforeAll(async () => {
   app = moduleRef.createNestApplication();
   await app.init();
 
-  document = registerKavoSchemas(
-    SwaggerModule.createDocument(
-      app,
-      new DocumentBuilder().setTitle("Kavo — Pet example").setDescription(KAVO_API_GUIDE).setVersion("0.0.0").build(),
-    ),
-  ) as unknown as Document;
+  document = buildSwaggerDocument(app, {
+    config: new DocumentBuilder()
+      .setTitle("Kavo — Pet example")
+      .setDescription(KAVO_API_GUIDE)
+      .setVersion("0.0.0")
+      .build(),
+  }) as unknown as Document;
 
   writeFileSync(fileURLToPath(new URL("../swagger.json", import.meta.url)), `${JSON.stringify(document, null, 2)}\n`);
 });
