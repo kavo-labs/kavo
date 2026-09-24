@@ -186,6 +186,21 @@
   color: var(--vp-c-text-3);
 }
 
+.ai-llms {
+  margin: 20px 0 0;
+  font-size: 13.5px;
+  color: var(--vp-c-text-2);
+}
+
+.ai-llms-link {
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+}
+
+.ai-llms-link:hover {
+  text-decoration: underline;
+}
+
 .ai-install div[class*="language-"] {
   position: relative;
   border-radius: 12px;

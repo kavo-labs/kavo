@@ -155,6 +155,9 @@ npx skills add kavo-labs/kavo
 
   <p class="ai-install-note">Fewer tokens, ship faster.</p>
   </div>
+  <p class="ai-llms">
+    Point any agent at <a class="ai-llms-link" href="/llms.txt" target="_blank" rel="noopener"><code>llms.txt</code></a>, the whole documentation index in one plain-text file.
+  </p>
 </div>
 
 <FeatureGrid />
