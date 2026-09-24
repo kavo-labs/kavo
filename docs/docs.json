@@ -1,5 +1,5 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
+  "$schema": "https://context7.com/schema/docs7.json",
   "theme": "mint",
   "name": "Kavo",
   "description": "A production-grade CRUD framework for TypeScript",
