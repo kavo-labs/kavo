@@ -12,6 +12,11 @@ hero:
     - theme: alt
       text: GitHub
       link: https://github.com/kavo-labs/kavo
+    - theme: alt
+      text: llms.txt
+      link: /llms.txt
+      target: _blank
+      rel: noopener
 ---
 
 <script setup lang="ts">
