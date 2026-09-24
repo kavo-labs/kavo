@@ -154,6 +154,33 @@ describe("registerKavoSchemas — class-validator DTOs", () => {
     expect(properties.rank).toMatchObject({ exclusiveMinimum: 0 });
   });
 
+  it("documents the open-ended and non-RegExp decorator spellings, and Date/object initializers", async () => {
+    class LooseDto {
+      @Length(3)
+      slug = "";
+
+      @Matches("^[0-9]+$")
+      digits = "";
+
+      dueAt = new Date(0);
+
+      extra = { note: "" };
+    }
+
+    @Kavo(Todo, { schema: { input: { create: LooseDto } } })
+    @Controller("todos")
+    class TodosController {}
+
+    const document = await createDocument([TodosController]);
+    const { properties } = schemaNamed(document, "TodoCreate");
+
+    expect(properties.slug).toMatchObject({ minLength: 3 });
+    expect(properties.slug).not.toHaveProperty("maxLength");
+    expect(properties.digits).toMatchObject({ type: "string", pattern: "^[0-9]+$" });
+    expect(properties.dueAt).toEqual({ type: "string", format: "date-time" });
+    expect(properties.extra).toEqual({ type: "object" });
+  });
+
   it("translates @IsNotEmpty() into minLength: 1 — the only JSON-Schema keyword that expresses 'not blank'", async () => {
     class RequiredNameDto {
       @IsNotEmpty()
