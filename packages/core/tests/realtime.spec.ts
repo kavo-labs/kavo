@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { KavoContext, RealtimeEventDto, RealtimeTransport } from "@kavo/core";
-import { ConfigurationException, createKavo } from "@kavo/core";
-import { InMemoryUserAdapter, User, userMetadata } from "./support/user-fixture.js";
+import { ConfigurationException, createKavo, encodeCompositeId } from "@kavo/core";
+import { InMemoryUserAdapter, User, unusedRepository, userMetadata } from "./support/user-fixture.js";
+import { CompositeEntity, compositeMetadata } from "./support/composite-fixture.js";
 import { Account, InMemoryAccountAdapter, accountMetadata } from "./support/account-fixture.js";
 
 /** Captures every event handed to it, in order — the fake transport the acceptance criteria calls for. */
@@ -441,6 +442,38 @@ describe("realtime — collection-channel support (issue #160)", () => {
     // transport instance route a single event to both kinds of subscriber.
     expect(transport.events.map((event) => event.channel)).toEqual(["User.1", "User.2"]);
     expect(transport.events.every((event) => event.entity === "User")).toBe(true);
+  });
+});
+
+describe("realtime — composite-key entities (issue #261)", () => {
+  function makeCompositeCrud(transport: RealtimeTransport) {
+    const adapter = {
+      ...unusedRepository<CompositeEntity>(),
+      create: async (data: Partial<CompositeEntity>) => data as CompositeEntity,
+    };
+    const kavo = createKavo({ realtimeTransports: [transport] });
+    return kavo.createCrud(CompositeEntity, { realtime: { events: {} } } as never, {
+      adapter,
+      metadata: compositeMetadata,
+    });
+  }
+
+  it("addresses a created row's event by its encoded composite id", async () => {
+    const transport = new FakeTransport();
+    const crud = makeCompositeCrud(transport);
+    await crud.createOne({ userId: "u1", topic: "news", key: "k" } as never);
+
+    const id = encodeCompositeId(["u1", "news"]);
+    expect(transport.events).toHaveLength(1);
+    expect(transport.events[0]).toMatchObject({ id, channel: `CompositeEntity.${id}` });
+  });
+
+  it("publishes nothing when a key column is missing from the created row — no id to address it by", async () => {
+    const transport = new FakeTransport();
+    const crud = makeCompositeCrud(transport);
+    await crud.createOne({ userId: "u1", key: "k" } as never);
+
+    expect(transport.events).toHaveLength(0);
   });
 });
 

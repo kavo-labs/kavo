@@ -5,6 +5,7 @@ import {
   NotFoundException,
   OperationDisabledException,
   OperationNotRegisteredException,
+  SchemaValidationException,
   createKavo,
   isEtagEnabled,
   toProblemDetails,
@@ -394,6 +395,27 @@ describe("KavoEngine — per-operation DTO override (issue #131)", () => {
       await crud.patchOne(created.id, { name: "Grace", email: "widened@example.com" } as never);
       expect(adapter.rows[0]?.email).not.toBe("widened@example.com");
     });
+  });
+
+  it("rejects a normalized query its schema.input.query fails, naming each issue's field (ADR-0055)", async () => {
+    const strict = {
+      safeParse: () => ({
+        success: false as const,
+        error: {
+          issues: [
+            { path: [], message: "query rejected" },
+            { path: ["pagination", "limit"], message: "too large" },
+          ],
+        },
+      }),
+    };
+    const { crud } = makeCrud({ schema: { input: { query: strict } } } as never);
+    const error = await crud.findMany().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SchemaValidationException);
+    expect(toProblemDetails(error as SchemaValidationException).errors).toEqual([
+      expect.objectContaining({ field: "(root)", detail: "query rejected" }),
+      expect.objectContaining({ field: "pagination.limit", detail: "too large" }),
+    ]);
   });
 
   it("treats an explicitly undefined dto key as unset, not as an inapplicable override", () => {
