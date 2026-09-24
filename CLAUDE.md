@@ -23,6 +23,8 @@ pnpm prettify     # prettier --write . (printWidth 120)
 pnpm format:check # prettier --check . — the separate formatting job CI runs alongside the gate
 pnpm docs:build   # vitepress build docs — a second CI gate that `check` does NOT run
 pnpm docs:links   # every `docs/**.md` reference and sidebar link resolves (a third; also not in `check`)
+pnpm docs7:build  # regenerate docs7/ (the committed Docs7 site) from docs/ — run after any docs/ edit; tests/docs7-sync.spec.ts fails until you do
+pnpm docs7:dev    # preview docs7/ with the Docs7 CLI (npx @upstash/docs7)
 ```
 
 Run a single test file or test by name:

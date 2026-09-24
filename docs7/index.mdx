@@ -1,0 +1,95 @@
+---
+title: "Kavo"
+description: "Turn models into APIs. Define an entity once and get a complete REST, GraphQL, and MCP CRUD API."
+---
+
+{/* Docs7 landing page. Hand-written: docs/index.md is a VitePress `layout: home` page built from Vue components. scripts/build-docs7.mjs copies this file into docs7/ as-is. */}
+
+Define an entity once and get a complete REST, GraphQL, and MCP CRUD API with filtering, sorting, pagination, realtime events, and generated routes. Vibe code it in minutes, on a fraction of the tokens.
+
+<Columns cols={2}>
+  <Card title="Get started" icon="rocket" href="/getting-started/introduction">
+    What Kavo is, and the first entity wired end to end.
+  </Card>
+  <Card title="GitHub" icon="github" href="https://github.com/kavo-labs/kavo">
+    Source, issues, and releases.
+  </Card>
+</Columns>
+
+## Stop writing repetitive CRUD endpoints
+
+A hand-written Nest controller for one entity runs to about 77 lines and still has no pagination, filtering, sorting, or field selection. With Kavo it is three lines, and all of that is included:
+
+```ts
+@Kavo(Book)
+@Controller("books")
+export class BooksController {}
+```
+
+## The query grammar, on the wire
+
+Filtering, sorting, pagination, and includes are all driven by the query string. No extra code to write.
+
+<CodeGroup>
+```http Filter & sort
+GET /books
+  ?filter[status][eq]=published
+  &filter[publishedAt][gte]=2020-01-01
+  &sort=-publishedAt
+  &include=author
+  &limit=2
+```
+```http Includes
+GET /books/42
+  ?include=author,reviews.user
+```
+```http Field selection
+GET /books
+  ?select=id,title,status
+  &select[author]=id,name
+```
+```http Pagination
+GET /books
+  ?sort=title
+  &limit=25
+  &offset=50
+```
+```http Soft delete
+GET /books
+  ?withDeleted=true
+  &filter[status][eq]=archived
+```
+</CodeGroup>
+
+## What you get
+
+<Columns cols={3}>
+  <Card title="Filtering" href="/querying/filtering">
+    A full operator grammar (eq, gt, in, isNull, and more) parsed straight from the query string.
+  </Card>
+  <Card title="Sorting & pagination" href="/querying/pagination">
+    Multi-field sort and limit/offset paging with consistent envelope fields on every list route.
+  </Card>
+  <Card title="Nested includes" href="/querying/includes">
+    Pull related entities into the response with field-path recursion, capped for safety.
+  </Card>
+  <Card title="Field selection" href="/querying/field-selection">
+    Ask for exactly the fields you need and leave the rest off the wire.
+  </Card>
+  <Card title="Per-operation schemas" href="/core/schemas">
+    Optional create, update, patch, query, item, and list shapes, derived or hand-written.
+  </Card>
+  <Card title="And more" href="/features/relations">
+    Soft delete, transactions, problem-details errors, GraphQL binding, and the rest of the surface.
+  </Card>
+</Columns>
+
+## Built for agentic development
+
+Built with Claude Code, and shipped with skills so Claude, Codex, Antigravity, and other coding agents move just as fast.
+
+```bash
+npx skills add kavo-labs/kavo
+```
+
+Fewer tokens, ship faster: point any agent at [`llms.txt`](https://kavo.js.org/llms.txt), the whole documentation index in one plain-text file.

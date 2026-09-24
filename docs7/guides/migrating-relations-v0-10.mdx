@@ -1,0 +1,36 @@
+---
+title: "Migrating relation config from before v0.10"
+---
+
+{/* Generated from docs/guides/migrating-relations-v0-10.md by scripts/build-docs7.mjs. Edit that file, then run pnpm docs7:build. */}
+
+Before v0.10, `relations.edges.<name>.includable: true` was how you opted a relation into `include=`. Naming a relation in `edges` at all, with no `includable` key, opened it by default. That key is gone ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists)).
+
+To migrate:
+
+1. Move each opted-in relation name to `include.fields` (see [Allowed](/features/allowed)).
+2. Move any `maxDepth` or `strategy` to `EntityConfig.relations.<name>.read` (issue #404 — the `relations.edges` `KavoSettings` key is gone; see [Relations](/features/relations)).
+
+`include.fields` is entity-scope-only config; there's no global default and no per-operation override. So a permission that used to come from a global default now needs its own `createCrud`/`@Kavo` registration per entity.
+
+## `defaultInclude` moved again, in v0.18 (issue #375)
+
+`relations.edges.<name>.defaultInclude` — the per-relation boolean this guide's earlier revisions covered — is also gone now, replaced (at the time) by a flat `defaults.include` list ([ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)): `relations.edges.posts.defaultInclude: true` became `defaults: { include: ["posts"] }`, alongside the same includable grant as before.
+
+## `include.fields`/`include.default` replace `allowed`/`defaults` entirely (issue #386)
+
+The `allowed`/`defaults` `KavoSettings` blocks this guide described above are themselves gone now, folded into per-axis `EntityConfig` blocks (issue #386, see [Config keys](/reference/config-keys)):
+
+- `allowed.includable` → `include.fields`
+- `defaults.include` → `include.default`
+
+```ts
+@Kavo(Book, {
+  include: {
+    fields: ["author", "tags"],
+    default: ["author"],
+  },
+})
+```
+
+Unlike the old `defaults.include`, `include.default` is `EntityConfig` — entity scope only, with no global default and no per-operation override, so the global-scope caveat this guide used to carry (a global `defaults.include` needing a matching per-entity `allowed.includable` grant) no longer applies: there is no global scope to set it at in the first place.

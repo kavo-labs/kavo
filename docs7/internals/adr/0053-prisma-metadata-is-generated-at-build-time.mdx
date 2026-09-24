@@ -1,0 +1,28 @@
+---
+title: "ADR-0053 — Generate Prisma metadata at build time"
+---
+
+{/* Generated from docs/internals/adr/0053-prisma-metadata-is-generated-at-build-time.md by scripts/build-docs7.mjs. Edit that file, then run pnpm docs7:build. */}
+
+**Status:** accepted
+
+## Context
+
+Prisma 7's recommended `prisma-client` generator no longer exposes the full
+schema model through the generated client's runtime `Prisma.dmmf` value. Kavo
+needs primary-key, default, nullability, and relation metadata to derive its
+entity contract. Reaching into generated-client internals would make the
+adapter dependent on unstable implementation details, while compiling the
+schema inside the application would add a CLI/compiler dependency to runtime.
+
+## Decision
+
+`@kavo/prisma` provides `kavo-prisma-generator`. Applications run it during
+`prisma generate`; it emits a typed metadata module from Prisma's generator
+protocol input. `createInfrastructure` and `createPrismaKavo` accept that
+generated metadata module through the `metadata` option. The runtime adapter
+does not import `Prisma.dmmf`, Prisma compiler packages, or generated-client
+internals.
+
+Prisma 7 is the supported Prisma major. The generated client should use the
+`prisma-client` generator and a driver adapter, as recommended by Prisma 7.
