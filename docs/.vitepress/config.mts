@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { copyFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type HeadConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
@@ -54,6 +55,13 @@ const config = defineConfig({
     ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
     ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
   ],
+
+  // `docs.json` (the Mintlify config) has to stay at the docs root, since its
+  // page paths resolve relative to it, so `public/` can't hold it; VitePress
+  // only emits rendered pages and `public/`, so copy it into the output here.
+  buildEnd({ srcDir, outDir }) {
+    copyFileSync(join(srcDir, "docs.json"), join(outDir, "docs.json"));
+  },
 
   transformHead({ pageData }) {
     const path = pageData.relativePath.replace(/(^|\/)index\.md$/, "$1").replace(/\.md$/, "");
