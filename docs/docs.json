@@ -6,10 +6,10 @@
   "colors": {
     "primary": "#7c5cff"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/public/favicon.svg",
   "logo": {
-    "light": "/favicon.svg",
-    "dark": "/favicon.svg"
+    "light": "/public/favicon.svg",
+    "dark": "/public/favicon.svg"
   },
   "appearance": {
     "default": "dark"
