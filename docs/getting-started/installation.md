@@ -1,24 +1,24 @@
 # Installation
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @kavo/core @kavo/nest @kavo/typeorm
 ```
 
-```bash [npm]
+```bash npm
 npm install @kavo/core @kavo/nest @kavo/typeorm
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @kavo/core @kavo/nest @kavo/typeorm
 ```
 
-```bash [bun]
+```bash bun
 bun add @kavo/core @kavo/nest @kavo/typeorm
 ```
 
-:::
+</CodeGroup>
 
 - `@kavo/core` — the engine.
 - `@kavo/nest` — generates the NestJS routes.

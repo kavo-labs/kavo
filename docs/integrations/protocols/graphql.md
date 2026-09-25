@@ -100,47 +100,47 @@ Pick one mounting approach per app. The zero-config option and a hand-written co
 
 Inside a Nest app, `@kavo/nest` already depends on `@kavo/graphql`. Add just the peer:
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add graphql
 ```
 
-```bash [npm]
+```bash npm
 npm install graphql
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add graphql
 ```
 
-```bash [bun]
+```bash bun
 bun add graphql
 ```
 
-:::
+</CodeGroup>
 
 Outside Nest, add `@kavo/graphql` yourself too, alongside `@kavo/core` and whichever ORM adapter you use:
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @kavo/core @kavo/graphql graphql
 ```
 
-```bash [npm]
+```bash npm
 npm install @kavo/core @kavo/graphql graphql
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @kavo/core @kavo/graphql graphql
 ```
 
-```bash [bun]
+```bash bun
 bun add @kavo/core @kavo/graphql graphql
 ```
 
-:::
+</CodeGroup>
 
 See [Peer dependencies](/reference/peer-dependencies) for the full version table.
 

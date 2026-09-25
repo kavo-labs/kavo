@@ -23,6 +23,7 @@ pnpm prettify     # prettier --write . (printWidth 120)
 pnpm format:check # prettier --check . — the separate formatting job CI runs alongside the gate
 pnpm docs:build   # vitepress build docs — a second CI gate that `check` does NOT run
 pnpm docs:links   # every `docs/**.md` reference and sidebar link resolves (a third; also not in `check`)
+                  # docs/ also feeds Docs7 via docs/docs.json, so pages are MDX-dialect — tests/docs-mdx.spec.ts compiles each one
 ```
 
 Run a single test file or test by name:

@@ -52,7 +52,9 @@ When `@nestjs/swagger` is installed, an explicit array here also names the gener
 
 `apiKey` is then absent from `findOne`, `findMany`, `restoreOne`, any custom operation's result, and the row echoed back by `createOne`/`updateOne`/`patchOne`. Naming it in `select=` is a 400. Writing the key at all is what turns it on: omit `select.fields` entirely and the projection is every column plus every declared computed field, exactly as before ([ADR-0026](/internals/adr/0026-selectable-narrows-the-response-projection)).
 
-::: danger `select.fields` alone is not a credential control
+<Danger>
+**`select.fields` alone is not a credential control**
+
 It closes the **response body**. Three other doors stay open, and a column you actually need to protect has to close all four.
 
 | Door                      | Still open after `select.fields`                                                                                                     | Close it with                                                                                                                  |
@@ -63,7 +65,7 @@ It closes the **response body**. Three other doors stay open, and a column you a
 | response body             | No                                                                                                                                   | `select.fields`                                                                                                                |
 
 The filter and sort doors are the same oracle [ADR-0021](/internals/adr/0021-cursor-pagination-is-an-opaque-keyset-union) refuses for cursor sort keys. Narrow all three allowlists together, and add the write schema.
-:::
+</Danger>
 
 Two more edges. A configured `schema.output.item`/`schema.output.list` with a runtime shape replaces the projection rather than intersecting with it, so `select.fields` does not fence a column the schema names, even where the schema is wider. Register the schema as the narrowing statement when you use one. And an included relation is projected by its own target's `select.fields`, never the root's, so hiding a column on `User` keeps it hidden wherever `user` is included, provided `User` itself went through `@Kavo`/`createCrud`. A relation target that never did gets a derived config, which configures nothing and serves its full column set.
 

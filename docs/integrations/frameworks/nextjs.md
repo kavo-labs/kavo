@@ -93,25 +93,25 @@ Every shape is derived from `EntityMetadata` and the entity's resolved config al
 
 `next` is an optional peerDependency — nothing in `@kavo/next` imports it at runtime, since route handlers only need the Fetch API's global `Request`/`Response`.
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @kavo/core @kavo/next
 ```
 
-```bash [npm]
+```bash npm
 npm install @kavo/core @kavo/next
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @kavo/core @kavo/next
 ```
 
-```bash [bun]
+```bash bun
 bun add @kavo/core @kavo/next
 ```
 
-:::
+</CodeGroup>
 
 Add whichever ORM adapter your app uses alongside it, the same as with `@kavo/nest`. See [Peer dependencies](/reference/peer-dependencies) for the full version table.
 

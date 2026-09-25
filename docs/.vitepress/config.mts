@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type HeadConfig } from "vitepress";
 import { withMermaid } from "vitepress-plugin-mermaid";
+import { docs7ToVitePress } from "./docs7-compat";
 
 const hostname = "https://kavo.js.org";
 
@@ -29,6 +30,16 @@ const config = defineConfig({
 
   sitemap: {
     hostname,
+  },
+
+  // Pages are written in the MDX dialect Docs7 compiles (see docs7-compat.ts);
+  // rewrite it to VitePress's own syntax before markdown-it tokenizes the page.
+  markdown: {
+    config(md) {
+      md.core.ruler.before("block", "docs7-compat", (state) => {
+        state.src = docs7ToVitePress(state.src);
+      });
+    },
   },
 
   head: [

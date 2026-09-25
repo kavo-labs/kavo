@@ -1,5 +1,6 @@
 ---
 layout: home
+title: Kavo
 
 hero:
   name: Kavo
@@ -19,6 +20,21 @@ hero:
       rel: noopener
 ---
 
+{/* docs7 */}
+
+Define an entity once and get a complete REST, GraphQL, and MCP CRUD API with filtering, sorting, pagination, realtime events, and generated routes.
+
+```ts
+@Kavo(Book)
+@Controller("books")
+export class BooksController {}
+```
+
+Start with the [Introduction](/getting-started/introduction), or go straight to your stack's wiring guide: [TypeORM](/integrations/orms/typeorm), [Prisma](/integrations/orms/prisma), [Mongoose](/integrations/orms/mongoose), or [MikroORM](/integrations/orms/mikroorm). Coding agents can read the whole documentation index from [llms.txt](https://kavo.js.org/llms.txt).
+
+{/* /docs7 */}
+
+{/* vitepress
 <script setup lang="ts">
 import { ref } from "vue";
 import ToolLogoStrip from "./.vitepress/theme/components/ToolLogoStrip.vue";
@@ -339,3 +355,4 @@ GET /books
 </div>
 
 <LayerEquation />
+*/}

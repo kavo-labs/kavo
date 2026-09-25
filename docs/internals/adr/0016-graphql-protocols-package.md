@@ -53,8 +53,8 @@ Cases:
   offer glue for.
 
 An entity opts into GraphQL exposure separately from its `@Kavo` config —
-`registerKavoGraphQLTypes(Entity, {...})`, not a `@Kavo(Entity, { graphql:
-{...} })` option — because `@kavo/graphql` cannot know `@Kavo` exists
+`registerKavoGraphQLTypes(Entity, {...})`, not a
+`@Kavo(Entity, { graphql: {...} })` option — because `@kavo/graphql` cannot know `@Kavo` exists
 (same reasoning ADR-0002 already gives for adapters never being reachable
 from framework config directly).
 

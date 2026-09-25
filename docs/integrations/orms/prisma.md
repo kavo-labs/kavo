@@ -2,33 +2,35 @@
 
 Kavo's engine (`@kavo/core`) is ORM-agnostic. It talks to your data through a small adapter seam. `@kavo/nest` generates the routes, and `@kavo/prisma` adapts Kavo to a Prisma Client. Below is the complete, minimal wiring for that combination.
 
+{/* vitepress
 <script setup lang="ts">
 import StackPicker from "../../.vitepress/theme/components/StackPicker.vue";
 </script>
 
 <StackPicker orm="prisma" />
+*/}
 
 If you haven't yet, read [Introduction](/getting-started/introduction) first. This page assumes you already know what `@Kavo()` does and just needs the app wiring.
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @kavo/core @kavo/nest @kavo/prisma
 ```
 
-```bash [npm]
+```bash npm
 npm install @kavo/core @kavo/nest @kavo/prisma
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @kavo/core @kavo/nest @kavo/prisma
 ```
 
-```bash [bun]
+```bash bun
 bun add @kavo/core @kavo/nest @kavo/prisma
 ```
 
-:::
+</CodeGroup>
 
 `@kavo/prisma` supports `@prisma/client` `^7.0.0`. Prisma 7 projects should use the `prisma-client` generator and a driver adapter. Add `@prisma/adapter-<driver>` for your database. `@kavo/nest` expects the Nest runtime your app already has. See [Peer dependencies](/getting-started/installation#peer-dependencies) for the full list with versions, and [Requirements](/getting-started/requirements) for the Node and TypeScript prerequisites.
 

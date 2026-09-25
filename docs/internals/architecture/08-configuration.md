@@ -89,8 +89,8 @@ properties instead of a callable function.
 **`operations` is a special case, at two different scopes.** At _global_
 scope, `KavoSettings.operations` is a plain boolean map
 (`Partial<Record<StandardOperationId, boolean>>`) and merges through
-`mergeSettings` exactly like any other key — `createKavo({ defaults:
-{ operations: { deleteOne: false } } })` sets an app-wide default. At
+`mergeSettings` exactly like any other key —
+`createKavo({ defaults: { operations: { deleteOne: false } } })` sets an app-wide default. At
 _entity/operation_ scope, `EntityConfig.operations`/`OperationConfig` is
 a structurally richer, per-entity-typed shape (it also carries
 `handler`/`meta`), so it is deliberately **excluded** from the generic

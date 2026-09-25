@@ -40,9 +40,9 @@ Whether a filter or sort on the field actually works — not just typechecks —
 
 The field never needs filtering or sorting — a formatted display value, a caller-facing label. Every ORM can do this; the mechanism differs.
 
-::: code-group
+<CodeGroup>
 
-```ts [TypeORM]
+```ts TypeORM
 @Entity()
 class Book {
   // ...
@@ -51,7 +51,7 @@ class Book {
 }
 ```
 
-```ts [MikroORM]
+```ts MikroORM
 @Entity()
 class Book {
   // ...
@@ -60,7 +60,7 @@ class Book {
 }
 ```
 
-```ts [Prisma]
+```ts Prisma
 const prisma = new PrismaClient().$extends({
   result: {
     book: {
@@ -75,14 +75,14 @@ const prisma = new PrismaClient().$extends({
 });
 ```
 
-```ts [Mongoose]
+```ts Mongoose
 const BookSchema = new Schema({ title: String, year: Number });
 BookSchema.virtual("displayTitle").get(function () {
   return `${this.title} (${this.year})`;
 });
 ```
 
-:::
+</CodeGroup>
 
 **TypeORM has a second, decorator-free way: a plain class getter**, because its QueryBuilder hands back real entity class instances rather than plain objects:
 
@@ -114,9 +114,9 @@ The TypeORM and MikroORM forms are `FieldMetadata` entries Kavo sees and can ser
 
 Only worth it when the ORM can push the expression into `WHERE`/`ORDER BY` — TypeORM and MikroORM here, not Prisma or Mongoose.
 
-::: code-group
+<CodeGroup>
 
-```ts [TypeORM]
+```ts TypeORM
 @Entity()
 class Book {
   // ...
@@ -125,7 +125,7 @@ class Book {
 }
 ```
 
-```ts [MikroORM]
+```ts MikroORM
 @Entity()
 class Book {
   // ...
@@ -134,7 +134,7 @@ class Book {
 }
 ```
 
-:::
+</CodeGroup>
 
 ```ts
 @Kavo(Book, {
@@ -154,9 +154,9 @@ GET /books?filter[titleLower][eq]=dune&sort=titleLower
 
 A per-row aggregate — "how many comments does this post have" — is just a correlated-subquery `@VirtualColumn`/`@Formula`, not a separate Kavo feature (aggregation as a bucketed `GROUP BY` endpoint is a different, still-unbuilt shape of problem, tracked separately).
 
-::: code-group
+<CodeGroup>
 
-```ts [TypeORM]
+```ts TypeORM
 @Entity()
 class Post {
   // ...
@@ -167,7 +167,7 @@ class Post {
 }
 ```
 
-```ts [MikroORM]
+```ts MikroORM
 @Entity()
 class Post {
   // ...
@@ -178,7 +178,7 @@ class Post {
 }
 ```
 
-:::
+</CodeGroup>
 
 ```ts
 @Kavo(Post, {

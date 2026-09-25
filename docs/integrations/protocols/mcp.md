@@ -81,47 +81,47 @@ Wire your own `@modelcontextprotocol/sdk` server (`Server` or `McpServer`, which
 
 Inside a Nest app, `@kavo/nest` already depends on `@kavo/mcp`. Add just the peer:
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @modelcontextprotocol/sdk
 ```
 
-```bash [npm]
+```bash npm
 npm install @modelcontextprotocol/sdk
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @modelcontextprotocol/sdk
 ```
 
-```bash [bun]
+```bash bun
 bun add @modelcontextprotocol/sdk
 ```
 
-:::
+</CodeGroup>
 
 Outside Nest, add `@kavo/mcp` yourself too, alongside `@kavo/core` and whichever ORM adapter you use:
 
-::: code-group
+<CodeGroup>
 
-```bash [pnpm]
+```bash pnpm
 pnpm add @kavo/core @kavo/mcp @modelcontextprotocol/sdk
 ```
 
-```bash [npm]
+```bash npm
 npm install @kavo/core @kavo/mcp @modelcontextprotocol/sdk
 ```
 
-```bash [yarn]
+```bash yarn
 yarn add @kavo/core @kavo/mcp @modelcontextprotocol/sdk
 ```
 
-```bash [bun]
+```bash bun
 bun add @kavo/core @kavo/mcp @modelcontextprotocol/sdk
 ```
 
-:::
+</CodeGroup>
 
 See [Peer dependencies](/reference/peer-dependencies) for the full version table.
 

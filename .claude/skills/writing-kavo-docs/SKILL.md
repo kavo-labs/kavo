@@ -27,13 +27,14 @@ Second person is rare; most pages describe the system ("Kavo stops actually dele
 - **Config-key references point at the anchor**, not just the page: `` `/guides/configuration/settings#softdelete` ``, matching the heading `## delete` would produce.
 - **Links are root-relative and extensionless** (`/features/soft-delete`, not `./soft-delete.md`), matching VitePress `cleanUrls`.
 - A page lives under the section its sidebar entry already has in `docs/.vitepress/config.mts` — check the sidebar array before inventing a new section for one page.
+- **Write the MDX dialect, not VitePress's.** Docs7 compiles every page as MDX from the same `docs/` folder, and `docs/.vitepress/docs7-compat.ts` rewrites it for VitePress. Use `<CodeGroup>` with ` ```bash pnpm ` tab labels, not `::: code-group`; `<Danger>`/`<Warning>`/`<Tip>`/`<Note>`, with an optional bold first line as the title, not `::: danger`; wrap `<script setup>` and Vue components in a `{/* vitepress` … `*/}` block. Never start a wrapped prose line with `{` or `<`. `tests/docs-mdx.spec.ts` compiles every page and fails otherwise.
 
 ## Process
 
 1. Skim one or two existing pages in the same `docs/` subdirectory before writing — the voice above is a description of what's already there, not a substitute for reading it.
 2. Draft the page: one real code example, prose that states behavior directly, tables for anything enumerable, cross-references where a related page already covers depth this page shouldn't duplicate.
 3. Run humanizer:humanizer on the draft in file mode, scoped to prose only — leave code blocks, frontmatter, and link targets untouched.
-4. Add the page to the sidebar in `docs/.vitepress/config.mts` if it's new.
+4. Add the page to the sidebar in `docs/.vitepress/config.mts` if it's new, and to `navigation` in `docs/docs.json` (Docs7's sidebar).
 5. Run `pnpm docs:links` (dead-link check across the repo, not just this page) and `pnpm docs:build` before calling it done — neither is part of `pnpm check`, so they're easy to skip by accident.
 
 ## Quick reference: phrases that don't belong in a Kavo doc
