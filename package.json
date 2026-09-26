@@ -56,5 +56,5 @@
     "vitepress-plugin-mermaid": "^2.0.17",
     "vitest": "^4.1.10"
   },
-  "version": "0.23.4"
+  "version": "0.23.5"
 }
