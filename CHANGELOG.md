@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.23.5](https://github.com/kavo-labs/kavo/compare/v0.23.4...v0.23.5) (2026-09-26)
+
+
+### Features
+
+* **docs:** generate a committed docs7/ site for Docs7 from the VitePress docs ([5702556](https://github.com/kavo-labs/kavo/commit/57025562f62a9b0a1bc65a7c5fc3dd23a5a4f82c))
+
+
+### Bug Fixes
+
+* **docs:** emit docs.json into the VitePress build so /docs.json is served ([3449339](https://github.com/kavo-labs/kavo/commit/344933925228248acb61547b56138c5daf56b98c))
+* **docs:** point docs.json at the Docs7 schema ([7b40f36](https://github.com/kavo-labs/kavo/commit/7b40f36f1bbeeb8e3fe2d6e5f37d8543f672acff))
+
+
+### Documentation
+
+* add an llms.txt hero button to the landing page ([#488](https://github.com/kavo-labs/kavo/issues/488)) ([7f80335](https://github.com/kavo-labs/kavo/commit/7f80335faa7167b400a75761f38e76f7be3d62aa))
+* add Mintlify docs.json mirroring the VitePress sidebar ([#487](https://github.com/kavo-labs/kavo/issues/487)) ([bbce06a](https://github.com/kavo-labs/kavo/commit/bbce06a361cb40154a51ae819b382712c093d2e1))
+* link llms.txt from the landing page ([#485](https://github.com/kavo-labs/kavo/issues/485)) ([d595cb0](https://github.com/kavo-labs/kavo/commit/d595cb02cbc6140b7e72b9945e7d3712a97f68e3))
+* make docs/ MDX-compatible so Docs7 can build it directly ([4279e1e](https://github.com/kavo-labs/kavo/commit/4279e1e45b0f4536e23b71c31551197e1c6898b5))
+
 ## [0.23.4](https://github.com/kavo-labs/kavo/compare/v0.23.3...v0.23.4) (2026-09-20)
 
 
