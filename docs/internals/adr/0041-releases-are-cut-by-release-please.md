@@ -24,10 +24,10 @@ human, is _deciding when a release goes out_.
 releases. It is configured as a **single logical package rooted at the repo**
 (`release-please-config.json`, `include-component-in-tag: false`): one release
 PR, one root `CHANGELOG.md`, one tag `vX.Y.Z`. Lockstep (ADR-0004) is held by
-listing every `PACKAGE_DIRS` manifest in the root package's `extra-files`, so
-release-please bumps all nine `package.json` versions together;
-`tests/release-workflow.spec.ts` asserts that list stays equal to
-`PACKAGE_DIRS`.
+one globbed `extra-files` entry on the root package, `packages/**/package.json`,
+so release-please bumps every package's version together;
+`tests/release-workflow.spec.ts` expands that glob against the tracked files
+and asserts the result stays equal to `PACKAGE_DIRS`.
 
 `release-please-action` runs from `.github/workflows/release-please.yml` on
 the default `GITHUB_TOKEN` — no PAT, no GitHub App. `GITHUB_TOKEN` is enough
@@ -88,7 +88,7 @@ v0.15.0`; the token still has to be present for the parse to line up.
   defaults to the branch name (`chore: release main`) — which is the bug this
   replaced, so it must stay set.
 
-The nine package versions are bumped through `extra-files`, independent of
+The package versions are bumped through `extra-files`, independent of
 all of the above.
 
 Pre-1.0 bump rules live in config: `bump-minor-pre-major` keeps a breaking

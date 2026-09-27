@@ -10,19 +10,7 @@
   "packages": {
     ".": {
       "package-name": "",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        { "type": "json", "path": "packages/core/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/orms/typeorm/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/orms/prisma/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/orms/mongoose/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/orms/mikroorm/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/realtime/sse/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/protocols/graphql/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/protocols/mcp/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/frameworks/nest/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/frameworks/next/package.json", "jsonpath": "$.version" }
-      ]
+      "extra-files": [{ "type": "json", "path": "packages/**/package.json", "glob": true, "jsonpath": "$.version" }]
     }
   },
   "changelog-sections": [

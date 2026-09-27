@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, matchesGlob, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -877,7 +877,14 @@ describe("release-please config", () => {
     const rootPkg = config.packages["."];
     expect(rootPkg).toBeDefined();
     const jsonExtras = (rootPkg["extra-files"] ?? []).filter((f: { type: string }) => f.type === "json");
-    const extraDirs = jsonExtras.map((f: { path: string }) => f.path.replace(/\/package\.json$/, ""));
+    // A glob entry is resolved the way release-please resolves it: against the
+    // files committed at the release ref, so untracked node_modules never match.
+    const tracked = spawnSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf8" }).stdout.split("\n");
+    const extraDirs = jsonExtras
+      .flatMap((f: { path: string; glob?: boolean }) =>
+        f.glob ? tracked.filter((file) => matchesGlob(file, f.path)) : [f.path],
+      )
+      .map((path: string) => path.replace(/\/package\.json$/, ""));
     // PACKAGE_DIRS stays the only authority for the released set; extra-files
     // must cover exactly it. (The "." entry additionally bumps the private
     // root manifest, which is not in PACKAGE_DIRS.)
