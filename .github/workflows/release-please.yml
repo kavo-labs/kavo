@@ -8,9 +8,12 @@ on:
   # PR fires neither `push` nor `pull_request` — its branch is authored by the
   # default GITHUB_TOKEN and GitHub suppresses those events to avoid recursion.
   # A `schedule` tick is NOT suppressed, so it is what actually cuts the tag,
-  # within one cron interval of the merge.
+  # within one cron interval of the merge. The release PR is merged manually
+  # (not latency-sensitive), so this polls every 30 minutes rather than 15 —
+  # half the Actions minutes spent waiting, at the cost of at most 15 extra
+  # minutes before the tag lands.
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"
   # Manual escape hatch: reconcile a release immediately instead of waiting
   # for the next tick.
   workflow_dispatch:
@@ -18,11 +21,14 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write # so the publish hand-off below can workflow_dispatch publish.yml
+  actions: write # so the publish job below can workflow_dispatch publish.yml
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -31,14 +37,20 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # release-please cuts the tag + GitHub Release with GITHUB_TOKEN, which
-      # does NOT trigger publish.yml's `release: published` / `push: tags`.
-      # `workflow_dispatch` is one of the two events exempt from GITHUB_TOKEN
-      # suppression, so hand off to publish.yml explicitly against the new tag.
+  # release-please cuts the tag + GitHub Release with GITHUB_TOKEN, which does
+  # NOT trigger publish.yml's `release: published` / `push: tags`.
+  # `workflow_dispatch` is one of the two events exempt from GITHUB_TOKEN
+  # suppression, so hand off to publish.yml explicitly against the new tag.
+  # Split into its own job (rather than a conditional step) so the hand-off's
+  # success/failure is visible independent of the release-please run itself.
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
       - name: Publish the new release to npm
-        if: ${{ steps.release.outputs.releases_created == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # --repo is required: this job has no actions/checkout, so `gh` has no
         # local git remote to infer the repository from.
-        run: gh workflow run publish.yml --ref "${{ steps.release.outputs.tag_name }}" --repo "${{ github.repository }}"
+        run: gh workflow run publish.yml --ref "${{ needs.release-please.outputs.tag_name }}" --repo "${{ github.repository }}"
