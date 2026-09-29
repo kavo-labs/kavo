@@ -2,10 +2,12 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.21.x  | :white_check_mark: |
-| < 0.21  | :x:                |
+Kavo is pre-1.0 and every `@kavo/*` package ships on one lockstep version. Security fixes ship in the next release and are not backported to earlier ones.
+
+| Version                        | Supported          |
+| ------------------------------ | ------------------ |
+| Latest release on the 0.x line | :white_check_mark: |
+| Any earlier release            | :x:                |
 
 ## Reporting a Vulnerability
 
