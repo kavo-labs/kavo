@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -329,26 +329,24 @@ describe("the Scorecard workflow", () => {
 });
 
 /**
- * `autoformat.yml` commits to the branch it formats. On a PR branch that is
- * the point; on `main` the ruleset (issue #496) rejects any direct push, so a
- * push trigger there could only ever fail. Its write grant also stays on the
- * job, for the same Token-Permissions reason as `scorecard.yml` above.
+ * The ruleset on `main` (issue #496) requires CI's checks to pass on a PR's
+ * head commit. A workflow that commits to a PR branch with `GITHUB_TOKEN`, or
+ * with `[skip ci]`, leaves that head with no check runs at all, so the PR can
+ * never merge. That is why the old autoformat workflow was removed: `ci.yml`'s
+ * `format` job already fails an unformatted PR, and `pnpm prettify` fixes it.
  */
-describe("the autoformat workflow", () => {
-  const autoformat = readFileSync(resolve(REPO_ROOT, ".github/workflows/autoformat.yml"), "utf8")
-    .split("\n")
-    .map((line) => line.replace(/\s*#.*$/, ""))
-    .join("\n");
-  const topLevel = autoformat.slice(0, autoformat.search(/^jobs:/m));
+describe("no workflow commits to the branch it runs on", () => {
+  const workflowDir = resolve(REPO_ROOT, ".github/workflows");
+  const workflows = readdirSync(workflowDir)
+    .filter((file) => /\.ya?ml$/.test(file))
+    .map((file) => ({ file, source: readFileSync(resolve(workflowDir, file), "utf8") }));
 
-  it("runs only on pull requests, never on a push to main", () => {
-    expect(topLevel).toMatch(/^on:\n {2}pull_request:$/m);
-    expect(topLevel).not.toMatch(/^ {2}push:/m);
-  });
-
-  it("grants `contents: write` to its job, not the whole workflow", () => {
-    expect(topLevel).toMatch(/^permissions: \{\}$/m);
-    expect(autoformat.slice(topLevel.length)).toMatch(/^ {4}permissions:\n {6}contents: write$/m);
+  it("uses no auto-commit action and marks no commit `[skip ci]`", () => {
+    expect(workflows.length).toBeGreaterThan(0);
+    for (const { file, source } of workflows) {
+      expect(source, `${file} auto-commits to the branch it runs on`).not.toContain("git-auto-commit-action");
+      expect(source, `${file} writes a \`[skip ci]\` commit`).not.toContain("[skip ci]");
+    }
   });
 });
 
