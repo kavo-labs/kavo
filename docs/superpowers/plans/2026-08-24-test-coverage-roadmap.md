@@ -135,6 +135,12 @@ _content_). Pinned as a known-behavior test in
 fixing it means deciding where operator-value scalar-shape validation
 belongs in `packages/core/src/query/`, which is its own change.
 
+**Resolved (issue #493):** `DefaultFilterParser.buildCondition` now rejects an
+object operand as `400 KAVO_QUERY_INVALID_VALUE` for every operator, before
+any adapter is called; the Mongoose test above asserts the 400. The root cause
+was not the driver: the bracket tree has no prototype, so `String(raw)` threw
+a `TypeError` in core, on every adapter.
+
 ---
 
 ## Priority order for follow-up issues

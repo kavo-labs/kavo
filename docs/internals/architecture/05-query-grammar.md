@@ -90,6 +90,12 @@ select:     root: [id, name, email]
   and keeps its per-element coercion behavior. The genuinely empty array a
   programmatic caller can pass (`value: []`) is unaffected — that is the
   empty set, and it round-trips as one.
+- **Operands are values, never objects.** An extra bracket level under an
+  operator (`filter[name][eq][contains]=a`) is a
+  `KAVO_QUERY_INVALID_VALUE` **400**. It is not an ORM operator
+  passthrough: no adapter ever receives an object where a value belongs
+  (issue #493). The repeated-key array form of a list operand (above) is
+  the only non-scalar spelling.
 - **`between`:** exactly two comma-separated bounds, in the order given —
   the pair is never sorted, so `between=65,18` is an empty range rather
   than a silently corrected one.

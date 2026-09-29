@@ -9,7 +9,7 @@ import {
   type KavoInstance,
   type DefaultKavoService,
 } from "@kavo/core";
-import { buildEntityMetadata, createInfrastructure, createPrismaKavo } from "@kavo/prisma";
+import { PrismaRepositoryAdapter, buildEntityMetadata, createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
 import { testMetadata } from "./support/datamodel.js";
 
@@ -429,6 +429,114 @@ describe("PrismaRepositoryAdapter — query translation", () => {
 
     const fetched = await books.findOne(created.id, { include: ["author"] } as never);
     expect(fetched).toMatchObject({ author: { id: author.id, name: "Assoc" } });
+  });
+
+  /**
+   * ADR-0014's other spelling: a reference object under the relation's own
+   * key. The deserializer narrows it to `{ id }` (or `null`), and the adapter
+   * turns that into Prisma's `connect`/`disconnect`/`set`, which Prisma
+   * requires for a relation field. Before this, every relation key a body
+   * carried reached `delegate.create`/`update` verbatim and failed there as a
+   * 500 (issue #493), including the nested-write shapes a client might try to
+   * smuggle in.
+   */
+  describe("association through the relation key (ADR-0014)", () => {
+    const booksService = () => kavo.createCrud(Book) as DefaultKavoService<Book>;
+
+    it("connects a to-one relation from a reference object on create", async () => {
+      const author = await client.author.create({ data: { email: "ref@x.io", name: "Ref", age: 1 } });
+      const created = (await booksService().createOne({ title: "Ref", author: { id: author.id } } as never)) as Book;
+      expect((await client.book.findUnique({ where: { id: created.id } }))?.authorId).toBe(author.id);
+    });
+
+    it("leaves a to-one relation unset when a create body sends null", async () => {
+      const created = (await booksService().createOne({ title: "Orphan", author: null } as never)) as Book;
+      expect((await client.book.findUnique({ where: { id: created.id } }))?.authorId).toBeNull();
+    });
+
+    it("rejects a smuggled Prisma nested write on create, writing nothing", async () => {
+      await expect(
+        booksService().createOne({
+          title: "Trojan",
+          author: { create: { email: "mallory@x.io", name: "Mallory", age: 1 } },
+        } as never),
+      ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
+      expect(await client.author.count()).toBe(0);
+      expect(await client.book.count()).toBe(0);
+    });
+
+    it("rejects a smuggled Prisma nested write on patch, leaving the existing link in place", async () => {
+      const author = await client.author.create({ data: { email: "kept@x.io", name: "Kept", age: 1 } });
+      const book = await client.book.create({ data: { title: "Linked", authorId: author.id } });
+      await expect(
+        booksService().patchOne(book.id, {
+          author: { create: { email: "mallory@x.io", name: "Mallory", age: 1 } },
+        } as never),
+      ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
+      expect(await client.book.findUnique({ where: { id: book.id } })).toMatchObject({ authorId: author.id });
+      expect(await client.author.count()).toBe(1);
+    });
+
+    it("answers a reference to a missing row with 422 KAVO_UNRESOLVED_RELATION, like the authorId spelling", async () => {
+      await expect(
+        booksService().createOne({ title: "Dangling", author: { id: 99999 } } as never),
+      ).rejects.toMatchObject({ code: "KAVO_UNRESOLVED_RELATION", status: 422 });
+      const book = await client.book.create({ data: { title: "Existing" } });
+      await expect(booksService().patchOne(book.id, { author: { id: 99999 } } as never)).rejects.toMatchObject({
+        code: "KAVO_UNRESOLVED_RELATION",
+        status: 422,
+      });
+    });
+
+    it("treats an undefined relation value as not sent, never as unlink", async () => {
+      const author = await client.author.create({ data: { email: "stay@x.io", name: "Stay", age: 1 } });
+      const book = await client.book.create({ data: { title: "Stays", authorId: author.id } });
+      const bookMetadata = buildEntityMetadata(testMetadata, Book, new Map([["Author", Author] as const]));
+      const adapter = new PrismaRepositoryAdapter<Book>(client as never, bookMetadata, {
+        caseInsensitiveFilters: false,
+      } as never);
+      await adapter.patch(
+        book.id,
+        { title: "Still linked", author: undefined } as never,
+        {
+          entityName: "Book",
+          operation: "patchOne",
+          config: { delete: { field: null } },
+        } as never,
+      );
+      expect(await client.book.findUnique({ where: { id: book.id } })).toMatchObject({
+        title: "Still linked",
+        authorId: author.id,
+      });
+    });
+
+    it("reconnects and disconnects a to-one relation on patch", async () => {
+      const [a, b] = await Promise.all([
+        client.author.create({ data: { email: "a@x.io", name: "A", age: 1 } }),
+        client.author.create({ data: { email: "b@x.io", name: "B", age: 1 } }),
+      ]);
+      const book = await client.book.create({ data: { title: "Moves", authorId: a.id } });
+
+      await booksService().patchOne(book.id, { author: { id: b.id } } as never);
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBe(b.id);
+
+      await booksService().patchOne(book.id, { author: null } as never);
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
+    });
+
+    it("refuses association through a to-many relation key with a 400, on create and update", async () => {
+      const book = await client.book.create({ data: { title: "Elsewhere" } });
+      await expect(
+        authors.createOne({ email: "many@x.io", name: "Many", age: 1, books: [{ id: book.id }] } as never),
+      ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
+      expect(await client.author.count()).toBe(0);
+
+      const author = await client.author.create({ data: { email: "own@x.io", name: "Own", age: 1 } });
+      await expect(
+        authors.updateOne(author.id, { email: "own@x.io", name: "Own", age: 1, books: [{ id: book.id }] } as never),
+      ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
+    });
   });
 });
 

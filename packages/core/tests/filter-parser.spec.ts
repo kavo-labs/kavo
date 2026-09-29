@@ -74,6 +74,54 @@ describe("DefaultFilterParser — isNull / isNotNull symmetry", () => {
   });
 });
 
+/**
+ * An extra bracket level under an operator (`filter[name][eq][contains]=a`)
+ * builds an object operand. The grammar has no such form, and the tree the
+ * bracket parser builds has no prototype, so reaching `String(raw)` threw a
+ * `TypeError` that surfaced as a 500 (issue #493). It is a 400 instead, for
+ * every operator family, before any adapter sees it.
+ */
+describe("DefaultFilterParser — nested operands", () => {
+  it.each([
+    ["eq", "name"],
+    ["gt", "age"],
+    ["like", "name"],
+    ["in", "status"],
+    ["between", "age"],
+    ["isNull", "name"],
+  ])("rejects an object operand under '%s' as KAVO_QUERY_INVALID_VALUE", (token, field) => {
+    const issues = issuesOf(() => parse({ [`filter[${field}][${token}][contains]`]: "a" }));
+    expect(issues).toEqual([expect.objectContaining({ field, code: "KAVO_QUERY_INVALID_VALUE" })]);
+  });
+
+  it.each([
+    ["an object wrapped into a list by the append form", { "filter[status][in][x]": "b", "filter[status][in][]": "a" }],
+    ["an object in a scalar operator's list", { "filter[name][eq][x]": "b", "filter[name][eq][]": "a" }],
+    ["an object under eq in the JSON form", { filter: JSON.stringify({ name: { eq: { contains: "a" } } }) }],
+    ["an object inside a JSON list operand", { filter: JSON.stringify({ name: { in: [{ toString: 1 }] } }) }],
+  ])("rejects %s as KAVO_QUERY_INVALID_VALUE", (_label, params) => {
+    const issues = issuesOf(() => parse(params));
+    expect(issues).toEqual([expect.objectContaining({ field: expect.any(String), code: "KAVO_QUERY_INVALID_VALUE" })]);
+  });
+
+  it("reports an unknown field before looking at its operand", () => {
+    const issues = issuesOf(() => parse({ "filter[secret][eq][x]": "1" }));
+    expect(issues).toEqual([expect.objectContaining({ code: "KAVO_QUERY_INVALID_FIELD" })]);
+  });
+
+  it("reports an unknown operator before looking at its operand", () => {
+    const issues = issuesOf(() => parse({ "filter[name][bogus][x]": "1" }));
+    expect(issues).toEqual([expect.objectContaining({ code: "KAVO_QUERY_INVALID_OPERATOR" })]);
+  });
+
+  it("still accepts the repeated-key array form of a list operand", () => {
+    expect(parse({ "filter[status][in][]": ["active", "pending"] }).root).toMatchObject({
+      operator: "IN",
+      value: ["active", "pending"],
+    });
+  });
+});
+
 describe("DefaultFilterParser — bracket grammar", () => {
   // The single-comparison case is the `gte` row of the operator table above;
   // repeating it here would mean two tests to update for one contract.

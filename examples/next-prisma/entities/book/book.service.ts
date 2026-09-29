@@ -13,6 +13,7 @@ import { CreateBookSchema } from "./book.schema";
 export const books = kavo.createCrud<Book>(Book, {
   filter: { fields: ["id", "title", "published", "authorId"] },
   sort: { fields: ["id", "title"] },
+  search: { fields: ["title"] },
   include: { fields: ["author"] },
   // A single top-level schema applies to input (create/update/patch) and output (item/list) alike.
   schema: CreateBookSchema,

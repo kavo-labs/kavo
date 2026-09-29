@@ -396,6 +396,25 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
  * column a bare scalar could be mistaken for, so the ambiguity above does
  * not apply there and that shorthand is unchanged.
  */
+/**
+ * One element of a to-many association array. Unlike a single-value
+ * reference, an element with no id is dropped rather than rejected — the
+ * array semantics are unchanged from before issue #493 tightened the
+ * single-value path.
+ */
+function associateElement<Entity>(
+  value: unknown,
+  spec: RelationIdSpec,
+  relation: string,
+  context: KavoContext<Entity>,
+): unknown {
+  if ("idField" in spec && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const id = (value as Record<string, unknown>)[spec.idField];
+    return id === undefined ? null : { [spec.idField]: id };
+  }
+  return associate(value, spec, relation, context);
+}
+
 function associate<Entity>(
   value: unknown,
   spec: RelationIdSpec,
@@ -406,18 +425,33 @@ function associate<Entity>(
     return null;
   }
   if (Array.isArray(value)) {
-    return value.map((element) => associate(element, spec, relation, context)).filter((element) => element !== null);
+    return value
+      .map((element) => associateElement(element, spec, relation, context))
+      .filter((element) => element !== null);
   }
   if ("idField" in spec) {
     const { idField } = spec;
-    if (typeof value === "object") {
-      const id = (value as Record<string, unknown>)[idField];
-      return id === undefined ? null : { [idField]: id };
+    const invalid = (expected: string) =>
+      new AssociationInvalidShapeException({
+        messageParams: { relation, idField, entity: context.entityName, expected },
+        context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+      });
+    if (typeof value !== "object") {
+      throw invalid(`send a reference object naming '${idField}', or null, not a bare id`);
     }
-    throw new AssociationInvalidShapeException({
-      messageParams: { relation, idField, entity: context.entityName },
-      context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
-    });
+    // A reference with no id used to narrow to `null`, which on update meant
+    // "unlink": a smuggled nested write (`{ author: { create: … } }`) silently
+    // removed the existing association (issue #493). And an id that is not a
+    // scalar (`{ id: { gt: 0 } }`) was passed through for the ORM to reject as
+    // a 500. Both are malformed references, so both are a 400.
+    const id = (value as Record<string, unknown>)[idField];
+    if (id === undefined) {
+      throw invalid(`a reference object must name '${idField}'; send null to clear the association`);
+    }
+    if (typeof id !== "string" && typeof id !== "number") {
+      throw invalid(`'${idField}' must be a string or a number`);
+    }
+    return { [idField]: id };
   }
   const { compositeIdFields } = spec;
   if (typeof value === "object") {

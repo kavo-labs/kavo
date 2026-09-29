@@ -19,10 +19,12 @@ datasource db {
 }
 
 model Author {
-  id    Int    @id @default(autoincrement())
-  name  String
-  email String @unique
-  books Book[]
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique
+  books     Book[]
+  // Soft delete (`delete: { field: "deletedAt" }` on the authors service).
+  deletedAt DateTime?
 }
 
 model Book {

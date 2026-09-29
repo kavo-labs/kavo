@@ -425,6 +425,32 @@ describe("DefaultDeserializer — single-key relation association (ADR-0014, iss
     expect(() => deserialize({ author: 7 })).toThrowError(AssociationInvalidShapeException);
   });
 
+  /**
+   * Issue #493: a reference with no id used to narrow to `null`, which an
+   * update reads as "unlink", so a smuggled nested write silently removed
+   * the existing association; and a non-scalar id reached the ORM as a 500.
+   */
+  it.each([
+    ["a smuggled nested create", { create: { name: "Mallory" } }],
+    ["a reference naming a different unique field", { email: "victim@example.com" }],
+    ["an operator object as the id", { id: { gt: 0 } }],
+    ["a null id", { id: null }],
+    ["an array id", { id: [1, 2] }],
+  ])("rejects %s as KAVO_ASSOCIATION_INVALID_SHAPE rather than unlinking", (_label, author) => {
+    try {
+      deserialize({ author });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(AssociationInvalidShapeException);
+      expect((error as AssociationInvalidShapeException).code).toBe("KAVO_ASSOCIATION_INVALID_SHAPE");
+      expect((error as AssociationInvalidShapeException).status).toBe(400);
+    }
+  });
+
+  it("accepts a string id as well as a numeric one", () => {
+    expect(deserialize({ author: { id: "7" } })).toEqual({ author: { id: "7" } });
+  });
+
   it("throws AssociationInvalidShapeException with the KAVO_ASSOCIATION_INVALID_SHAPE code", () => {
     try {
       deserialize({ author: 7 });

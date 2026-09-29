@@ -278,16 +278,20 @@ describe("MikroOrmRepositoryAdapter — relation writes are association-only", (
     const isolated = createMikroOrmKavo(orm);
     const books = isolated.createCrud(Book) as DefaultKavoService<Book>;
     const before = await orm.em.fork().count(Author, {});
+    const booksBefore = await orm.em.fork().count(Book, {});
 
-    const created = (await books.createOne({
-      title: "smuggled",
-      author: { email: "evil@x.io", name: "Injected", age: 1 },
-    } as never)) as Book;
+    // An id-less relation value is a malformed reference (ADR-0014's #493
+    // amendment): a 400 before anything is written, rather than the `null` it
+    // used to narrow to, which on an update would have meant "unlink".
+    await expect(
+      books.createOne({
+        title: "smuggled",
+        author: { email: "evil@x.io", name: "Injected", age: 1 },
+      } as never),
+    ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
 
-    // The row is created, the smuggled object is not: an id-less relation
-    // value becomes `null`, so no Author is written and none is associated.
     expect(await orm.em.fork().count(Author, {})).toBe(before);
-    expect(await readAuthorId(created.id)).toBeUndefined();
+    expect(await orm.em.fork().count(Book, {})).toBe(booksBefore);
   });
 });
 

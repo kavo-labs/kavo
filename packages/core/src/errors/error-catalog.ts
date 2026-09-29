@@ -89,8 +89,7 @@ export const ERROR_CATALOG = {
   KAVO_ASSOCIATION_INVALID_SHAPE: {
     status: 400,
     title: "Invalid association shape",
-    message:
-      "The value for '{relation}' on {entity} must be a reference object naming '{idField}', or null — not a bare id.",
+    message: "The value for '{relation}' on {entity} is not a valid association: {expected}.",
   },
   KAVO_JSON_PATCH_INVALID_DOCUMENT: {
     status: 400,

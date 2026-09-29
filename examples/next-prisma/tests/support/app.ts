@@ -24,11 +24,13 @@ export function buildTestApp() {
     filter: { fields: ["id", "name", "email"] },
     sort: { fields: ["id", "name"] },
     include: { fields: ["books"] },
+    delete: { field: "deletedAt" },
   });
 
   const books = kavo.createCrud<Book>(Book, {
     filter: { fields: ["id", "title", "published", "authorId"] },
     sort: { fields: ["id", "title"] },
+    search: { fields: ["title"] },
     include: { fields: ["author"] },
     operations: {
       createOne: true,
@@ -53,5 +55,5 @@ export function buildTestApp() {
     },
   });
 
-  return { authors, books };
+  return { prisma, authors, books };
 }

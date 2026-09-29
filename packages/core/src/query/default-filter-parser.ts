@@ -334,6 +334,22 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     if (!this.checkOperatorAllowed(field, token, operator, config, issues)) {
       return null;
     }
+    // An extra bracket level under the operator (`filter[name][eq][x]=1`)
+    // builds an object operand, which no operator takes. The tree has no
+    // prototype (`emptyNode`), so letting it reach `String(raw)` below threw a
+    // TypeError, a 500 rather than a 400 (issue #493). Arrays are the
+    // repeated-key form of a list operand and stay allowed, but only of
+    // scalars: `filter[f][in][x]=b&filter[f][in][]=a` wraps the object node
+    // into that array, and a JSON `filter=` list can hold objects directly.
+    const nested = (value: unknown) => typeof value === "object" && value !== null;
+    if (Array.isArray(raw) ? raw.some(nested) : nested(raw)) {
+      issues.push({
+        field,
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: `'${token}' on field '${field}' takes a value, not a nested filter[${field}][${token}][...] object.`,
+      });
+      return null;
+    }
     const metadata = this.fields.get(field);
     const path = field as FieldPath<Entity>;
 

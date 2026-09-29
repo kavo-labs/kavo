@@ -1,5 +1,6 @@
 import type {
   KavoContext,
+  KavoException,
   EntityId,
   EntityMetadata,
   IncludeTree,
@@ -10,10 +11,12 @@ import type {
 } from "@kavo/core";
 import {
   AlreadyDeletedException,
+  AssociationInvalidShapeException,
   ConfigurationException,
   NotDeletedException,
   NotFoundException,
   PatchNoChangesException,
+  UnresolvedRelationException,
   hasKeyset,
   readFilter,
 } from "@kavo/core";
@@ -245,11 +248,87 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
   // ── Writes ───────────────────────────────────────────────────────────
 
   async create(data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
+    const write = this.toWriteData(data, "create", context);
     try {
-      return (await this.delegate.create({ data })) as Entity;
+      return (await this.delegate.create({ data: write.data })) as Entity;
     } catch (error) {
-      throw mapDriverError(error, errorContext(context));
+      throw this.mapWriteError(error, write.connects, context);
     }
+  }
+
+  /**
+   * ADR-0014 association through a to-one relation's own key, in Prisma's
+   * terms. The deserializer has already narrowed the value to a reference
+   * (`{ id }`) or `null`, and rejects anything else — a nested write, a
+   * reference with no id — as a 400, so only an id reaches here. Prisma
+   * rejects a bare reference under a relation field, so this wraps it in the
+   * operation that means the same thing: `{ connect: ref }`, and for `null`
+   * nothing on create and `disconnect` on update. `undefined` means "not
+   * sent" and is dropped (issue #289: it never means "set to nothing").
+   *
+   * A to-many relation key is refused with a 400 rather than translated:
+   * association through it is not supported on this adapter. Write the
+   * related rows' own foreign keys instead. The scalar foreign-key spelling
+   * (`authorId`) is an ordinary column and passes through untouched.
+   */
+  private toWriteData(
+    data: Partial<Entity> | Record<string, unknown>,
+    mode: "create" | "update",
+    context: KavoContext<Entity>,
+  ): { readonly data: Record<string, unknown>; readonly connects: boolean } {
+    const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+    let connects = false;
+    for (const relation of this.metadata.relations) {
+      if (!Object.prototype.hasOwnProperty.call(out, relation.name)) {
+        continue;
+      }
+      const value = out[relation.name];
+      if (value === undefined) {
+        delete out[relation.name];
+        continue;
+      }
+      if (relation.cardinality === "many") {
+        throw new AssociationInvalidShapeException({
+          messageParams: {
+            relation: relation.name,
+            entity: context.entityName,
+            idField: this.idField,
+            expected: "to-many association through the relation key is not supported on Prisma",
+          },
+          context: errorContext(context),
+        });
+      }
+      if (value === null) {
+        if (mode === "create") {
+          delete out[relation.name];
+        } else {
+          out[relation.name] = { disconnect: true };
+        }
+        continue;
+      }
+      out[relation.name] = { connect: value };
+      connects = true;
+    }
+    return { data: out, connects };
+  }
+
+  /**
+   * P2025 on a create, or on an update whose row `writeExisting` has already
+   * found, can only come from a `connect` to a related row that does not
+   * exist: a dangling reference, 422, the same as the `authorId` spelling's
+   * P2003. Without this it surfaced as a 404 naming the entity being
+   * written, which reads as "that row doesn't exist".
+   */
+  private mapWriteError(error: unknown, connects: boolean, context: KavoContext<Entity>): KavoException {
+    const code = (error as { code?: unknown } | null)?.code;
+    if (connects && code === "P2025") {
+      return new UnresolvedRelationException({
+        messageParams: { entity: context.entityName },
+        context: errorContext(context),
+        cause: error,
+      });
+    }
+    return mapDriverError(error, errorContext(context));
   }
 
   async update(
@@ -317,6 +396,7 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     context: KavoContext<Entity>,
     identifierField?: string,
   ): Promise<Entity> {
+    let connects = false;
     try {
       const existing = await this.byId(id, context, false, identifierField);
       if (existing === null) {
@@ -338,9 +418,14 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
       // addressed it by a different column, ADR-0052) — Prisma's `where`
       // for a plain `update`/`delete` must name a unique column, and the
       // primary key is the one Kavo already knows is unique.
-      return (await this.delegate.update({ where: { [this.idField]: existing[this.idField] }, data })) as Entity;
+      const write = this.toWriteData(data, "update", context);
+      connects = write.connects;
+      return (await this.delegate.update({
+        where: { [this.idField]: existing[this.idField] },
+        data: write.data,
+      })) as Entity;
     } catch (error) {
-      throw mapDriverError(error, errorContext(context));
+      throw this.mapWriteError(error, connects, context);
     }
   }
 
