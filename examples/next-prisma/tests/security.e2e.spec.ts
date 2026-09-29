@@ -270,13 +270,15 @@ describe("Mass assignment", () => {
       },
     );
 
-    it("rejects association through a to-many relation key, leaving other rows untouched", async () => {
+    it("never associates through a to-many relation key the entity did not opt in, leaving other rows untouched", async () => {
+      // To-many association is opt-in (GHSA-p8cm-xwp6-gvrc): by default the
+      // key is not part of the write shape, so it is dropped like any other
+      // unknown key and the related row keeps its owner.
       const book = await prisma.book.create({ data: { title: "Elsewhere" } });
-      await expectRejected(
-        await call("POST", ["authors"], {
-          body: { name: "Grabber", email: "grab@example.com", books: [{ id: book.id }] },
-        }),
-      );
+      const response = await call("POST", ["authors"], {
+        body: { name: "Grabber", email: "grab@example.com", books: [{ id: book.id }] },
+      });
+      expect(response.status).toBe(201);
       expect((await prisma.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
     });
   });

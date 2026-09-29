@@ -1,7 +1,14 @@
 import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
-import type { ClassRef, EntityMetadata, EntitySchemaMap, KavoInstance, OperationRegistry } from "@kavo/core";
+import type {
+  ClassRef,
+  EntityMetadata,
+  EntitySchemaMap,
+  KavoInstance,
+  OperationRegistry,
+  RelationRegistry,
+} from "@kavo/core";
 import {
   ConfigurationException,
   DefaultSchemaResolver,
@@ -46,16 +53,21 @@ export type KavoGraphQLOption = boolean | { readonly path?: string };
  * the separate top-level `create`/`update` shorthand this used to fall
  * back to as well): every non-generated column except the primary key
  * (kept for a composite key, which has no single column to exclude), plus
- * every relation, associable by id (ADR-0014). Used only as a Swagger
+ * every to-one relation, associable by id (ADR-0014), plus each to-many
+ * relation the entity opted in with `relations.<name>.write` — the same set
+ * the deserializer accepts (GHSA-p8cm-xwp6-gvrc). Used only as a Swagger
  * fallback — `applyBodySchemaDocs`'s decoration-time schema when no real
  * DTO exists.
  */
-function writableBaseOf(metadata: EntityMetadata<object>): readonly string[] {
+function writableBaseOf(metadata: EntityMetadata<object>, relations: RelationRegistry): readonly string[] {
   const compositeIdFields = metadata.compositeIdFields;
   const columns = metadata.fields
     .filter((field) => !field.generated && (compositeIdFields !== undefined || field.name !== metadata.idField))
     .map((field) => field.name);
-  return [...columns, ...metadata.relations.map((relation) => relation.name)];
+  const associable = metadata.relations.filter(
+    (relation) => relation.cardinality === "one" || relations.get(relation.name)?.write !== undefined,
+  );
+  return [...columns, ...associable.map((relation) => relation.name)];
 }
 
 function graphqlPathFrom(option: KavoGraphQLOption | undefined): string | undefined {
@@ -455,10 +467,10 @@ class KavoBinder implements OnModuleInit {
               {
                 creatable:
                   shorthandFieldsOf(resolvedSchema.resolveInput("create", descriptor.id)) ??
-                  writableBaseOf(service.engine.metadata),
+                  writableBaseOf(service.engine.metadata, service.engine.config.relations),
                 updatable:
                   shorthandFieldsOf(resolvedSchema.resolveInput("update", descriptor.id)) ??
-                  writableBaseOf(service.engine.metadata),
+                  writableBaseOf(service.engine.metadata, service.engine.config.relations),
               },
               relationTargetMetadata,
             );
