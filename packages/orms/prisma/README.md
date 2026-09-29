@@ -59,17 +59,19 @@ one of two ways, the same contract `@kavo/typeorm` exposes:
 references: [id])`), the [documented best
   practice](https://www.prisma.io/docs/orm/prisma-schema/data-model/relations)
   for any 1:1/1:n relation.
-- **A reference under the relation's own key** (`{ author: { id: 5 } }`,
-  or `{ books: [{ id: 1 }, { id: 2 }] }` for a to-many). Core narrows the
-  value to its id before the adapter sees it, and the adapter turns it into
-  Prisma's `connect`. On update, `null` disconnects a to-one and an array
-  replaces a to-many (`set`). Because only the id survives, a nested write
-  such as `{ author: { create: { … } } }` never reaches Prisma: it is read
-  as "no reference" and writes nothing.
+- **A reference under a to-one relation's own key** (`{ author: { id: 5 } }`).
+  The adapter turns it into Prisma's `connect`; `null` leaves it unset on
+  create and `disconnect`s it on update. A dangling id is a 422
+  `KAVO_UNRESOLVED_RELATION`, the same as the `authorId` spelling. Anything
+  other than `{ <id>: <string | number> }` or `null` — a nested write such
+  as `{ author: { create: { … } } }`, a reference with no id — is a 400
+  `KAVO_ASSOCIATION_INVALID_SHAPE`, and nothing is written.
 
-Send one spelling per relation per request: Prisma rejects a body that
-mixes `authorId` with `author`. An **implicit many-to-many** relation (no
-scalar field on either side; Prisma manages the join table) is not covered
-by this package's tests; a custom operation handler reaching for the raw
-Prisma Client remains the supported escape hatch there, as for any write
-shape Kavo doesn't model directly.
+A **to-many** relation key (`{ books: [...] }`) is refused with a 400
+`KAVO_ASSOCIATION_INVALID_SHAPE`: associate those rows by writing each
+one's own foreign key instead. Send one spelling per relation per request:
+Prisma rejects a body that mixes `authorId` with `author`. An **implicit
+many-to-many** relation (no scalar field on either side; Prisma manages the
+join table) has no foreign key to write; a custom operation handler
+reaching for the raw Prisma Client is the escape hatch there, as for any
+write shape Kavo doesn't model directly.
