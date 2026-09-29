@@ -9,7 +9,7 @@ import { AppModule } from "./app.module.js";
  * The Blog example over MongoDB, the counterpart to `nest-typeorm`'s Pet
  * example. Point `MONGO_URL` at any MongoDB instance:
  *
- *   docker run --rm -p 27017:27017 mongo:8
+ *   docker run --rm -p 27017:27017 mongo:8.2
  */
 async function bootstrap(): Promise<void> {
   await mongoose.connect(process.env["MONGO_URL"] ?? "mongodb://127.0.0.1:27017/kavo");
