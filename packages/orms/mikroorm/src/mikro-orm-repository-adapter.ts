@@ -516,8 +516,10 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
  * `{ id: 5 }` → `5`; arrays element-wise; scalars and `null` unchanged.
  *
  * An object carrying no id becomes `null` rather than being passed through.
- * That mirrors core's own `associate()` exactly, and it matters because core
- * only narrows a relation when the *target* entity is in its catalog — a
+ * Core's own `associate()` rejects such an object with a 400 when it can see
+ * the target (ADR-0014, #493 amendment); this is the backstop for when it
+ * cannot, because core only narrows a relation when the *target* entity is
+ * in its catalog — a
  * relation whose target was never `createCrud`-ed arrives here as whatever
  * the client sent. Handing that object to `em.create` would put a nested
  * write one cascade setting away from working, which is precisely what

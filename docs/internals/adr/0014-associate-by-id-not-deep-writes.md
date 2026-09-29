@@ -39,6 +39,15 @@ The default deserializer normalizes a reference object to `{ id }` and
 writes the association and drops `name`. A nested object is never a
 cascade; the framework does not partially honor a deep write.
 
+**Amendment (issue #493):** a single reference must actually name the id.
+A reference object with no id (`{"owner": {"create": {…}}}`,
+`{"owner": {"email": "…"}}`) used to narrow to `null`, which an update
+reads as "clear the association", so a malformed or smuggled nested write
+silently unlinked the row. It is now a 400 `KAVO_ASSOCIATION_INVALID_SHAPE`,
+as is an id that is not a string or number (`{"owner": {"id": {"gt": 0}}}`).
+`null` remains the one way to clear a to-one association. Array elements
+keep the narrowing described above.
+
 Relations join the derived write shape by default, so association works
 with zero config. An entity with a registered `create`/`update` DTO opts
 in by declaring the property (`owner: number | null = null`), which also
