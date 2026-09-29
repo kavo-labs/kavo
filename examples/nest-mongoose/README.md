@@ -12,7 +12,7 @@ which can only ever prove the SQL path. This app is what shows the same
 decorator, engine, and route generation working over MongoDB.
 
 ```bash
-docker run --rm -p 27017:27017 mongo:8
+docker run --rm -p 27017:27017 mongo:8.2
 pnpm build && MONGO_URL=mongodb://127.0.0.1:27017/kavo pnpm --filter @kavo/example-nest-mongoose start
 # → http://localhost:3001/articles   (Swagger at /docs)
 ```
@@ -27,10 +27,10 @@ in how it gets a `mongod` to point the default `mongoose` instance at. One
 behavioral spec, two servers, no forked assertions (the same split
 `nest-typeorm` uses for SQLite/Postgres/MariaDB).
 
-| Spec                          | Server                                                |
-| ----------------------------- | ----------------------------------------------------- |
-| `tests/app.e2e.spec.ts`       | `mongodb-memory-server` — standalone, no Docker       |
-| `tests/app-mongo.e2e.spec.ts` | Testcontainers `mongo:8` — a real, pinned replica set |
+| Spec                          | Server                                                  |
+| ----------------------------- | ------------------------------------------------------- |
+| `tests/app.e2e.spec.ts`       | `mongodb-memory-server` — standalone, no Docker         |
+| `tests/app-mongo.e2e.spec.ts` | Testcontainers `mongo:8.2` — a real, pinned replica set |
 
 The default suite is the one that runs without Docker: it downloads a `mongod`
 binary once and caches it, then runs it against an ephemeral data directory, so
@@ -41,7 +41,10 @@ before this app existed.) What the default suite cannot pin down is the server
 the app is actually deployed onto — it is a standalone of whatever version the
 tool fetches for the current platform.
 
-So `tests/app-mongo.e2e.spec.ts` self-provisions a pinned `mongo:8` container
+So `tests/app-mongo.e2e.spec.ts` self-provisions a pinned `mongo:8.2` container
+(8.2 rather than the floating `mongo:8`, because from 8.3 `mongod` refuses to
+start on Linux kernels 6.19 and newer, which includes Docker Desktop's VM:
+[SERVER-121912](https://jira.mongodb.org/browse/SERVER-121912))
 via Testcontainers and runs the identical suite against it, exactly the way
 `nest-typeorm`'s Postgres and MariaDB suites do. That needs a running Docker
 daemon wherever `pnpm check`/`pnpm test` runs. Two details are specific to

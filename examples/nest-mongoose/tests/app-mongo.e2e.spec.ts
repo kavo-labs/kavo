@@ -24,7 +24,10 @@ let container: StartedMongoDBContainer;
 let app: INestApplication;
 
 beforeAll(async () => {
-  container = await new MongoDBContainer("mongo:8").start();
+  // Pinned to 8.2, not the floating `mongo:8`: from 8.3, mongod refuses to
+  // start on Linux kernels 6.19 and newer (SERVER-121912), which covers
+  // Docker Desktop's current VM kernel. 8.2 starts on both that and CI.
+  container = await new MongoDBContainer("mongo:8.2").start();
 
   // `MongoDBContainer` always starts a single-node replica set, and
   // `rs.initiate()` advertises that member under the *container's* own

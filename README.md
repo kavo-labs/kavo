@@ -16,6 +16,7 @@
   <a href="https://github.com/kavo-labs/kavo/blob/main/LICENSE"><img src="https://img.shields.io/github/license/kavo-labs/kavo?label=license" alt="MIT licensed" /></a>
   <a href="https://www.npmjs.com/package/@kavo/core"><img src="https://img.shields.io/npm/dm/%40kavo%2Fcore?label=downloads" alt="Downloads per month on npm" /></a>
   <a href="https://kavo.js.org"><img src="https://img.shields.io/badge/docs-kavo.js.org-1f6feb" alt="Documentation" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/kavo-labs/kavo"><img src="https://api.scorecard.dev/projects/github.com/kavo-labs/kavo/badge" alt="OpenSSF Scorecard" /></a>
 </p>
 
 # Kavo

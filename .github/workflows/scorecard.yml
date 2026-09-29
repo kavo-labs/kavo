@@ -1,0 +1,49 @@
+name: Scorecard
+
+# OpenSSF Scorecard grades the repository's supply-chain posture (branch
+# protection, token permissions, pinned dependencies, …). It runs weekly and
+# on every push to `main`, publishes to the public Scorecard API that the
+# README badge reads, and uploads SARIF so findings show on the Security tab
+# (issue #496).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 3 * * 1"
+
+# Read-only by default. The job below widens only what publishing needs, and
+# `tests/ci-workflow.spec.ts` fails if a `write` scope reaches this level.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      # Upload the SARIF to code scanning.
+      security-events: write
+      # Mint the OIDC token `publish_results` authenticates with.
+      id-token: write
+
+    # Actions are SHA-pinned here, unlike the tag-pinned ones in the other
+    # workflows, since Scorecard's own Pinned-Dependencies check grades this
+    # file. Pinning the rest is #490's job.
+    #
+    # Publishing results also makes the Scorecard API verify this workflow:
+    # it rejects the run if the job uses an action outside its approved list,
+    # or if the workflow or job sets `env`/`defaults` or runs containers or
+    # services. See "Workflow Restrictions" in the scorecard-action README.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: results.sarif

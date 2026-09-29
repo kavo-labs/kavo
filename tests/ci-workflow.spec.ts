@@ -249,6 +249,85 @@ describe("the nest-compat job", () => {
   });
 });
 
+/**
+ * `scorecard.yml` needs `security-events: write` and `id-token: write`, but
+ * only inside its one job. Granting them at the top level would hand them to
+ * any job added later, and Scorecard's own Token-Permissions check marks a
+ * top-level write down, so the workflow would lower the score it reports.
+ */
+describe("the Scorecard workflow", () => {
+  // Comments are stripped first, so prose in the file that happens to spell
+  // out a key (`publish_results: true`) can never satisfy an assertion.
+  const scorecard = readFileSync(resolve(REPO_ROOT, ".github/workflows/scorecard.yml"), "utf8")
+    .split("\n")
+    .map((line) => line.replace(/\s*#.*$/, ""))
+    .filter((line) => line.trim() !== "")
+    .join("\n");
+  // Everything before `jobs:` is workflow-level; job-level grants come after.
+  const topLevel = scorecard.slice(0, scorecard.search(/^jobs:/m));
+  const jobs = scorecard.slice(topLevel.length);
+  // One entry per `- uses:` step: the action reference and its `with:` inputs.
+  const steps = jobs
+    .split(/^ {6}- /m)
+    .slice(1)
+    .map((body) => ({
+      uses: /^uses: (\S+)/.exec(body)?.[1] ?? "",
+      with: Object.fromEntries(captures(body, /^ {10}([\w-]+: .+)$/gm).map((pair) => pair.split(": "))),
+    }));
+  const step = (action: string) => steps.find(({ uses }) => uses.startsWith(`${action}@`));
+
+  it("is read-only at the workflow level", () => {
+    expect(topLevel).toMatch(/^permissions: read-all$/m);
+    expect(topLevel).not.toMatch(/:\s*write\b/);
+  });
+
+  it("grants the job exactly the two write scopes publishing needs", () => {
+    const block = /^ {4}permissions:\n((?: {6}.+\n?)+)/m.exec(jobs)?.[1] ?? "";
+    const scopes = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    expect(scopes.sort()).toEqual(["id-token: write", "security-events: write"]);
+  });
+
+  it("runs weekly and on every push to main", () => {
+    expect(topLevel).toMatch(/^ {2}schedule:\n {4}- cron: "[^"]+"$/m);
+    expect(topLevel).toMatch(/^ {2}push:\n {4}branches: \[main\]$/m);
+  });
+
+  it("stays inside what the Scorecard API accepts for a published run", () => {
+    // No `env`/`defaults` at either level, and no containers or services.
+    expect(scorecard).not.toMatch(/^(env|defaults):/m);
+    expect(jobs).not.toMatch(/^ {4}(env|defaults|container|services):/m);
+    expect(steps.map(({ uses }) => uses.split("@")[0])).toEqual([
+      "actions/checkout",
+      "ossf/scorecard-action",
+      "github/codeql-action/upload-sarif",
+    ]);
+  });
+
+  it("pins every action to a full commit SHA", () => {
+    for (const { uses } of steps) {
+      expect(uses, `scorecard.yml uses "${uses}", not an action pinned to a commit SHA`).toMatch(/@[0-9a-f]{40}$/);
+    }
+  });
+
+  it("checks out without persisting the token", () => {
+    expect(step("actions/checkout")?.with).toEqual({ "persist-credentials": "false" });
+  });
+
+  it("publishes results and uploads the SARIF file it wrote", () => {
+    const analysis = step("ossf/scorecard-action")?.with;
+    expect(analysis).toEqual({ results_file: "results.sarif", results_format: "sarif", publish_results: "true" });
+    expect(step("github/codeql-action/upload-sarif")?.with).toEqual({ sarif_file: analysis?.results_file });
+  });
+
+  it("is badged in the README, linking to the Scorecard viewer", () => {
+    expect(readme).toContain("https://api.scorecard.dev/projects/github.com/kavo-labs/kavo/badge");
+    expect(readme).toContain("https://scorecard.dev/viewer/?uri=github.com/kavo-labs/kavo");
+  });
+});
+
 describe("the README status badges point at real check runs", () => {
   it("filters on a check-run name ci.yml actually produces", () => {
     const badged = badgedCheckRunNames();
