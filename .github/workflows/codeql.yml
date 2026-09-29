@@ -1,0 +1,56 @@
+name: CodeQL
+
+# GitHub's own dataflow analysis over the published packages (issue #495),
+# with the `security-extended` query suite. It complements the Kavo-specific
+# Semgrep rules in `ci.yml`: those pin exact patterns Kavo must never
+# contain, this follows request input through code to a sink. Results land on
+# the Security tab.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+
+# Read-only by default. The job below widens only what uploading results
+# needs, and `tests/ci-workflow.spec.ts` fails if a `write` scope reaches this
+# level.
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Upload the analysis to code scanning.
+      security-events: write
+
+    # SHA-pinned, like `scorecard.yml`; the trailing comment names the tag.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Only the shipped sources: tests and build output would add alerts
+      # about code no adopter runs.
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          config: |
+            paths:
+              - packages
+            paths-ignore:
+              - "**/tests/**"
+              - "**/dist/**"
+
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          category: /language:javascript-typescript
