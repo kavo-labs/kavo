@@ -9,15 +9,10 @@ import { buildTestApp } from "./support/app";
  * `describe`/`it` names match that suite wherever a case ports one-to-one, so
  * the shared testkit (#491) can merge them mechanically.
  *
- * Two deliberate differences from the TypeORM suite:
- *
- * - This app's models have no soft-delete column, so the two `deletedAt`
- *   mass-assignment cases have nothing to attack. Prisma's own mass-assignment
- *   surface is the nested write (`author: { create | connect }`), which is
- *   attacked here instead.
- * - Two cases exist only because of this stack: a Prisma operator object
- *   smuggled into a filter value, and an encoded path segment in a catch-all
- *   route id.
+ * Cases that exist only because of this stack: Prisma's nested-write
+ * syntax (`author: { create | connect }`) smuggled into a write body, a
+ * Prisma operator object smuggled into a filter value, and an encoded path
+ * segment in a catch-all route id.
  *
  * Every row count goes straight through the Prisma client, never the API.
  *
@@ -109,6 +104,13 @@ describe("SQL injection via the query grammar (identifier position)", () => {
       }),
     });
     expect(response.status).toBe(400);
+    const { errors } = await json<{ errors: { field: string; code: string }[] }>(response);
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "title; DROP TABLE Book --", code: "KAVO_QUERY_INVALID_FIELD" }),
+        expect.objectContaining({ code: "KAVO_QUERY_INVALID_FIELD" }),
+      ]),
+    );
     expect(await prisma.book.count()).toBe(before);
     expect(await prisma.author.count()).toBeGreaterThanOrEqual(0);
     // The table is not just present, it still serves ordinary reads.
@@ -149,19 +151,45 @@ describe("SQL injection via filter/search values (data position)", () => {
     expect((await json<{ title: string }>(fetched)).title).toBe("Robert'); DROP TABLE Book; --");
   });
 
-  it("treats a Prisma operator object smuggled into a filter value as data, never as a nested where", async () => {
-    // A title containing "a": if either request below were read as
+  describe("a Prisma operator object smuggled into a filter, never read as a nested where", () => {
+    // A title containing "a": if any request below were read as
     // `{ title: { contains: "a" } }`, this row would come back.
-    await createBook({ title: "Alpha" });
-    const before = await prisma.book.count();
+    beforeEach(async () => {
+      await createBook({ title: "Alpha" });
+    });
 
-    const bracket = await call("GET", ["books"], { search: query({ "filter[title][eq][contains]": "a" }) });
-    expect(bracket.status).toBe(400);
+    async function expectInvalid(search: string, code: string) {
+      const response = await call("GET", ["books"], { search });
+      expect(response.status).toBe(400);
+      expect(await json(response)).toMatchObject({
+        code: "KAVO_QUERY_INVALID",
+        errors: [expect.objectContaining({ field: "title", code })],
+      });
+    }
 
-    const smuggled = await call("GET", ["books"], { search: query({ "filter[title][eq]": '{"contains":"a"}' }) });
-    expect(smuggled.status).toBe(200);
-    expect((await json<{ items: unknown[] }>(smuggled)).items).toEqual([]);
-    expect(await prisma.book.count()).toBe(before);
+    it("rejects the bracket form under an operator as an invalid value", async () => {
+      await expectInvalid(query({ "filter[title][eq][contains]": "a" }), "KAVO_QUERY_INVALID_VALUE");
+    });
+
+    it("rejects the JSON filter form under an operator as an invalid value", async () => {
+      await expectInvalid(
+        query({ filter: JSON.stringify({ title: { eq: { contains: "a" } } }) }),
+        "KAVO_QUERY_INVALID_VALUE",
+      );
+    });
+
+    it("rejects a Prisma operator name in the operator position as an unknown operator", async () => {
+      await expectInvalid(
+        query({ filter: JSON.stringify({ title: { contains: "a" } }) }),
+        "KAVO_QUERY_INVALID_OPERATOR",
+      );
+    });
+
+    it("treats a JSON-looking string value as a literal, matching nothing", async () => {
+      const response = await call("GET", ["books"], { search: query({ "filter[title][eq]": '{"contains":"a"}' }) });
+      expect(response.status).toBe(200);
+      expect((await json<{ items: unknown[] }>(response)).items).toEqual([]);
+    });
   });
 });
 
@@ -177,32 +205,80 @@ describe("Mass assignment", () => {
     expect(original?.title).toBe("Original");
   });
 
-  it("strips a Prisma nested create smuggled into a create body, never writing the related row", async () => {
-    const authorsBefore = await prisma.author.count();
-    const created = await createBook({
-      title: "Trojan",
-      author: { create: { name: "Mallory", email: "mallory@example.com" } },
+  it("ignores an owner-supplied deletedAt on create, never soft-deleting a row on arrival", async () => {
+    const response = await call("POST", ["authors"], {
+      body: { name: "Ghost", email: "ghost@example.com", deletedAt: new Date().toISOString() },
     });
-    expect(await prisma.author.count()).toBe(authorsBefore);
-    expect((await prisma.book.findUnique({ where: { id: created.id } }))?.authorId).toBeNull();
+    expect(response.status).toBe(201);
+    const { id } = await json<{ id: number }>(response);
+    expect((await prisma.author.findUnique({ where: { id } }))?.deletedAt).toBeNull();
+    expect((await call("GET", ["authors", String(id)])).status).toBe(200);
   });
 
-  it("strips a Prisma nested connect smuggled into a create body, never linking the related row", async () => {
-    const victim = await prisma.author.create({ data: { name: "Victim", email: "victim@example.com" } });
-    const created = await createBook({ title: "Hijack", author: { connect: { id: victim.id } } });
-    expect((await prisma.book.findUnique({ where: { id: created.id } }))?.authorId).toBeNull();
+  it("a patch body cannot resurrect a soft-deleted row by smuggling deletedAt: null (must go through restoreOne)", async () => {
+    const created = await call("POST", ["authors"], { body: { name: "ToDelete", email: "todelete@example.com" } });
+    const { id } = await json<{ id: number }>(created);
+    expect((await call("DELETE", ["authors", String(id)])).status).toBe(204);
+    expect((await call("GET", ["authors", String(id)])).status).toBe(404);
+
+    const response = await call("PATCH", ["authors", String(id)], { body: { deletedAt: null, name: "Sneaky" } });
+    expect(response.status).toBe(404);
+    expect((await prisma.author.findUnique({ where: { id } }))?.deletedAt).not.toBeNull();
+    expect((await call("GET", ["authors", String(id)])).status).toBe(404);
   });
 
-  it("strips a Prisma nested write smuggled into a patch body", async () => {
-    const book = await createBook({ title: "Patched" });
-    const authorsBefore = await prisma.author.count();
-    const response = await call("PATCH", ["books", String(book.id)], {
-      body: { title: "Renamed", author: { create: { name: "Mallory", email: "mallory2@example.com" } } },
+  describe("Prisma nested-write syntax smuggled into a write body", () => {
+    async function expectRejected(response: Response) {
+      expect(response.status).toBe(400);
+      expect(await json(response)).toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE" });
+    }
+
+    it("rejects a nested create on create, writing neither row", async () => {
+      const [authorsBefore, booksBefore] = await Promise.all([prisma.author.count(), prisma.book.count()]);
+      await expectRejected(
+        await call("POST", ["books"], {
+          body: { title: "Trojan", author: { create: { name: "Mallory", email: "mallory@example.com" } } },
+        }),
+      );
+      expect(await prisma.author.count()).toBe(authorsBefore);
+      expect(await prisma.book.count()).toBe(booksBefore);
     });
-    expect(response.status).toBe(200);
-    expect(await prisma.author.count()).toBe(authorsBefore);
-    const stored = await prisma.book.findUnique({ where: { id: book.id } });
-    expect(stored).toMatchObject({ title: "Renamed", authorId: null });
+
+    it("rejects a nested connect on create, never linking the related row", async () => {
+      const victim = await prisma.author.create({ data: { name: "Victim", email: "victim@example.com" } });
+      await expectRejected(
+        await call("POST", ["books"], { body: { title: "Hijack", author: { connect: { id: victim.id } } } }),
+      );
+      expect(await prisma.book.count({ where: { authorId: victim.id } })).toBe(0);
+    });
+
+    it.each(["PATCH", "PUT"] as const)(
+      "rejects a nested create in a %s body, leaving the existing link in place",
+      async (method) => {
+        const author = await prisma.author.create({ data: { name: "Kept", email: "kept@example.com" } });
+        const book = await prisma.book.create({ data: { title: "Linked", authorId: author.id } });
+        await expectRejected(
+          await call(method, ["books", String(book.id)], {
+            body: { title: "Renamed", author: { create: { name: "Mallory", email: "mallory2@example.com" } } },
+          }),
+        );
+        expect(await prisma.book.findUnique({ where: { id: book.id } })).toMatchObject({
+          title: "Linked",
+          authorId: author.id,
+        });
+        expect(await prisma.author.count()).toBe(1);
+      },
+    );
+
+    it("rejects association through a to-many relation key, leaving other rows untouched", async () => {
+      const book = await prisma.book.create({ data: { title: "Elsewhere" } });
+      await expectRejected(
+        await call("POST", ["authors"], {
+          body: { name: "Grabber", email: "grab@example.com", books: [{ id: book.id }] },
+        }),
+      );
+      expect((await prisma.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
+    });
   });
 });
 
@@ -245,14 +321,23 @@ describe("Catch-all route ids (Next.js-specific)", () => {
   // an encoded `/` stays inside its one segment, so these are the ids an
   // attacker can actually deliver. The raw, still-encoded forms are covered
   // too, for a runtime that passes segments through undecoded.
+  // Books 1 and 2 and an author exist, so a traversal that resolved to any of
+  // them would answer 200, not the 400 an invalid numeric id earns.
+  beforeEach(async () => {
+    await prisma.author.create({ data: { name: "Admin", email: "admin@example.com" } });
+    await createBook({ title: "One" });
+    await createBook({ title: "Two" });
+  });
+
   it.each(["../../admin", "..", "1/../2", "..%2F..%2Fadmin", "%2e%2e", "1%2F..%2F2", "%"])(
     "never lets an encoded path segment in an id (%s) reach another route or operation",
     async (id) => {
-      const before = await prisma.book.count();
       const response = await call("GET", ["books", id]);
-      expect([400, 404]).toContain(response.status);
-      expect(response.headers.get("Content-Type")).toMatch(/application\/(problem\+)?json/);
-      expect(await prisma.book.count()).toBe(before);
+      expect(response.status).toBe(400);
+      expect(response.headers.get("Content-Type")).toMatch(/application\/problem\+json/);
+      expect(await json(response)).toMatchObject({
+        errors: [expect.objectContaining({ field: "id", code: "KAVO_QUERY_INVALID_VALUE" })],
+      });
     },
   );
 

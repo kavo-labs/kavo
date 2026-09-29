@@ -24,6 +24,7 @@ export function buildTestApp() {
     filter: { fields: ["id", "name", "email"] },
     sort: { fields: ["id", "name"] },
     include: { fields: ["books"] },
+    delete: { field: "deletedAt" },
   });
 
   const books = kavo.createCrud<Book>(Book, {
