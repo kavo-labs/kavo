@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -325,6 +325,28 @@ describe("the Scorecard workflow", () => {
   it("is badged in the README, linking to the Scorecard viewer", () => {
     expect(readme).toContain("https://api.scorecard.dev/projects/github.com/kavo-labs/kavo/badge");
     expect(readme).toContain("https://scorecard.dev/viewer/?uri=github.com/kavo-labs/kavo");
+  });
+});
+
+/**
+ * The ruleset on `main` (issue #496) requires CI's checks to pass on a PR's
+ * head commit. A workflow that commits to a PR branch with `GITHUB_TOKEN`, or
+ * with `[skip ci]`, leaves that head with no check runs at all, so the PR can
+ * never merge. That is why the old autoformat workflow was removed: `ci.yml`'s
+ * `format` job already fails an unformatted PR, and `pnpm prettify` fixes it.
+ */
+describe("no workflow commits to the branch it runs on", () => {
+  const workflowDir = resolve(REPO_ROOT, ".github/workflows");
+  const workflows = readdirSync(workflowDir)
+    .filter((file) => /\.ya?ml$/.test(file))
+    .map((file) => ({ file, source: readFileSync(resolve(workflowDir, file), "utf8") }));
+
+  it("uses no auto-commit action and marks no commit `[skip ci]`", () => {
+    expect(workflows.length).toBeGreaterThan(0);
+    for (const { file, source } of workflows) {
+      expect(source, `${file} auto-commits to the branch it runs on`).not.toContain("git-auto-commit-action");
+      expect(source, `${file} writes a \`[skip ci]\` commit`).not.toContain("[skip ci]");
+    }
   });
 });
 
