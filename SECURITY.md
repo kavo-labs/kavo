@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Kavo is pre-1.0 and every `@kavo/*` package ships on one lockstep version. Security fixes land in the next patch of the latest release only.
+Kavo is pre-1.0 and every `@kavo/*` package ships on one lockstep version. Security fixes ship in the next release and are not backported to earlier ones.
 
 | Version                        | Supported          |
 | ------------------------------ | ------------------ |

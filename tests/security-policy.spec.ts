@@ -24,11 +24,20 @@ describe("SECURITY.md supported versions", () => {
   });
 
   it("pins no concrete version, so a release bump can never leave it stale", () => {
-    expect(supported).not.toMatch(/\b\d+\.\d+\.(\d+|x)\b/);
+    // No leading `\b`: in the repo's own tag format, `v0.23.4`, there is no
+    // word boundary between `v` and `0`, so `\b` would let it through.
+    expect(supported).not.toMatch(/\d+\.\d+\.(?:\d+|x|\*)/i);
   });
 
   it("supports the latest release and nothing older", () => {
-    expect(supported).toMatch(/Latest release[^|]*\|\s*:white_check_mark:/);
-    expect(supported).toMatch(/Any earlier release[^|]*\|\s*:x:/);
+    expect(supported).toMatch(/^\|\s*Latest release[^|]*\|\s*:white_check_mark:\s*\|\s*$/m);
+    expect(supported).toMatch(/^\|\s*Any earlier release\s*\|\s*:x:\s*\|\s*$/m);
+  });
+
+  it("has exactly those two rows, so no extra version line can creep back in", () => {
+    // Header, separator, and the two rows above: a `< 0.23` or `1.x` row would
+    // pin a version without ever matching the three-part pattern.
+    const tableLines = supported.split(/\r?\n/).filter((line) => line.trimStart().startsWith("|"));
+    expect(tableLines).toHaveLength(4);
   });
 });
