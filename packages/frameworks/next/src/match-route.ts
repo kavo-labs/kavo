@@ -5,6 +5,21 @@ function templateSegments(path: string): readonly string[] {
   return path.split("/").filter((segment) => segment.length > 0);
 }
 
+/**
+ * `decodeURIComponent`, except that a segment which is not valid
+ * percent-encoding comes back verbatim instead of throwing. Next.js has
+ * usually decoded the segment already, so a literal `%` in an id (sent as
+ * `%25`) arrives bare, and decoding it again threw `URIError`, a 500 rather
+ * than the ordinary 400/404 the id itself earns (issue #493).
+ */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export interface RouteMatch {
   readonly id: string | null;
 }
@@ -28,7 +43,7 @@ export function matchRoute(route: ResolvedRoute, segments: readonly string[]): R
     const templateSegment = template[i] as string;
     const actual = segments[i] as string;
     if (templateSegment === ":id") {
-      id = decodeURIComponent(actual);
+      id = decodeSegment(actual);
       continue;
     }
     if (templateSegment !== actual) {
