@@ -74,6 +74,34 @@ describe("DefaultFilterParser — isNull / isNotNull symmetry", () => {
   });
 });
 
+/**
+ * An extra bracket level under an operator (`filter[name][eq][contains]=a`)
+ * builds an object operand. The grammar has no such form, and the tree the
+ * bracket parser builds has no prototype, so reaching `String(raw)` threw a
+ * `TypeError` that surfaced as a 500 (issue #493). It is a 400 instead, for
+ * every operator family, before any adapter sees it.
+ */
+describe("DefaultFilterParser — nested operands", () => {
+  it.each([
+    ["eq", "name"],
+    ["gt", "age"],
+    ["like", "name"],
+    ["in", "status"],
+    ["between", "age"],
+    ["isNull", "name"],
+  ])("rejects an object operand under '%s' as KAVO_QUERY_INVALID_VALUE", (token, field) => {
+    const issues = issuesOf(() => parse({ [`filter[${field}][${token}][contains]`]: "a" }));
+    expect(issues).toEqual([expect.objectContaining({ field, code: "KAVO_QUERY_INVALID_VALUE" })]);
+  });
+
+  it("still accepts the repeated-key array form of a list operand", () => {
+    expect(parse({ "filter[status][in][]": ["active", "pending"] }).root).toMatchObject({
+      operator: "IN",
+      value: ["active", "pending"],
+    });
+  });
+});
+
 describe("DefaultFilterParser — bracket grammar", () => {
   // The single-comparison case is the `gte` row of the operator table above;
   // repeating it here would mean two tests to update for one contract.

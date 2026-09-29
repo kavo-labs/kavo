@@ -108,20 +108,19 @@ describe("NoSQL operator injection via filter values (data position)", () => {
     expect(await articleCount()).toBe(before);
   });
 
-  // KNOWN GAP (found writing this suite, not yet fixed): `filter[title][eq]
-  // [$ne]=` parses as a nested object under `eq`, which the query
-  // normalizer does not reject as a bad *value shape* the way it rejects a
-  // bad *field*. It reaches `@kavo/mongoose`'s driver call, which throws a
-  // Mongoose cast error, and that surfaces as a 500 `KAVO_PERSISTENCE_FAILED`
-  // rather than a 400 `KAVO_QUERY_INVALID`. It is not an actual injection —
-  // the driver rejects the malformed query outright, nothing is bypassed —
-  // but attacker-controlled input should never reach the persistence layer
-  // unvalidated and turn into an unhandled 500. This test pins the current
-  // (wrong) behavior so a fix shows up as an intentional change here, not a
-  // silent regression; see the roadmap doc's follow-up list.
-  it("does not yet reject a nested-object eq value at the query-validation stage — reaches the driver and 500s instead of 400ing (tracked gap)", async () => {
-    const response = await request(server()).get("/articles").query("filter[title][eq][$ne]=").expect(500);
-    expect(response.body).toMatchObject({ code: "KAVO_PERSISTENCE_FAILED" });
+  // `filter[title][eq][$ne]=` parses as a nested object under `eq`. It used
+  // to reach the driver and surface as a 500 `KAVO_PERSISTENCE_FAILED` (never
+  // an injection: the object could not be stringified, so nothing was
+  // queried). Core's filter parser now rejects an object operand as a bad
+  // value before any adapter sees it (issue #493).
+  it("rejects a nested-object eq value at the query-validation stage, before it reaches the driver", async () => {
+    const before = await articleCount();
+    const response = await request(server()).get("/articles").query("filter[title][eq][$ne]=").expect(400);
+    expect(response.body).toMatchObject({ code: "KAVO_QUERY_INVALID" });
+    expect(response.body.errors).toEqual([
+      expect.objectContaining({ field: "title", code: "KAVO_QUERY_INVALID_VALUE" }),
+    ]);
+    expect(await articleCount()).toBe(before);
   });
 
   it("round-trips a value containing Mongo operator syntax as ordinary data on write, without executing it", async () => {
