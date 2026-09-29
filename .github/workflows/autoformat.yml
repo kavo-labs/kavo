@@ -10,18 +10,14 @@ name: Autoformat
 # access to a fork's branch, so a fork PR just falls through to ci.yml's
 # `format` job (check-only) instead of failing here.
 #
-# Also runs on push to main, so a commit landed on main some other way
-# (an admin merge bypassing this workflow, a direct push) still gets
-# formatted. `[skip ci]` in the commit message keeps that fix commit from
-# retriggering this same workflow.
+# It never pushes to main. The ruleset protecting main rejects direct pushes
+# and allows changes only through a PR (issue #496), and this workflow has
+# already run on each of those PRs, so there is nothing left to format.
 on:
   pull_request:
-  push:
-    branches:
-      - main
 
-permissions:
-  contents: write
+# Nothing by default; the one job that commits gets `contents: write` itself.
+permissions: {}
 
 concurrency:
   group: autoformat-${{ github.workflow }}-${{ github.ref }}
@@ -30,12 +26,14 @@ concurrency:
 jobs:
   autoformat:
     name: autoformat
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.head_ref || github.ref }}
+          ref: ${{ github.head_ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6

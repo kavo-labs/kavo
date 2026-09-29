@@ -328,6 +328,30 @@ describe("the Scorecard workflow", () => {
   });
 });
 
+/**
+ * `autoformat.yml` commits to the branch it formats. On a PR branch that is
+ * the point; on `main` the ruleset (issue #496) rejects any direct push, so a
+ * push trigger there could only ever fail. Its write grant also stays on the
+ * job, for the same Token-Permissions reason as `scorecard.yml` above.
+ */
+describe("the autoformat workflow", () => {
+  const autoformat = readFileSync(resolve(REPO_ROOT, ".github/workflows/autoformat.yml"), "utf8")
+    .split("\n")
+    .map((line) => line.replace(/\s*#.*$/, ""))
+    .join("\n");
+  const topLevel = autoformat.slice(0, autoformat.search(/^jobs:/m));
+
+  it("runs only on pull requests, never on a push to main", () => {
+    expect(topLevel).toMatch(/^on:\n {2}pull_request:$/m);
+    expect(topLevel).not.toMatch(/^ {2}push:/m);
+  });
+
+  it("grants `contents: write` to its job, not the whole workflow", () => {
+    expect(topLevel).toMatch(/^permissions: \{\}$/m);
+    expect(autoformat.slice(topLevel.length)).toMatch(/^ {4}permissions:\n {6}contents: write$/m);
+  });
+});
+
 describe("the README status badges point at real check runs", () => {
   it("filters on a check-run name ci.yml actually produces", () => {
     const badged = badgedCheckRunNames();
