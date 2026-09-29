@@ -246,10 +246,54 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
 
   async create(data: Partial<Entity>, context: KavoContext<Entity>): Promise<Entity> {
     try {
-      return (await this.delegate.create({ data })) as Entity;
+      return (await this.delegate.create({ data: this.toWriteData(data, "create") })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }
+  }
+
+  /**
+   * ADR-0014 association through a relation's own key, in Prisma's terms.
+   * The deserializer has already narrowed every relation value to a
+   * reference (`{ id }`), an array of them, or `null`, so nothing a client
+   * sent survives here except ids: a smuggled nested write (`{ create: … }`)
+   * arrived as `null`. Prisma rejects a bare reference under a relation
+   * field, so this wraps it in the operation that means the same thing:
+   *
+   * - to-one: `{ connect: ref }`; `null` leaves it unset on create and
+   *   `disconnect`s it on update.
+   * - to-many: `connect` on create, and on update `set`, which replaces the
+   *   related rows the same way assigning the array does in `@kavo/typeorm`.
+   *
+   * The scalar foreign-key spelling (`authorId`) is an ordinary column and
+   * passes through untouched.
+   */
+  private toWriteData(
+    data: Partial<Entity> | Record<string, unknown>,
+    mode: "create" | "update",
+  ): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...(data as Record<string, unknown>) };
+    for (const relation of this.metadata.relations) {
+      if (!Object.prototype.hasOwnProperty.call(out, relation.name)) {
+        continue;
+      }
+      const value = out[relation.name];
+      if (relation.cardinality === "one") {
+        if (value === null || value === undefined) {
+          if (mode === "create") {
+            delete out[relation.name];
+          } else {
+            out[relation.name] = { disconnect: true };
+          }
+        } else {
+          out[relation.name] = { connect: value };
+        }
+        continue;
+      }
+      const refs = value === null || value === undefined ? [] : Array.isArray(value) ? value : [value];
+      out[relation.name] = mode === "create" ? { connect: refs } : { set: refs };
+    }
+    return out;
   }
 
   async update(
@@ -338,7 +382,10 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
       // addressed it by a different column, ADR-0052) — Prisma's `where`
       // for a plain `update`/`delete` must name a unique column, and the
       // primary key is the one Kavo already knows is unique.
-      return (await this.delegate.update({ where: { [this.idField]: existing[this.idField] }, data })) as Entity;
+      return (await this.delegate.update({
+        where: { [this.idField]: existing[this.idField] },
+        data: this.toWriteData(data, "update"),
+      })) as Entity;
     } catch (error) {
       throw mapDriverError(error, errorContext(context));
     }

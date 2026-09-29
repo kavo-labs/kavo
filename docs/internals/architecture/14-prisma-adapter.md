@@ -183,10 +183,15 @@ escape story here (doc 17 §7).
 - **Transactions:** same unbuilt seam as `@kavo/typeorm` (doc 09 §6) —
   `TransactionManager` has no consumer in this build.
 - **Composite primary keys:** out of scope, same as `@kavo/typeorm`.
-- **Implicit many-to-many relations:** associate-by-id (ADR-0014) writes a
-  scalar foreign-key field, which an implicit Prisma m:n relation has none
-  of (Prisma manages the join table itself). See the package README for
-  the escape hatch (a custom operation handler against the raw client).
+- **Relation-key association (ADR-0014):** `toWriteData` turns the
+  deserializer's `{ id }` references into Prisma's `connect` (create),
+  `disconnect` (a to-one `null` on update) and `set` (a to-many on
+  update). Issue #493 added it; before, every relation-key write reached
+  Prisma verbatim and failed as a 500. Covered for 1:n and n:1 edges.
+- **Implicit many-to-many relations:** no scalar foreign key to write,
+  and the relation-key path above is not tested against one. See the
+  package README for the escape hatch (a custom operation handler against
+  the raw client).
 
 ## 8. Performance posture
 

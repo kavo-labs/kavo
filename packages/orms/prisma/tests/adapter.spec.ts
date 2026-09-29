@@ -430,6 +430,76 @@ describe("PrismaRepositoryAdapter — query translation", () => {
     const fetched = await books.findOne(created.id, { include: ["author"] } as never);
     expect(fetched).toMatchObject({ author: { id: author.id, name: "Assoc" } });
   });
+
+  /**
+   * ADR-0014's other spelling: a reference object under the relation's own
+   * key. The deserializer narrows it to `{ id }` (or `null`), and the adapter
+   * turns that into Prisma's `connect`/`disconnect`/`set`, which Prisma
+   * requires for a relation field. Before this, every relation key a body
+   * carried reached `delegate.create`/`update` verbatim and failed there as a
+   * 500 (issue #493), including the nested-write shapes a client might try to
+   * smuggle in.
+   */
+  describe("association through the relation key (ADR-0014)", () => {
+    const booksService = () => kavo.createCrud(Book) as DefaultKavoService<Book>;
+
+    it("connects a to-one relation from a reference object on create", async () => {
+      const author = await client.author.create({ data: { email: "ref@x.io", name: "Ref", age: 1 } });
+      const created = (await booksService().createOne({ title: "Ref", author: { id: author.id } } as never)) as Book;
+      expect((await client.book.findUnique({ where: { id: created.id } }))?.authorId).toBe(author.id);
+    });
+
+    it("leaves a to-one relation unset when a create body sends null", async () => {
+      const created = (await booksService().createOne({ title: "Orphan", author: null } as never)) as Book;
+      expect((await client.book.findUnique({ where: { id: created.id } }))?.authorId).toBeNull();
+    });
+
+    it("never writes the related row when a body smuggles a Prisma nested write", async () => {
+      const created = (await booksService().createOne({
+        title: "Trojan",
+        author: { create: { email: "mallory@x.io", name: "Mallory", age: 1 } },
+      } as never)) as Book;
+      expect(await client.author.count()).toBe(0);
+      expect((await client.book.findUnique({ where: { id: created.id } }))?.authorId).toBeNull();
+    });
+
+    it("reconnects and disconnects a to-one relation on patch", async () => {
+      const [a, b] = await Promise.all([
+        client.author.create({ data: { email: "a@x.io", name: "A", age: 1 } }),
+        client.author.create({ data: { email: "b@x.io", name: "B", age: 1 } }),
+      ]);
+      const book = await client.book.create({ data: { title: "Moves", authorId: a.id } });
+
+      await booksService().patchOne(book.id, { author: { id: b.id } } as never);
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBe(b.id);
+
+      await booksService().patchOne(book.id, { author: null } as never);
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
+    });
+
+    it("connects a to-many relation on create and replaces it on update", async () => {
+      const [first, second] = await Promise.all([
+        client.book.create({ data: { title: "First" } }),
+        client.book.create({ data: { title: "Second" } }),
+      ]);
+      const created = (await authors.createOne({
+        email: "many@x.io",
+        name: "Many",
+        age: 1,
+        books: [{ id: first.id }],
+      } as never)) as Author;
+      expect((await client.book.findUnique({ where: { id: first.id } }))?.authorId).toBe(created.id);
+
+      await authors.updateOne(created.id, {
+        email: "many@x.io",
+        name: "Many",
+        age: 1,
+        books: [{ id: second.id }],
+      } as never);
+      expect((await client.book.findUnique({ where: { id: first.id } }))?.authorId).toBeNull();
+      expect((await client.book.findUnique({ where: { id: second.id } }))?.authorId).toBe(created.id);
+    });
+  });
 });
 
 /**

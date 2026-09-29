@@ -48,18 +48,28 @@ Set `caseInsensitiveFilters: false` when the connector isn't Postgres or
 MongoDB — Prisma's `mode: "insensitive"` (used to translate the `ilike`
 filter operator) is rejected outright by MySQL, SQLite, and SQL Server.
 
-## Relation writes: explicit scalar foreign keys only
+## Relation writes: associate by id
 
-Per ADR-0014 ("associate by id, not deep writes"), a relation is set by
-writing its scalar foreign-key field directly (`{ authorId: 5 }`), the
-same contract `@kavo/typeorm` exposes. This requires the Prisma schema to
-declare that foreign key as an explicit scalar field on the relation
-(`authorId Int?` alongside `author Author? @relation(fields: [authorId],
-references: [id])`) — the [documented best
-practice](https://www.prisma.io/docs/orm/prisma-schema/data-model/relations)
-for any 1:1/1:n relation. An **implicit many-to-many** relation (no
-scalar field on either side, Prisma manages the join table itself) has no
-foreign key for a schema to expose, so it cannot be associated through the
-normal write path — a custom operation handler reaching for the raw
-Prisma Client is the escape hatch, same as any write shape Kavo doesn't
-model directly.
+Per ADR-0014 ("associate by id, not deep writes"), a relation is set in
+one of two ways, the same contract `@kavo/typeorm` exposes:
+
+- **The scalar foreign-key field** (`{ authorId: 5 }`). This needs the
+  Prisma schema to declare that key as an explicit scalar on the relation
+  (`authorId Int?` alongside `author Author? @relation(fields: [authorId],
+references: [id])`), the [documented best
+  practice](https://www.prisma.io/docs/orm/prisma-schema/data-model/relations)
+  for any 1:1/1:n relation.
+- **A reference under the relation's own key** (`{ author: { id: 5 } }`,
+  or `{ books: [{ id: 1 }, { id: 2 }] }` for a to-many). Core narrows the
+  value to its id before the adapter sees it, and the adapter turns it into
+  Prisma's `connect`. On update, `null` disconnects a to-one and an array
+  replaces a to-many (`set`). Because only the id survives, a nested write
+  such as `{ author: { create: { … } } }` never reaches Prisma: it is read
+  as "no reference" and writes nothing.
+
+Send one spelling per relation per request: Prisma rejects a body that
+mixes `authorId` with `author`. An **implicit many-to-many** relation (no
+scalar field on either side; Prisma manages the join table) is not covered
+by this package's tests; a custom operation handler reaching for the raw
+Prisma Client remains the supported escape hatch there, as for any write
+shape Kavo doesn't model directly.
