@@ -24,7 +24,8 @@ import { CreateArticleDto, UpdateArticleDto, ArticleItemDto, ArticleListDto } fr
     input: { create: CreateArticleDto, update: UpdateArticleDto },
     output: { item: ArticleItemDto, list: ArticleListDto },
   },
-  delete: { field: "deletedAt" },
+  // `allowDeletedReads`: `?withDeleted`/`?onlyDeleted` are a 400 without it (#517).
+  delete: { field: "deletedAt", allowDeletedReads: true },
   operations: {
     createOne: true,
     findOne: true,

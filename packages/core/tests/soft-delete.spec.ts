@@ -6,6 +6,7 @@ import {
   NotDeletedException,
   NotFoundException,
   QueryValidationException,
+  WireQuery,
   createKavo,
   createOperationRegistry,
   mergeSettings,
@@ -84,6 +85,30 @@ describe("soft delete lifecycle", () => {
     expect(adapter.rows[0]!.deletedAt).toBeInstanceOf(Date);
     await expect(crud.findOne(1)).rejects.toBeInstanceOf(NotFoundException);
     expect((await crud.findMany()).items).toHaveLength(0);
+  });
+
+  it("refuses a client's withDeleted unless the operation opts in with delete.allowDeletedReads (#517)", async () => {
+    const { crud } = makeAccountCrud({
+      // `operations` is an exclusive whitelist, so the others are named too.
+      operations: {
+        findMany: { delete: { allowDeletedReads: true } },
+        findOne: true,
+        createOne: true,
+        deleteOne: true,
+      },
+    } as never);
+    await crud.createOne({ name: "acme" } as never);
+    await crud.deleteOne(1);
+    const wire = (operation: string, params: Record<string, string>, id?: number) =>
+      crud.engine.execute({ operation, id, query: new WireQuery(params) } as never);
+
+    const response = await wire("findMany", { withDeleted: "true" });
+    expect(response.list?.items).toHaveLength(1);
+    await expect(wire("findOne", { withDeleted: "true" }, 1)).rejects.toMatchObject({
+      issues: [{ field: "withDeleted", code: "KAVO_QUERY_UNSUPPORTED_PARAM" }],
+    });
+    // Server code reaching the same row through a programmatic query is not a client.
+    expect(await crud.findOne(1, { withDeleted: true } as never)).toMatchObject({ id: 1 });
   });
 
   it("shows deleted rows again under withDeleted", async () => {

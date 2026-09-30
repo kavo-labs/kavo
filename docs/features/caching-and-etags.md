@@ -28,7 +28,7 @@ Supported on every route that targets one book: `PUT /books/1`, `PATCH /books/1`
 
 If the book's current tag is one you named, the write goes ahead and the response carries the new tag. If it isn't, because somebody else changed the book since you read it, the write is refused with `412 Precondition Failed` and a `KAVO_PRECONDITION_FAILED` problem document naming the current tag. Nothing is written. `*` matches any existing representation, so `If-Match: *` means "only if it still exists".
 
-For restore and purge, the tag to send is the one from `GET /books/1?withDeleted=true`. A soft-deleted book is what those routes act on, and an ordinary `GET /books/1` will not show it to you.
+For restore and purge, the tag to send is the one from `GET /books/1?withDeleted=true`. A soft-deleted book is what those routes act on, and an ordinary `GET /books/1` will not show it to you. That read needs `delete.allowDeletedReads` on `findOne` ([Soft delete](/features/soft-delete)). Without it a client has no way to learn the deleted row's tag; `If-Match: *` still passes, but it only asserts the row exists and guards against no concurrent change.
 
 If the book doesn't exist at all, or is in a state the route refuses, you get that route's own error rather than a `412`: `404` for a book that isn't there, `409 KAVO_ALREADY_DELETED` for `DELETE` on one that is already soft-deleted. Sending a conditional header never changes which error you get, only whether the write happens.
 

@@ -77,10 +77,25 @@ Soft-deleted rows are invisible by default — to `findOne`, `findMany`,
 `count`, and to `updateOne`/`patchOne`, which will not touch a deleted
 row (reviving one is `restoreOne`'s job, not a side effect of a write).
 
-`withDeleted=true` opts back in, on both wire and programmatic paths. On
+`withDeleted=true` opts back in, on both wire and programmatic paths (on
+the wire, only with `delete.allowDeletedReads`, below). On
 an entity that is not soft-deletable the parameter is **rejected**
 (`KAVO_QUERY_UNSUPPORTED_PARAM`) rather than ignored: a client that
 believes it is seeing deleted rows should be told it is not.
+
+On the wire, both flags also need `delete.allowDeletedReads` (default
+`false`, issue #517), resolved through the ordinary settings chain, so it
+can be opened per entity or per read (`operations.findMany`). Many apps
+treat a soft-deleted row as gone from the client's side, and before this
+key any client could read the trash by adding a query parameter. A
+programmatic `QueryContext` is not gated: it is server code, and the
+engine's own internal reads (the `restoreOne`/`purgeOne` pre-fetch) pass
+`withDeleted` that way. The gate lives in `QueryNormalizer`'s
+`parseSoftDeleteFlag`, which knows which path it is on; adapters are
+unchanged. The flip side is a rule for every protocol binding: GraphQL,
+MCP and any resolver reach the engine through a programmatic
+`QueryContext`, so they must never forward `withDeleted`/`onlyDeleted`
+from their own client, or they bypass this gate.
 
 `onlyDeleted=true` is the third state: instead of widening the default
 exclusion, it narrows a read to _only_ soft-deleted rows (a "trash" view).

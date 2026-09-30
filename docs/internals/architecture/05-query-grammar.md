@@ -260,8 +260,9 @@ limit ?? defaultLimit, maxLimit)`) rather than calling the registered
   are otherwise excluded from every read (doc 11); `onlyDeleted=true`
   narrows a read to _only_ those rows — the trash view — and applies to
   single-row reads as well as lists. On an entity
-  that is not soft-deletable either is rejected with
-  `KAVO_QUERY_UNSUPPORTED_PARAM`, not ignored; a non-boolean value is a
+  that is not soft-deletable, or on the wire when the operation's
+  `delete.allowDeletedReads` is off (the default, #517), either is rejected
+  with `KAVO_QUERY_UNSUPPORTED_PARAM`, not ignored; a non-boolean value is a
   field-level 400. The two are contradictory ("everything" vs. "only the
   deleted"), so sending both is `KAVO_QUERY_CONFLICTING_PARAMS`. Neither
   flag changes include resolution: a trash-view read resolves `include=`

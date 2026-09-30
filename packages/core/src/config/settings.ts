@@ -139,6 +139,17 @@ export interface SoftDeleteSettings {
   /** Delete-marker field name (`deletedAt: Date | null` convention). */
   readonly field: string;
   readonly strategy: SoftDeleteMode;
+  /**
+   * Whether a client may ask for soft-deleted rows with the `withDeleted`
+   * or `onlyDeleted` query parameters. Off by default (issue #517): many
+   * apps treat a soft-deleted row as gone from the client's side, so a
+   * request that names either flag is a 400 until the entity (or one
+   * operation) opts in. Only the wire grammar is gated; a programmatic
+   * `QueryContext` is server code and may always ask. Optional because an
+   * object re-enabling `delete` over an inherited `false` replaces the
+   * subtree and may omit it; absent means `false`.
+   */
+  readonly allowDeletedReads?: boolean;
 }
 
 /**

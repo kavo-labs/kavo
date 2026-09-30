@@ -76,10 +76,19 @@ Soft-deleted rows are invisible by default — to `findOne`, `findMany`,
 `count`, and to `updateOne`/`patchOne` (a write never touches a deleted
 row; reviving one is `restoreOne`'s job, not a side effect of a write).
 
-`withDeleted=true` opts back in on both wire and programmatic paths. On an
+`withDeleted=true` opts back in on both wire and programmatic paths (on
+the wire, only with `delete.allowDeletedReads`, below). On an
 entity that is **not** soft-deletable, the parameter is rejected
 (`KAVO_QUERY_UNSUPPORTED_PARAM`), never silently ignored — a client that
 believes it's seeing deleted rows should be told it isn't.
+
+**From a client, `withDeleted`/`onlyDeleted` also need an opt-in:**
+`delete: { allowDeletedReads: true }` (default `false`, issue #517). Without
+it the flags are the same `400`, so a soft-deleted row stays gone from the
+client's side. Set it on the entity, or per read with
+`operations: { findMany: { delete: { allowDeletedReads: true } } }`. A
+programmatic `service.findMany({ withDeleted: true })` is server code and
+is never gated.
 
 In `@kavo/typeorm`: for a real `@DeleteDateColumn`, TypeORM already excludes
 deleted rows and the adapter opts in with `.withDeleted()`; for an ordinary

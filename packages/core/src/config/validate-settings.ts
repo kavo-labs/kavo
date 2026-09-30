@@ -111,6 +111,12 @@ export function validateSettings(entityName: string, settings: KavoSettings): vo
         `expected "auto", "soft", or "hard", got ${JSON.stringify(strategy)}`,
       );
     }
+    // Absent is `false`, not an error: an object re-enabling `delete` over an
+    // inherited `false` replaces the subtree, so it carries only the keys it
+    // names, and configs written before #517 name only `field`/`strategy`.
+    if (settings.delete.allowDeletedReads !== undefined) {
+      bool("delete.allowDeletedReads", settings.delete.allowDeletedReads);
+    }
   }
 
   if (settings.realtime !== false) {

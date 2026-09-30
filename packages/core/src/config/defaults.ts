@@ -49,6 +49,8 @@ export const BUILT_IN_DEFAULTS: KavoSettings = Object.freeze({
   delete: Object.freeze({
     field: "deletedAt",
     strategy: "auto" as const,
+    // A client's `withDeleted`/`onlyDeleted` is a 400 until opted in (#517).
+    allowDeletedReads: false,
   }),
   // Off by default, the same `false` sentinel `delete`/`cache` use at
   // this scope. Registered transports live outside this tree entirely

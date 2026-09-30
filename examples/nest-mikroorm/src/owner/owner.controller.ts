@@ -30,7 +30,8 @@ import { CreateOwnerDto, UpdateOwnerDto, OwnerItemDto, OwnerListDto } from "./ow
     input: { create: CreateOwnerDto, update: UpdateOwnerDto },
     output: { item: OwnerItemDto, list: OwnerListDto },
   },
-  delete: { field: "deletedAt" },
+  // `allowDeletedReads`: `?withDeleted`/`?onlyDeleted` are a 400 without it (#517).
+  delete: { field: "deletedAt", allowDeletedReads: true },
   filter: { fields: { exclude: ["deletedAt"] } },
   sort: { fields: { exclude: ["deletedAt"] } },
   select: { fields: { exclude: ["deletedAt"] } },

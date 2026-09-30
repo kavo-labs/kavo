@@ -58,7 +58,7 @@ See [ETags and conditional requests](/features/caching-and-etags#etags-and-condi
 
 ## delete
 
-`field` (default `"deletedAt"`) is the name of the delete-marker column. `strategy` (default `"auto"`, or `"soft"`/`"hard"`) picks how deletion behaves: `auto` resolves per entity (soft if the marker field exists, hard otherwise), while `soft`/`hard` state it outright. Setting `false` for the whole `delete` key (instead of an object) disables soft delete entirely, even if a marker field exists.
+`field` (default `"deletedAt"`) is the name of the delete-marker column. `strategy` (default `"auto"`, or `"soft"`/`"hard"`) picks how deletion behaves: `auto` resolves per entity (soft if the marker field exists, hard otherwise), while `soft`/`hard` state it outright. Setting `false` for the whole `delete` key (instead of an object) disables soft delete entirely, even if a marker field exists. `allowDeletedReads` (default `false`) lets a client ask for soft-deleted rows with `?withDeleted`/`?onlyDeleted`; without it both flags are a `400`, and set per operation it opens only that read.
 
 See [Soft delete](/features/soft-delete) for the practical walkthrough, and [Soft delete, restore & purge](/internals/architecture/11-soft-delete) for the full behavior.
 

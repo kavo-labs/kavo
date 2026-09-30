@@ -38,13 +38,14 @@ One subtree covers both halves of HTTP response caching. `cache.ttl` is the engi
 
 ### delete
 
-| Key               | Type                           | Default                      |
-| ----------------- | ------------------------------ | ---------------------------- |
-| `delete`          | `{ field, strategy } \| false` | resolved per entity (`auto`) |
-| `delete.field`    | `string`                       | `"deletedAt"`                |
-| `delete.strategy` | `"auto" \| "soft" \| "hard"`   | `"auto"`                     |
+| Key                        | Type                                              | Default                      |
+| -------------------------- | ------------------------------------------------- | ---------------------------- |
+| `delete`                   | `{ field, strategy, allowDeletedReads } \| false` | resolved per entity (`auto`) |
+| `delete.field`             | `string`                                          | `"deletedAt"`                |
+| `delete.strategy`          | `"auto" \| "soft" \| "hard"`                      | `"auto"`                     |
+| `delete.allowDeletedReads` | `boolean`                                         | `false`                      |
 
-`auto` resolves per entity: soft when the entity carries the marker field, hard otherwise. `soft` on an entity without a marker field fails at bootstrap. `false` at any scope disables soft delete entirely. See [Soft delete](/features/soft-delete).
+`auto` resolves per entity: soft when the entity carries the marker field, hard otherwise. `soft` on an entity without a marker field fails at bootstrap. `false` at any scope disables soft delete entirely. `allowDeletedReads` lets a client send `?withDeleted` or `?onlyDeleted`; without it either flag is a `400 KAVO_QUERY_UNSUPPORTED_PARAM` (a programmatic `QueryContext` is server code and is not gated). Set it per entity, or per read with `operations.findMany`/`findOne`. See [Soft delete](/features/soft-delete).
 
 ### realtime
 
