@@ -1169,12 +1169,17 @@ export class KavoEngine<Entity extends object> {
     if (forced === undefined) {
       return;
     }
-    // Defined, not assigned: `Object.assign` and `body[field] = …` both run the
-    // `__proto__` setter, so a forced field of that name would re-parent the
-    // write body instead of setting a key (#533).
     for (const [field, value] of Object.entries(forced)) {
-      if (descriptor.id !== "patchOne" || Object.hasOwn(body, field)) {
+      if (descriptor.id === "patchOne" && !Object.hasOwn(body, field)) {
+        continue;
+      }
+      if (field === "__proto__" && !Object.hasOwn(body, field)) {
+        // Assigning `__proto__` would run the prototype setter and re-parent
+        // the write body instead of setting a key (#533). Every other field is
+        // assigned, so a custom deserializer's setters still run.
         Object.defineProperty(body, field, { value, writable: true, enumerable: true, configurable: true });
+      } else {
+        (body as Record<string, unknown>)[field] = value;
       }
     }
   }

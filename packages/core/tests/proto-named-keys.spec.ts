@@ -72,6 +72,19 @@ describe("a field named __proto__", () => {
     expectOwnProtoKey(adapter.writes[0], { polluted: true });
   });
 
+  it("stays an own key when `set.update` forces it on patchOne", async () => {
+    const adapter = new RecordingAdapter([{ id: 1, name: "a" }]);
+    const crud = createKavo().createCrud(
+      Doc,
+      { set: { update: () => JSON.parse('{ "__proto__": { "forced": true } }') as Record<string, unknown> } } as never,
+      { adapter, metadata: docMetadata },
+    );
+
+    await crud.patchOne(1, JSON.parse('{ "__proto__": { "sent": true } }') as never);
+
+    expectOwnProtoKey(adapter.writes[0], { forced: true });
+  });
+
   it("stays an own key when `set` forces it", async () => {
     const adapter = new RecordingAdapter();
     const crud = createKavo().createCrud(
@@ -130,5 +143,51 @@ describe("a write-opted relation named __proto__", () => {
     await crud.patchOne(1, [{ op: "add", path: "/__proto__/-", value: { id: 3 } }] as never);
 
     expect(adapter.patches).toEqual([{ relation: "__proto__", changes: { add: [3], remove: [] } }]);
+  });
+});
+
+class Binder {
+  id = 0;
+  name = "";
+}
+
+const binderMetadata: EntityMetadata<Binder> = {
+  entity: Binder,
+  name: "Binder",
+  idField: "id",
+  fields: [
+    { name: "id", kind: "number", nullable: false, generated: true },
+    { name: "name", kind: "string", nullable: false, generated: false },
+    { name: "__proto__", kind: "json", nullable: true, generated: false },
+  ],
+  relations: [{ name: "posts", target: () => Post as never, cardinality: "many" } as never],
+};
+
+class BinderAdapter extends SeededAdapter<Binder> {
+  readonly writes: Record<string, unknown>[] = [];
+
+  override async patch(id: EntityId, data: Partial<Binder>): Promise<Binder> {
+    this.writes.push(data as Record<string, unknown>);
+    return { id: Number(id), name: "" };
+  }
+
+  async patchRelation(id: EntityId): Promise<Binder> {
+    return { id: Number(id), name: "" };
+  }
+}
+
+describe("a jsonPatch body replacing a field named __proto__", () => {
+  it("reaches the adapter as an own key", async () => {
+    const adapter = new BinderAdapter([{ id: 1, name: "a" }]);
+    const kavo = createKavo();
+    kavo.createCrud(Post, undefined, { adapter: new SeededAdapter<Post>(), metadata: postMetadata });
+    const crud = kavo.createCrud(Binder, { relations: { posts: { write: { strategy: "jsonPatch" } } } } as never, {
+      adapter,
+      metadata: binderMetadata,
+    });
+
+    await crud.patchOne(1, [{ op: "replace", path: "/__proto__", value: { polluted: true } }] as never);
+
+    expectOwnProtoKey(adapter.writes[0], { polluted: true });
   });
 });

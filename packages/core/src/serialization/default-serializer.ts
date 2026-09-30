@@ -473,7 +473,8 @@ function associate<Entity>(
   const { compositeIdFields } = spec;
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
+    // Entries for the same reason as `deserialize` above (#533).
+    const result: [string, unknown][] = [];
     for (const field of compositeIdFields) {
       const fieldValue = record[field];
       if (fieldValue === undefined) {
@@ -496,9 +497,9 @@ function associate<Entity>(
           },
         });
       }
-      result[field] = fieldValue;
+      result.push([field, fieldValue]);
     }
-    return result;
+    return Object.fromEntries(result);
   }
   if (typeof value === "string") {
     const parts = decodeCompositeId(value, compositeIdFields.length);
