@@ -938,7 +938,9 @@ describe("release-please workflow", () => {
   it("points release-please at the repo's config and manifest files", () => {
     expect(wf).toContain("release-please-config.json");
     expect(wf).toContain(".release-please-manifest.json");
-    expect(wf).toContain("googleapis/release-please-action@v5");
+    // Pinned by SHA like every action (workflow-permissions.spec.ts); the
+    // trailing comment still names the major it tracks.
+    expect(wf).toMatch(/googleapis\/release-please-action@[0-9a-f]{40} # v5\./);
   });
 
   it("cuts the tag after a merge via a schedule tick (push/pull_request are GITHUB_TOKEN-suppressed)", () => {

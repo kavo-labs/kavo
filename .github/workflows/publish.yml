@@ -16,13 +16,12 @@ on:
 permissions:
   # Read-only checkout is all these jobs need: they publish to npm and
   # nothing else. The GitHub Release is release-please's to create
-  # (ADR-0041), so no `contents: write` here. `id-token: write` is for npm
-  # OIDC trusted publishing (and the provenance attestation that comes with
-  # it) — the publish job below inherits it rather than redeclaring it, since
-  # job-level `permissions:` replaces the workflow-level block instead of
-  # merging with it.
+  # (ADR-0041), so no `contents: write` here. `id-token: write` (npm OIDC
+  # trusted publishing, and the provenance attestation that comes with it) is
+  # granted to the publish job alone, not here: `prepare` installs
+  # dependencies and runs the whole gate, and third-party code has no business
+  # holding a token that can mint an npm publish credential.
   contents: read
-  id-token: write
 
 env:
   TARBALL_DIR: /tmp/kavo-tarballs
@@ -57,13 +56,13 @@ jobs:
         packages/frameworks/nest
         packages/frameworks/next
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: lts/*
           cache: pnpm
@@ -175,7 +174,7 @@ jobs:
           '
 
       - name: Upload packed tarballs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kavo-tarballs
           path: ${{ env.TARBALL_DIR }}
@@ -189,15 +188,20 @@ jobs:
     name: publish
     needs: prepare
     runs-on: ubuntu-latest
+    # Job-level `permissions:` replaces the workflow-level block rather than
+    # merging with it, so `contents: read` is restated alongside the OIDC grant.
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
         dir: ${{ fromJson(needs.prepare.outputs.package_dirs) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
@@ -208,7 +212,7 @@ jobs:
         run: npm install -g npm@latest
 
       - name: Download packed tarballs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: kavo-tarballs
           path: ${{ env.TARBALL_DIR }}
