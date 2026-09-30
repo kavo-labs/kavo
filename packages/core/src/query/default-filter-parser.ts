@@ -438,6 +438,16 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
         // `%`/`_` are escaped with a backslash (`\%`) — the adapter emits
         // the matching ESCAPE clause.
         const pattern = String(raw);
+        // A pattern skips `coerceScalar`, so it gets that function's NUL
+        // check here: no column stores one, and the driver would 500 (#527).
+        if (pattern.includes("\u0000")) {
+          issues.push({
+            field,
+            code: "KAVO_QUERY_INVALID_VALUE",
+            detail: `'${token}' pattern for field '${field}' contains a NUL character.`,
+          });
+          return null;
+        }
         const max = config.filter.limits.maxLikePatternLength;
         if (pattern.length > max) {
           // Values are parameter-bound (never SQLi), but an unbounded

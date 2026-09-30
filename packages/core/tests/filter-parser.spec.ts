@@ -527,6 +527,11 @@ describe("DefaultFilterParser — security posture", () => {
     },
   );
 
+  it.each(["like", "ilike"])("rejects a NUL character in a %s pattern with a 400 (#527)", (token) => {
+    const issues = issuesOf(() => parse({ [`filter[name][${token}]`]: "%a\u0000%" }));
+    expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
   it("rejects coercion failures as field-level issues", () => {
     const issues = issuesOf(() => parse({ "filter[age][eq]": "abc" }));
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_VALUE");
