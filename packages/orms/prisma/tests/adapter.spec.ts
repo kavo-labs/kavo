@@ -4,7 +4,6 @@ import {
   ConflictException,
   NotFoundException,
   PatchNoChangesException,
-  PersistenceException,
   QueryValidationException,
   type KavoInstance,
   type DefaultKavoService,
@@ -345,13 +344,13 @@ describe("PrismaRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(4);
   });
 
-  it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
+  it("refuses an operator outside the AST enum with a 400 rather than dropping the predicate", async () => {
     await seed();
     await expect(
       authors.findMany({
         filter: { kind: "condition", field: "status", operator: "SOUNDS_LIKE" as never, value: "active" },
       }),
-    ).rejects.toBeInstanceOf(PersistenceException);
+    ).rejects.toMatchObject({ code: "KAVO_QUERY_INVALID", status: 400 });
   });
 
   it("still rejects non-allowlisted programmatic filters", async () => {

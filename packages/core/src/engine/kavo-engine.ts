@@ -380,7 +380,22 @@ export class KavoEngine<Entity extends object> {
     context: KavoContext<Entity>,
   ): Promise<void> {
     const standard = isStandardOperationId(descriptor.id);
-    const policy = standard ? configView.policy[descriptor.id] : undefined;
+    // A synthesized relation operation (`replace<Rel>`/`add<Rel>`/
+    // `remove<Rel>`/`list<Rel>`, ADR-0029) reads or writes the parent row
+    // named by the route id, so it answers to that row's rules: its writes
+    // are governed as `updateOne`, its read as `findOne`. The policy sees
+    // that governing id as `operation`, so a rule keyed on "updateOne"
+    // cannot be sidestepped through a relation route.
+    const arrayMutation = (descriptor.meta as { arrayMutation?: { readonly action: string } } | undefined)
+      ?.arrayMutation;
+    const governing: StandardOperationId | undefined = standard
+      ? descriptor.id
+      : arrayMutation !== undefined
+        ? arrayMutation.action === "list"
+          ? "findOne"
+          : "updateOne"
+        : undefined;
+    const policy = governing !== undefined ? configView.policy[governing] : undefined;
     // `filter.apply` (ADR-0048) gates single-row writes the same way
     // `policy` gates them, and for the same reason a plain function can't
     // be inspected up front: `updateOne`/`patchOne`/`deleteOne`/
@@ -390,7 +405,9 @@ export class KavoEngine<Entity extends object> {
     // all — `filter.apply` already composed into their `NormalizedQueryContext`
     // before `context` was built (`KavoEngine.resolveReadApply`).
     const applyFilter =
-      standard && descriptor.kind === "write" && request.id !== null ? configView.filter.apply : undefined;
+      governing !== undefined && (descriptor.kind === "write" || arrayMutation !== undefined) && request.id !== null
+        ? configView.filter.apply
+        : undefined;
     if (policy === undefined && applyFilter === undefined) {
       // An operation with no resolved `policy.<id>` (and no mandatory
       // `filter.apply`) runs unrestricted — the opt-in posture every Kavo
@@ -411,7 +428,7 @@ export class KavoEngine<Entity extends object> {
     if (id !== null) {
       const filterRoot =
         applyFilter !== undefined
-          ? ((await applyFilter({ context, resource: context.entityName, operation: descriptor.id, params })) ?? null)
+          ? ((await applyFilter({ context, resource: context.entityName, operation: governing!, params })) ?? null)
           : null;
       const found = await context.repository.findOneById(
         id,
@@ -433,7 +450,7 @@ export class KavoEngine<Entity extends object> {
     }
 
     if (policy !== undefined) {
-      await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+      await this.assertPolicyAllows(policy, governing!, configView, context, entity, params);
     }
   }
 
@@ -1101,10 +1118,13 @@ export class KavoEngine<Entity extends object> {
 
   /**
    * `set` (issue #476, ADR-0048's write-side sibling): evaluated once per
-   * `createOne`/`updateOne`, after `resolveInput` has already produced the
-   * deserialized body, so its result can overwrite whatever the client sent
-   * for a forced field. `patchOne` never consults it — a `PATCH` omitting a
-   * field means "leave it unchanged", not "reset it." Mutates `input` in
+   * `createOne`/`updateOne`/`patchOne`, after `resolveInput` has already
+   * produced the deserialized body, so its result can overwrite whatever the
+   * client sent for a forced field. `patchOne` evaluates `set.update` but
+   * overwrites only the forced fields its body actually carries: a `PATCH`
+   * omitting a field still means "leave it unchanged", not "reset it", while
+   * one that names a forced field (an object body or a JSON Patch `replace`)
+   * can never write a value of the client's choosing there. Mutates `input` in
    * place rather than returning a new object: `resolveInput`'s two write
    * shapes differ (`createOne`'s input *is* the body; `updateOne`'s wraps it
    * under `data`), and mutating the body object either shape already holds
@@ -1120,13 +1140,13 @@ export class KavoEngine<Entity extends object> {
     const apply =
       descriptor.id === "createOne"
         ? configView.createApply
-        : descriptor.id === "updateOne"
+        : descriptor.id === "updateOne" || descriptor.id === "patchOne"
           ? configView.updateApply
           : undefined;
     if (apply === undefined) {
       return;
     }
-    const body = descriptor.id === "updateOne" ? (input as { data: object }).data : (input as object);
+    const body = descriptor.id === "createOne" ? (input as object) : (input as { data: object }).data;
     const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
     const args: ApplyArgs<Entity> = {
       context,
@@ -1135,8 +1155,17 @@ export class KavoEngine<Entity extends object> {
       params: { id },
     };
     const forced = await apply(args);
-    if (forced !== undefined) {
+    if (forced === undefined) {
+      return;
+    }
+    if (descriptor.id !== "patchOne") {
       Object.assign(body, forced);
+      return;
+    }
+    for (const [field, value] of Object.entries(forced)) {
+      if (Object.hasOwn(body, field)) {
+        (body as Record<string, unknown>)[field] = value;
+      }
     }
   }
 
@@ -1372,7 +1401,9 @@ export class KavoEngine<Entity extends object> {
     if (refs === null || refs === undefined) {
       return null;
     }
-    return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
+    return (refs as readonly (Record<string, unknown> | null)[])
+      .filter((ref): ref is Record<string, unknown> => ref !== null)
+      .map((ref) => Object.values(ref)[0] as EntityId);
   }
 
   /**
@@ -1419,6 +1450,17 @@ export class KavoEngine<Entity extends object> {
    * since core never re-encodes what it already validated.
    */
   private coerceId(id: unknown): unknown {
+    // An id is a scalar (`EntityId`) and nothing else. A programmatic
+    // surface (MCP tool args, GraphQL JSON, application code) can hand in
+    // any JSON value, and an object reaching an adapter is read as query
+    // criteria — `Repository.delete({ ... })` deletes every matching row.
+    if (!((typeof id === "string" && id !== "") || (typeof id === "number" && Number.isFinite(id)))) {
+      throw QueryValidationException.single({
+        field: "id",
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: "An id must be a non-empty string or a finite number.",
+      });
+    }
     const { metadata } = this.deps;
     const { compositeIdFields } = metadata;
     if (compositeIdFields !== undefined) {

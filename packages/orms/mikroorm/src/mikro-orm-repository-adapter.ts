@@ -115,12 +115,16 @@ export class MikroOrmRepositoryAdapter<Entity extends object> implements Reposit
   ): Promise<Entity | null> {
     try {
       const include = query?.include ?? {};
-      const where = this.scopeToLive(
-        { [identifierField ?? this.idField]: id },
-        context,
-        query?.withDeleted ?? false,
-        query?.onlyDeleted ?? false,
-      );
+      // `query.filter` carries the entity's mandatory `filter.apply` scope
+      // (ADR-0048), so it is ANDed onto the id lookup: a row outside the
+      // caller's scope is not found, exactly as it would be absent from
+      // `findMany`.
+      const byId = { [identifierField ?? this.idField]: id };
+      const scoped =
+        query !== null && query.filter.root !== null
+          ? { $and: [byId, translateFilter(query.filter, this.filterOptions)] }
+          : byId;
+      const where = this.scopeToLive(scoped, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false);
       const row = await this.fork().findOne(this.entity, where as never, this.populateOptions(include) as never);
       return row === null ? null : pruneIncluded(toPlain(row), include);
     } catch (error) {

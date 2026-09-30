@@ -578,3 +578,35 @@ describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
     expect((result.content[0] as { text: string }).text).toBe("KAVO_QUERY_INVALID: The request query is invalid.");
   });
 });
+
+describe("crudTools — service-only operations", () => {
+  it("builds no tool for a standard or custom operation marked meta.routes.enabled: false", () => {
+    const service = createKavo().createCrud(
+      Todo,
+      {
+        operations: {
+          findOne: true,
+          findMany: true,
+          deleteOne: { meta: { routes: { enabled: false } } },
+          archiveOne: {
+            kind: "write",
+            handler: { execute: async () => ({ archived: true }) },
+            schema: { output: { fields: ["id"] } },
+            meta: { routes: { enabled: false } },
+          },
+          markDoneOne: {
+            kind: "write",
+            handler: { execute: async () => ({ done: true }) },
+            schema: { output: { fields: ["id"] } },
+          },
+        },
+      } as never,
+      { adapter: new InMemoryTodoAdapter(), metadata: todoMetadata },
+    );
+    const names = crudTools({ name: "Todo", service }).map((binding) => binding.tool.name);
+    expect(names).not.toContain("todo.deleteOne");
+    expect(names).not.toContain("todo.archiveOne");
+    expect(names).toContain("todo.findOne");
+    expect(names).toContain("todo.markDoneOne");
+  });
+});

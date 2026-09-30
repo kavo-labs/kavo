@@ -170,7 +170,9 @@ const freeformObjectSchema: Tool["inputSchema"] = { type: "object" };
  * any operation an entity's own `@Kavo` config disabled — still produces a
  * tool, and calling it surfaces `OperationDisabledException` as a normal
  * `isError` result (`guarded`), exactly like calling the disabled REST
- * route would.
+ * route would. The one exception is a service-only operation
+ * (`meta.routes.enabled: false`): it gets no REST route, so it gets no tool
+ * either.
  *
  * A **custom** operation (ADR-0006's #145 amendment) reaches this toolset
  * too, unlike the standard eight without needing a name in `options` — MCP
@@ -274,10 +276,24 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
     },
   ];
 
+  // `meta.routes.enabled: false` marks an operation service-only: callable
+  // from application code, never exposed to a remote client. REST generates
+  // no route for it (`@kavo/nest`'s and `@kavo/next`'s `resolveRoute`), and
+  // no tool is built for it here either — standard or custom.
+  const serviceOnly = new Set(
+    (registryOf(service)?.all() ?? [])
+      .filter((descriptor) => (descriptor.meta as { routes?: { enabled?: boolean } }).routes?.enabled === false)
+      .map((descriptor) => descriptor.id),
+  );
   const standardIds: ReadonlySet<StandardOperationId> = new Set(STANDARD_OPERATION_IDS);
   for (const descriptor of registryOf(service)?.all() ?? []) {
     const hasOutput = (descriptor.schemaOutput ?? null) !== null;
-    if (standardIds.has(descriptor.id as StandardOperationId) || !descriptor.enabled || !hasOutput) {
+    if (
+      standardIds.has(descriptor.id as StandardOperationId) ||
+      !descriptor.enabled ||
+      !hasOutput ||
+      serviceOnly.has(descriptor.id)
+    ) {
       continue;
     }
     const takesId = descriptor.cardinality === "one";
@@ -308,5 +324,5 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
     });
   }
 
-  return bindings;
+  return bindings.filter((binding) => !serviceOnly.has(binding.tool.name.slice(prefix.length + 1)));
 }

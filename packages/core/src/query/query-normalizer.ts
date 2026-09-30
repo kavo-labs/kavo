@@ -1130,6 +1130,67 @@ function escapeLikeLiteral(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+const FILTER_OPERATORS: ReadonlySet<string> = new Set([
+  "EQ",
+  "NE",
+  "GT",
+  "GTE",
+  "LT",
+  "LTE",
+  "IN",
+  "NOT_IN",
+  "LIKE",
+  "ILIKE",
+  "BETWEEN",
+  "IS_NULL",
+  "IS_NOT_NULL",
+]);
+const LOGICAL_OPERATORS: ReadonlySet<string> = new Set(["AND", "OR", "NOT"]);
+
+function isFilterScalar(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean" ||
+    (typeof value === "number" && Number.isFinite(value)) ||
+    (value instanceof Date && !Number.isNaN(value.getTime()))
+  );
+}
+
+/**
+ * Whether `value` has the shape `operator` takes: a list of scalars for
+ * `IN`/`NOT_IN`, exactly two for `BETWEEN`, a string pattern for
+ * `LIKE`/`ILIKE`, nothing in particular for the null checks, and one scalar
+ * otherwise. The wire grammar can only produce these shapes; a programmatic
+ * filter (GraphQL's `JSON`, an MCP tool argument) can hand in any JSON
+ * value, and an object here would reach the adapter as a parameter.
+ */
+function valueFitsOperator(operator: string, value: unknown): boolean {
+  switch (operator) {
+    case "IS_NULL":
+    case "IS_NOT_NULL":
+      return true;
+    case "IN":
+    case "NOT_IN":
+      return Array.isArray(value) && value.every(isFilterScalar);
+    case "BETWEEN":
+      return Array.isArray(value) && value.length === 2 && value.every(isFilterScalar);
+    case "LIKE":
+    case "ILIKE":
+      return typeof value === "string";
+    default:
+      return isFilterScalar(value);
+  }
+}
+
+/**
+ * A programmatic filter (`QueryContext.filter`) meets every rule the wire
+ * grammar enforces while parsing: a real node shape, a known operator, a
+ * value of the shape that operator takes, the field allowlist, the
+ * per-field operator map (`filter.fields`' map form), and every
+ * `filter.limits` cap. Typed input skips coercion, not security — it is not
+ * trusted because it arrived already structured.
+ */
 function validateExpression<Entity>(
   expression: FilterExpression<Entity>,
   config: ResolvedEntityConfig<Entity>,
@@ -1144,30 +1205,81 @@ function validateExpression<Entity>(
     });
     return;
   }
-  if (expression.kind === "condition") {
-    requireAllowlisted(expression.field as string, config, "filtering", issues);
-    const value = expression.value;
+  const node = expression as unknown as Record<string, unknown> | null;
+  if (typeof node !== "object" || node === null || Array.isArray(node)) {
+    issues.push({ field: "filter", code: "KAVO_QUERY_INVALID_VALUE", detail: "A filter node must be an object." });
+    return;
+  }
+  if (node["kind"] === "condition") {
+    const field = node["field"];
+    const operator = node["operator"];
+    if (typeof field !== "string") {
+      issues.push({ field: "filter", code: "KAVO_QUERY_INVALID_VALUE", detail: "A condition must name a field." });
+      return;
+    }
+    if (!requireAllowlisted(field, config, "filtering", issues)) {
+      return;
+    }
+    if (typeof operator !== "string" || !FILTER_OPERATORS.has(operator)) {
+      issues.push({
+        field,
+        code: "KAVO_QUERY_INVALID_OPERATOR",
+        detail: `Unknown filter operator '${String(operator)}' on field '${field}'.`,
+      });
+      return;
+    }
+    const allowed = config.filter.operators?.get(field);
+    if (allowed !== undefined && !allowed.has(operator as FilterCondition<Entity>["operator"])) {
+      issues.push({
+        field,
+        code: "KAVO_QUERY_INVALID_OPERATOR",
+        detail: `Operator '${operator}' is not permitted on field '${field}'.`,
+      });
+      return;
+    }
+    const value = node["value"];
+    if (!valueFitsOperator(operator, value)) {
+      issues.push({
+        field,
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: `The value for '${operator}' on field '${field}' has the wrong shape.`,
+      });
+      return;
+    }
     if (Array.isArray(value) && value.length > config.filter.limits.maxInValues) {
       issues.push({
-        field: expression.field as string,
+        field,
         code: "KAVO_QUERY_LIMIT_EXCEEDED",
-        detail: `'${expression.operator}' carries ${value.length} values; the maximum is ${config.filter.limits.maxInValues}.`,
+        detail: `'${operator}' carries ${value.length} values; the maximum is ${config.filter.limits.maxInValues}.`,
       });
     }
     if (
-      (expression.operator === "LIKE" || expression.operator === "ILIKE") &&
+      (operator === "LIKE" || operator === "ILIKE") &&
       typeof value === "string" &&
       value.length > config.filter.limits.maxLikePatternLength
     ) {
       issues.push({
-        field: expression.field as string,
+        field,
         code: "KAVO_QUERY_LIMIT_EXCEEDED",
-        detail: `'${expression.operator}' pattern is ${value.length} characters; the maximum is ${config.filter.limits.maxLikePatternLength}.`,
+        detail: `'${operator}' pattern is ${value.length} characters; the maximum is ${config.filter.limits.maxLikePatternLength}.`,
       });
     }
     return;
   }
-  for (const child of expression.children) {
+  if (node["kind"] !== "group" || typeof node["operator"] !== "string" || !LOGICAL_OPERATORS.has(node["operator"])) {
+    issues.push({
+      field: "filter",
+      code: "KAVO_QUERY_INVALID_VALUE",
+      detail: "A filter node must be a condition or an AND/OR/NOT group.",
+    });
+    return;
+  }
+  const children = node["children"];
+  if (!Array.isArray(children)) {
+    issues.push({ field: "filter", code: "KAVO_QUERY_INVALID_VALUE", detail: "A filter group must carry children." });
+    return;
+  }
+  for (const child of children as readonly FilterExpression<Entity>[]) {
     validateExpression(child, config, issues, depth + 1);
   }
 }
