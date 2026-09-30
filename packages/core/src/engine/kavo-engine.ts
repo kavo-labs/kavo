@@ -380,7 +380,22 @@ export class KavoEngine<Entity extends object> {
     context: KavoContext<Entity>,
   ): Promise<void> {
     const standard = isStandardOperationId(descriptor.id);
-    const policy = standard ? configView.policy[descriptor.id] : undefined;
+    // A synthesized relation operation (`replace<Rel>`/`add<Rel>`/
+    // `remove<Rel>`/`list<Rel>`, ADR-0029) reads or writes the parent row
+    // named by the route id, so it answers to that row's rules: its writes
+    // are governed as `updateOne`, its read as `findOne`. The policy sees
+    // that governing id as `operation`, so a rule keyed on "updateOne"
+    // cannot be sidestepped through a relation route.
+    const arrayMutation = (descriptor.meta as { arrayMutation?: { readonly action: string } } | undefined)
+      ?.arrayMutation;
+    const governing: StandardOperationId | undefined = standard
+      ? descriptor.id
+      : arrayMutation !== undefined
+        ? arrayMutation.action === "list"
+          ? "findOne"
+          : "updateOne"
+        : undefined;
+    const policy = governing !== undefined ? configView.policy[governing] : undefined;
     // `filter.apply` (ADR-0048) gates single-row writes the same way
     // `policy` gates them, and for the same reason a plain function can't
     // be inspected up front: `updateOne`/`patchOne`/`deleteOne`/
@@ -390,7 +405,9 @@ export class KavoEngine<Entity extends object> {
     // all — `filter.apply` already composed into their `NormalizedQueryContext`
     // before `context` was built (`KavoEngine.resolveReadApply`).
     const applyFilter =
-      standard && descriptor.kind === "write" && request.id !== null ? configView.filter.apply : undefined;
+      governing !== undefined && (descriptor.kind === "write" || arrayMutation !== undefined) && request.id !== null
+        ? configView.filter.apply
+        : undefined;
     if (policy === undefined && applyFilter === undefined) {
       // An operation with no resolved `policy.<id>` (and no mandatory
       // `filter.apply`) runs unrestricted — the opt-in posture every Kavo
@@ -411,7 +428,7 @@ export class KavoEngine<Entity extends object> {
     if (id !== null) {
       const filterRoot =
         applyFilter !== undefined
-          ? ((await applyFilter({ context, resource: context.entityName, operation: descriptor.id, params })) ?? null)
+          ? ((await applyFilter({ context, resource: context.entityName, operation: governing!, params })) ?? null)
           : null;
       const found = await context.repository.findOneById(
         id,
@@ -433,7 +450,7 @@ export class KavoEngine<Entity extends object> {
     }
 
     if (policy !== undefined) {
-      await this.assertPolicyAllows(policy, descriptor.id, configView, context, entity, params);
+      await this.assertPolicyAllows(policy, governing!, configView, context, entity, params);
     }
   }
 
