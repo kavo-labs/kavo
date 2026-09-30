@@ -422,7 +422,9 @@ function associateElement<Entity>(
 ): unknown {
   if ("idField" in spec && typeof value === "object" && value !== null && !Array.isArray(value)) {
     const id = (value as Record<string, unknown>)[spec.idField];
-    return id === undefined ? null : { [spec.idField]: id };
+    // A present id goes through `associate`'s scalar check, so an object id
+    // is a 400 here exactly as it is on a single-value reference.
+    return id === undefined ? null : associate(value, spec, relation, context);
   }
   return associate(value, spec, relation, context);
 }

@@ -1372,7 +1372,9 @@ export class KavoEngine<Entity extends object> {
     if (refs === null || refs === undefined) {
       return null;
     }
-    return (refs as readonly Record<string, unknown>[]).map((ref) => Object.values(ref)[0] as EntityId);
+    return (refs as readonly (Record<string, unknown> | null)[])
+      .filter((ref): ref is Record<string, unknown> => ref !== null)
+      .map((ref) => Object.values(ref)[0] as EntityId);
   }
 
   /**
@@ -1419,6 +1421,17 @@ export class KavoEngine<Entity extends object> {
    * since core never re-encodes what it already validated.
    */
   private coerceId(id: unknown): unknown {
+    // An id is a scalar (`EntityId`) and nothing else. A programmatic
+    // surface (MCP tool args, GraphQL JSON, application code) can hand in
+    // any JSON value, and an object reaching an adapter is read as query
+    // criteria — `Repository.delete({ ... })` deletes every matching row.
+    if (!((typeof id === "string" && id !== "") || (typeof id === "number" && Number.isFinite(id)))) {
+      throw QueryValidationException.single({
+        field: "id",
+        code: "KAVO_QUERY_INVALID_VALUE",
+        detail: "An id must be a non-empty string or a finite number.",
+      });
+    }
     const { metadata } = this.deps;
     const { compositeIdFields } = metadata;
     if (compositeIdFields !== undefined) {
