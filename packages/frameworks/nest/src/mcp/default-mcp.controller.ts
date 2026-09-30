@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, Res, type Type } from "@nestjs/common";
+import { Body, Controller, Post, Req, Res, UseGuards, type CanActivate, type Type } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { BaseKavoMcpController } from "./base-kavo-mcp.controller.js";
@@ -34,17 +34,24 @@ export const DEFAULT_MCP_PATH = "mcp";
  * attempt to support a non-Node-http platform adapter (e.g. Fastify's raw
  * request/response) for this controller.
  *
- * Carries no auth guard, interceptor, or other route-level protection of
- * its own — same as `createDefaultGraphQLController`. A guard attached to
- * an entity's `@Kavo`-decorated REST controller does **not** extend to
- * this controller; it is a separate, unguarded route exposing that
- * entity's full write surface (`createOne`/`updateOne`/`deleteOne`/etc.)
- * to anyone who can reach `path`. A consumer wanting auth, a different
- * method, or a different transport writes their own controller extending
- * `BaseKavoMcpController` instead and leaves `mcp` unset — this factory
- * and a custom controller are alternatives, never both at once.
+ * Carries exactly the `guards` it is handed (`mcp: { guards }`, issue #498)
+ * and no other route-level protection — same as
+ * `createDefaultGraphQLController`. They go on the class with `UseGuards`,
+ * so Nest resolves guard classes through DI like any controller's; applying
+ * it after the class body is safe because the real `@Controller` already
+ * made tsc emit `design:paramtypes`. With no
+ * guards the route is unguarded: a guard attached to an entity's
+ * `@Kavo`-decorated REST controller does **not** extend to it, so it exposes
+ * that entity's full write surface (`createOne`/`updateOne`/`deleteOne`/etc.)
+ * to anyone who can reach `path`. A consumer wanting a different method or
+ * transport writes their own controller extending `BaseKavoMcpController`
+ * instead and leaves `mcp` unset — this factory and a custom controller are
+ * alternatives, never both at once.
  */
-export function createDefaultMcpController(path: string = DEFAULT_MCP_PATH): Type<BaseKavoMcpController> {
+export function createDefaultMcpController(
+  path: string = DEFAULT_MCP_PATH,
+  guards: readonly (Type<CanActivate> | CanActivate)[] = [],
+): Type<BaseKavoMcpController> {
   @Controller(path)
   class DefaultMcpController extends BaseKavoMcpController {
     constructor(moduleRef: ModuleRef) {
@@ -78,5 +85,8 @@ export function createDefaultMcpController(path: string = DEFAULT_MCP_PATH): Typ
     }
   }
 
+  if (guards.length > 0) {
+    UseGuards(...guards)(DefaultMcpController);
+  }
   return DefaultMcpController;
 }

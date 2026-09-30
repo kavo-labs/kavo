@@ -165,6 +165,14 @@ graphql: true })` mounts `POST /graphql`; `{ graphql: { path: "api/graphql"
   left unset. A concrete controller (previous bullet) and this flag are
   alternatives — pick one per app, never both at the same path.
 
+  `{ graphql: { guards } }` (issue #498) hands `createDefaultGraphQLController(path,
+guards)` guards it applies to the generated class with `UseGuards`, still
+  inside the factory, so Nest resolves guard classes through DI in
+  `KavoModule`'s scope. Guards are a Nest concept and stay in `@kavo/nest`;
+  `@kavo/graphql` never learns about them (ADR-0016). Without guards the
+  route is unguarded, mutations included — a guard on an entity's REST
+  controller does not extend to it.
+
   `createDefaultGraphQLController` builds a **fresh class per call**, with
   real `@Controller`/`@Post`/`@HttpCode` decorator syntax closing over
   `path` — not a shared singleton, and not decorators applied as plain
@@ -175,7 +183,11 @@ graphql: true })` mounts `POST /graphql`; `{ graphql: { path: "api/graphql"
   `emitDecoratorMetadata` only emits `design:paramtypes` for a class it
   sees an actual `@decorator` applied to at compile time — calling the
   same decorator function afterward compiles fine but silently drops the
-  constructor's `ModuleRef` injection.
+  constructor's `ModuleRef` injection. The one decorator the factory does
+  apply after the class body is `UseGuards`, and only when `guards` is
+  non-empty: the real `@Controller` already makes tsc emit
+  `design:paramtypes`, and `UseGuards` writes guard metadata alone, so
+  applying it late costs nothing.
 
 ## 6. Lazy-loading an optional protocol dependency
 

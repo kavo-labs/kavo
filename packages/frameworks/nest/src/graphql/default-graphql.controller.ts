@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, type Type } from "@nestjs/common";
+import { Body, Controller, HttpCode, Post, UseGuards, type CanActivate, type Type } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import { BaseKavoGraphQLController } from "./base-kavo-graphql.controller.js";
 
@@ -20,12 +20,23 @@ export const DEFAULT_GRAPHQL_PATH = "graphql";
  * applied to, so the constructor's `ModuleRef` injection silently breaks
  * without it.
  *
- * A consumer wanting a different method, auth guard, or transport
- * (subscriptions, batched requests) writes their own controller extending
+ * Carries exactly the `guards` it is handed (`graphql: { guards }`, issue
+ * #498), applied with `UseGuards` so Nest resolves guard classes through DI.
+ * That one decorator is applied after the class body, which is safe: the
+ * real `@Controller` above already made tsc emit `design:paramtypes`, and
+ * `UseGuards` writes guard metadata only.
+ * With no guards the route is unguarded — mutations included — and a guard
+ * on an entity's REST controller does not extend to it.
+ *
+ * A consumer wanting a different method or transport (subscriptions,
+ * batched requests) writes their own controller extending
  * `BaseKavoGraphQLController` instead and leaves `graphql` unset — this
  * factory and a custom controller are alternatives, never both at once.
  */
-export function createDefaultGraphQLController(path: string = DEFAULT_GRAPHQL_PATH): Type<BaseKavoGraphQLController> {
+export function createDefaultGraphQLController(
+  path: string = DEFAULT_GRAPHQL_PATH,
+  guards: readonly (Type<CanActivate> | CanActivate)[] = [],
+): Type<BaseKavoGraphQLController> {
   @Controller(path)
   class DefaultGraphQLController extends BaseKavoGraphQLController {
     constructor(moduleRef: ModuleRef) {
@@ -39,5 +50,8 @@ export function createDefaultGraphQLController(path: string = DEFAULT_GRAPHQL_PA
     }
   }
 
+  if (guards.length > 0) {
+    UseGuards(...guards)(DefaultGraphQLController);
+  }
   return DefaultGraphQLController;
 }

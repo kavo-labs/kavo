@@ -35,7 +35,7 @@ Other protocols:
 | Skill             | Covers                                                                     |
 | ----------------- | -------------------------------------------------------------------------- |
 | `graphql-binding` | `@kavo/graphql` and its Nest binding                                       |
-| `mcp-binding`     | `@kavo/mcp` — the standard toolset, and the unguarded default `POST /mcp`  |
+| `mcp-binding`     | `@kavo/mcp` — the standard toolset, and guarding the default `POST /mcp`   |
 | `swagger`         | Optional `@nestjs/swagger` integration — what's auto-documented vs. manual |
 
 ## Install

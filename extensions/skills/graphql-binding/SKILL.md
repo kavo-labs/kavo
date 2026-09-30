@@ -122,6 +122,14 @@ Two ways to mount it, pick one per app/path — never both:
    schema's resolvers need every entity's service as a DI provider), even
    if `provideServices` itself is left unset.
 
+   ⚠️ **The route is unguarded unless you give it guards**, mutations
+   included; a guard on an entity's REST controller does not extend to it.
+   `{ graphql: { guards: [GraphQLAuthGuard] } }` puts guards on it with
+   `@UseGuards` (a denial stops the request before any resolver runs, `403` when the guard returns `false`). Guards must stay singleton-scoped. A guard
+   class's own dependencies must come from a global module or from
+   `forRootAsync({ imports })`. Either way `context.app` is `{}` over
+   GraphQL, so per-caller `policy`/`filter.apply` rules see no caller.
+
 `graphql` is an **optional peer** of `@kavo/nest` — it's lazy-loaded
 (`loadGraphQL()`, dynamic `import()`) so an app that never touches GraphQL
 never needs it installed, and `import { Kavo } from "@kavo/nest"` never
