@@ -171,3 +171,39 @@ describe("evaluateFilter — logical operators", () => {
     expect(evaluateFilter(expression, { status: "banned", age: 70 })).toBe(false);
   });
 });
+
+describe("evaluateFilter — LIKE matching cost", () => {
+  // Both the pattern (a subscriber's filter) and the value (a row's field)
+  // are client-controlled, and this runs on the event loop once per
+  // subscriber per publish. A regex translation backtracked exponentially on
+  // exactly this shape; the matcher must stay polynomial.
+  it("evaluates a pathological multi-% pattern against a long value in linear-ish time", () => {
+    const expression = filterOf({ "filter[name][like]": "%a%a%a%a%a%a%a%a%a%a%b" });
+    const started = performance.now();
+    expect(evaluateFilter(expression, { name: "a".repeat(200) })).toBe(false);
+    expect(evaluateFilter(expression, { name: `${"a".repeat(199)}b` })).toBe(true);
+    expect(performance.now() - started).toBeLessThan(100);
+  });
+
+  it.each([
+    ["%", "", true],
+    ["a%", "abc", true],
+    ["%c", "abc", true],
+    ["a_c", "abc", true],
+    ["a_c", "ac", false],
+    ["a%%c", "ac", true],
+    ["100\\%", "100%", true],
+    ["100\\%", "1000", false],
+    ["a\\_c", "a_c", true],
+    ["a\\_c", "abc", false],
+    ["%\\\\%", "a\\b", true],
+    ["a.c", "abc", false],
+    ["line%", "line\nbreak", true],
+  ])("LIKE %j against %j is %s", (pattern, value, expected) => {
+    expect(evaluateFilter(filterOf({ "filter[name][like]": pattern }), { name: value })).toBe(expected);
+  });
+
+  it("matches ILIKE case-insensitively", () => {
+    expect(evaluateFilter(filterOf({ "filter[name][ilike]": "%DUNE%" }), { name: "Children of Dune" })).toBe(true);
+  });
+});

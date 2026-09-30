@@ -94,9 +94,9 @@ function evaluateCondition<Entity>(
       return compareOrdered(itemValue, low, (a, b) => a >= b) && compareOrdered(itemValue, high, (a, b) => a <= b);
     }
     case "LIKE":
-      return likePattern(condition.value as string, false).test(String(itemValue));
+      return likeMatches(condition.value as string, String(itemValue), false);
     case "ILIKE":
-      return likePattern(condition.value as string, true).test(String(itemValue));
+      return likeMatches(condition.value as string, String(itemValue), true);
   }
 }
 
@@ -152,40 +152,70 @@ function normalizeForDateCompare(itemValue: unknown, filterValue: FilterScalar):
   return [itemValue, filterValue];
 }
 
+type LikeToken =
+  { readonly kind: "any" } | { readonly kind: "one" } | { readonly kind: "literal"; readonly char: string };
+
 /**
- * `LIKE`/`ILIKE` → `RegExp`. The parser passes the pattern through
- * unmodified (doc 05 §3: callers spell `%`/`_` themselves, and escape a
- * literal one with a backslash) — every other character is escaped as a
- * regex literal *before* `%`/`_` are translated, so a pattern containing
- * `(`, `[`, `+`, `*`, … can't reach `RegExp` unescaped. That matters here
- * more than it would for a one-off match: this runs once per candidate
- * subscriber, per publish, for the life of a long-lived connection.
+ * `LIKE`/`ILIKE` matching without `RegExp`. The parser passes the pattern
+ * through unmodified (doc 05 §3: callers spell `%`/`_` themselves, and escape
+ * a literal one with a backslash). A regex translation (`%` → `.*`) let a
+ * pattern such as `%a%a%a%a%b` backtrack exponentially against a long value,
+ * and both the pattern (a subscriber's filter) and the value (a row's field)
+ * are client-controlled — while this runs once per candidate subscriber, per
+ * publish, on the event loop. The two-pointer wildcard match below only ever
+ * backtracks to the most recent `%`, so it is `O(pattern × value)` at worst.
+ * Characters are compared per code point, as SQL compares characters.
  */
-function likePattern(pattern: string, caseInsensitive: boolean): RegExp {
-  let out = "";
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i] as string;
-    if (ch === "\\" && i + 1 < pattern.length) {
-      const next = pattern[i + 1] as string;
+function likeMatches(pattern: string, value: string, caseInsensitive: boolean): boolean {
+  const tokens = likeTokens(caseInsensitive ? pattern.toLowerCase() : pattern);
+  const chars = Array.from(caseInsensitive ? value.toLowerCase() : value);
+  let t = 0;
+  let c = 0;
+  let starToken = -1;
+  let starChar = 0;
+  while (c < chars.length) {
+    const token = tokens[t];
+    if (token !== undefined && token.kind === "any") {
+      starToken = t++;
+      starChar = c;
+    } else if (token !== undefined && (token.kind === "one" || token.char === chars[c])) {
+      t++;
+      c++;
+    } else if (starToken !== -1) {
+      t = starToken + 1;
+      c = ++starChar;
+    } else {
+      return false;
+    }
+  }
+  while (tokens[t]?.kind === "any") {
+    t++;
+  }
+  return t === tokens.length;
+}
+
+function likeTokens(pattern: string): readonly LikeToken[] {
+  const chars = Array.from(pattern);
+  const tokens: LikeToken[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i] as string;
+    if (ch === "\\" && i + 1 < chars.length) {
+      const next = chars[i + 1] as string;
       if (next === "%" || next === "_" || next === "\\") {
-        out += escapeRegExp(next);
+        tokens.push({ kind: "literal", char: next });
         i++;
         continue;
       }
     }
     if (ch === "%") {
-      out += ".*";
+      // Consecutive `%`s mean the same as one; collapsing them keeps the
+      // backtracking bookkeeping to one star per run.
+      if (tokens[tokens.length - 1]?.kind !== "any") {
+        tokens.push({ kind: "any" });
+      }
       continue;
     }
-    if (ch === "_") {
-      out += ".";
-      continue;
-    }
-    out += escapeRegExp(ch);
+    tokens.push(ch === "_" ? { kind: "one" } : { kind: "literal", char: ch });
   }
-  return new RegExp(`^${out}$`, caseInsensitive ? "i" : "");
-}
-
-function escapeRegExp(ch: string): string {
-  return ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return tokens;
 }
