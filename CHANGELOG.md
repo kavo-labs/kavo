@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.24.0](https://github.com/kavo-labs/kavo/compare/v0.23.4...v0.24.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** an app that associated a to-many relation through a body without configuration must now opt in.
+
+### Features
+
+* **docs:** generate a committed docs7/ site for Docs7 from the VitePress docs ([5702556](https://github.com/kavo-labs/kavo/commit/57025562f62a9b0a1bc65a7c5fc3dd23a5a4f82c))
+
+
+### Bug Fixes
+
+* **core:** make to-many relation association opt-in ([02c3abc](https://github.com/kavo-labs/kavo/commit/02c3abc83a04d38bf919922035221720097799bf))
+* **docs:** emit docs.json into the VitePress build so /docs.json is served ([3449339](https://github.com/kavo-labs/kavo/commit/344933925228248acb61547b56138c5daf56b98c))
+* **docs:** point docs.json at the Docs7 schema ([7b40f36](https://github.com/kavo-labs/kavo/commit/7b40f36f1bbeeb8e3fe2d6e5f37d8543f672acff))
+
+
+### Documentation
+
+* add an llms.txt hero button to the landing page ([#488](https://github.com/kavo-labs/kavo/issues/488)) ([7f80335](https://github.com/kavo-labs/kavo/commit/7f80335faa7167b400a75761f38e76f7be3d62aa))
+* add Mintlify docs.json mirroring the VitePress sidebar ([#487](https://github.com/kavo-labs/kavo/issues/487)) ([bbce06a](https://github.com/kavo-labs/kavo/commit/bbce06a361cb40154a51ae819b382712c093d2e1))
+* link llms.txt from the landing page ([#485](https://github.com/kavo-labs/kavo/issues/485)) ([d595cb0](https://github.com/kavo-labs/kavo/commit/d595cb02cbc6140b7e72b9945e7d3712a97f68e3))
+* make docs/ MDX-compatible so Docs7 can build it directly ([4279e1e](https://github.com/kavo-labs/kavo/commit/4279e1e45b0f4536e23b71c31551197e1c6898b5))
+* **security:** state supported versions as a policy instead of a pinned line ([b570951](https://github.com/kavo-labs/kavo/commit/b570951fc4304534eefa9d354b8d2275bc0be03a)), closes [#492](https://github.com/kavo-labs/kavo/issues/492)
+
+
+### Tests
+
+* **next-prisma:** add an attacker-input security e2e suite, and fix what it found ([dc2b11d](https://github.com/kavo-labs/kavo/commit/dc2b11d068644a96aecef68ac97cf7e30674d872)), closes [#493](https://github.com/kavo-labs/kavo/issues/493)
+
+
+### CI
+
+* add CodeQL code-scanning workflow ([9521c1b](https://github.com/kavo-labs/kavo/commit/9521c1b51c22856aa6a19bf5e0abbf551c6e5fdb)), closes [#507](https://github.com/kavo-labs/kavo/issues/507)
+* add OpenSSF Scorecard workflow and README badge ([60fcec9](https://github.com/kavo-labs/kavo/commit/60fcec973b067a5a5647d92f8c347ceed06a8610)), closes [#496](https://github.com/kavo-labs/kavo/issues/496)
+* collapse release-please extra-files into one glob ([c7a4750](https://github.com/kavo-labs/kavo/commit/c7a4750e9ebc9a5cd67c424e05206a6fe5396ae1))
+* remove the autoformat workflow ([4af5c40](https://github.com/kavo-labs/kavo/commit/4af5c4093940431f9576a0ad12c5a9582a3626e2)), closes [#496](https://github.com/kavo-labs/kavo/issues/496)
+* split release-please tag/publish hand-off and slow the polling schedule ([c2c29b5](https://github.com/kavo-labs/kavo/commit/c2c29b5832d546a9bdf9a84c10452ae383a7555d))
+
 ## [0.23.4](https://github.com/kavo-labs/kavo/compare/v0.23.3...v0.23.4) (2026-09-20)
 
 
