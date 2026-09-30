@@ -1,11 +1,18 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { DefaultKavoService, EntityId, OperationRegistry, StandardOperationId } from "@kavo/core";
+import type {
+  DefaultKavoService,
+  EntityId,
+  KavoExceptionShape,
+  OperationRegistry,
+  StandardOperationId,
+} from "@kavo/core";
 import {
   ConfigurationException,
   KavoException,
   QueryValidationException,
   STANDARD_OPERATION_IDS,
   renderMessage,
+  toProblemDetails,
 } from "@kavo/core";
 
 /**
@@ -15,8 +22,9 @@ import {
  *
  * Unlike GraphQL, nothing upstream enforces the declared `inputSchema` on a
  * tool's arguments, so the shape is checked here: anything but an array of
- * strings is the client's error (a `KAVO_QUERY_INVALID` result), not a
- * `TypeError` escaping `guarded` as a protocol-level failure.
+ * strings is the client's error (a `KAVO_QUERY_INVALID` result that names
+ * `sort`), not a `TypeError` that `guarded` could only report as a generic
+ * `KAVO_UNEXPECTED_ERROR`.
  */
 function parseSortArg(tokens: unknown): { field: string; direction: "asc" | "desc" }[] {
   if (tokens === undefined || tokens === null) {
@@ -153,13 +161,26 @@ async function guarded(fn: () => Promise<unknown>, exposeInternals: boolean): Pr
   try {
     return textResult(await fn());
   } catch (error) {
-    if (error instanceof KavoException) {
-      return { isError: true, content: [{ type: "text", text: `${error.code}: ${error.detail}` }] };
-    }
-    const detail = renderMessage("KAVO_UNEXPECTED_ERROR", {});
-    const internal = exposeInternals && error instanceof Error ? ` (${error.message})` : "";
-    return { isError: true, content: [{ type: "text", text: `KAVO_UNEXPECTED_ERROR: ${detail}${internal}` }] };
+    // `toProblemDetails` renders the detail exactly as REST does, so a
+    // cause (a wrapped driver error, or the non-Kavo error itself) appears
+    // under `exposeInternals` and nowhere else.
+    const shape: KavoExceptionShape = error instanceof KavoException ? error : unexpected(error);
+    const { code, detail } = toProblemDetails(shape, { exposeInternals });
+    return { isError: true, content: [{ type: "text", text: `${code}: ${detail}` }] };
   }
+}
+
+/** A non-Kavo error as `KAVO_UNEXPECTED_ERROR`, carrying it as the cause — as `@kavo/next` does. */
+function unexpected(error: unknown): KavoExceptionShape {
+  return {
+    code: "KAVO_UNEXPECTED_ERROR",
+    status: 500,
+    messageKey: "KAVO_UNEXPECTED_ERROR",
+    messageParams: {},
+    detail: renderMessage("KAVO_UNEXPECTED_ERROR", {}),
+    context: {},
+    cause: error,
+  };
 }
 
 const idSchema = { type: ["string", "number"] };

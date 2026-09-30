@@ -165,6 +165,26 @@ describe("crudTools", () => {
     expect((result.content[0] as { text: string }).text).toContain("secretColumn");
   });
 
+  it("shows a wrapped adapter error's cause only when the entity's exposeInternals is on, as REST does", async () => {
+    class FailingAdapter extends InMemoryTodoAdapter {
+      override async findOneById(): Promise<never> {
+        throw new Error("connection to db-internal-7 refused");
+      }
+    }
+    const text = async (exposeInternals: boolean) => {
+      const service = createKavo({ defaults: { errors: { exposeInternals } } } as never).createCrud(Todo, undefined, {
+        adapter: new FailingAdapter(),
+        metadata: todoMetadata,
+      });
+      const result = await find(crudTools({ name: "Todo", service }), "todo.findOne").handler({ id: 1 });
+      expect(result.isError).toBe(true);
+      return (result.content[0] as { text: string }).text;
+    };
+
+    expect(await text(false)).not.toContain("db-internal-7");
+    expect(await text(true)).toContain("db-internal-7");
+  });
+
   it("answers a malformed sort argument with a KAVO_QUERY_* result, not a runtime error", async () => {
     const { bindings } = setup();
 

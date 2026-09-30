@@ -109,6 +109,12 @@ argument shape nothing upstream validated) becomes an `isError` result too,
 on (issue #523). It used to propagate as a protocol-level error, but the SDK
 then put the raw `message` into the JSON-RPC error, leaking internals that
 REST's problem-details boundary (ADR-0009) keeps behind `exposeInternals`.
+Both kinds of result render their text through core's `toProblemDetails`,
+so a cause appears exactly as it would in a REST body. The flag is read from
+the bound entity's resolved settings, so an entity-scope
+`errors.exposeInternals` applies here; `@kavo/nest`'s exception filter reads
+only the module-wide default, so the two can differ for an entity that sets
+it on its own.
 
 ## 4. The Nest binding
 
