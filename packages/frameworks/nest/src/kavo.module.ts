@@ -1,4 +1,4 @@
-import type { DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
+import type { CanActivate, DynamicModule, ModuleMetadata, OnModuleInit, Provider, Type } from "@nestjs/common";
 import { Inject, Injectable, Module } from "@nestjs/common";
 import { APP_FILTER, DiscoveryModule, DiscoveryService } from "@nestjs/core";
 import type {
@@ -43,8 +43,26 @@ import {
   getKavoServiceToken,
 } from "./tokens.js";
 
-/** `graphql: true` mounts the default controller at `POST /graphql`; `{ path }` mounts it at `POST <path>` instead. */
-export type KavoGraphQLOption = boolean | { readonly path?: string };
+/**
+ * Guards for a zero-config route (issue #498): classes, resolved through DI
+ * in `KavoModule`'s scope (so a guard's own dependencies must come from a
+ * global module or from `forRootAsync`'s `imports`), or ready instances.
+ * Keep them singleton-scoped: a request-scoped guard makes Nest rebuild the
+ * controller per request, and the rebuilt one never collects its toolset or
+ * schema (it fails closed, not open).
+ */
+type KavoRouteGuards = readonly (Type<CanActivate> | CanActivate)[];
+
+/**
+ * `graphql: true` mounts the default controller at `POST /graphql`; `{ path }`
+ * mounts it at `POST <path>` instead, and `{ guards }` puts those guards on it.
+ *
+ * **Without `guards` the route carries no auth guard**, and a guard on an
+ * entity's REST controller does not extend to it: anyone who can reach it can
+ * run every entity's queries and mutations. An app-wide `APP_GUARD` does
+ * cover it.
+ */
+export type KavoGraphQLOption = boolean | { readonly path?: string; readonly guards?: KavoRouteGuards };
 
 /**
  * The entity-derived writable default `DefaultDeserializer` falls back to
@@ -80,8 +98,31 @@ function graphqlPathFrom(option: KavoGraphQLOption | undefined): string | undefi
   return option.path ?? DEFAULT_GRAPHQL_PATH;
 }
 
-/** `mcp: true` mounts the default controller at `POST /mcp`; `{ path }` mounts it at `POST <path>` instead. */
-export type KavoMcpOption = boolean | { readonly path?: string };
+/**
+ * `mcp: true` mounts the default controller at `POST /mcp`; `{ path }` mounts
+ * it at `POST <path>` instead, and `{ guards }` puts those guards on it.
+ *
+ * **Without `guards` the route carries no auth guard**, and a guard on an
+ * entity's REST controller does not extend to it: anyone who can reach it can
+ * call every entity's tools, writes included. An app-wide `APP_GUARD` does
+ * cover it.
+ */
+export type KavoMcpOption = boolean | { readonly path?: string; readonly guards?: KavoRouteGuards };
+
+/** The guards a `graphql`/`mcp` option asks for; none for `true`, `false` or unset. */
+function routeGuardsFrom(option: KavoGraphQLOption | KavoMcpOption | undefined): KavoRouteGuards {
+  return typeof option === "object" ? (option.guards ?? []) : [];
+}
+
+/** The zero-config controllers `forRoot` and `forRootAsync` mount, each with its guards applied. */
+function defaultControllers(graphql: KavoGraphQLOption | undefined, mcp: KavoMcpOption | undefined): Type[] {
+  const graphqlPath = graphqlPathFrom(graphql);
+  const mcpPath = mcpPathFrom(mcp);
+  return [
+    ...(graphqlPath !== undefined ? [createDefaultGraphQLController(graphqlPath, routeGuardsFrom(graphql))] : []),
+    ...(mcpPath !== undefined ? [createDefaultMcpController(mcpPath, routeGuardsFrom(mcp))] : []),
+  ];
+}
 
 function mcpPathFrom(option: KavoMcpOption | undefined): string | undefined {
   if (option === undefined || option === false) {
@@ -116,9 +157,11 @@ export interface KavoModuleAsyncOptions extends Pick<ModuleMetadata, "imports"> 
    * requirement `BaseKavoGraphQLController` always has) even if
    * `provideServices` itself is left unset.
    *
-   * **The mounted route carries no auth guard.** A guard on an entity's REST
-   * controller does not extend to it. Extend `BaseKavoGraphQLController`
-   * with your own guard instead if the GraphQL surface needs auth.
+   * **Unless you pass `guards`, the mounted route carries no auth guard.** A
+   * guard on an entity's REST controller does not extend to it, and it runs
+   * mutations. `{ guards: [MyAuthGuard] }` puts guards on it; so does an
+   * app-wide `APP_GUARD`, or your own controller extending
+   * `BaseKavoGraphQLController`.
    */
   graphql?: KavoGraphQLOption;
   /**
@@ -133,10 +176,11 @@ export interface KavoModuleAsyncOptions extends Pick<ModuleMetadata, "imports"> 
    * is left unset. Runs stateless — see `createDefaultMcpController`'s doc
    * comment.
    *
-   * **The mounted route carries no auth guard.** Anyone who can reach it can
-   * call every entity's tools, writes included; a guard on an entity's REST
-   * controller does not extend to it. Extend `BaseKavoMcpController` with
-   * your own guard instead if the MCP surface needs auth.
+   * **Unless you pass `guards`, the mounted route carries no auth guard.**
+   * Anyone who can reach it can call every entity's tools, writes included;
+   * a guard on an entity's REST controller does not extend to it.
+   * `{ guards: [MyAuthGuard] }` puts guards on it; so does an app-wide
+   * `APP_GUARD`, or your own controller extending `BaseKavoMcpController`.
    */
   mcp?: KavoMcpOption;
 }
@@ -185,18 +229,13 @@ export class KavoModule {
     } = {},
   ): DynamicModule {
     const { provideServices, graphql, mcp, ...kavoOptions } = options;
-    const graphqlPath = graphqlPathFrom(graphql);
-    const mcpPath = mcpPathFrom(mcp);
-    const serviceProviders =
-      provideServices === true || graphqlPath !== undefined || mcpPath !== undefined ? providersFromRegistry() : [];
+    const controllers = defaultControllers(graphql, mcp);
+    const serviceProviders = provideServices === true || controllers.length > 0 ? providersFromRegistry() : [];
     return {
       module: KavoModule,
       global: true,
       imports: [DiscoveryModule],
-      controllers: [
-        ...(graphqlPath !== undefined ? [createDefaultGraphQLController(graphqlPath)] : []),
-        ...(mcpPath !== undefined ? [createDefaultMcpController(mcpPath)] : []),
-      ],
+      controllers,
       providers: [
         { provide: KAVO_MODULE_OPTIONS, useValue: kavoOptions },
         {
@@ -213,20 +252,13 @@ export class KavoModule {
   }
 
   static forRootAsync(options: KavoModuleAsyncOptions): DynamicModule {
-    const graphqlPath = graphqlPathFrom(options.graphql);
-    const mcpPath = mcpPathFrom(options.mcp);
-    const serviceProviders =
-      options.provideServices === true || graphqlPath !== undefined || mcpPath !== undefined
-        ? providersFromRegistry()
-        : [];
+    const controllers = defaultControllers(options.graphql, options.mcp);
+    const serviceProviders = options.provideServices === true || controllers.length > 0 ? providersFromRegistry() : [];
     return {
       module: KavoModule,
       global: true,
       imports: [DiscoveryModule, ...(options.imports ?? [])],
-      controllers: [
-        ...(graphqlPath !== undefined ? [createDefaultGraphQLController(graphqlPath)] : []),
-        ...(mcpPath !== undefined ? [createDefaultMcpController(mcpPath)] : []),
-      ],
+      controllers,
       providers: [
         {
           provide: KAVO_MODULE_OPTIONS,
