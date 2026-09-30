@@ -4,45 +4,74 @@
 # must match and whose `// ok:` lines must not; CI runs both the fixtures and
 # a scan of `packages/`, and fails on any finding. A false positive gets a
 # narrowed rule, never a blanket `nosemgrep`.
+#
+# `paths.include` globs are anchored at the repository root (`/packages/...`),
+# so run the scan from the root: `semgrep scan --config .semgrep/kavo.yml
+# --error packages`. `semgrep --test` ignores `paths`, which is what lets the
+# fixtures under `.semgrep/tests/` match.
 rules:
-  # The #367 class: a SQL fragment built by string interpolation. TypeORM's
-  # query builder takes identifiers as raw SQL, so `@kavo/typeorm` does build
-  # fragments, but only from identifiers and generated bind-parameter names,
-  # never from a value. The allowlist below is that vocabulary, each name one
-  # the adapter derives itself rather than reads off the request:
+  # The #367 class: a SQL fragment built from strings. TypeORM's query builder
+  # takes identifiers as raw SQL, so `@kavo/typeorm` does build fragments, but
+  # only from identifiers and generated bind-parameter names, never from a
+  # value. The allowlist below is that vocabulary, each name one the adapter
+  # derives itself rather than reads off the request:
   #
-  #   column                        FilterTranslator.columnRef, which rejects
-  #                                 any segment that is not a plain identifier
+  #   column                        FilterTranslator.columnRef: an
+  #                                 `alias.column` whose every segment passed
+  #                                 the identifier check, or a @VirtualColumn's
+  #                                 SQL expression taken from entity metadata
   #   segment, alias                that same check, per path segment, and the
   #                                 join aliases built from it
-  #   this.alias, this.rootAlias,   aliases the adapter mints
-  #   parentAlias
+  #   this.alias, parentAlias       aliases the adapter mints
   #   parameter, keyword            generated `:pN` names and the IN / NOT IN
   #                                 keyword chosen from the AST operator
   #   this.idField, identifierField, entity metadata and resolved config
   #   deleteConfig.field,
   #   node.relation.name,
+  #   keyScratch(node.relation.name),
   #   relation, relatedIdField      (relation is resolved through
   #                                 relationMetadataOf before it is used)
   #
-  # Anything else interpolated, `${value}`, `${id}`, `${query.search}`, fails.
-  # Adding a name here is a review decision: it must be an identifier the
+  # Anything else, `${value}`, `${id}`, `${query.search}`, fails, whether it is
+  # interpolated, concatenated with `+`, `.concat()` or `.join()`, or built
+  # into a variable first and then passed. The matching is by name, so reusing
+  # a vocabulary name for an unvalidated input is itself a review finding, and
+  # adding a name here is a review decision: it must be an identifier the
   # adapter validated or derived from metadata.
+  #
+  # This is a syntactic rule. It does not see a fragment assembled across
+  # functions, and it cannot tell a validated identifier from a raw one passed
+  # with no string building at all (`qb.addOrderBy(sort.field)`); that is
+  # `columnRef`'s job and its rejection tests'. A green scan is not a proof.
   - id: kavo-no-template-string-into-query-builder
     languages: [typescript]
     severity: ERROR
     message: >-
-      String-built SQL fragment passed to a query-builder method with an interpolation outside the
-      vetted identifier vocabulary. Identifiers must come from entity metadata (validated), and
-      values must be bound parameters (see #367 and .semgrep/kavo.yml).
+      String-built SQL fragment passed to a query-builder method with a value outside the vetted
+      identifier vocabulary. Identifiers must come from entity metadata (validated), and values
+      must be bound parameters (see #367 and .semgrep/kavo.yml).
     patterns:
       - pattern-either:
           - pattern: $QB.$M(..., `...${$X}...`, ...)
           - pattern: $QB.$M(..., "..." + $X, ...)
           - pattern: $QB.$M(..., $X + "...", ...)
+          - pattern: $QB.$M(..., $S.concat(..., $X, ...), ...)
+          - pattern: $QB.$M(..., [..., $X, ...].join(...), ...)
+          - pattern: |
+              $V = `...${$X}...`;
+              ...
+              $QB.$M(..., $V, ...);
+          - pattern: |
+              $V = "..." + $X;
+              ...
+              $QB.$M(..., $V, ...);
+          - pattern: |
+              $V = $X + "...";
+              ...
+              $QB.$M(..., $V, ...);
       - metavariable-regex:
           metavariable: $M
-          regex: ^(where|andWhere|orWhere|orderBy|addOrderBy|having|andHaving|orHaving|select|addSelect|groupBy|addGroupBy|leftJoin|innerJoin|leftJoinAndSelect|innerJoinAndSelect|query)$
+          regex: ^(where|andWhere|orWhere|orderBy|addOrderBy|having|andHaving|orHaving|select|addSelect|groupBy|addGroupBy|from|distinctOn|leftJoin|innerJoin|leftJoinAndSelect|innerJoinAndSelect|leftJoinAndMapOne|leftJoinAndMapMany|innerJoinAndMapOne|innerJoinAndMapMany|loadRelationIdAndMap|loadRelationCountAndMap|query)$
       - metavariable-pattern:
           metavariable: $X
           patterns:
@@ -51,28 +80,30 @@ rules:
             - pattern-not: alias
             - pattern-not: parentAlias
             - pattern-not: this.alias
-            - pattern-not: this.rootAlias
             - pattern-not: parameter
             - pattern-not: keyword
             - pattern-not: this.idField
             - pattern-not: identifierField ?? this.idField
             - pattern-not: deleteConfig.field
             - pattern-not: node.relation.name
+            - pattern-not: keyScratch(node.relation.name)
             - pattern-not: relation
             - pattern-not: relatedIdField
     paths:
-      include: ["packages/orms/**/src/**"]
+      include: ["/packages/orms/**/src/**"]
 
   # `$where`, `$function` and `$accumulator` run JavaScript on the MongoDB
-  # server. `@kavo/mongoose` never needs them, so any mention in its source
-  # is a finding, whatever builds it.
+  # server. `@kavo/mongoose` never needs them, so any mention in its source,
+  # comments included, is a finding. Being a text match, it cannot see an
+  # operator name assembled at runtime; the adapter's structural defence is
+  # that every value sits under an explicit operator on an allowlisted field.
   - id: kavo-no-mongo-code-operators
     languages: [typescript]
     severity: ERROR
     message: Server-side JavaScript operators must never be built from request input.
     pattern-regex: \$(where|function|accumulator)\b
     paths:
-      include: ["packages/orms/mongoose/src/**"]
+      include: ["/packages/orms/mongoose/src/**"]
 
   - id: kavo-no-raw-prisma
     languages: [typescript]
@@ -82,7 +113,7 @@ rules:
       - pattern: $C.$queryRawUnsafe(...)
       - pattern: $C.$executeRawUnsafe(...)
     paths:
-      include: ["packages/orms/prisma/src/**"]
+      include: ["/packages/orms/prisma/src/**"]
 
   - id: kavo-no-dynamic-code
     languages: [typescript]
@@ -90,6 +121,8 @@ rules:
     message: Dynamic code evaluation in a published package.
     pattern-either:
       - pattern: eval(...)
+      - pattern: $G.eval(...)
       - pattern: new Function(...)
+      - pattern: Function(...)
     paths:
-      include: ["packages/*/src/**", "packages/*/*/src/**"]
+      include: ["/packages/*/src/**", "/packages/*/*/src/**"]

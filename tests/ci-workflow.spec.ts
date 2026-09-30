@@ -330,31 +330,56 @@ describe("the Scorecard workflow", () => {
 
 /**
  * Static analysis (issue #495). Both scanners exist to fail a PR, so the
- * regressions worth pinning are the quiet ones: a job deleted or set to
- * `continue-on-error`, a scan that stops passing `--error`, a trigger dropped,
- * a rule that loses its fixture, or an action left on a movable tag.
+ * regressions worth pinning are the quiet ones: a job deleted, skipped with
+ * `if:`, or set to `continue-on-error`; a step whose failure is swallowed or
+ * commented out; a scan that stops passing `--error`; a trigger dropped; a
+ * write scope added; a rule that loses its fixture or scans no file; or an
+ * action left on a movable tag.
  */
-describe("the Semgrep job", () => {
-  const body = new RegExp(`\\n  semgrep:\\n([\\s\\S]*?)(?=\\n  \\w[\\w-]*:\\n|$)`).exec(workflow)?.[1] ?? "";
-  const rules = readFileSync(resolve(REPO_ROOT, ".semgrep/kavo.yml"), "utf8");
-  const ruleIds = captures(rules, /^ {2}- id: ([\w-]+)$/gm);
 
-  it("exists in ci.yml and does not tolerate failure", () => {
+/** `source` with YAML comments removed, so prose can never satisfy or trip an assertion. */
+function stripComments(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => line.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, ""))
+    .filter((line) => line.trim() !== "")
+    .join("\n");
+}
+
+describe("the Semgrep job", () => {
+  const body = stripComments(
+    new RegExp(`\\n  semgrep:\\n([\\s\\S]*?)(?=\\n  \\w[\\w-]*:\\n|$)`).exec(workflow)?.[1] ?? "",
+  );
+  const rules = readFileSync(resolve(REPO_ROOT, ".semgrep/kavo.yml"), "utf8");
+  const ruleIds = captures(rules, /^ {2}- id: "?([\w-]+)"?\s*(?:#.*)?$/gm);
+
+  it("exists in ci.yml and can neither be skipped nor tolerate failure", () => {
     expect(body, "ci.yml declares a `semgrep` job").not.toBe("");
     expect(body).not.toMatch(/continue-on-error/);
+    expect(body, "a job- or step-level `if:` can silently skip the scan").not.toMatch(/^\s+if:/m);
+    expect(body, "`|| true` swallows a failing command").not.toMatch(/\|\|/);
   });
 
-  it("holds the rules to their fixtures, then fails on any finding in packages/", () => {
-    expect(body).toContain("semgrep --test");
-    expect(body).toMatch(/semgrep scan .*--config \.semgrep\/kavo\.yml.* --error packages$/m);
+  it("holds every rule to its fixture, one `semgrep --test` run per fixture", () => {
+    expect(body).toMatch(/^ {10}for fixture in \.semgrep\/tests\/\*\.ts; do$/m);
+    expect(body).toMatch(/^ {12}semgrep --test --metrics=off --config \.semgrep\/kavo\.yml "\$fixture"$/m);
+    expect(body).toMatch(/^ {10}done$/m);
+  });
+
+  it("then fails on any finding in packages/", () => {
+    expect(body).toMatch(/^ {8}run: semgrep scan --metrics=off --config \.semgrep\/kavo\.yml --error packages$/m);
   });
 
   it("is read-only and runs a digest-pinned image with a SHA-pinned checkout", () => {
     expect(body).toMatch(/^ {4}permissions:\n {6}contents: read$/m);
     expect(body).not.toMatch(/:\s*write\b/);
     expect(body).toMatch(/^ {6}image: semgrep\/semgrep@sha256:[0-9a-f]{64}$/m);
-    for (const [, uses] of body.matchAll(/uses: (\S+)/g)) {
-      expect(uses, `the semgrep job uses "${uses}", not an action pinned to a commit SHA`).toMatch(/@[0-9a-f]{40}$/);
+    const uses = captures(body, /uses: (\S+)/g);
+    expect(uses.length).toBeGreaterThan(0);
+    for (const action of uses) {
+      expect(action, `the semgrep job uses "${action}", not an action pinned to a commit SHA`).toMatch(
+        /@[0-9a-f]{40}$/,
+      );
     }
   });
 
@@ -362,8 +387,12 @@ describe("the Semgrep job", () => {
     expect(ruleIds.length).toBeGreaterThan(0);
     for (const id of ruleIds) {
       const fixture = readFileSync(resolve(REPO_ROOT, `.semgrep/tests/${id}.ts`), "utf8");
-      expect(fixture, `.semgrep/tests/${id}.ts has no \`// ruleid: ${id}\` line`).toContain(`// ruleid: ${id}\n`);
-      expect(fixture, `.semgrep/tests/${id}.ts has no \`// ok: ${id}\` line`).toContain(`// ok: ${id}\n`);
+      expect(fixture, `.semgrep/tests/${id}.ts has no \`// ruleid: ${id}\` line`).toMatch(
+        new RegExp(`^\\s*// ruleid: ${id}$`, "m"),
+      );
+      expect(fixture, `.semgrep/tests/${id}.ts has no \`// ok: ${id}\` line`).toMatch(
+        new RegExp(`^\\s*// ok: ${id}$`, "m"),
+      );
     }
   });
 
@@ -371,42 +400,77 @@ describe("the Semgrep job", () => {
     const fixtures = readdirSync(resolve(REPO_ROOT, ".semgrep/tests")).map((file) => file.replace(/\.ts$/, ""));
     expect(fixtures.sort()).toEqual([...ruleIds].sort());
   });
+
+  it("scopes every rule to a glob that matches at least one source file", () => {
+    // `semgrep --test` ignores `paths`, so a typo in an include glob would
+    // leave a rule scanning nothing while its fixture stays green.
+    const sources = readdirSync(resolve(REPO_ROOT, "packages"), { recursive: true })
+      .map((file) => `/packages/${String(file).split("\\").join("/")}`)
+      .filter((file) => file.endsWith(".ts") && !file.includes("/node_modules/"));
+    const globs = captures(rules, /^ {6}include: \[(.+)\]$/gm).flatMap((list) => captures(list, /"([^"]+)"/g));
+    expect(globs.length).toBeGreaterThanOrEqual(ruleIds.length);
+    for (const glob of globs) {
+      expect(glob, `include glob "${glob}" is not anchored at the repository root`).toMatch(/^\/packages\//);
+      const pattern = new RegExp(
+        `^${glob
+          .split("**/")
+          .map((part) =>
+            part
+              .split("**")
+              .map((piece) => piece.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*"))
+              .join(".*"),
+          )
+          .join("(?:.*/)?")}$`,
+      );
+      expect(
+        sources.some((file) => pattern.test(file)),
+        `include glob "${glob}" matches no file under packages/`,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("the CodeQL workflow", () => {
-  const codeql = readFileSync(resolve(REPO_ROOT, ".github/workflows/codeql.yml"), "utf8")
-    .split("\n")
-    .map((line) => line.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, ""))
-    .filter((line) => line.trim() !== "")
-    .join("\n");
+  const codeql = stripComments(readFileSync(resolve(REPO_ROOT, ".github/workflows/codeql.yml"), "utf8"));
   const topLevel = codeql.slice(0, codeql.search(/^jobs:/m));
   const jobs = codeql.slice(topLevel.length);
 
-  it("runs on pushes to main, on pull requests, and weekly", () => {
+  it("runs on pushes to main, on every pull request, and weekly", () => {
     expect(topLevel).toMatch(/^ {2}push:\n {4}branches: \[main\]$/m);
     expect(topLevel).toMatch(/^ {2}pull_request:$/m);
+    expect(topLevel, "a `pull_request` path filter would skip PRs that touch code").not.toMatch(
+      /^ {2}pull_request:\n {4}/m,
+    );
     expect(topLevel).toMatch(/^ {2}schedule:\n {4}- cron: "[^"]+"$/m);
   });
 
-  it("analyzes JavaScript/TypeScript with the security-extended queries", () => {
+  it("analyzes the published packages' JavaScript/TypeScript with the security-extended queries", () => {
     expect(jobs).toMatch(/^ {10}languages: javascript-typescript$/m);
     expect(jobs).toMatch(/^ {10}queries: security-extended$/m);
+    expect(jobs).toMatch(/^ {12}paths:\n {14}- packages$/m);
     expect(jobs).toContain("github/codeql-action/analyze@");
+    expect(jobs, "`upload` would stop results reaching the Security tab").not.toMatch(/^\s+upload:/m);
   });
 
-  it("does not tolerate failure", () => {
+  it("can neither be skipped nor tolerate failure", () => {
     expect(codeql).not.toMatch(/continue-on-error/);
+    expect(jobs, "a job- or step-level `if:` can silently skip the analysis").not.toMatch(/^\s+if:/m);
   });
 
-  it("is read-only at the workflow level and grants the job only what uploading needs", () => {
+  it("is read-only at the workflow level and grants each job only what uploading needs", () => {
     expect(topLevel).toMatch(/^permissions:\n {2}contents: read$/m);
     expect(topLevel).not.toMatch(/:\s*write\b/);
-    const block = /^ {4}permissions:\n((?: {6}.+\n?)+)/m.exec(jobs)?.[1] ?? "";
-    const scopes = block
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    expect(scopes.sort()).toEqual(["contents: read", "security-events: write"]);
+    const jobCount = captures(jobs, /^ {2}([\w-]+):$/gm).length;
+    const blocks = [...jobs.matchAll(/^ {4}permissions:\n((?: {6}.+\n?)+)/gm)].map(([, block]) => block ?? "");
+    expect(jobCount).toBeGreaterThan(0);
+    expect(blocks.length, "every CodeQL job declares its own permissions").toBe(jobCount);
+    for (const block of blocks) {
+      const scopes = block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      expect(scopes.sort()).toEqual(["contents: read", "security-events: write"]);
+    }
   });
 
   it("pins every action to a full commit SHA", () => {
