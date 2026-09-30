@@ -47,6 +47,8 @@ interface EntityWriter<Entity, Id> {
 
 Every method receives an already-validated, already-normalized query. Allowed, limits, and coercion were all enforced upstream by the engine, so an adapter **translates**, it never re-validates. `context: KavoContext<Entity>` carries the entity's resolved config, the active transaction handle (if any), and everything else a query needs to resolve consistently.
 
+**`findOneById` must honour `query.filter`.** When `query` is non-null, AND its filter onto the id match. It carries the entity's mandatory `filter.apply` row scope ([ADR-0048](/internals/adr/0048-apply-server-side-query-constraint)) on `findOne` and on the pre-fetch every id-addressed write runs, so an adapter that matches on the id alone serves and writes rows outside the caller's scope. The shared security conformance suite (`tools/security-testkit`) and each built-in adapter's `apply-scope.spec.ts` show the expected behavior.
+
 **"Missing vs. error" is the engine's decision, not the adapter's.** A reader returns `null` for a row that doesn't exist; it's the built-in handler that turns that `null` into `NotFoundException`. Don't throw from an adapter for a row that's simply absent.
 
 ## The other half: `EntityMetadata`

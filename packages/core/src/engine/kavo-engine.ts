@@ -271,10 +271,18 @@ export class KavoEngine<Entity extends object> {
     // include tree that has already been built.
     const serverApply =
       descriptor.kind === "read" ? await this.resolveReadApply(descriptor, request, configView, correlationId) : null;
-    const query =
+    const normalized =
       descriptor.kind === "read"
         ? this.normalizeQuery(request, descriptor, configView, serverApply, correlationId)
         : null;
+    // `findOne` addresses one row by id: `filter.default`, `search.default`
+    // and a client `filter[...]` shape a collection and have never narrowed
+    // it. Its id lookup carries the mandatory `filter.apply` scope alone
+    // (ADR-0048) — which every adapter's `findOneById` must honour.
+    const query =
+      normalized !== null && descriptor.id === "findOne"
+        ? { ...normalized, filter: { root: serverApply?.filter ?? null } }
+        : normalized;
     const context = createKavoContext<Entity>({
       operation: descriptor.id,
       config: configView,
@@ -479,7 +487,10 @@ export class KavoEngine<Entity extends object> {
   ): Promise<void> {
     const allowed = await policy({ context, entity, resource: context.entityName, operation, params });
     if (!allowed) {
-      this.denyForbidden(operation, configView, context);
+      // The denial names the operation the client called (`replaceTags`),
+      // not the one a relation operation is governed as (`updateOne`), the
+      // same id its 404 and every other error carry.
+      this.denyForbidden(context.operation as OperationId, configView, context);
     }
   }
 
