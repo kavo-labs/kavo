@@ -180,6 +180,16 @@ export class QueryNormalizer<Entity = unknown> {
     const clientSort = input.sort ?? [];
     for (const entry of clientSort) {
       requireAllowlisted(entry.field as string, config, "sorting", issues);
+      // The wire grammar can only spell `asc`/`desc`; a programmatic
+      // caller (GraphQL, MCP, application code) hands the direction in
+      // directly, so it is checked here instead of reaching an adapter.
+      if (entry.direction !== "asc" && entry.direction !== "desc") {
+        issues.push({
+          field: entry.field as string,
+          code: "KAVO_QUERY_INVALID_VALUE",
+          detail: `Sort direction '${String(entry.direction)}' for field '${String(entry.field)}' must be 'asc' or 'desc'.`,
+        });
+      }
     }
     let sort = clientSort.length > 0 ? clientSort : config.sortDefault;
     sort = prependServerSort(sort, serverApply?.sort);

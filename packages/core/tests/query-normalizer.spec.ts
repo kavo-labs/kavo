@@ -1026,3 +1026,25 @@ describe("QueryNormalizer — prototype keys on every non-filter axis", () => {
     expect(Object.getPrototypeOf({})).toBe(Object.prototype);
   });
 });
+
+describe("QueryNormalizer — programmatic sort direction", () => {
+  it.each(["ASC", "descending", "", "__proto__"])("rejects a sort direction of '%s' with a 400", (direction) => {
+    const issues = issuesOf(() =>
+      normalizer.normalizeInput({ sort: [{ field: "name", direction: direction as never }] }, config),
+    );
+    expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
+  it("accepts asc and desc", () => {
+    const query = normalizer.normalizeInput(
+      {
+        sort: [
+          { field: "name", direction: "asc" },
+          { field: "createdAt", direction: "desc" },
+        ],
+      },
+      config,
+    );
+    expect(query.sort.map((entry) => entry.direction)).toEqual(["asc", "desc"]);
+  });
+});
