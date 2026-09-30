@@ -88,9 +88,10 @@ The result is not always the entity — do not assume an item shape:
 
 A `KavoException` the engine raises becomes an **`isError: true`** tool
 result with `${code}: ${detail}` as the text, MCP's convention for an
-expected domain failure: the _call_ succeeded, the _operation_ didn't. An
-error the engine did not itself raise still propagates as a protocol-level
-error rather than being reframed as routine tool output.
+expected domain failure: the _call_ succeeded, the _operation_ didn't. Any
+other error becomes an `isError` result with `KAVO_UNEXPECTED_ERROR` and a
+generic message; its own message is appended only when `exposeInternals` is
+on, so a runtime error never leaks internals into the JSON-RPC response.
 
 ## Many entities
 
