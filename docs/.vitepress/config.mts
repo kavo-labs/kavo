@@ -214,6 +214,7 @@ const config = defineConfig({
             ],
           },
           { text: "Wiring Your Own Auth", link: "/guides/wiring-your-own-auth" },
+          { text: "Security", link: "/guides/security" },
           { text: "Error Handling", link: "/guides/error-handling" },
           { text: "Custom Adapter", link: "/guides/custom-adapter" },
           { text: "Benchmarks", link: "/guides/benchmarks" },
