@@ -218,6 +218,25 @@ describe("createKavoGraphQLSchema", () => {
     expect(adapter.lastQuery?.filter.root).toEqual({ kind: "condition", field: "done", operator: "EQ", value: true });
   });
 
+  it("rejects a filter or sort field outside the entity's allowlist before the adapter runs", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    const service = createKavo().createCrud(
+      Todo,
+      { filter: { fields: ["title"] }, sort: { fields: ["title"] } } as never,
+      { adapter, metadata: todoMetadata },
+    );
+    const schema = createKavoGraphQLSchema({ name: "Todo", service, itemType: TodoType });
+
+    for (const args of [
+      `filter: { kind: "condition", field: "done", operator: "EQ", value: true }`,
+      `sort: ["-done"]`,
+    ]) {
+      const result = await graphql({ schema, source: `query { todos(${args}) { total } }` });
+      expect(result.errors?.[0]?.message).toBe("The request query is invalid.");
+    }
+    expect(adapter.lastQuery).toBeNull();
+  });
+
   it("reads an unprefixed sort token as ascending, alongside a '-' descending one", async () => {
     // The `-` prefix is the only descending spelling, so its absence is
     // what carries "ascending". The MCP binding duplicates this parser

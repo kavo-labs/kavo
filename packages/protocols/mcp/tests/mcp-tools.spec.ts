@@ -84,6 +84,39 @@ describe("crudTools", () => {
     expect(adapter.lastQuery?.filter.root).toEqual({ kind: "condition", field: "done", operator: "EQ", value: true });
   });
 
+  it.each([
+    ["a bare string", "title"],
+    ["a non-string element", ["title", 7]],
+    ["an object", { title: "asc" }],
+  ])("answers findMany with %s as sort with an isError result, never a thrown TypeError", async (_label, sort) => {
+    const { adapter, bindings } = setup();
+    const result = await find(bindings, "todo.findMany").handler({ sort });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toMatch(/^KAVO_QUERY_INVALID/);
+    expect(adapter.lastQuery).toBeNull();
+  });
+
+  it("rejects a findMany filter or sort field outside the entity's allowlist", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    const service = createKavo().createCrud(
+      Todo,
+      { filter: { fields: ["title"] }, sort: { fields: ["title"] } } as never,
+      { adapter, metadata: todoMetadata },
+    );
+    const findMany = find(crudTools({ name: "Todo", service }), "todo.findMany");
+
+    const filtered = await findMany.handler({
+      filter: { kind: "condition", field: "done", operator: "EQ", value: true },
+    });
+    const sorted = await findMany.handler({ sort: ["-done"] });
+
+    for (const result of [filtered, sorted]) {
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toMatch(/^KAVO_QUERY_INVALID/);
+    }
+    expect(adapter.lastQuery).toBeNull();
+  });
+
   it("reads an unprefixed sort token as ascending, alongside a '-' descending one", async () => {
     // The `-` prefix is the only descending spelling, so the absence of one
     // is what carries "ascending". Testing only `-title` leaves the default
