@@ -128,11 +128,15 @@ export function mapDriverError(error: unknown, context: ErrorContext): KavoExcep
 
     const invalidInput = code === "22P02"; // Postgres invalid_text_representation
     if (invalidInput) {
+      // A Kavo-authored detail, never the driver's: Postgres's message names
+      // the column's database type (an enum's type name, `uuid`) and echoes
+      // the rejected value, and issues are serialized regardless of
+      // `exposeInternals`. The driver error stays on `cause` for logs.
       return QueryValidationException.single(
         {
           field: "id",
           code: "KAVO_QUERY_INVALID_VALUE",
-          detail: message,
+          detail: "A value in the request is not valid for its column's type.",
         },
         { context, cause: error },
       );

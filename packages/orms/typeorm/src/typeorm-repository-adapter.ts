@@ -21,7 +21,7 @@ import {
   hasKeyset,
   readFilter,
 } from "@kavo/core";
-import type { DataSource, DeepPartial, ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
+import type { DataSource, DeepPartial, EntityManager, ObjectLiteral, Repository, SelectQueryBuilder } from "typeorm";
 import { In } from "typeorm";
 import { FilterTranslator } from "./filter-translator.js";
 import { mapDriverError } from "./error-mapping.js";
@@ -810,6 +810,27 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   /**
+   * The parent row a relation primitive mutates, inside that primitive's
+   * transaction and scoped to live rows (`scopeToLive`) — or a 404. Shared by
+   * `patchRelation` and `add`/`removeRelationMember`, so a soft-deleted parent
+   * answers the same through each of them.
+   */
+  private async findLiveParent(manager: EntityManager, id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+    const existingQb = manager.getRepository(this.entity).createQueryBuilder(this.alias);
+    if (this.compositeIdFields === null) {
+      existingQb.where(`${this.alias}.${this.idField} = :id`, { id });
+    } else {
+      existingQb.where(this.compositeCriteria(id) as ObjectLiteral);
+    }
+    this.scopeToLive(existingQb, context, false, false);
+    const existing = await existingQb.getOne();
+    if (existing === null) {
+      throw this.notFound(id, context);
+    }
+    return existing;
+  }
+
+  /**
    * `arrayMutation`'s `jsonPatch` strategy (ADR-0029's jsonPatch
    * amendment): incremental add/remove of one relation's membership.
    * Unlike `replaceRelation` above — whose read and write are two separate
@@ -827,10 +848,11 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   ): Promise<Entity> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        const existing = await manager.getRepository(this.entity).findOne({ where: this.findOneCriteria(id) as never });
-        if (existing === null) {
-          throw this.notFound(id, context);
-        }
+        // Soft-delete-scoped like every other relation primitive: a plain
+        // marker column gets no automatic exclusion from TypeORM's
+        // repository API, so a bare `findOne` would leave a soft-deleted
+        // parent's membership writable through a JSON Patch.
+        await this.findLiveParent(manager, id, context);
 
         const relationMetadata = manager.connection
           .getMetadata(this.entity)
@@ -985,17 +1007,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // Soft-delete-scoped, the same as `replaceRelation`'s own existence
         // check (`byId`) — a soft-deleted parent must 404 here too, not
         // stay reachable through `add`/`removeRelationMember`.
-        const existingQb = manager.getRepository(this.entity).createQueryBuilder(this.alias);
-        if (this.compositeIdFields === null) {
-          existingQb.where(`${this.alias}.${this.idField} = :id`, { id });
-        } else {
-          existingQb.where(this.compositeCriteria(id) as ObjectLiteral);
-        }
-        this.scopeToLive(existingQb, context, false, false);
-        const existing = await existingQb.getOne();
-        if (existing === null) {
-          throw this.notFound(id, context);
-        }
+        await this.findLiveParent(manager, id, context);
 
         const relationMetadata = this.relationMetadataOf(manager, relation, context);
         const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;
