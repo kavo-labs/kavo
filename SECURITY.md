@@ -33,12 +33,12 @@ You should receive an initial response within **48 hours**. We will work with yo
 
 ## Security Hardening
 
-Kavo includes several built-in security measures:
+Kavo includes several built-in security measures. Each is exercised on every ORM adapter and protocol surface by the shared [security conformance suite](tools/security-testkit/README.md), under the case named in brackets:
 
-- **Mass assignment protection** — only declared DTO fields are accepted; generated/primary-key columns are stripped automatically.
-- **Filter/sort/select allowlists** — clients can only query fields marked `filterable`, `sortable`, or `selectable`.
-- **No raw query exposure** — the query grammar is AST-based and does not concatenate user input into SQL/NoSQL strings.
-- **JSON-only responses** — no HTML sink; responses are always `application/json`.
+- **Mass assignment protection** — only declared DTO fields are accepted; generated/primary-key columns are stripped automatically. [`create-strips-protected-fields`, `patch-keeps-primary-key`]
+- **Filter/sort/select allowlists** — clients can only query fields marked `filterable`, `sortable`, or `selectable`. [`filter-hidden-column`, `sort-hidden-column`, `select-hidden-column`, `response-hides-column`]
+- **No raw query exposure** — the query grammar is AST-based and does not concatenate user input into SQL/NoSQL strings. [`filter-identifier-injection`, `filter-value-literal`, `filter-prototype-key`]
+- **JSON-only responses** — no HTML sink; responses are always `application/json`. [`error-body-hides-internals`; the per-example `security.e2e.spec.ts` suites pin the content type]
 
 ## Scope
 
