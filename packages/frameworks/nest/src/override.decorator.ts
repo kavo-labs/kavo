@@ -61,7 +61,8 @@ export interface OverrideMetadata {
  * | Method decorators you added | yes       | `@UseGuards`, `@SetMetadata`, `@Version`, … are copied onto the wrapper   |
  * | `If-Match` → `412`          | **no**    | evaluated in the engine; reaches it only if you forward `preconditions`   |
  * | `If-None-Match` → `304`     | not Kavo's | the host framework answers it off the tag above; see below               |
- * | Row scoping, auth           | n/a       | never Kavo's; that is why you are overriding                              |
+ * | `policy`, `filter.apply`    | if called | enforced by the engine; reached when you delegate to it with `context.app` |
+ * | Your own auth code          | n/a       | whatever the override adds, on this route only (see below)                |
  *
  * Authorization written into an override protects **this REST route only**.
  * The GraphQL and MCP surfaces (`graphql`/`mcp`, `BaseKavoGraphQLController`,

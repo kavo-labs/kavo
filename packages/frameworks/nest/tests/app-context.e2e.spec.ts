@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import request from "supertest";
 import { Controller, UseGuards, type CanActivate, type ExecutionContext, type INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { KavoAppContext, KavoContext, OperationHandler, WireQuery } from "@kavo/core";
+import type { KavoAppContext, KavoContext, OperationHandler, RequestPreconditions, WireQuery } from "@kavo/core";
 import { ConfigurationException } from "@kavo/core";
 import type { KavoAppContextExtractor, KavoAppContextRequest } from "@kavo/nest";
 import { Kavo, KavoModule, Override, boundKavoAppContext, boundKavoService } from "@kavo/nest";
@@ -191,6 +191,42 @@ describe("boundKavoAppContext — the methods Kavo does not generate", () => {
 
     const item = await request(server()).get("/todos/1").set("x-user", "u-7").expect(200);
     expect(item.body.viewer).toBe("anonymous");
+  });
+
+  // The `engine.execute` form `@Override`'s own doc comment documents, run
+  // as written: a policy that reads `context.app` must see the caller, or an
+  // override that copies the example silently evaluates it against `{}`.
+  @Kavo(Todo, {
+    policy: ({ context, operation }) => operation !== "updateOne" || (context.app as { id?: string }).id === "u-7",
+  })
+  @Controller("todos")
+  @UseGuards(new HeaderUserGuard())
+  class ExecutingOverrideController {
+    @Override()
+    async updateOne(
+      id: string,
+      body: Partial<Todo>,
+      preconditions: RequestPreconditions | null,
+      incoming: KavoAppContextRequest,
+    ) {
+      return boundKavoService<Todo>(this).engine.execute({
+        operation: "updateOne",
+        id,
+        body: body as never,
+        query: null,
+        options: { app: boundKavoAppContext(this, incoming) },
+        preconditions,
+      });
+    }
+  }
+
+  it("lets the documented engine.execute override form reach a policy with the caller's app context", async () => {
+    await bootstrap(ExecutingOverrideController, fromRequestUser);
+    await request(server()).post("/todos").send({ title: "x" }).expect(201);
+
+    await request(server()).put("/todos/1").set("x-user", "u-7").send({ title: "mine" }).expect(200);
+    await request(server()).put("/todos/1").set("x-user", "u-8").send({ title: "theirs" }).expect(403);
+    expect(adapter.rows[0]).toMatchObject({ title: "mine" });
   });
 
   it("throws on an object the binder never visited, rather than answering an empty context", () => {
