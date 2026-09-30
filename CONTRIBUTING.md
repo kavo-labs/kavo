@@ -110,6 +110,33 @@ test that forces its way into one of those asserts the shape of the code
 rather than any behavior. Raise the numbers when real coverage rises; don't
 chase the gap.
 
+### Fuzzing
+
+Two suites in `packages/core/tests/` are property-based rather than
+example-based: `fuzz-query-normalizer.spec.ts` throws generated query-string
+maps at the wire normalizer, and `fuzz-json-patch.spec.ts` throws generated
+documents at the `jsonPatch` body parser. Each asserts invariants that must
+hold for every input — only a Kavo exception, never a crash; no prototype
+pollution; nothing outside the configured allowlists; no page over
+`maxLimit`. They use [fast-check](https://fast-check.dev/), a root
+devDependency only, and run inside `pnpm test` like everything else.
+
+CI sets `FC_SEED=42`, so a red run is reproducible. When one fails, fast-check
+prints the shrunk counterexample and the seed. Replay it with:
+
+```bash
+FC_SEED=42 pnpm vitest run -t fuzzed
+```
+
+Without `FC_SEED`, every local run explores fresh inputs, which is how new
+counterexamples get found. Loop over a few seeds (`for s in 1 2 3; do
+FC_SEED=$s pnpm vitest run -t fuzzed; done`) when you change the grammar or
+the parser. A counterexample becomes a named, example-based test in the
+ordinary spec (`query-normalizer.spec.ts`, `json-patch.spec.ts`) before it is
+fixed, so the regression is pinned independently of any seed. One that is
+exploitable against a released version goes through the private advisory
+route in [`SECURITY.md`](SECURITY.md), not a public issue.
+
 Note that `typecheck` is a hand-maintained list — the root script names each
 project's `tsconfig.tests.json` explicitly, with no glob and no discovery. **If
 you add a package, or add a first `tests/` directory to one, append it to the

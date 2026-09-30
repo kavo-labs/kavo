@@ -15,6 +15,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Pins the property-based fuzz suites (issue #494) so a CI failure replays
+# locally with the same seed. Workflow-wide because `test`, `test (bun)` and
+# `coverage` all run them. Unset locally, every run explores fresh inputs.
+env:
+  FC_SEED: "42"
+
 # `pnpm check` runs the whole gate as one command locally. CI splits it in
 # two — `build` (compile, types, boundaries, lint) and `test` — because a
 # status badge can only report a job, never a step: one combined job can say
