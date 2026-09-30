@@ -180,6 +180,11 @@ describe("QueryNormalizer — wire params", () => {
 describe("QueryNormalizer — search[...]", () => {
   const searchEnabled = resolveEntityConfig(userMetadata, { search: {} }, undefined);
 
+  it("rejects a search term containing a NUL character with a 400", () => {
+    const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada\u0000" }, searchEnabled));
+    expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_INVALID_VALUE" });
+  });
+
   it("rejects search[query] when search is false (the default)", () => {
     const issues = issuesOf(() => normalizer.normalizeWire({ "search[query]": "ada" }, config));
     expect(issues[0]).toMatchObject({ field: "search[query]", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });

@@ -56,6 +56,19 @@ describe("coerceScalar — locale-independent wire coercion", () => {
     }
   });
 
+  it.each(["string", "number", "enum"] as const)(
+    "rejects a %s value containing a NUL character with a 400, never passing it to the database",
+    (kind) => {
+      expect(issueOf(coerce(kind, "alpha\u0000", { enumValues: ["alpha\u0000"] })).code).toBe(
+        "KAVO_QUERY_INVALID_VALUE",
+      );
+    },
+  );
+
+  it("rejects a NUL character on a relation path too, where no column metadata coerces the value", () => {
+    expect(issueOf(coerceScalar("a\u0000b", "owner.name", undefined)).code).toBe("KAVO_QUERY_INVALID_VALUE");
+  });
+
   it("accepts exactly true/false/1/0 for booleans", () => {
     expect(coerce("boolean", "true")).toBe(true);
     expect(coerce("boolean", "1")).toBe(true);
