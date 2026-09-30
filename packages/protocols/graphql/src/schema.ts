@@ -234,6 +234,29 @@ export function crudFields<
   requireOffsetPageable(name, paginationStrategyOf(service), "GraphQL");
   const fieldName = lowerFirst(name);
   const idArgs = { id: { type: new GraphQLNonNull(GraphQLInt) } };
+  const registry = registryOf(service);
+
+  // `meta.routes.enabled: false` marks an operation service-only: callable
+  // from application code, never exposed to a remote client. REST gives it no
+  // route and MCP no tool (issue #531 brings GraphQL in line). The two reads
+  // every entity gets are simply left off; an explicit opt-in below that
+  // names a service-only operation is a bootstrap error instead, so the
+  // opt-in and the marker can never silently disagree.
+  const serviceOnly = new Set<string>(
+    (registry?.all() ?? [])
+      .filter((descriptor) => (descriptor.meta as { routes?: { enabled?: boolean } }).routes?.enabled === false)
+      .map((descriptor) => descriptor.id),
+  );
+  const refuseServiceOnly = (operation: string, option: string): void => {
+    if (serviceOnly.has(operation)) {
+      throw new ConfigurationException(
+        name,
+        option,
+        `'${operation}' is service-only on this entity (meta.routes.enabled: false), so it cannot be ` +
+          `exposed on the GraphQL schema; drop '${option}' from registerKavoGraphQLTypes, or expose the operation`,
+      );
+    }
+  };
 
   const listType = new GraphQLObjectType({
     name: `${name}List`,
@@ -245,13 +268,16 @@ export function crudFields<
     },
   });
 
-  const query: Record<string, GraphQLFieldConfig<unknown, unknown>> = {
-    [fieldName]: {
+  const query: Record<string, GraphQLFieldConfig<unknown, unknown>> = {};
+  if (!serviceOnly.has("findOne")) {
+    query[fieldName] = {
       type: itemType,
       args: idArgs,
       resolve: (_root: unknown, args: { id: number }) => service.findOne(args.id as Id),
-    },
-    [`${fieldName}s`]: {
+    };
+  }
+  if (!serviceOnly.has("findMany")) {
+    query[`${fieldName}s`] = {
       type: new GraphQLNonNull(listType),
       args: {
         limit: { type: GraphQLInt },
@@ -269,10 +295,24 @@ export function crudFields<
           sort: parseSortArg(args.sort),
           filter: args.filter ?? null,
         } as never),
-    },
-  };
+    };
+  }
 
   const mutation: Record<string, GraphQLFieldConfig<unknown, unknown>> = {};
+
+  const optIns: readonly (readonly [boolean, string, string])[] = [
+    [createInputType !== undefined, "createOne", "createInputType"],
+    [updateInputType !== undefined, "updateOne", "updateInputType"],
+    [patchInputType !== undefined, "patchOne", "patchInputType"],
+    [deleteOne === true, "deleteOne", "deleteOne"],
+    [restoreOne === true, "restoreOne", "restoreOne"],
+    [purgeOne === true, "purgeOne", "purgeOne"],
+  ];
+  for (const [named, operation, option] of optIns) {
+    if (named) {
+      refuseServiceOnly(operation, option);
+    }
+  }
 
   if (createInputType !== undefined) {
     mutation[`create${name}`] = {
@@ -329,7 +369,6 @@ export function crudFields<
   }
 
   const standardIds: ReadonlySet<StandardOperationId> = new Set(STANDARD_OPERATION_IDS);
-  const registry = registryOf(service);
   for (const [id, custom] of Object.entries(customOperations ?? {})) {
     if (standardIds.has(id as StandardOperationId)) {
       throw new ConfigurationException(
@@ -355,6 +394,7 @@ export function crudFields<
         `'${id}' is disabled on this entity — a disabled operation cannot be exposed on the GraphQL schema`,
       );
     }
+    refuseServiceOnly(id, `operations.${id}`);
     const hasDeclaredOutput = (descriptor.schemaOutput ?? null) !== null;
     if (!hasDeclaredOutput) {
       throw new ConfigurationException(
@@ -431,6 +471,17 @@ export function createKavoGraphQLSchema<
   ListDto,
 >(options: KavoGraphQLOptions<Entity, Id, CreateDto, UpdateDto, PatchDto, ItemDto, ListDto>): GraphQLSchema {
   const { query, mutation } = crudFields(options);
+  if (Object.keys(query).length === 0) {
+    // Only reachable when both reads are service-only and no custom read is
+    // exposed; an empty `Query` type is invalid GraphQL, so fail here with
+    // the fix rather than on the first request.
+    throw new ConfigurationException(
+      options.name,
+      "operations",
+      "every read is service-only, so the GraphQL schema would have an empty Query type — expose " +
+        "findOne or findMany, or add a custom read to registerKavoGraphQLTypes' 'operations'",
+    );
+  }
   return new GraphQLSchema({
     query: new GraphQLObjectType({ name: "Query", fields: query }),
     mutation:

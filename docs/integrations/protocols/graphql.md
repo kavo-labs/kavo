@@ -51,6 +51,8 @@ Each field is opt-in per entity. Omitting an option leaves the field out of the 
 | `Mutation.restoreOwner: Owner`              | `restoreOne: true` |
 | `Mutation.purgeOwner: Boolean`              | `purgeOne: true`   |
 
+An operation marked service-only (`meta.routes.enabled: false`) never reaches the schema, as it gets no REST route or MCP tool: a service-only `findOne`/`findMany` is left off `Query`, and naming a service-only operation here (`deleteOne: true`, an input type, or an `operations` entry) fails at bootstrap with a `ConfigurationException`.
+
 `filter` and `sort` on `Query.owners` use Kavo's own grammar, not a generated per-entity input type. `sort` takes REST's `-field` string convention. `filter` takes a raw filter-AST `JSON` scalar (`{ kind: "condition", field, operator, value }`, operators in `SCREAMING_SNAKE`) rather than a typed input object.
 
 ## Custom operations
