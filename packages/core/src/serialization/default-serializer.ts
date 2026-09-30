@@ -363,7 +363,10 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // graceful fallback the id exclusion already makes.
     const softDeleteField = explicit === null ? (context.config?.delete?.field ?? null) : null;
     const source = raw as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
+    // Entries, not `result[key] = …`: a writable name like `__proto__` would
+    // run the prototype setter and re-parent the result instead of becoming a
+    // key. `Object.fromEntries` defines every name as an own property (#533).
+    const result: [string, unknown][] = [];
     for (const key of allowed) {
       if (key === softDeleteField) {
         continue;
@@ -378,9 +381,9 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
         continue;
       }
       const spec = this.relationIdFields.get(key)?.();
-      result[key] = spec === undefined ? source[key] : associate(source[key], spec, key, context);
+      result.push([key, spec === undefined ? source[key] : associate(source[key], spec, key, context)]);
     }
-    return result as Shape;
+    return Object.fromEntries(result) as Shape;
   }
 }
 
@@ -470,7 +473,8 @@ function associate<Entity>(
   const { compositeIdFields } = spec;
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
+    // Entries for the same reason as `deserialize` above (#533).
+    const result: [string, unknown][] = [];
     for (const field of compositeIdFields) {
       const fieldValue = record[field];
       if (fieldValue === undefined) {
@@ -493,9 +497,9 @@ function associate<Entity>(
           },
         });
       }
-      result[field] = fieldValue;
+      result.push([field, fieldValue]);
     }
-    return result;
+    return Object.fromEntries(result);
   }
   if (typeof value === "string") {
     const parts = decodeCompositeId(value, compositeIdFields.length);

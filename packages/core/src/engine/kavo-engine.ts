@@ -1169,12 +1169,16 @@ export class KavoEngine<Entity extends object> {
     if (forced === undefined) {
       return;
     }
-    if (descriptor.id !== "patchOne") {
-      Object.assign(body, forced);
-      return;
-    }
     for (const [field, value] of Object.entries(forced)) {
-      if (Object.hasOwn(body, field)) {
+      if (descriptor.id === "patchOne" && !Object.hasOwn(body, field)) {
+        continue;
+      }
+      if (field === "__proto__" && !Object.hasOwn(body, field)) {
+        // Assigning `__proto__` would run the prototype setter and re-parent
+        // the write body instead of setting a key (#533). Every other field is
+        // assigned, so a custom deserializer's setters still run.
+        Object.defineProperty(body, field, { value, writable: true, enumerable: true, configurable: true });
+      } else {
         (body as Record<string, unknown>)[field] = value;
       }
     }
@@ -1349,13 +1353,17 @@ export class KavoEngine<Entity extends object> {
       return { id, data };
     }
 
-    const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = {};
-    for (const [relation, ops] of relationEntries) {
-      relationPatch[relation] = {
-        add: this.resolveJsonPatchMemberIds(relation, ops.add, context),
-        remove: this.resolveJsonPatchMemberIds(relation, ops.remove, context),
-      };
-    }
+    // `Object.fromEntries`, not assignment: a relation named `__proto__` must
+    // stay an own key rather than re-parent the patch (#533).
+    const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = Object.fromEntries(
+      relationEntries.map(([relation, ops]) => [
+        relation,
+        {
+          add: this.resolveJsonPatchMemberIds(relation, ops.add, context),
+          remove: this.resolveJsonPatchMemberIds(relation, ops.remove, context),
+        },
+      ]),
+    );
     return { id, data, relationPatch };
   }
 
