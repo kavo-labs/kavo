@@ -151,6 +151,23 @@ describe("createKavoHandler", () => {
       expect(response.status).toBe(404);
     });
 
+    it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+      "answers 404, not 500, for the Object.prototype member name '%s' as an entity key",
+      async (key) => {
+        const response = await call(handlers, "GET", [key]);
+        expect(response.status).toBe(404);
+      },
+    );
+
+    it("gives every 404 its own readable problem-details body", async () => {
+      for (const key of ["nope1", "nope2", "nope3"]) {
+        const response = await call(handlers, "GET", [key]);
+        expect(response.status).toBe(404);
+        expect(response.headers.get("content-type")).toBe("application/problem+json");
+        expect(await response.json()).toMatchObject({ status: 404 });
+      }
+    });
+
     it("returns 404 for a method no enabled route matches", async () => {
       // markPaidOne only resolves for POST; PUT on the same path is unmatched.
       const row = await adapter.create({ title: "x" });
