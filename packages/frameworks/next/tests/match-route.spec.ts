@@ -15,13 +15,16 @@ describe("matchRoute", () => {
     expect(matchRoute(route(":id"), ["42"])).toEqual({ id: "42" });
   });
 
-  it("decodes a percent-encoded id", () => {
-    expect(matchRoute(route(":id"), ["a%20b"])).toEqual({ id: "a b" });
+  it("captures an id exactly as Next.js decoded it, never decoding it a second time", () => {
+    // Next.js has already decoded the URL's `%2531` to `%31`; a second decode
+    // would serve the id `1` instead.
+    expect(matchRoute(route(":id"), ["%31"])).toEqual({ id: "%31" });
+    expect(matchRoute(route(":id"), ["a b"])).toEqual({ id: "a b" });
+    expect(matchRoute(route(":id"), ["..%2F..%2Fetc"])).toEqual({ id: "..%2F..%2Fetc" });
   });
 
   it("keeps an id that is not valid percent-encoding verbatim instead of throwing", () => {
-    // Next.js has already decoded `%25` to `%` by the time the handler sees
-    // it; decoding again used to throw URIError, a 500 (issue #493).
+    // Decoding `%` used to throw URIError, a 500 (issue #493).
     expect(matchRoute(route(":id"), ["%"])).toEqual({ id: "%" });
     expect(matchRoute(route(":id"), ["100%off"])).toEqual({ id: "100%off" });
   });
