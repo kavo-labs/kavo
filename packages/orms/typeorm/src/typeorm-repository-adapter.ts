@@ -110,7 +110,15 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
     try {
       const include = query?.include ?? {};
       const qb = this.byId(id, context, query?.withDeleted ?? false, query?.onlyDeleted ?? false, identifierField);
-      this.joinIncludes(qb, include, this.alias);
+      // `query.filter` carries the entity's mandatory `filter.apply` scope
+      // (ADR-0048) on every id-addressed read and write pre-fetch, so it is
+      // ANDed onto the id lookup: a row outside the caller's scope is not
+      // found, exactly as it would be absent from `findMany`.
+      const translator = new FilterTranslator(qb, this.alias, this.derivedExpressions);
+      this.joinIncludes(qb, include, this.alias, translator);
+      if (query !== null) {
+        translator.apply(query.filter);
+      }
       const entity = await qb.getOne();
       if (entity !== null) {
         await this.loadBatches([entity], this.entity, include);

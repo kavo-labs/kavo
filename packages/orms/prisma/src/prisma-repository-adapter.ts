@@ -77,8 +77,15 @@ export class PrismaRepositoryAdapter<Entity extends object> implements Repositor
     identifierField?: string,
   ): Promise<Entity | null> {
     try {
+      // `query.filter` carries the entity's mandatory `filter.apply` scope
+      // (ADR-0048), so it is ANDed onto the id lookup: a row outside the
+      // caller's scope is not found, exactly as it would be absent from
+      // `findMany`.
+      const byId = { [identifierField ?? this.idField]: id };
       const where = this.scopeToLive(
-        { [identifierField ?? this.idField]: id },
+        query !== null && query.filter.root !== null
+          ? { AND: [byId, translateFilter(query.filter, this.filterOptions)] }
+          : byId,
         context,
         query?.withDeleted ?? false,
         query?.onlyDeleted ?? false,

@@ -85,7 +85,13 @@ describe("serializer — a to-many association element's id must be a scalar", (
   it("rejects { id: <object> } as a replace<Relation> member with a 400 before the adapter runs", async () => {
     const { crud, adapter } = makeAuthors();
     await expect(
-      crud.engine.execute({ operation: "replacePosts", id: "1", body: [{ id: { gt: 0 } }], query: null, options: null } as never),
+      crud.engine.execute({
+        operation: "replacePosts",
+        id: "1",
+        body: [{ id: { gt: 0 } }],
+        query: null,
+        options: null,
+      } as never),
     ).rejects.toBeInstanceOf(AssociationInvalidShapeException);
     expect(adapter.calls).toHaveLength(0);
   });
