@@ -80,6 +80,13 @@ unchanged," the same reasoning that already keeps `update.default` off
 `patchOne`. Whether a forced value should ever override that omission
 semantics is a separate decision, left out here.
 
+> **Amended:** `update.apply` also runs on `patchOne`, but overwrites only
+> the forced fields the `PATCH` body actually carries. Omission still means
+> "leave it unchanged"; what a `PATCH` can no longer do is _name_ a forced
+> field (an object body, or a JSON Patch `replace`) and write a value of the
+> client's choosing there, which left exactly the relabelling gap this ADR
+> set out to close.
+
 **Where it runs.** After `resolveInput` has produced the deserialized body
 (`KavoEngine.run`), so the forced values reach the adapter exactly as if the
 client had sent them, and `filter.apply`'s own single-row scoping (which

@@ -543,7 +543,7 @@ describe("set — force write-body values the client cannot override (issue #476
     expect(seen?.params.id).toBe(1);
   });
 
-  it("patchOne never consults set.update — a PATCH omitting a field means leave it unchanged", async () => {
+  it("patchOne leaves a set.update field alone when the PATCH omits it — omission means unchanged", async () => {
     const { crud, adapter } = makeCrud({
       set: { update: () => ({ authorId: 7 }) },
     } as never);
@@ -552,6 +552,17 @@ describe("set — force write-body values the client cannot override (issue #476
     );
     await crud.patchOne(1, { title: "new" } as never);
     expect(adapter.rows[0]).toMatchObject({ title: "new", authorId: 1 });
+  });
+
+  it("patchOne cannot write a set.update-forced field the client sends — the forced value wins", async () => {
+    const { crud, adapter } = makeCrud({
+      set: { update: () => ({ authorId: 7 }) },
+    } as never);
+    adapter.rows.push(
+      ...posts([{ id: 1, title: "old", authorId: 7 as never, author: null, comments: [], deletedAt: null }]),
+    );
+    await crud.patchOne(1, { title: "new", authorId: 999 } as never);
+    expect(adapter.rows[0]).toMatchObject({ title: "new", authorId: 7 });
   });
 
   it("set.create is never consulted on updateOne, and set.update never on createOne", async () => {

@@ -1118,10 +1118,13 @@ export class KavoEngine<Entity extends object> {
 
   /**
    * `set` (issue #476, ADR-0048's write-side sibling): evaluated once per
-   * `createOne`/`updateOne`, after `resolveInput` has already produced the
-   * deserialized body, so its result can overwrite whatever the client sent
-   * for a forced field. `patchOne` never consults it — a `PATCH` omitting a
-   * field means "leave it unchanged", not "reset it." Mutates `input` in
+   * `createOne`/`updateOne`/`patchOne`, after `resolveInput` has already
+   * produced the deserialized body, so its result can overwrite whatever the
+   * client sent for a forced field. `patchOne` evaluates `set.update` but
+   * overwrites only the forced fields its body actually carries: a `PATCH`
+   * omitting a field still means "leave it unchanged", not "reset it", while
+   * one that names a forced field (an object body or a JSON Patch `replace`)
+   * can never write a value of the client's choosing there. Mutates `input` in
    * place rather than returning a new object: `resolveInput`'s two write
    * shapes differ (`createOne`'s input *is* the body; `updateOne`'s wraps it
    * under `data`), and mutating the body object either shape already holds
@@ -1137,13 +1140,13 @@ export class KavoEngine<Entity extends object> {
     const apply =
       descriptor.id === "createOne"
         ? configView.createApply
-        : descriptor.id === "updateOne"
+        : descriptor.id === "updateOne" || descriptor.id === "patchOne"
           ? configView.updateApply
           : undefined;
     if (apply === undefined) {
       return;
     }
-    const body = descriptor.id === "updateOne" ? (input as { data: object }).data : (input as object);
+    const body = descriptor.id === "createOne" ? (input as object) : (input as { data: object }).data;
     const id = request.id === null ? null : (this.coerceId(request.id) as EntityId);
     const args: ApplyArgs<Entity> = {
       context,
@@ -1152,8 +1155,17 @@ export class KavoEngine<Entity extends object> {
       params: { id },
     };
     const forced = await apply(args);
-    if (forced !== undefined) {
+    if (forced === undefined) {
+      return;
+    }
+    if (descriptor.id !== "patchOne") {
       Object.assign(body, forced);
+      return;
+    }
+    for (const [field, value] of Object.entries(forced)) {
+      if (Object.hasOwn(body, field)) {
+        (body as Record<string, unknown>)[field] = value;
+      }
     }
   }
 
