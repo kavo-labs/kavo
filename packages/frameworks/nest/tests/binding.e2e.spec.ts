@@ -1665,7 +1665,7 @@ describe("KavoExceptionFilter — errors that never reach KavoEngine.execute", (
 
 describe("@Kavo soft-delete routes", () => {
   @Kavo(Todo, {
-    delete: { strategy: "soft" },
+    delete: { strategy: "soft", allowDeletedReads: true },
     operations: {
       createOne: true,
       findOne: true,

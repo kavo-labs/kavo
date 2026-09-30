@@ -73,7 +73,9 @@ import { OwnerWelcomeService } from "./owner-welcome.service.js";
   },
   cache: { etag: false },
   realtime: { events: {} },
-  delete: { strategy: "soft" },
+  // `allowDeletedReads`: an admin trash view reads deleted owners with
+  // `?withDeleted`/`?onlyDeleted`, which are a 400 without it (#517).
+  delete: { strategy: "soft", allowDeletedReads: true },
   search: {},
   // `deletedAt` is soft-delete plumbing (`@DeleteDateColumn`), not data a
   // client should ever filter, sort, or select on — `{ exclude }` resolves

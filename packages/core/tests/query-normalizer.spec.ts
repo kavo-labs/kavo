@@ -18,7 +18,10 @@ import { issuesOf } from "./support/query-issues.js";
 const config = resolveEntityConfig(userMetadata, undefined, undefined);
 const normalizer = new QueryNormalizer(userMetadata);
 
-const softDeletableConfig = resolveEntityConfig(accountMetadata, undefined, undefined);
+// Opted in: most soft-delete specs here exercise the flags themselves. The
+// gate on a client's flags (#517) has its own describe below.
+const softDeletableConfig = resolveEntityConfig(accountMetadata, { delete: { allowDeletedReads: true } }, undefined);
+const gatedSoftDeletableConfig = resolveEntityConfig(accountMetadata, undefined, undefined);
 const softDeletableNormalizer = new QueryNormalizer(accountMetadata);
 
 /**
@@ -36,7 +39,11 @@ const postCatalog = new DefaultEntityCatalog((entity: ClassRef) => {
   }
   return undefined;
 });
-const postConfig = resolveEntityConfig(postMetadata, { include: { fields: ["comments"] } }, undefined);
+const postConfig = resolveEntityConfig(
+  postMetadata,
+  { include: { fields: ["comments"] }, delete: { allowDeletedReads: true } },
+  undefined,
+);
 const postNormalizer = new QueryNormalizer<Post>(postMetadata, [], new DefaultIncludeResolver<Post>(postCatalog));
 
 describe("QueryNormalizer — wire params", () => {
@@ -384,6 +391,60 @@ describe("QueryNormalizer — search[...]", () => {
   it("backfills mode/driver when only one is named", () => {
     const config = resolveEntityConfig(userMetadata, { search: { mode: "words" } }, undefined);
     expect(config.search).toEqual({ fields: ["name", "email"], default: null, mode: "words", driver: "orm" });
+  });
+});
+
+describe("QueryNormalizer — a client's soft-delete flags need delete.allowDeletedReads (#517)", () => {
+  it.each(["withDeleted", "onlyDeleted"])("rejects %s=true from a client by default, naming the key", (flag) => {
+    const issues = issuesOf(() => softDeletableNormalizer.normalizeWire({ [flag]: "true" }, gatedSoftDeletableConfig));
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ field: flag, code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+    expect(issues[0]!.detail).toContain("delete.allowDeletedReads");
+  });
+
+  it.each(["withDeleted", "onlyDeleted"])("still accepts %s=false from a client, which asks for nothing", (flag) => {
+    const query = softDeletableNormalizer.normalizeWire({ [flag]: "false" }, gatedSoftDeletableConfig);
+    expect(query.withDeleted).toBe(false);
+    expect(query.onlyDeleted).toBe(false);
+  });
+
+  it("lets server code ask through a programmatic QueryContext without opting in", () => {
+    const query = softDeletableNormalizer.normalizeInput({ withDeleted: true }, gatedSoftDeletableConfig);
+    expect(query.withDeleted).toBe(true);
+  });
+
+  it("accepts the flags from a client once the entity opts in", () => {
+    const query = softDeletableNormalizer.normalizeWire({ withDeleted: "true" }, softDeletableConfig);
+    expect(query.withDeleted).toBe(true);
+  });
+
+  it("follows the precedence chain: a global opt-in, then an entity opt-out", () => {
+    const global = { delete: { allowDeletedReads: true } };
+    const optedInGlobally = resolveEntityConfig(accountMetadata, undefined, global as never);
+    expect(softDeletableNormalizer.normalizeWire({ withDeleted: "true" }, optedInGlobally).withDeleted).toBe(true);
+
+    const entityOptOut = resolveEntityConfig(
+      accountMetadata,
+      { delete: { allowDeletedReads: false } },
+      global as never,
+    );
+    expect(() => softDeletableNormalizer.normalizeWire({ withDeleted: "true" }, entityOptOut)).toThrowError(
+      QueryValidationException,
+    );
+  });
+
+  it("treats a delete object re-enabled over an inherited false as not opted in", () => {
+    const reEnabled = resolveEntityConfig(accountMetadata, { delete: { field: "deletedAt", strategy: "soft" } }, {
+      delete: false,
+    } as never);
+    const issues = issuesOf(() => softDeletableNormalizer.normalizeWire({ onlyDeleted: "true" }, reEnabled));
+    expect(issues[0]).toMatchObject({ field: "onlyDeleted", code: "KAVO_QUERY_UNSUPPORTED_PARAM" });
+  });
+
+  it("rejects a non-boolean delete.allowDeletedReads at bootstrap", () => {
+    expect(() =>
+      resolveEntityConfig(accountMetadata, { delete: { allowDeletedReads: "yes" } } as never, undefined),
+    ).toThrowError(ConfigurationException);
   });
 });
 

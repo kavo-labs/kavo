@@ -8,6 +8,7 @@ import {
   NotFoundException,
   PatchNoChangesException,
   type DefaultKavoService,
+  WireQuery,
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createPrismaKavo } from "@kavo/prisma";
 import { newTestPrismaClient } from "./support/client.js";
@@ -313,4 +314,15 @@ describe("PrismaRepositoryAdapter — id and soft-delete marker mass assignment"
     await coupons.deleteOne("WELCOME");
     expect((await coupons.findMany()).items).toHaveLength(0);
   });
+});
+
+describe("PrismaRepositoryAdapter — a client's soft-delete flags (#517)", () => {
+  it.each(["withDeleted", "onlyDeleted"])(
+    "rejects %s from a client with a 400 before the adapter runs, unless delete.allowDeletedReads is set",
+    async (flag) => {
+      await expect(
+        tickets.engine.execute({ operation: "findMany", query: new WireQuery({ [flag]: "true" }) } as never),
+      ).rejects.toMatchObject({ issues: [{ field: flag, code: "KAVO_QUERY_UNSUPPORTED_PARAM" }] });
+    },
+  );
 });

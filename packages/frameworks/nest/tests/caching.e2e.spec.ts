@@ -76,6 +76,8 @@ async function seed(title = "write docs"): Promise<string> {
 }
 
 @Kavo(Todo, {
+  // The restore specs read the trashed row with `?withDeleted` (#517).
+  delete: { allowDeletedReads: true },
   operations: {
     createOne: true,
     findOne: true,

@@ -64,8 +64,8 @@ export class QueryNormalizer<Entity = unknown> {
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
 
-    const withDeleted = parseSoftDeleteFlag("withDeleted", rawParams["withDeleted"], config, issues);
-    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", rawParams["onlyDeleted"], config, issues);
+    const withDeleted = parseSoftDeleteFlag("withDeleted", rawParams["withDeleted"], config, issues, "client");
+    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", rawParams["onlyDeleted"], config, issues, "client");
     if (withDeleted && onlyDeleted) {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
@@ -164,8 +164,8 @@ export class QueryNormalizer<Entity = unknown> {
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
     const input = query ?? {};
-    const withDeleted = parseSoftDeleteFlag("withDeleted", input.withDeleted, config, issues);
-    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", input.onlyDeleted, config, issues);
+    const withDeleted = parseSoftDeleteFlag("withDeleted", input.withDeleted, config, issues, "server");
+    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", input.onlyDeleted, config, issues, "server");
     if (withDeleted && onlyDeleted) {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
@@ -767,12 +767,18 @@ function parseIncludePaths(raw: unknown, issues: QueryIssueDto[]): readonly stri
  * be told it is not. Setting both together is a separate conflict check
  * (see {@link conflictingSoftDeleteFlagsIssue}), since each is individually
  * valid on a soft-deletable entity.
+ *
+ * From a client (the wire grammar), either flag also needs
+ * `delete.allowDeletedReads` (issue #517): without it a soft-deleted row
+ * stays gone from the client's side. A programmatic `QueryContext` is
+ * server code, so `origin: "server"` skips that gate.
  */
 function parseSoftDeleteFlag<Entity>(
   field: "withDeleted" | "onlyDeleted",
   raw: unknown,
   config: ResolvedEntityConfig<Entity>,
   issues: QueryIssueDto[],
+  origin: "client" | "server",
 ): boolean {
   if (raw === undefined || raw === null || raw === "" || raw === false || raw === "false" || raw === "0") {
     return false;
@@ -792,6 +798,17 @@ function parseSoftDeleteFlag<Entity>(
       detail:
         `Query parameter '${field}' is not supported: ` +
         `${config.entityName} is not soft-deletable, so no rows are excluded.`,
+    });
+    return false;
+  }
+  const settings = config.settings.delete;
+  if (origin === "client" && (settings === false || settings.allowDeletedReads !== true)) {
+    issues.push({
+      field,
+      code: "KAVO_QUERY_UNSUPPORTED_PARAM",
+      detail:
+        `Query parameter '${field}' is not enabled for ${config.entityName}: ` +
+        `soft-deleted rows are not readable by clients unless 'delete.allowDeletedReads' is set.`,
     });
     return false;
   }

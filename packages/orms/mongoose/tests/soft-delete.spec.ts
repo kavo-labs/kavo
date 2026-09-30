@@ -9,6 +9,7 @@ import {
   PatchNoChangesException,
   type DefaultKavoService,
   type RepositoryAdapter,
+  WireQuery,
 } from "@kavo/core";
 import { buildEntityMetadata, createInfrastructure, createMongooseKavo } from "@kavo/mongoose";
 import {
@@ -332,4 +333,15 @@ describe("MongooseRepositoryAdapter — hard-delete contexts assembled by hand",
     expect(error).toBeInstanceOf(NotFoundException);
     expect(error.code).toBe("KAVO_NOT_FOUND");
   });
+});
+
+describe("MongooseRepositoryAdapter — a client's soft-delete flags (#517)", () => {
+  it.each(["withDeleted", "onlyDeleted"])(
+    "rejects %s from a client with a 400 before the adapter runs, unless delete.allowDeletedReads is set",
+    async (flag) => {
+      await expect(
+        tickets.engine.execute({ operation: "findMany", query: new WireQuery({ [flag]: "true" }) } as never),
+      ).rejects.toMatchObject({ issues: [{ field: flag, code: "KAVO_QUERY_UNSUPPORTED_PARAM" }] });
+    },
+  );
 });
