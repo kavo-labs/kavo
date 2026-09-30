@@ -1,0 +1,68 @@
+name: Security re-audit
+
+# Opens the quarterly full-surface security re-audit issue (#499) from
+# `.github/ISSUE_TEMPLATE/security-reaudit.md`. The audit itself is run by a
+# maintainer with Claude Code following that issue; nothing here runs an agent.
+# The issue records the `main` SHA it audits, and the next one reads it back,
+# so each re-audit diffs packages and ADRs against exactly the last one.
+
+on:
+  schedule:
+    - cron: "0 6 1 1,4,7,10 *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  open-issue:
+    # The issue records the SHA it audits as `main`, so a manual dispatch from
+    # another branch must not open one.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Idempotent per quarter: a manual dispatch after the scheduled run, or a
+      # rerun, finds the issue and stops instead of opening a second one.
+      - name: Open the re-audit issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: ${{ github.sha }}
+          TEMPLATE: .github/ISSUE_TEMPLATE/security-reaudit.md
+        run: |
+          quarter="$(date -u +%Y)-Q$(( ($(date -u +%-m) - 1) / 3 + 1 ))"
+          title="Quarterly security re-audit ${quarter}"
+          search='"Quarterly security re-audit" in:title sort:created-desc'
+
+          if gh issue list --state all --label security --search "$search" --json title --jq '.[].title' | grep -qxF "$title"; then
+            echo "\"${title}\" already exists"
+            exit 0
+          fi
+
+          # Title search is a loose phrase match (it finds #499 itself), so the
+          # exact title shape is filtered here rather than trusted to the search.
+          last="$(gh issue list --state all --label security --search "$search" --json number,title \
+            --jq '[.[] | select(.title | test("^Quarterly security re-audit [0-9]{4}-Q[1-4]$"))][0].number // empty')"
+          last_ref=none
+          last_sha=none
+          if [ -n "$last" ]; then
+            last_ref="#${last}"
+            # A body edited in the web UI comes back with CRLF line endings.
+            found="$(gh issue view "$last" --json body --jq .body | tr -d '\r' \
+              | sed -n 's/^- This re-audit: `main` at `\([0-9a-f]\{40\}\)`$/\1/p')"
+            if [ -z "$found" ]; then
+              echo "::warning::#${last} records no audited SHA; this re-audit has no diff baseline"
+            fi
+            last_sha="${found:-none}"
+          fi
+
+          body="$(awk 'n >= 2 { print; next } /^---$/ { n++ }' "$TEMPLATE" \
+            | sed -e "s/{{LAST_REAUDIT}}/${last_ref}/g" -e "s/{{LAST_SHA}}/${last_sha}/g" -e "s/{{MAIN_SHA}}/${MAIN_SHA}/g")"
+          gh issue create --title "$title" --label security --label type:chore --body "$body"

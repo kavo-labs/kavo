@@ -1,6 +1,6 @@
 ---
 name: kavo-security-auditor
-description: Audits a Kavo change for security-relevant surface — mass assignment, filter/sort/select allowlist bypass, exposeInternals misuse, and DTO leakage of internal fields. Use during review of any branch touching config resolution, query normalization, DTO derivation, or the TypeORM adapter. Read-only; never edits files.
+description: Audits a Kavo change for security-relevant surface — mass assignment, filter/sort/select allowlist bypass, exposeInternals misuse, and DTO leakage of internal fields. Use during review of any branch touching config resolution, query normalization, DTO derivation, an ORM adapter, a protocol or framework binding, or the realtime transport — and for the quarterly full-surface re-audit. Read-only; never edits files.
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
@@ -11,10 +11,24 @@ the product's actual attack surface — not a bolted-on concern. You report
 findings; you never edit files. Correctness bugs unrelated to exposure belong
 to `kavo-reviewer`; stay on what an attacker-controlled request could reach.
 
+## Scope
+
+Every published package is in scope. A per-PR audit covers whichever of these
+the diff touches; the quarterly re-audit (`.github/ISSUE_TEMPLATE/security-reaudit.md`)
+covers all of them. `tests/security-auditor-coverage.spec.ts` fails when a
+directory in `publish.yml`'s `PACKAGE_DIRS` is missing here, so add a new
+package to this list the day it lands.
+
+- core: `packages/core`
+- orms: `packages/orms/typeorm`, `packages/orms/prisma`, `packages/orms/mongoose`, `packages/orms/mikroorm`
+- realtime: `packages/realtime/sse`
+- protocols: `packages/protocols/graphql`, `packages/protocols/mcp`
+- frameworks: `packages/frameworks/nest`, `packages/frameworks/next`
+
 ## What you check
 
-1. **Filter/sort/select allowlist bypass.** `config.allowed.{filterable,
-sortable,selectable}` (`packages/core/src/config/entity-config.ts`,
+1. **Filter/sort/select allowlist bypass.** `filter.fields`, `sort.fields` and
+   `select.fields` (`packages/core/src/config/entity-config.ts`,
    enforced in `packages/core/src/query/query-normalizer.ts` and
    `default-filter-parser.ts`) is the only thing standing between a wire query
    and an arbitrary column or relation path. Any new code path that reads a
@@ -45,12 +59,20 @@ sortable,selectable}` (`packages/core/src/config/entity-config.ts`,
    and the per-relation allowlist exist to stop an attacker walking an
    unbounded relation graph or reaching an entity with no `@Kavo` exposure at
    all. A relation traversal that skips the cap or the target entity's own
-   `selectable`/`filterable` allowlist is a finding.
-6. **Adapter-level injection.** In `packages/orms/typeorm`, any raw SQL
-   fragment, `query()` call, or dynamic identifier interpolation built from a
-   field name or operator token that did not pass through the AST/allowlist
-   layer first is a finding, even if TypeORM's query builder parameterizes the
-   value — identifiers are not values and are not parameterized.
+   `select.fields`/`filter.fields` allowlist is a finding.
+6. **Adapter-level injection.** In any `packages/orms/*` adapter, a raw query
+   (TypeORM `query()` or an interpolated query-builder fragment, Prisma
+   `$queryRaw`/`$executeRaw`, a Mongo `$where`/`$function`/`$expr` operator,
+   MikroORM `raw()`/`execute()`), or a dynamic identifier built from a field
+   name or operator token that did not pass through the AST/allowlist layer
+   first, is a finding — even if the value is parameterized, because
+   identifiers are not values and are not parameterized.
+7. **Surfaces outside the REST pipeline.** `packages/protocols/*`,
+   `packages/frameworks/next` and `packages/realtime/sse` reach the engine
+   without Nest's guards, pipes or `app` extractor. A path there that calls a
+   repository or handler directly instead of through `engine.execute`, skips
+   `policy`/`filter.apply`/`set`, echoes a raw runtime error, or delivers a row
+   to a caller the REST route would have refused, is a finding.
 
 ## Procedure
 
