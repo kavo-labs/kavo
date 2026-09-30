@@ -15,7 +15,6 @@ import {
   ConflictException,
   NotFoundException,
   PatchNoChangesException,
-  PersistenceException,
   QueryValidationException,
   type KavoInstance,
   type DefaultKavoService,
@@ -505,15 +504,14 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
     expect(list.items).toHaveLength(4);
   });
 
-  it("refuses an operator outside the AST enum rather than dropping the predicate", async () => {
+  it("refuses an operator outside the AST enum with a 400 rather than dropping the predicate", async () => {
     await seed();
-    // The parser can never emit this, but a programmatic caller hand-builds
-    // the AST: its type restricts operators, while `validateExpression`
-    // enforces the field allowlist.
-    // Falling through the translator's switch would add no predicate at
-    // all — the caller asked to narrow to one row and would silently get
-    // all four back. The guard surfaces as PersistenceException: a forged
-    // AST is an internal contract violation (500), not a bad request.
+    // The parser can never emit this, but a programmatic caller (GraphQL's
+    // JSON filter, an MCP tool argument) hands in any AST. Falling through
+    // the translator's switch would add no predicate at all — the caller
+    // asked to narrow to one row and would silently get all four back — so
+    // `validateExpression` refuses an unknown operator as the client's 400,
+    // before the adapter is ever called.
     await expect(
       authors.findMany({
         filter: {
@@ -523,7 +521,7 @@ describe("TypeOrmRepositoryAdapter — query translation", () => {
           value: "active",
         },
       }),
-    ).rejects.toBeInstanceOf(PersistenceException);
+    ).rejects.toMatchObject({ code: "KAVO_QUERY_INVALID", status: 400 });
   });
 
   it("still rejects non-allowlisted programmatic filters", async () => {
