@@ -9,7 +9,7 @@ import { assertNever } from "../types/assert-never.js";
  * produce a field-level issue — never a silent `NaN`/`Invalid Date`.
  *
  * Documented conventions, per type:
- * - number: JavaScript number syntax (`42`, `-3.5`); no locale separators.
+ * - number: JavaScript number syntax (`42`, `-3.5`), finite only; no locale separators.
  * - boolean: `true`/`false`/`1`/`0`, exact.
  * - date: ISO 8601 (`2026-01-01`, `2026-01-01T10:00:00Z`).
  * - enum: exact member match.
@@ -41,7 +41,10 @@ export function coerceScalar(
       return text;
     case "number": {
       const value = Number(text);
-      if (text.trim() === "" || Number.isNaN(value)) {
+      // `Number.isFinite` also refuses `Infinity`/`-Infinity` (and `1e999`,
+      // which overflows to it): no column stores one, so it would only fail
+      // later, in the driver, as a 500.
+      if (text.trim() === "" || !Number.isFinite(value)) {
         return issue(field, text, "number");
       }
       return value;

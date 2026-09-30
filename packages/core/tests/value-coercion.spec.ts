@@ -50,6 +50,12 @@ describe("coerceScalar — locale-independent wire coercion", () => {
     }
   });
 
+  it("rejects Infinity, -Infinity and NaN as a number filter value with a 400, never a driver 500", () => {
+    for (const raw of ["Infinity", "-Infinity", "+Infinity", "NaN", "1e999"]) {
+      expect(issueOf(coerce("number", raw)).code).toBe("KAVO_QUERY_INVALID_VALUE");
+    }
+  });
+
   it("accepts exactly true/false/1/0 for booleans", () => {
     expect(coerce("boolean", "true")).toBe(true);
     expect(coerce("boolean", "1")).toBe(true);

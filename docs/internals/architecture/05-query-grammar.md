@@ -376,7 +376,9 @@ through `filter`, the same way it composes any other filter.
   implicitly). Anything outside a list → 400
   (`KAVO_QUERY_INVALID_FIELD`), never a silent drop. Programmatic
   callers (`findMany({ filter })`) pass through the **same** allowlist
-  and limit checks — typed input skips coercion, not security.
+  and limit checks — typed input skips coercion, not security. A
+  programmatic sort entry's `direction` is checked too: anything but
+  `asc`/`desc` is a 400 rather than reaching an adapter.
 - **`select.fields` governs the response as well as the request:** where
   `filter.fields` and `sort.fields` only gate what a request may name, an
   _explicitly configured_ `select.fields` also narrows the default projection,
@@ -425,7 +427,9 @@ through `filter`, the same way it composes any other filter.
   before becoming AST values — number, boolean (`true`/`false`/`1`/`0`),
   date (ISO 8601), enum (member match), `null` for nullable columns.
   Failures are field-level 400 issues, never a silent `NaN` or
-  `Invalid Date`. Coercion consults the **root** entity's column metadata
+  `Invalid Date`. A number must be finite: `Infinity` and an overflowing
+  `1e999` are rejected like any other non-number, and the same rule coerces
+  a route id on a numeric id column (a blank id is a 400, not `0`). Coercion consults the **root** entity's column metadata
   only: a relation-path value (`filter[profile.city][eq]=…`) has no entry
   in that map and passes through as a string. Include resolution and
   fieldset validation wire in the target entity's config (doc 12), but
@@ -438,7 +442,9 @@ through `filter`, the same way it composes any other filter.
   `Object.prototype`. The same applies to `select[__proto__]`, and the
   deserializer reads request bodies with an own-property check, so a
   prototype polluted by anything else in the host application still cannot
-  add a writable field to a request that omitted it.
+  add a writable field to a request that omitted it. Operator tokens are
+  looked up in a `Map`, so `filter[name][constructor]=x` is an unknown
+  operator (`KAVO_QUERY_INVALID_OPERATOR`), not an inherited member.
 - **One exception, all issues:** every violation across filter, sort,
   select, and pagination is collected into a single
   `QueryValidationException`, so a client fixes its request in one round

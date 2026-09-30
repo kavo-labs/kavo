@@ -407,3 +407,21 @@ describe("TypeOrmRepositoryAdapter#removeRelationMember (arrayMutation's resourc
     ).rejects.toThrowError(NotFoundException);
   });
 });
+
+describe("TypeOrmRepositoryAdapter#patchRelation — soft-deleted parent (arrayMutation's jsonPatch strategy, ADR-0029)", () => {
+  it("raises NotFoundException for a soft-deleted parent through a plain marker column, leaving the member unlinked", async () => {
+    // The same scoping `readRelation`/`add`/`removeRelationMember` apply:
+    // a soft-deleted parent must 404 through every relation primitive, or its
+    // membership stays writable through a JSON Patch `add`/`remove`.
+    const studio = await dataSource.getRepository(Studio).save({ name: "Ghost Studio", archivedAt: new Date() });
+    const [album] = await dataSource.getRepository(Album).save([{ title: "Smuggled" }]);
+    await expect(
+      studioAdapter.patchRelation!(studio.id, "albums", { add: [album!.id], remove: [] }, studioContext("patchOne")),
+    ).rejects.toThrowError(NotFoundException);
+    const reloaded = await dataSource.getRepository(Album).findOne({
+      where: { id: album!.id },
+      relations: { studio: true },
+    });
+    expect(reloaded?.studio ?? null).toBeNull();
+  });
+});

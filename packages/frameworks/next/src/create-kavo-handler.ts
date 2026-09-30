@@ -54,10 +54,16 @@ export interface KavoRouteHandlers {
   readonly DELETE: KavoRouteHandler;
 }
 
-const NOT_FOUND = new Response(JSON.stringify({ title: "Not Found", status: 404 }), {
-  status: 404,
-  headers: { "Content-Type": "application/problem+json" },
-});
+/**
+ * A fresh `Response` per miss: a body can be read only once, so one shared
+ * instance would hand every 404 after the first an already-consumed stream.
+ */
+function notFound(): Response {
+  return new Response(JSON.stringify({ title: "Not Found", status: 404 }), {
+    status: 404,
+    headers: { "Content-Type": "application/problem+json" },
+  });
+}
 
 /**
  * Malformed JSON in the request body — a client input error, not the
@@ -187,11 +193,14 @@ function createKavoHandlerFromEntities(entities: KavoHandlerEntities, options: K
       const segments = await resolveSegments(context);
       const [entityKey, ...rest] = segments;
       if (entityKey === undefined) {
-        return NOT_FOUND;
+        return notFound();
       }
-      const service = entities[entityKey];
+      // Own keys only: the entity key is the first URL segment, and a plain
+      // lookup would resolve `constructor`/`__proto__` to an
+      // `Object.prototype` member instead of missing.
+      const service = Object.hasOwn(entities, entityKey) ? entities[entityKey] : undefined;
       if (service === undefined) {
-        return NOT_FOUND;
+        return notFound();
       }
 
       const method = request.method as KavoHttpMethod;
@@ -215,7 +224,7 @@ function createKavoHandlerFromEntities(entities: KavoHandlerEntities, options: K
         break;
       }
       if (matched === null || matchedKind === null) {
-        return NOT_FOUND;
+        return notFound();
       }
 
       const bodylessWrite = BODYLESS_WRITES.has(matched.operation as never);

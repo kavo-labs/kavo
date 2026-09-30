@@ -7,6 +7,7 @@ import {
   NotFoundException,
   PersistenceException,
   QueryValidationException,
+  toProblemDetails,
   TransactionException,
   UnresolvedRelationException,
 } from "@kavo/core";
@@ -181,9 +182,21 @@ describe("mapDriverError — invalid input syntax", () => {
       {
         field: "id",
         code: "KAVO_QUERY_INVALID_VALUE",
-        detail: 'invalid input syntax for type uuid: "not-a-uuid"',
+        detail: "A value in the request is not valid for its column's type.",
       },
     ]);
+  });
+
+  it("never carries the driver's message, which names database types and echoes the input", () => {
+    const mapped = mapDriverError(
+      queryFailed({ code: "22P02", message: 'invalid input value for enum user_role_enum: "x"' }),
+      context,
+    );
+    const body = JSON.stringify(toProblemDetails(mapped));
+    expect(body).not.toContain("user_role_enum");
+    expect(body).not.toContain('"x"');
+    // The driver message stays reachable server-side, for logs.
+    expect((mapped.cause as Error).message).toContain("user_role_enum");
   });
 
   it("keeps the original driver error as cause", () => {

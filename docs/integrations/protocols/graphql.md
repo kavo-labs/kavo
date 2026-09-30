@@ -21,6 +21,8 @@ KavoModule.forRoot({
 
 Setting `graphql` implies `provideServices`, because the merged schema's resolvers need every entity's service as a DI provider to look them up.
 
+**The zero-config route has no auth guard.** Anyone who can reach `POST /graphql` can run every query and mutation an entity registered. See [No auth guard by default](#no-auth-guard-by-default) before you set `graphql: true`.
+
 Each entity registers its GraphQL types once, next to its other config. This is opt-in, not implied by `@Kavo` alone:
 
 ```ts
@@ -67,6 +69,16 @@ registerKavoGraphQLTypes(Order, {
 Naming an id there is not enough by itself: the operation still has to be enabled and declare a matching `schema` shape (`operations.markPaidOne.schema.output`, and `schema.input` if `inputType` is given) on the entity's own config — a custom id has no entity-derived schema fallback the way the standard eight do, so there is nothing to build a typed field from otherwise. Naming an id here whose registry entry is missing, disabled, or missing the matching declared shape fails at schema-build time with a `ConfigurationException`, not a silently omitted field.
 
 The field's placement — `Query` or `Mutation` — follows the operation's registered `kind` (`"read"`/`"write"`), the same as everywhere else the registry decides that. A cardinality-`"one"` operation takes an `id` argument the way `update`/`delete`/etc. do; a cardinality-`"many"` one does not. The field name is `<lowerName><OperationId>` (`orderMarkPaidOne`), namespaced by the entity the same way the standard fields already are.
+
+## No auth guard by default
+
+The zero-config controller carries no guard, interceptor, or other route-level protection. A guard on an entity's `@Kavo`-decorated REST controller does not extend to `POST /graphql`, and neither does anything else that lives on that controller:
+
+- An `@Override`'d or hand-written method's own authorization. Resolvers call the entity's service directly, so they never reach controller code.
+- Nest's `ValidationPipe` on a class-shaped `schema.input`. It validates REST bodies only.
+- The module's `app` context extractor. `context.app` is `{}` for every GraphQL call ([Wiring your own auth](/guides/wiring-your-own-auth)).
+
+What the engine enforces does hold here: the field allowlists, write-body stripping, `policy`, `filter.apply` and `set`, but evaluated with an empty `context.app`. If the GraphQL surface needs auth, write your own controller instead (below), put the guard on it, and leave `graphql` unset.
 
 ## Mounting your own controller
 

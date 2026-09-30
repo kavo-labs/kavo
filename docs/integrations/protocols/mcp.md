@@ -21,6 +21,8 @@ KavoModule.forRoot({
 
 Setting `mcp` implies `provideServices`, the same way `graphql` does. It requires `@modelcontextprotocol/sdk` installed.
 
+**The zero-config route has no auth guard.** Anyone who can reach `POST /mcp` can call every entity's tools, writes included. See [No auth guard by default](#no-auth-guard-by-default) before you set `mcp: true`.
+
 The default controller uses the SDK's Streamable HTTP transport, run stateless. Each request gets a fresh server instance: connected, driven through that one request, then closed, with plain JSON-RPC responses rather than an SSE stream. Only `POST` is wired. Streamable HTTP's `GET` (server-initiated stream) and `DELETE` (session termination) exist only for stateful mode, which the default controller never enters.
 
 ## Every entity's full toolset
@@ -49,6 +51,8 @@ A successful call returns `{ content: [{ type: "text", text: JSON.stringify(resu
 ## No auth guard by default
 
 The zero-config controller carries no guard, interceptor, or other route-level protection. A guard on an entity's `@Kavo`-decorated REST controller does not extend to `POST /mcp`. Setting `mcp: true` exposes every entity's full standard toolset, including every write operation, to anyone who can reach that route. If the MCP surface needs auth, write your own controller instead (below) and leave `mcp` unset.
+
+The same goes for anything else that lives on a REST controller. Tool handlers call the entity's service directly, so an `@Override`'d method's own authorization, Nest's `ValidationPipe`, and the module's `app` context extractor never run for an MCP call; `context.app` is `{}`. The engine's own rules (field allowlists, write-body stripping, `policy`, `filter.apply`, `set`) still apply.
 
 ## Mounting your own controller
 

@@ -18,19 +18,23 @@ on:
   # for the next tick.
   workflow_dispatch:
 
+# Each job declares exactly the write scopes it uses, so neither job holds the
+# other's: release-please opens its PR and cuts the tag, and the hand-off job
+# only dispatches publish.yml.
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write # so the publish job below can workflow_dispatch publish.yml
+  contents: read
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -47,6 +51,9 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # so this job can workflow_dispatch publish.yml
     steps:
       - name: Publish the new release to npm
         env:

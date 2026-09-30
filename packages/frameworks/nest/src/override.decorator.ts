@@ -37,10 +37,14 @@ export interface OverrideMetadata {
  *
  * ```ts
  * @Override()
- * async findOne(id: EntityId, query: WireQuery) {
- *   return this.base.findOne(id as never, query as never);
+ * async findOne(id: EntityId, query: WireQuery, _p: RequestPreconditions | null, request: KavoAppContextRequest) {
+ *   return this.base.findOne(id as never, query as never, { app: boundKavoAppContext(this, request) });
  * }
  * ```
+ *
+ * Forward the app context as above even when the override adds nothing that
+ * reads it: `policy`, `filter.apply` and `set` read `context.app`, and a
+ * delegation that drops it runs them against `{}`.
  *
  * ## What an override inherits, and what it does not
  *
@@ -57,7 +61,16 @@ export interface OverrideMetadata {
  * | Method decorators you added | yes       | `@UseGuards`, `@SetMetadata`, `@Version`, … are copied onto the wrapper   |
  * | `If-Match` → `412`          | **no**    | evaluated in the engine; reaches it only if you forward `preconditions`   |
  * | `If-None-Match` → `304`     | not Kavo's | the host framework answers it off the tag above; see below               |
- * | Row scoping, auth           | n/a       | never Kavo's; that is why you are overriding                              |
+ * | `policy`, `filter.apply`    | if called | enforced by the engine; reached when you delegate to it with `context.app` |
+ * | Your own auth code          | n/a       | whatever the override adds, on this route only (see below)                |
+ *
+ * Authorization written into an override protects **this REST route only**.
+ * The GraphQL and MCP surfaces (`graphql`/`mcp`, `BaseKavoGraphQLController`,
+ * `BaseKavoMcpController`) call the entity's service directly and never reach
+ * a controller method, so they run the operation without it. Put a rule that
+ * must hold on every surface where the engine enforces it — `policy`,
+ * `filter.apply`, `set` — or leave that entity off the other surfaces. The
+ * same is true of Nest's `ValidationPipe`, which validates REST bodies only.
  *
  * The `304` row is the one worth reading twice. Kavo reports
  * `notModified: false` for a promoted return, because the promotion never
@@ -74,13 +87,18 @@ export interface OverrideMetadata {
  *
  * ```ts
  * @Override()
- * async updateOne(id: EntityId, body: Partial<Todo>, preconditions: RequestPreconditions | null) {
+ * async updateOne(
+ *   id: EntityId,
+ *   body: Partial<Todo>,
+ *   preconditions: RequestPreconditions | null,
+ *   request: KavoAppContextRequest,
+ * ) {
  *   return this.base.engine.execute({
  *     operation: "updateOne",
  *     id,
  *     body: body as never,
  *     query: null,
- *     options: null,
+ *     options: { app: boundKavoAppContext(this, request) },
  *     preconditions,
  *   });
  * }

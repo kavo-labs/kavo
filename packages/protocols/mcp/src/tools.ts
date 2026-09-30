@@ -1,15 +1,27 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import type { DefaultKavoService, EntityId, OperationRegistry, StandardOperationId } from "@kavo/core";
-import { ConfigurationException, KavoException, STANDARD_OPERATION_IDS } from "@kavo/core";
+import { ConfigurationException, KavoException, QueryValidationException, STANDARD_OPERATION_IDS } from "@kavo/core";
 
 /**
  * `sort: ["-createdAt", "name"]` → `[{ field: "createdAt", direction: "desc" }, { field: "name", direction: "asc" }]`
  * — same convention (and same reasoning) as `@kavo/graphql`'s `parseSortArg`: this binding calls the programmatic
  * `QueryContext` surface directly, never REST's wire-string parser.
+ *
+ * Unlike GraphQL, nothing upstream enforces the declared `inputSchema` on a
+ * tool's arguments, so the shape is checked here: anything but an array of
+ * strings is the client's error (a `KAVO_QUERY_INVALID` result), not a
+ * `TypeError` escaping `guarded` as a protocol-level failure.
  */
-function parseSortArg(tokens: readonly string[] | undefined): { field: string; direction: "asc" | "desc" }[] {
-  if (tokens === undefined) {
+function parseSortArg(tokens: unknown): { field: string; direction: "asc" | "desc" }[] {
+  if (tokens === undefined || tokens === null) {
     return [];
+  }
+  if (!Array.isArray(tokens) || !tokens.every((token): token is string => typeof token === "string")) {
+    throw QueryValidationException.single({
+      field: "sort",
+      code: "KAVO_QUERY_INVALID_VALUE",
+      detail: "'sort' must be an array of field names, each optionally prefixed with '-'.",
+    });
   }
   return tokens.map((token) =>
     token.startsWith("-")
@@ -201,7 +213,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
           service.findMany({
             limit: args["limit"] as number | undefined,
             offset: args["offset"] as number | undefined,
-            sort: parseSortArg(args["sort"] as readonly string[] | undefined),
+            sort: parseSortArg(args["sort"]),
             filter: (args["filter"] as never) ?? null,
           } as never),
         ),
