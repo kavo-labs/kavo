@@ -8,6 +8,7 @@ import {
   NotFoundException,
   createKavo,
 } from "@kavo/core";
+import { parseJsonPatchDocument } from "../src/engine/json-patch.js";
 import { Author, Post, SeededAdapter, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
 /** `SeededAdapter` plus the one write the `jsonPatch` strategy needs. */
@@ -566,5 +567,55 @@ describe("patchOne — jsonPatch document, relation ops", () => {
         options: null,
       } as never),
     ).rejects.toThrowError(AssociationInvalidShapeException);
+  });
+});
+
+// Counterexamples found by fuzz-json-patch.spec.ts (#494). A field or relation
+// may share its name with an `Object.prototype` member; the parser has to
+// treat it as an ordinary name, never read the inherited member back.
+describe("parseJsonPatchDocument — names that shadow Object.prototype", () => {
+  const options = (writableFields: string[], writeOptedRelations: string[]) => ({
+    entityName: "User",
+    writableFields: new Set(writableFields),
+    writeOptedRelations: new Set(writeOptedRelations),
+    operation: "patchOne",
+    correlationId: "test",
+  });
+
+  it("collects member changes for a write-opted relation named 'toString'", () => {
+    const parsed = parseJsonPatchDocument(
+      [
+        { op: "add", path: "/toString/-", value: "" },
+        { op: "add", path: "/name", value: 0 },
+      ],
+      options(["name"], ["toString"]),
+    );
+
+    expect(parsed.relations).toEqual({ toString: { add: [""], remove: [] } });
+    expect(parsed.fields).toEqual({ name: 0 });
+  });
+
+  it("collects member changes for a relation named 'constructor', across add and remove", () => {
+    const parsed = parseJsonPatchDocument(
+      [
+        { op: "add", path: "/constructor/-", value: 1 },
+        { op: "remove", path: "/constructor/-", value: 2 },
+      ],
+      options([], ["constructor"]),
+    );
+
+    expect(Object.keys(parsed.relations)).toEqual(["constructor"]);
+    expect(parsed.relations["constructor"]).toEqual({ add: [1], remove: [2] });
+  });
+
+  it("keeps a field named '__proto__' as an own key instead of re-parenting the result", () => {
+    const parsed = parseJsonPatchDocument(
+      [{ op: "replace", path: "/__proto__", value: { polluted: true } }],
+      options(["__proto__"], []),
+    );
+
+    expect(Object.keys(parsed.fields)).toEqual(["__proto__"]);
+    expect(Object.getPrototypeOf(parsed.fields)).toBe(Object.prototype);
+    expect((parsed.fields as Record<string, unknown>)["polluted"]).toBeUndefined();
   });
 });

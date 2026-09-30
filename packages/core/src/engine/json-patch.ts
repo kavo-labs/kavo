@@ -67,8 +67,12 @@ export interface JsonPatchParseOptions {
  * {@link JsonPatchTargetNotFoundException} for `remove`).
  */
 export function parseJsonPatchDocument(document: readonly unknown[], options: JsonPatchParseOptions): ParsedJsonPatch {
-  const fields: Record<string, unknown> = {};
-  const relations: Record<string, { add: unknown[]; remove: unknown[] }> = {};
+  // Maps, not object literals: a field or relation may be named after an
+  // `Object.prototype` member (`toString`, `constructor`, `__proto__`), and an
+  // object accumulator would read the inherited member back or re-parent
+  // itself. `Object.fromEntries` below defines every name as an own key.
+  const fields = new Map<string, unknown>();
+  const relations = new Map<string, { add: unknown[]; remove: unknown[] }>();
 
   const invalid = (detail: string): never => {
     throw new JsonPatchInvalidDocumentException({
@@ -106,7 +110,7 @@ export function parseJsonPatchDocument(document: readonly unknown[], options: Js
       if (!hasValue) {
         invalid(`op ${index} ('${op}' on '${path}') needs a 'value'`);
       }
-      fields[field] = record.value;
+      fields.set(field, record.value);
       return;
     }
 
@@ -127,7 +131,11 @@ export function parseJsonPatchDocument(document: readonly unknown[], options: Js
       if (!hasValue || record.value === null || record.value === undefined) {
         invalid(`op ${index} ('${op}' on '${path}') needs a 'value' naming the member id`);
       }
-      const bucket = (relations[relationName] ??= { add: [], remove: [] });
+      let bucket = relations.get(relationName);
+      if (bucket === undefined) {
+        bucket = { add: [], remove: [] };
+        relations.set(relationName, bucket);
+      }
       bucket[op as "add" | "remove"].push(record.value);
       return;
     }
@@ -135,5 +143,5 @@ export function parseJsonPatchDocument(document: readonly unknown[], options: Js
     invalid(`op ${index} has path '${path}', which is neither '/<field>' nor '/<relation>/-'`);
   });
 
-  return { fields, relations };
+  return { fields: Object.fromEntries(fields), relations: Object.fromEntries(relations) };
 }
