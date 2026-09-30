@@ -1,0 +1,50 @@
+name: dependency audit
+
+# Supply-chain track of the security conformance work (#491, threat category
+# 7). `pnpm audit --prod` answers for the dependency graph as it stands on
+# the day it runs, not for a PR's code, so it is not a gate on every pull
+# request: a new advisory published upstream would turn unrelated PRs red.
+# It runs where the graph actually changes (a lockfile or manifest edit),
+# weekly for advisories that appear while the graph stands still, and on
+# demand.
+on:
+  pull_request:
+    paths:
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "**/package.json"
+  push:
+    branches: [main]
+    paths:
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "**/package.json"
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: lts/*
+
+      # Reads the lockfile only; nothing is installed, so no dependency's
+      # lifecycle script runs in this job.
+      - name: Audit production dependencies
+        run: pnpm audit --prod
