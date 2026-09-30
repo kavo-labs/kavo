@@ -9,8 +9,8 @@
 > `{ create?, update? }` object lets the two diverge, replacing the two
 > separately-named callbacks. Kavo is pre-1.0, so this shipped as a straight
 > rename rather than a deprecation window. The semantics this ADR argues for
-> — unconditional, composes by overwrite not merge, `createOne`/`updateOne`
-> only, never `patchOne`, not bootstrap-validated — are unchanged; only the
+> — unconditional, composes by overwrite not merge, not bootstrap-validated —
+> are unchanged; only the
 > key names moved. Examples below use the pre-#476 `create.apply`/
 > `update.apply` names for the historical record; see
 > [`docs/features/apply.md`](/features/apply#writing-forced-values-set) and

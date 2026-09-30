@@ -32,7 +32,9 @@ const bindings = crudTools({
 
 Each `KavoMcpToolBinding` pairs one MCP `Tool` definition with the handler
 that runs it. There is no per-entity config — `crudTools` always produces
-the full standard set, unconditionally:
+the full standard set, less any operation marked service-only
+(`meta.routes.enabled: false`), which gets no tool for the same reason it
+gets no REST route:
 
 | Tool               | Args                                                 |
 | ------------------ | ---------------------------------------------------- |

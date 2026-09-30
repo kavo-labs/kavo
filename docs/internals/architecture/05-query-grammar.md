@@ -378,7 +378,17 @@ through `filter`, the same way it composes any other filter.
   callers (`findMany({ filter })`) pass through the **same** allowlist
   and limit checks — typed input skips coercion, not security. A
   programmatic sort entry's `direction` is checked too: anything but
-  `asc`/`desc` is a 400 rather than reaching an adapter.
+  `asc`/`desc` is a 400 rather than reaching an adapter. A programmatic
+  filter AST (GraphQL's `JSON` filter, an MCP tool argument) meets the
+  rest of what the wire parser enforces while parsing: each node is a
+  `condition` or an `AND`/`OR`/`NOT` group with a `children` array, each
+  operator is one of the enum's, the per-field operator map
+  (`filter.fields`' map form) applies, and each value has the shape its
+  operator takes (a scalar, a scalar list for `IN`/`NOT_IN`, two scalars
+  for `BETWEEN`, a string for `LIKE`/`ILIKE`, nothing for the null
+  checks). A violation is a 400 (`KAVO_QUERY_INVALID_OPERATOR` or
+  `KAVO_QUERY_INVALID_VALUE`), never an adapter 500. Group arity is still
+  not checked; the empty-group rows below say what each adapter does.
 - **`select.fields` governs the response as well as the request:** where
   `filter.fields` and `sort.fields` only gate what a request may name, an
   _explicitly configured_ `select.fields` also narrows the default projection,

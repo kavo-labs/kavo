@@ -356,10 +356,12 @@ export interface SearchConfig<Entity> {
   /**
    * What `search[fields]` may narrow to, and the full field set a
    * `search[query]` searches when it does not. Same shape and default
-   * posture as `filter.fields`/`sort.fields`: when unconfigured, every own
-   * **string**-kind column — narrower than `filter.fields`'s "every own
-   * column" default, since a non-string column has nothing an `ILIKE`
-   * fragment can usefully match.
+   * posture as `filter.fields`/`sort.fields`: when unconfigured (or in the
+   * `{ exclude }` form), every own **string**-kind column that `filter.fields`
+   * allows `ilike` on and `select.fields` exposes. A non-string column has
+   * nothing an `ILIKE` fragment can usefully match, and a search term is a
+   * substring match, so the default never reaches a column those allowlists
+   * hide. An explicit list is taken as given.
    *
    * Unlike `filter.fields`/`sort.fields`, entries **may** be relation paths
    * (`'brand.name'`) — search is a single free-text term spread across
@@ -767,8 +769,10 @@ export interface EntityConfig<
    * },
    * ```
    *
-   * `patchOne` never consults it: a `PATCH` omitting a field means "leave
-   * it unchanged", not "reset it." Not bootstrap-validated against the
+   * `patchOne` applies `update` only to the forced fields its body sends: a
+   * `PATCH` omitting a field still means "leave it unchanged", not "reset
+   * it", but one naming a forced field gets the forced value (ADR-0049's
+   * amendment). Not bootstrap-validated against the
    * entity's writable columns — evaluated per request with an arbitrary
    * runtime value, so there is nothing to check ahead of time beyond "is
    * it callable at all."

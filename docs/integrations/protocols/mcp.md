@@ -27,7 +27,7 @@ The default controller uses the SDK's Streamable HTTP transport, run stateless. 
 
 ## Every entity's full toolset
 
-`crudTools` always produces the same eight tools per entity, unconditionally, with no per-entity config:
+`crudTools` always produces the same eight tools per entity, with no per-entity config. The one exception is an operation marked service-only (`meta.routes.enabled: false`): it gets no REST route, and no tool either, standard or custom.
 
 | Tool                  | Args                                                 |
 | --------------------- | ---------------------------------------------------- |

@@ -159,8 +159,9 @@ export interface ResolvedEntityConfig<Entity = unknown> {
    */
   readonly createApply?: WriteApply<Entity>;
   /**
-   * `set`/`set.update` — same idea, `updateOne` only (never `patchOne`, whose
-   * omission means "leave unchanged" rather than "reset").
+   * `set`/`set.update` — same idea, on `updateOne`, and on `patchOne` for
+   * the forced fields its body sends (omission still means "leave
+   * unchanged" rather than "reset").
    */
   readonly updateApply?: WriteApply<Entity>;
 }
