@@ -810,4 +810,19 @@ describe("createKavoGraphQLSchema — service-only operations (#531)", () => {
       }),
     ).toThrowError(/empty Query type/);
   });
+
+  it("names the service-only cause when a merged schema is left with no Query field", () => {
+    expect(() =>
+      mergeKavoGraphQLSchemas([
+        {
+          name: "Todo",
+          itemType: ItemType,
+          service: service({
+            findOne: { meta: { routes: { enabled: false } } },
+            findMany: { meta: { routes: { enabled: false } } },
+          }),
+        } as never,
+      ]),
+    ).toThrowError(/reads are service-only/);
+  });
 });

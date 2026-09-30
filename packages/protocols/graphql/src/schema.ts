@@ -518,8 +518,12 @@ export function mergeKavoGraphQLSchemas(
     throw new ConfigurationException(
       "GraphQLSchema",
       "bindings",
-      "no entity registered any GraphQL types — call registerKavoGraphQLTypes(Entity, {...}) " +
-        "for at least one @Kavo entity before enabling a GraphQL endpoint",
+      bindings.length === 0
+        ? "no entity registered any GraphQL types — call registerKavoGraphQLTypes(Entity, {...}) " +
+            "for at least one @Kavo entity before enabling a GraphQL endpoint"
+        : "every registered entity's reads are service-only (meta.routes.enabled: false), so the " +
+            "schema would have an empty Query type — expose findOne or findMany on at least one, or " +
+            "add a custom read to its registerKavoGraphQLTypes 'operations'",
     );
   }
 

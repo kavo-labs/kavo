@@ -47,7 +47,7 @@ Fallback order per field: `operations.<id>.schema.<field>`, then the entity's ro
 
 - **`method`** (`"GET"` | `"POST"` | `"PUT"` | `"PATCH"` | `"DELETE"`, default: the operation's standard verb): overrides which HTTP verb the generated route uses.
 - **`path`** (`string`, default: the operation's standard path): route path relative to the controller (e.g. `":id/activate"`).
-- **`enabled`** (`boolean`, default: `true`): `false` makes the operation service-only: still callable through `service.engine.execute(...)`, but no route is generated, and no MCP tool either.
+- **`enabled`** (`boolean`, default: `true`): `false` makes the operation service-only: still callable through `service.engine.execute(...)`, but no route is generated, no MCP tool, and no GraphQL field either.
 - **`successStatus`** (`number`, default: `201` create, `204` delete, `200` otherwise): overrides the response status code on success.
 
 See [NestJS integration](/internals/architecture/10-nestjs-integration) for how route generation reads this, and [Registry-driven operations](/internals/adr/0006-registry-driven-operations) for why routes always come from the same registry the engine uses.
@@ -140,7 +140,7 @@ Worth knowing before you reach for one:
 
 - **The route defaults to `POST` and `201`.** A custom id is absent from the standard route table, so it falls back to `POST /<controller>/<operation id>` with a `201`: a custom operation is a write against the collection until its `meta.routes` says otherwise. A read that returns an existing row almost certainly wants `meta: { routes: { method: "GET", path: ":id/summary", successStatus: 200 } }`.
 
-Custom operations reach the other surfaces too. The MCP binding builds a tool for every enabled custom operation that declares `schema.output` ([MCP](/integrations/protocols/mcp)), and the GraphQL binding exposes one opted in by id through `registerKavoGraphQLTypes`' `operations` option ([GraphQL](/integrations/protocols/graphql)). A service-only operation (`meta.routes.enabled: false`) gets neither a REST route nor an MCP tool; GraphQL exposes only what `registerKavoGraphQLTypes` names.
+Custom operations reach the other surfaces too. The MCP binding builds a tool for every enabled custom operation that declares `schema.output` ([MCP](/integrations/protocols/mcp)), and the GraphQL binding exposes one opted in by id through `registerKavoGraphQLTypes`' `operations` option ([GraphQL](/integrations/protocols/graphql)). A service-only operation (`meta.routes.enabled: false`) gets no REST route, MCP tool or GraphQL field, and naming one in `registerKavoGraphQLTypes` fails at bootstrap.
 
 ## Custom list metadata
 

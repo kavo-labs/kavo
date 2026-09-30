@@ -40,16 +40,16 @@ registerKavoGraphQLTypes(Owner, {
 
 Each field is opt-in per entity. Omitting an option leaves the field out of the schema entirely:
 
-| Field                                       | Enabled by         |
-| ------------------------------------------- | ------------------ |
-| `Query.owner(id)`                           | always             |
-| `Query.owners(limit, offset, sort, filter)` | always             |
-| `Mutation.createOwner`                      | `createInputType`  |
-| `Mutation.updateOwner`                      | `updateInputType`  |
-| `Mutation.patchOwner`                       | `patchInputType`   |
-| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`  |
-| `Mutation.restoreOwner: Owner`              | `restoreOne: true` |
-| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`   |
+| Field                                       | Enabled by                                |
+| ------------------------------------------- | ----------------------------------------- |
+| `Query.owner(id)`                           | always, unless `findOne` is service-only  |
+| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is service-only |
+| `Mutation.createOwner`                      | `createInputType`                         |
+| `Mutation.updateOwner`                      | `updateInputType`                         |
+| `Mutation.patchOwner`                       | `patchInputType`                          |
+| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                         |
+| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                        |
+| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                          |
 
 An operation marked service-only (`meta.routes.enabled: false`) never reaches the schema, as it gets no REST route or MCP tool: a service-only `findOne`/`findMany` is left off `Query`, and naming a service-only operation here (`deleteOne: true`, an input type, or an `operations` entry) fails at bootstrap with a `ConfigurationException`.
 
