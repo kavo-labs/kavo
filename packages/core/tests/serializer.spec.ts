@@ -59,6 +59,43 @@ function ada(overrides: Partial<User> = {}): User {
 
 const COLUMNS = ["id", "name", "email", "age", "status", "createdAt"];
 
+describe("DefaultSerializer — select.default never widens a registered DTO (#514)", () => {
+  // `select.default` names `email`, which the DTO omits.
+  const serializer = new DefaultSerializer<User>(userMetadata, undefined, null, ["id", "name", "email"]);
+
+  class UserItemDto {
+    id = 0;
+    name = "";
+    age = 0;
+  }
+
+  it("serves the default intersected with the DTO for an item read with no select=", () => {
+    const item = serializer.serializeItem(ada(), UserItemDto, readContext(userConfig));
+    expect(Object.keys(item)).toEqual(["id", "name"]);
+  });
+
+  it("serves the default intersected with the DTO for every row of a list read", () => {
+    const rows = serializer.serializeList([ada(), ada({ id: 2 })], UserItemDto, readContext(userConfig));
+    for (const row of rows) {
+      expect(Object.keys(row as object)).toEqual(["id", "name"]);
+    }
+  });
+
+  it("still serves the whole default when no DTO is registered", () => {
+    const item = serializer.serializeItem(ada(), null, readContext(userConfig));
+    expect(Object.keys(item as object)).toEqual(["id", "name", "email"]);
+  });
+
+  it("leaves an explicit select= bounded by the DTO, as before", () => {
+    const item = serializer.serializeItem(
+      ada(),
+      UserItemDto,
+      readContext(userConfig, { select: { root: ["email", "age"], relations: {} } as never }),
+    );
+    expect(Object.keys(item)).toEqual(["age"]);
+  });
+});
+
 describe("DefaultSerializer — response projection", () => {
   const serializer = new DefaultSerializer<User>(userMetadata);
 

@@ -228,13 +228,24 @@ function narrowToProjection(derived: readonly string[], projection: readonly str
  * field narrows it away like any other field. A validator-shaped schema
  * contributes no narrowing at this layer — that's the engine's own
  * `safeParse` step (Task 10), not response projection.
+ *
+ * The DTO is the ceiling for the default projection too (issue #514): a
+ * `select.default` naming a field the DTO omits is intersected away here,
+ * at request time, so a read with no `select=` can never return more than
+ * the registered item/list DTO — the same ceiling an explicit `select=`
+ * already meets by narrowing `keys`.
  */
 function narrowToSchema(projection: Projection, schema: SchemaLike<object> | null): Projection {
   if (schema === null || !isSchemaClass(schema)) {
     return projection;
   }
   const keys = shorthandFieldsOf(schema) ?? schemaShapeKeys(schema);
-  return keys === null ? projection : { ...projection, keys };
+  if (keys === null) {
+    return projection;
+  }
+  const ceiling = new Set(keys);
+  const defaultKeys = projection.defaultKeys?.filter((key) => ceiling.has(key)) ?? null;
+  return { ...projection, keys, defaultKeys };
 }
 
 /**
