@@ -220,7 +220,10 @@ by issue #386), same posture: entity-scope-only, applied only on omission,
 checked against that axis's own `fields` allowlist at the same bootstrap
 pass `sort.default` is. `select.default` fields are checked against
 `select.fields`; absent, the projection is unchanged (every selectable
-field). `include.default` names are checked against `include.fields`
+field). A registered class-shaped output schema is its ceiling too: the
+serializer intersects the default with the schema's keys at request time,
+and a default sharing no field with one fails at bootstrap (issue #514).
+`include.default` names are checked against `include.fields`
 ([ADR-0028](/internals/adr/0028-includable-relations-move-into-allowlists),
 [ADR-0046](/internals/adr/0046-defaults-block-for-omitted-query-axes)) — the
 replacement for the old per-relation `relations.edges.<name>.defaultInclude`

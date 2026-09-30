@@ -25,6 +25,40 @@ import { DefaultEntityCatalog } from "./metadata/entity-catalog.js";
 import { DefaultIncludeResolver } from "./relations/default-include-resolver.js";
 import { describeResolvedConfig, resolveEntityConfig } from "./config/resolve-entity-config.js";
 import { registerArrayMutationOperations } from "./relations/array-mutation-operations.js";
+import type { SchemaLike } from "./schema/schema-class.js";
+import { isSchemaClass } from "./schema/schema-class.js";
+import { schemaShapeKeys } from "./schema/schema-shape.js";
+import { shorthandFieldsOf } from "./schema/schema-fields-shorthand.js";
+
+/**
+ * A registered class-shaped output schema caps `select.default` at request
+ * time (issue #514). One that shares no field with the default would serve
+ * `{}` for every read, with an ETag that never changes, so it is refused
+ * here instead of degrading silently.
+ */
+function requireSelectDefaultWithinOutputSchemas(
+  entityName: string,
+  selectDefault: readonly string[] | null,
+  schemas: readonly (SchemaLike<object> | null)[],
+): void {
+  if (selectDefault === null || selectDefault.length === 0) {
+    return;
+  }
+  for (const schema of schemas) {
+    if (schema === null || !isSchemaClass(schema)) {
+      continue;
+    }
+    const keys = shorthandFieldsOf(schema) ?? schemaShapeKeys(schema);
+    if (keys !== null && !selectDefault.some((field) => keys.includes(field))) {
+      throw new ConfigurationException(
+        entityName,
+        "select.default",
+        `shares no field with the registered output schema '${schema.name}', so a read with no ` +
+          `select= would return an empty object; name at least one of ${JSON.stringify(keys)}`,
+      );
+    }
+  }
+}
 
 /**
  * Root-factory options. `GlobalConfig.defaults` is the
@@ -252,6 +286,19 @@ export function createKavo(options: KavoOptions = {}): KavoInstance {
         metadata: metadata as EntityMetadata<object>,
         config: resolved as unknown as ResolvedEntityConfig<object>,
       });
+
+      requireSelectDefaultWithinOutputSchemas(
+        metadata.name,
+        (resolved.select.default as readonly string[] | undefined) ?? null,
+        [
+          resolved.schema.resolveOutput("item", "findOne"),
+          resolved.schema.resolveOutput("list", "findMany"),
+          ...registry
+            .all()
+            .filter((descriptor) => descriptor.kind === "read")
+            .map((descriptor) => descriptor.schemaOutput ?? null),
+        ],
+      );
 
       const engine = new KavoEngine<Entity>({
         metadata: metadata as EntityMetadata<Entity>,

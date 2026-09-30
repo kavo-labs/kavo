@@ -9,13 +9,15 @@ import type {
 } from "@kavo/core";
 import {
   AssociationInvalidShapeException,
+  ConfigurationException,
   DefaultDeserializer,
   DefaultEntityCatalog,
   DefaultSerializer,
+  createKavo,
   createKavoContext,
   resolveEntityConfig,
 } from "@kavo/core";
-import { User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
+import { InMemoryUserAdapter, User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
 import { Author, Post, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
 const userConfig = resolveEntityConfig(userMetadata, undefined, undefined);
@@ -58,6 +60,70 @@ function ada(overrides: Partial<User> = {}): User {
 }
 
 const COLUMNS = ["id", "name", "email", "age", "status", "createdAt"];
+
+describe("DefaultSerializer — select.default never widens a registered DTO (#514)", () => {
+  // `select.default` names `email`, which the DTO omits.
+  const serializer = new DefaultSerializer<User>(userMetadata, undefined, null, ["id", "name", "email"]);
+
+  class UserItemDto {
+    id = 0;
+    name = "";
+    age = 0;
+  }
+
+  it("serves the default intersected with the DTO for an item read with no select=", () => {
+    const item = serializer.serializeItem(ada(), UserItemDto, readContext(userConfig));
+    expect(Object.keys(item)).toEqual(["id", "name"]);
+  });
+
+  it("serves the default intersected with the DTO for every row of a list read", () => {
+    const rows = serializer.serializeList([ada(), ada({ id: 2 })], UserItemDto, readContext(userConfig));
+    for (const row of rows) {
+      expect(Object.keys(row as object)).toEqual(["id", "name"]);
+    }
+  });
+
+  it("still serves the whole default when no DTO is registered", () => {
+    const item = serializer.serializeItem(ada(), null, readContext(userConfig));
+    expect(Object.keys(item as object)).toEqual(["id", "name", "email"]);
+  });
+
+  it("caps the default through a real createCrud service, on findOne and findMany", async () => {
+    const adapter = new InMemoryUserAdapter();
+    adapter.rows.push(ada());
+    const crud = createKavo().createCrud(
+      User,
+      {
+        schema: { output: { item: UserItemDto, list: UserItemDto } },
+        select: { default: ["id", "name", "email"] },
+      } as never,
+      { adapter, metadata: userMetadata },
+    );
+
+    expect(Object.keys((await crud.findOne(1)) as object)).toEqual(["id", "name"]);
+    const list = await crud.findMany();
+    expect(Object.keys(list.items[0]!)).toEqual(["id", "name"]);
+  });
+
+  it("refuses at bootstrap a select.default that shares no field with the output DTO", () => {
+    expect(() =>
+      createKavo().createCrud(
+        User,
+        { schema: { output: { item: UserItemDto } }, select: { default: ["email", "status"] } } as never,
+        { adapter: new InMemoryUserAdapter(), metadata: userMetadata },
+      ),
+    ).toThrowError(ConfigurationException);
+  });
+
+  it("leaves an explicit select= bounded by the DTO, as before", () => {
+    const item = serializer.serializeItem(
+      ada(),
+      UserItemDto,
+      readContext(userConfig, { select: { root: ["email", "age"], relations: {} } as never }),
+    );
+    expect(Object.keys(item)).toEqual(["age"]);
+  });
+});
 
 describe("DefaultSerializer — response projection", () => {
   const serializer = new DefaultSerializer<User>(userMetadata);
