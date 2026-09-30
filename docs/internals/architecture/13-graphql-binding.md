@@ -38,20 +38,24 @@ const schema = createKavoGraphQLSchema({
 
 Every field this produces:
 
-| Field                                       | Enabled by         |
-| ------------------------------------------- | ------------------ |
-| `Query.owner(id)`                           | always             |
-| `Query.owners(limit, offset, sort, filter)` | always             |
-| `Mutation.createOwner`                      | `createInputType`  |
-| `Mutation.updateOwner`                      | `updateInputType`  |
-| `Mutation.patchOwner`                       | `patchInputType`   |
-| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`  |
-| `Mutation.restoreOwner: Owner`              | `restoreOne: true` |
-| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`   |
+| Field                                       | Enabled by                                |
+| ------------------------------------------- | ----------------------------------------- |
+| `Query.owner(id)`                           | always, unless `findOne` is service-only  |
+| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is service-only |
+| `Mutation.createOwner`                      | `createInputType`                         |
+| `Mutation.updateOwner`                      | `updateInputType`                         |
+| `Mutation.patchOwner`                       | `patchInputType`                          |
+| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                         |
+| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                        |
+| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                          |
 
 Each mutation is opt-in per entity — omit the option and the field never
-reaches the schema. This does **not** read the entity's `OperationRegistry`
-to check what REST actually has enabled: setting `restoreOne: true` here
+reaches the schema. The binding reads the entity's `OperationRegistry` for
+one thing only, service-only operations (`meta.routes.enabled: false`, the
+same check REST and MCP make, issue #531): a service-only `findOne`/
+`findMany` is left off `Query`, and an option above (or an `operations`
+entry) naming a service-only operation is a `ConfigurationException` at
+bootstrap. It does **not** check whether an operation is disabled: setting `restoreOne: true` here
 for an entity whose `@Kavo` config disables `restoreOne` still puts the
 field in the schema, and it throws `OperationDisabledException` at resolve
 time, the same way calling the REST route would. Keeping the two in sync
@@ -88,7 +92,8 @@ const schema = mergeKavoGraphQLSchemas([
 
 Field names are namespaced by each entity's own `name`, so entries never
 collide. `mergeKavoGraphQLSchemas` throws `ConfigurationException` if the
-result would have zero `Query` fields (an empty binding list) — an empty
+result would have zero `Query` fields (an empty binding list, or bindings
+whose reads are all service-only) — an empty
 `Query` type is invalid GraphQL, and graphql-js would otherwise only
 report that on the first request, deep inside `graphql()`'s own schema
 validation; this fails at schema-build time instead, with a message that

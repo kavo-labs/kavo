@@ -239,17 +239,16 @@ const trashForAdmins: Policy<Book> = ({ context }) =>
 
 Each of these is a public issue. Until it closes, the mitigation beside it is yours.
 
-| Issue | Gap                                                                                                    | Mitigation                                                                                                                                                  |
-| ----- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #513  | Cursor and `since` tokens, search terms, offsets, filter breadth and array bodies have no size cap yet | Cap URL length and body size at the proxy                                                                                                                   |
-| #515  | Includes don't carry the target entity's `filter.apply`                                                | Don't make a tenant-scoped entity includable                                                                                                                |
-| #516  | Association-by-id targets are checked for existence, not against the target's `filter.apply`           | Keep to-one relations to tenant-scoped entities out of `schema.input` fields, or force them with `set`                                                      |
-| #518  | Some adapter errors echo driver detail                                                                 | Keep `exposeInternals` off, and watch the logs                                                                                                              |
-| #519  | `@kavo/prisma` doesn't reject Prisma update-operation objects in a write body                          | Validate scalar columns with a validator-shaped `schema.input`, which runs on every surface                                                                 |
-| #520  | `%` and `_` in a search term act as wildcards on `@kavo/prisma` and `@kavo/mikroorm`                   | Leave `search` off there, or accept broader matches                                                                                                         |
-| #522  | GraphQL and MCP writes skip `ValidationPipe` rules                                                     | Use a validator-shaped `schema.input`, or keep such entities off GraphQL and MCP                                                                            |
-| #524  | `@kavo/sse` has no per-subscriber authorization or connection cap                                      | Guard the route, cap connections at the proxy, and narrow payloads with `subscribableFields`                                                                |
-| #531  | A service-only operation (`meta.routes.enabled: false`) still gets a GraphQL field                     | Don't pass `registerKavoGraphQLTypes` the input type or flag for that write, and don't register GraphQL types at all for an entity with a service-only read |
+| Issue | Gap                                                                                                    | Mitigation                                                                                             |
+| ----- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| #513  | Cursor and `since` tokens, search terms, offsets, filter breadth and array bodies have no size cap yet | Cap URL length and body size at the proxy                                                              |
+| #515  | Includes don't carry the target entity's `filter.apply`                                                | Don't make a tenant-scoped entity includable                                                           |
+| #516  | Association-by-id targets are checked for existence, not against the target's `filter.apply`           | Keep to-one relations to tenant-scoped entities out of `schema.input` fields, or force them with `set` |
+| #518  | Some adapter errors echo driver detail                                                                 | Keep `exposeInternals` off, and watch the logs                                                         |
+| #519  | `@kavo/prisma` doesn't reject Prisma update-operation objects in a write body                          | Validate scalar columns with a validator-shaped `schema.input`, which runs on every surface            |
+| #520  | `%` and `_` in a search term act as wildcards on `@kavo/prisma` and `@kavo/mikroorm`                   | Leave `search` off there, or accept broader matches                                                    |
+| #522  | GraphQL and MCP writes skip `ValidationPipe` rules                                                     | Use a validator-shaped `schema.input`, or keep such entities off GraphQL and MCP                       |
+| #524  | `@kavo/sse` has no per-subscriber authorization or connection cap                                      | Guard the route, cap connections at the proxy, and narrow payloads with `subscribableFields`           |
 
 ## Production checklist
 

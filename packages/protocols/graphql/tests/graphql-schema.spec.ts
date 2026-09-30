@@ -741,3 +741,88 @@ describe("pagination.strategy: 'none' entities (ADR-0030, issue #225)", () => {
     expect(result.errors?.[0]?.message).toBe("The request query is invalid.");
   });
 });
+
+describe("createKavoGraphQLSchema — service-only operations (#531)", () => {
+  const ItemType = new GraphQLObjectType({
+    name: "ServiceOnlyTodo",
+    fields: { id: { type: new GraphQLNonNull(GraphQLInt) }, title: { type: GraphQLString } },
+  });
+  const ArchivedType = new GraphQLObjectType({
+    name: "ServiceOnlyArchived",
+    fields: { id: { type: GraphQLInt } },
+  });
+
+  function service(operations: Record<string, unknown>) {
+    return createKavo().createCrud(Todo, { operations } as never, {
+      adapter: new InMemoryTodoAdapter(),
+      metadata: todoMetadata,
+    });
+  }
+
+  const archiveOne = {
+    kind: "write",
+    handler: { execute: async () => ({ id: 1 }) },
+    schema: { output: { fields: ["id"] } },
+    meta: { routes: { enabled: false } },
+  };
+
+  it("leaves a service-only read off the schema", () => {
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      itemType: ItemType,
+      service: service({ findOne: { meta: { routes: { enabled: false } } }, findMany: true }),
+    });
+    const fields = Object.keys(schema.getQueryType()!.getFields());
+    expect(fields).toEqual(["todos"]);
+  });
+
+  it("refuses at bootstrap a standard mutation opt-in that names a service-only operation", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        itemType: ItemType,
+        deleteOne: true,
+        service: service({ findOne: true, findMany: true, deleteOne: { meta: { routes: { enabled: false } } } }),
+      }),
+    ).toThrowError(/'deleteOne' is service-only/);
+  });
+
+  it("refuses at bootstrap a custom operation marked service-only", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        itemType: ItemType,
+        operations: { archiveOne: { type: ArchivedType } },
+        service: service({ findOne: true, findMany: true, archiveOne }),
+      } as never),
+    ).toThrowError(/service-only/);
+  });
+
+  it("refuses at bootstrap a schema left with no Query field", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        itemType: ItemType,
+        service: service({
+          findOne: { meta: { routes: { enabled: false } } },
+          findMany: { meta: { routes: { enabled: false } } },
+        }),
+      }),
+    ).toThrowError(/empty Query type/);
+  });
+
+  it("names the service-only cause when a merged schema is left with no Query field", () => {
+    expect(() =>
+      mergeKavoGraphQLSchemas([
+        {
+          name: "Todo",
+          itemType: ItemType,
+          service: service({
+            findOne: { meta: { routes: { enabled: false } } },
+            findMany: { meta: { routes: { enabled: false } } },
+          }),
+        } as never,
+      ]),
+    ).toThrowError(/reads are service-only/);
+  });
+});
