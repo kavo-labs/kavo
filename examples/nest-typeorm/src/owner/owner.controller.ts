@@ -31,9 +31,9 @@ import { OwnerWelcomeService } from "./owner-welcome.service.js";
  * these events over `text/event-stream`.
  *
  * Search: `GET /owners?search[query]=ada` free-text searches every own
- * string column — `name` and `email` — since `allowed.searchable` is
- * left unconfigured here (contrast Cat's explicit array): the zero-config
- * default. `search[fields]=name` narrows a given request to just one.
+ * string column the filter and select allowlists expose — `name` and
+ * `email` — since `search.fields` is left unconfigured here (contrast
+ * Cat's explicit array): the zero-config default. `search[fields]=name` narrows a given request to just one.
  *
  * Validation: `createOne`/`updateOne`/`patchOne` are `@Override()`'d to give
  * their body parameter a concrete, `class-validator`-decorated type

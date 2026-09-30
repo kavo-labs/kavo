@@ -40,7 +40,7 @@ Forces field values into a `createOne`/`updateOne` body, overwriting whatever th
 })
 ```
 
-`set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`, whose omitting a field means "leave it unchanged," not "reset it." It composes with `schema.input.create`/`update`'s writable-field allowlist rather than replacing it: the allowlist narrows what the client's own body may set, `set` unconditionally overwrites a field regardless of what the allowlist let through or the client sent. See [Apply](/features/apply) for the full argument shape and composition rules.
+`set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` and `patchOne`. On `patchOne`, `set.update` overwrites only the forced fields the body sends: omitting a field still means "leave it unchanged", but a `PATCH` naming a forced field gets the forced value. It composes with `schema.input.create`/`update`'s writable-field allowlist rather than replacing it: the allowlist narrows what the client's own body may set, `set` unconditionally overwrites a field regardless of what the allowlist let through or the client sent. See [Apply](/features/apply) for the full argument shape and composition rules.
 
 ## filter / sort / select / search / include
 

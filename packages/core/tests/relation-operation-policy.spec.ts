@@ -91,6 +91,15 @@ describe("relation operations answer to the parent's policy", () => {
     },
   );
 
+  it("names the relation operation the client called in the 403, not the governing one", async () => {
+    const { run } = makeAuthors({ policy: () => false });
+    await expect(run("addPosts", "1", { id: 9 })).rejects.toMatchObject({
+      code: "KAVO_FORBIDDEN",
+      context: { operation: "addPosts" },
+      messageParams: { operation: "addPosts" },
+    });
+  });
+
   it("governs listPosts by the findOne policy", async () => {
     const { adapter, run } = makeAuthors({ policy: ({ operation }: { operation: string }) => operation !== "findOne" });
     await expect(run("listPosts", "1")).rejects.toBeInstanceOf(ForbiddenException);

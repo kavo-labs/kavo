@@ -476,6 +476,23 @@ function associate<Entity>(
       if (fieldValue === undefined) {
         return null;
       }
+      // Each key part is a scalar, as a single-key reference's id is: an
+      // object here would reach the ORM as query criteria, not a key value.
+      if (typeof fieldValue !== "string" && typeof fieldValue !== "number") {
+        throw new AssociationInvalidShapeException({
+          messageParams: {
+            relation,
+            idField: compositeIdFields.join(", "),
+            entity: context.entityName,
+            expected: `'${field}' must be a string or a number`,
+          },
+          context: {
+            entityName: context.entityName,
+            operation: context.operation,
+            correlationId: context.correlationId,
+          },
+        });
+      }
       result[field] = fieldValue;
     }
     return result;

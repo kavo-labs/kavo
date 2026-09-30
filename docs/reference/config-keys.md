@@ -113,13 +113,13 @@ Not `KavoSettings`. Declared on `EntityConfig` directly, so there is no global d
 
 ### search
 
-| Key              | Type                                                               | Default                      |
-| ---------------- | ------------------------------------------------------------------ | ---------------------------- |
-| `search`         | `{ fields?, default?, mode?, driver? } \| false`                   | `false`                      |
-| `search.fields`  | `FieldPath[] \| { exclude: FieldPath[] }` (relation paths allowed) | every own string-kind column |
-| `search.default` | `string`                                                           | unset                        |
-| `search.mode`    | `"substring" \| "words"`                                           | `"substring"`                |
-| `search.driver`  | `"orm"`                                                            | `"orm"`                      |
+| Key              | Type                                                               | Default                                                                                         |
+| ---------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `search`         | `{ fields?, default?, mode?, driver? } \| false`                   | `false`                                                                                         |
+| `search.fields`  | `FieldPath[] \| { exclude: FieldPath[] }` (relation paths allowed) | every own string-kind column that `filter.fields` allows `ilike` on and `select.fields` exposes |
+| `search.default` | `string`                                                           | unset                                                                                           |
+| `search.mode`    | `"substring" \| "words"`                                           | `"substring"`                                                                                   |
+| `search.driver`  | `"orm"`                                                            | `"orm"`                                                                                         |
 
 `false` (the default) disables search — `search[query]` is rejected with a 400 until an entity or operation scope sets an object. Unlike `filter.fields`/`sort.fields`, `search.fields` entries may be relation paths (`"brand.name"`) — a search box spreads one term across whatever fields make sense. `default` is the term used when a request sends no `search[query]`. See [Search](/querying/search).
 
@@ -155,7 +155,7 @@ Keyed by the entity's own top-level relation names, resolved directly at bootstr
 | ----- | --------------------------------------------------------------------------------------------------------------------- | ------- |
 | `set` | `(args) => Partial<EntityInput<Entity>> \| undefined \| { create?: WriteApply<Entity>; update?: WriteApply<Entity> }` | unset   |
 
-Issue #476, ADR-0048's write-side sibling ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)); supersedes the former `create.apply`/`update.apply`. A bare function forces the same values on both `createOne` and `updateOne`; a `{ create?, update? }` object lets the two diverge — an unconditional, per-request constraint that overwrites whatever the client sent, rather than only filling a gap the way `schema.input.create`/`update` can't (writable-field narrowing is the only write-side allowlist left; see [Allowed](/features/allowed)). `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` only — never `patchOne`. See [Apply](/features/apply).
+Issue #476, ADR-0048's write-side sibling ([ADR-0049](/internals/adr/0049-write-apply-forces-create-update-body-values)); supersedes the former `create.apply`/`update.apply`. A bare function forces the same values on both `createOne` and `updateOne`; a `{ create?, update? }` object lets the two diverge — an unconditional, per-request constraint that overwrites whatever the client sent, rather than only filling a gap the way `schema.input.create`/`update` can't (writable-field narrowing is the only write-side allowlist left; see [Allowed](/features/allowed)). `set.create` (or the bare-function form) runs on `createOne`, `set.update` on `updateOne` and `patchOne`. On `patchOne`, `set.update` overwrites only the forced fields the body sends: omitting a field still means "leave it unchanged", but a `PATCH` naming a forced field gets the forced value. See [Apply](/features/apply).
 
 ### policy
 

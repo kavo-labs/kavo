@@ -252,6 +252,49 @@ describe("filter.apply — findOne is scoped the same way", () => {
   });
 });
 
+describe("filter.apply — findOne's id lookup carries the apply scope and nothing else", () => {
+  // `filter.default`, `search.default` and a client `filter[...]` shape a
+  // collection read; they have never narrowed `findOne`, which addresses one
+  // row by id. Only the mandatory `filter.apply` scope does (ADR-0048).
+  it("still finds a row outside filter.default, search.default and a client filter when apply allows it", async () => {
+    const { crud, adapter } = makeCrud({
+      filter: {
+        apply: ownFilter("authorId"),
+        default: { kind: "condition", field: "title", operator: "EQ", value: "published" },
+      },
+      search: { fields: ["title"], default: "published" },
+    } as never);
+    adapter.rows.push(
+      ...posts([{ id: 1, title: "draft", authorId: "u-1" as never, author: null, comments: [], deletedAt: null }]),
+    );
+    const item = (await crud.findOne(
+      1,
+      { filter: { kind: "condition", field: "title", operator: "EQ", value: "x" } } as never,
+      {
+        app: { userId: "u-1" } as never,
+      },
+    )) as unknown as Post;
+    expect(item.id).toBe(1);
+    expect(adapter.lastQuery?.filter.root).toEqual({
+      kind: "condition",
+      field: "authorId",
+      operator: "EQ",
+      value: "u-1",
+    });
+  });
+
+  it("hands findOneById no filter at all when the entity configures no apply", async () => {
+    const { crud, adapter } = makeCrud({
+      filter: { default: { kind: "condition", field: "title", operator: "EQ", value: "published" } },
+    } as never);
+    adapter.rows.push(
+      ...posts([{ id: 1, title: "draft", authorId: "u-1" as never, author: null, comments: [], deletedAt: null }]),
+    );
+    await expect(crud.findOne(1)).resolves.toMatchObject({ id: 1 });
+    expect(adapter.lastQuery?.filter.root).toBeNull();
+  });
+});
+
 describe("filter.apply — enforced on single-row writes by id (ADR-0048)", () => {
   it("updateOne on an out-of-scope row answers 404, not a successful write", async () => {
     const { crud, adapter } = makeCrud({ filter: { apply: ownFilter("authorId") } } as never);

@@ -10,12 +10,18 @@ import type { NormalizedQueryContext } from "../query/query-context.js";
  * Soft-delete exclusion and include loading are the
  * reader's concern, driven by `query.withDeleted` / `query.include`:
  * soft-deleted rows are excluded from every read unless `withDeleted` is
- * set, and `findOneById` follows the same rule even though it filters by
- * id alone.
+ * set, and `findOneById` follows the same rule.
  */
 export interface EntityReader<Entity = unknown, Id extends EntityId = EntityId> {
   /**
    * `null` when nothing matches — "missing vs. error" is the engine's call.
+   *
+   * **`query.filter` must be ANDed onto the id match** whenever `query` is
+   * non-null. It carries the entity's mandatory `filter.apply` row scope
+   * (ADR-0048), on `findOne` and on the pre-fetch every id-addressed write
+   * and relation operation runs, so an adapter that matched on the id alone
+   * would serve and write rows outside the caller's scope. A row the filter
+   * excludes is `null`, exactly as if it did not exist.
    *
    * `identifierField`, when passed (ADR-0052), names the scalar column
    * `id` is matched against instead of the entity's primary key — the

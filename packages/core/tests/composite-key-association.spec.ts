@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClassRef, EntityMetadata } from "@kavo/core";
-import { DefaultDeserializer, DefaultEntityCatalog } from "@kavo/core";
+import { AssociationInvalidShapeException, DefaultDeserializer, DefaultEntityCatalog } from "@kavo/core";
 import {
   CompositeEntity,
   compositeMetadata,
@@ -48,6 +48,12 @@ describe("DefaultDeserializer.associate() — composite-key relation target (iss
   it("drops extra keys from a reference object, same as a single-key target", () => {
     const result = deserialize({ item: { userId: "u1", topic: "billing", key: "sneaky" } });
     expect(result).toEqual({ item: { userId: "u1", topic: "billing" } });
+  });
+
+  it("rejects a key column whose value is an object, never passing it on as ORM criteria", () => {
+    expect(() => deserialize({ item: { userId: { gt: "" }, topic: "billing" } })).toThrowError(
+      AssociationInvalidShapeException,
+    );
   });
 
   it("narrows to null when the reference object is missing a key column", () => {
