@@ -132,22 +132,67 @@ describe("crudTools", () => {
     ]);
   });
 
-  it("lets a non-Kavo throw escape as a protocol error rather than a routine tool result", async () => {
-    // A `KavoException` is a domain answer and becomes `isError` content a
-    // model can reason about. A bug is not an answer: reframing it the same
-    // way would hide a 500 behind a tidy tool response. The engine wraps
-    // adapter throws into `PersistenceFailedException`, so reaching this
-    // path takes a stub service rather than a real one.
-    const bindings = crudTools({
-      name: "Todo",
-      service: {
-        async findOne() {
-          throw new Error("bug");
-        },
-      } as never,
-    });
+  // A non-Kavo throw (issue #523). Rethrowing it handed the SDK its raw
+  // message, which went into the JSON-RPC error whatever `exposeInternals`
+  // said. The engine wraps adapter throws into a Kavo exception, so reaching
+  // this path takes a stub service rather than a real one.
+  function throwingService(exposeInternals?: boolean) {
+    return {
+      engine: { config: { settings: { errors: { exposeInternals } } } },
+      async findOne() {
+        throw new TypeError("Cannot read properties of undefined (reading 'secretColumn')");
+      },
+    } as never;
+  }
 
-    await expect(find(bindings, "todo.findOne").handler({ id: 1 })).rejects.toThrow("bug");
+  it("turns a non-Kavo throw into a generic KAVO_UNEXPECTED_ERROR result, hiding its message", async () => {
+    const bindings = crudTools({ name: "Todo", service: throwingService() });
+
+    const result = await find(bindings, "todo.findOne").handler({ id: 1 });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toMatch(/^KAVO_UNEXPECTED_ERROR: /);
+    expect(text).not.toContain("secretColumn");
+  });
+
+  it("includes the non-Kavo error's message only when exposeInternals is on", async () => {
+    const bindings = crudTools({ name: "Todo", service: throwingService(true) });
+
+    const result = await find(bindings, "todo.findOne").handler({ id: 1 });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain("secretColumn");
+  });
+
+  it("shows a wrapped adapter error's cause only when the entity's exposeInternals is on, as REST does", async () => {
+    class FailingAdapter extends InMemoryTodoAdapter {
+      override async findOneById(): Promise<never> {
+        throw new Error("connection to db-internal-7 refused");
+      }
+    }
+    const text = async (exposeInternals: boolean) => {
+      const service = createKavo({ defaults: { errors: { exposeInternals } } } as never).createCrud(Todo, undefined, {
+        adapter: new FailingAdapter(),
+        metadata: todoMetadata,
+      });
+      const result = await find(crudTools({ name: "Todo", service }), "todo.findOne").handler({ id: 1 });
+      expect(result.isError).toBe(true);
+      return (result.content[0] as { text: string }).text;
+    };
+
+    expect(await text(false)).not.toContain("db-internal-7");
+    expect(await text(true)).toContain("db-internal-7");
+  });
+
+  it("answers a malformed sort argument with a KAVO_QUERY_* result, not a runtime error", async () => {
+    const { bindings } = setup();
+
+    for (const sort of ["-title", 42, [1, 2], { field: "title" }]) {
+      const result = await find(bindings, "todo.findMany").handler({ sort });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toMatch(/^KAVO_QUERY_/);
+    }
   });
 
   it("carries the list envelope's contributed meta into the tool result unchanged", async () => {

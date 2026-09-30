@@ -173,6 +173,28 @@ describe("KavoModule.forRoot({ mcp: true })", () => {
     expect(JSON.parse(called.body.result.content[0].text)).toMatchObject({ items: [] });
   });
 
+  it("answers a malformed argument with a KAVO_QUERY_* tool result, never a raw runtime message (#523)", async () => {
+    const adapter = new InMemoryTodoAdapter();
+    const moduleRef = await Test.createTestingModule({
+      imports: [KavoModule.forRoot({ infrastructure: fakeInfrastructure(adapter), mcp: true })],
+      controllers: [TodoController],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    const server = await listen(app);
+
+    const called = await mcpRequest(server).send({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "todo.findMany", arguments: { sort: "-title" } },
+    });
+
+    expect(called.status).toBe(200);
+    expect(called.body.error).toBeUndefined();
+    expect(called.body.result.isError).toBe(true);
+    expect(called.body.result.content[0].text).toMatch(/^KAVO_QUERY_INVALID: /);
+  });
+
   it("maps a not-found id to an isError tool result over HTTP", async () => {
     const adapter = new InMemoryTodoAdapter();
     const moduleRef = await Test.createTestingModule({

@@ -102,10 +102,19 @@ A `KavoException` the engine raises (`NotFoundException`,
 `OperationDisabledException`, a conflict, …) is caught and turned into an
 **`isError: true`** tool result (`${code}: ${detail}` as the text) instead
 of propagating — MCP's own convention for an expected domain failure: the
-_call_ succeeded, the _operation_ didn't. An error the engine did not
-itself raise (a bug, an unmapped adapter failure) still propagates, so it
-surfaces as a protocol-level error rather than being silently reframed as
-routine tool output.
+_call_ succeeded, the _operation_ didn't. Any other error (a bug, an
+argument shape nothing upstream validated) becomes an `isError` result too,
+`KAVO_UNEXPECTED_ERROR` with the catalog's generic message, and its own
+`message` appended only when the bound entity's `errors.exposeInternals` is
+on (issue #523). It used to propagate as a protocol-level error, but the SDK
+then put the raw `message` into the JSON-RPC error, leaking internals that
+REST's problem-details boundary (ADR-0009) keeps behind `exposeInternals`.
+Both kinds of result render their text through core's `toProblemDetails`,
+so a cause appears exactly as it would in a REST body. The flag is read from
+the bound entity's resolved settings, so an entity-scope
+`errors.exposeInternals` applies here; `@kavo/nest`'s exception filter reads
+only the module-wide default, so the two can differ for an entity that sets
+it on its own.
 
 ## 4. The Nest binding
 

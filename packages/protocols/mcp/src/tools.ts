@@ -1,6 +1,19 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
-import type { DefaultKavoService, EntityId, OperationRegistry, StandardOperationId } from "@kavo/core";
-import { ConfigurationException, KavoException, QueryValidationException, STANDARD_OPERATION_IDS } from "@kavo/core";
+import type {
+  DefaultKavoService,
+  EntityId,
+  KavoExceptionShape,
+  OperationRegistry,
+  StandardOperationId,
+} from "@kavo/core";
+import {
+  ConfigurationException,
+  KavoException,
+  QueryValidationException,
+  STANDARD_OPERATION_IDS,
+  renderMessage,
+  toProblemDetails,
+} from "@kavo/core";
 
 /**
  * `sort: ["-createdAt", "name"]` → `[{ field: "createdAt", direction: "desc" }, { field: "name", direction: "asc" }]`
@@ -9,8 +22,9 @@ import { ConfigurationException, KavoException, QueryValidationException, STANDA
  *
  * Unlike GraphQL, nothing upstream enforces the declared `inputSchema` on a
  * tool's arguments, so the shape is checked here: anything but an array of
- * strings is the client's error (a `KAVO_QUERY_INVALID` result), not a
- * `TypeError` escaping `guarded` as a protocol-level failure.
+ * strings is the client's error (a `KAVO_QUERY_INVALID` result that names
+ * `sort`), not a `TypeError` that `guarded` could only report as a generic
+ * `KAVO_UNEXPECTED_ERROR`.
  */
 function parseSortArg(tokens: unknown): { field: string; direction: "asc" | "desc" }[] {
   if (tokens === undefined || tokens === null) {
@@ -114,13 +128,27 @@ function textResult(value: unknown): CallToolResult {
 }
 
 /**
+ * The bound entity's `errors.exposeInternals`, read structurally for the
+ * same reason `paginationStrategyOf` reads `pagination.strategy`.
+ */
+function exposeInternalsOf(service: object): boolean {
+  const engine = (service as { engine?: { config?: { settings?: { errors?: { exposeInternals?: boolean } } } } })
+    .engine;
+  return engine?.config?.settings?.errors?.exposeInternals === true;
+}
+
+/**
  * Runs a handler and turns a `KavoException` into a normal (`isError:
  * true`) tool result instead of letting it propagate — the MCP protocol's
  * own convention for an expected domain failure (bad id, disabled
- * operation, conflict): the *call* succeeded, the *operation* didn't. An
- * error the engine did not itself raise (a bug, an unmapped adapter
- * failure) still propagates, so it surfaces as a protocol-level error
- * rather than being silently reframed as routine tool output.
+ * operation, conflict): the *call* succeeded, the *operation* didn't.
+ *
+ * Any other error (a bug, an argument shape nothing upstream validated)
+ * becomes a generic `KAVO_UNEXPECTED_ERROR` result too, with its message
+ * only when `exposeInternals` is on (issue #523). Rethrowing it used to hand
+ * the SDK the raw `message`, which it put into the JSON-RPC error whatever
+ * `exposeInternals` said — the same leak ADR-0009's problem-details
+ * boundary closes for REST.
  *
  * This is also how a mutation tool that doesn't apply to a given entity —
  * `restoreOne`/`purgeOne` on one that never declared soft delete —
@@ -129,15 +157,30 @@ function textResult(value: unknown): CallToolResult {
  * disabled operation lands here as a normal `isError` result, exactly the
  * way calling the equivalent disabled REST route would.
  */
-async function guarded(fn: () => Promise<unknown>): Promise<CallToolResult> {
+async function guarded(fn: () => Promise<unknown>, exposeInternals: boolean): Promise<CallToolResult> {
   try {
     return textResult(await fn());
   } catch (error) {
-    if (error instanceof KavoException) {
-      return { isError: true, content: [{ type: "text", text: `${error.code}: ${error.detail}` }] };
-    }
-    throw error;
+    // `toProblemDetails` renders the detail exactly as REST does, so a
+    // cause (a wrapped driver error, or the non-Kavo error itself) appears
+    // under `exposeInternals` and nowhere else.
+    const shape: KavoExceptionShape = error instanceof KavoException ? error : unexpected(error);
+    const { code, detail } = toProblemDetails(shape, { exposeInternals });
+    return { isError: true, content: [{ type: "text", text: `${code}: ${detail}` }] };
   }
+}
+
+/** A non-Kavo error as `KAVO_UNEXPECTED_ERROR`, carrying it as the cause — as `@kavo/next` does. */
+function unexpected(error: unknown): KavoExceptionShape {
+  return {
+    code: "KAVO_UNEXPECTED_ERROR",
+    status: 500,
+    messageKey: "KAVO_UNEXPECTED_ERROR",
+    messageParams: {},
+    detail: renderMessage("KAVO_UNEXPECTED_ERROR", {}),
+    context: {},
+    cause: error,
+  };
 }
 
 const idSchema = { type: ["string", "number"] };
@@ -190,11 +233,13 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
   const { name, service } = options;
   requireOffsetPageable(name, paginationStrategyOf(service));
   const prefix = lowerFirst(name);
+  const exposeInternals = exposeInternalsOf(service);
+  const run = (fn: () => Promise<unknown>): Promise<CallToolResult> => guarded(fn, exposeInternals);
 
   const bindings: KavoMcpToolBinding[] = [
     {
       tool: { name: `${prefix}.findOne`, description: `Find one ${name} by id.`, inputSchema: idOnlySchema },
-      handler: (args) => guarded(() => service.findOne(args["id"] as Id)),
+      handler: (args) => run(() => service.findOne(args["id"] as Id)),
     },
     {
       tool: {
@@ -211,7 +256,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
         ),
       },
       handler: (args) =>
-        guarded(() =>
+        run(() =>
           service.findMany({
             limit: args["limit"] as number | undefined,
             offset: args["offset"] as number | undefined,
@@ -222,7 +267,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
     },
     {
       tool: { name: `${prefix}.createOne`, description: `Create a new ${name}.`, inputSchema: freeformObjectSchema },
-      handler: (args) => guarded(() => service.createOne(args as CreateDto)),
+      handler: (args) => run(() => service.createOne(args as CreateDto)),
     },
     {
       tool: {
@@ -232,7 +277,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
       },
       handler: (args) => {
         const { id, ...input } = args;
-        return guarded(() => service.updateOne(id as Id, input as UpdateDto));
+        return run(() => service.updateOne(id as Id, input as UpdateDto));
       },
     },
     {
@@ -243,13 +288,13 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
       },
       handler: (args) => {
         const { id, ...input } = args;
-        return guarded(() => service.patchOne(id as Id, input as PatchDto));
+        return run(() => service.patchOne(id as Id, input as PatchDto));
       },
     },
     {
       tool: { name: `${prefix}.deleteOne`, description: `Delete a ${name} by id.`, inputSchema: idOnlySchema },
       handler: (args) =>
-        guarded(async () => {
+        run(async () => {
           await service.deleteOne(args["id"] as Id);
           return { deleted: true };
         }),
@@ -260,7 +305,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
         description: `Restore a soft-deleted ${name} by id.`,
         inputSchema: idOnlySchema,
       },
-      handler: (args) => guarded(() => service.restoreOne(args["id"] as Id)),
+      handler: (args) => run(() => service.restoreOne(args["id"] as Id)),
     },
     {
       tool: {
@@ -269,7 +314,7 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
         inputSchema: idOnlySchema,
       },
       handler: (args) =>
-        guarded(async () => {
+        run(async () => {
           await service.purgeOne(args["id"] as Id);
           return { purged: true };
         }),
@@ -315,11 +360,11 @@ export function crudTools<Entity extends object, Id extends EntityId, CreateDto,
       handler: (args) => {
         if (takesId) {
           const { id, ...body } = args;
-          return guarded(() =>
+          return run(() =>
             service.run(descriptor.id, takesInput ? { id: id as Id, body: body as never } : { id: id as Id }),
           );
         }
-        return guarded(() => service.run(descriptor.id, takesInput ? { body: args as never } : {}));
+        return run(() => service.run(descriptor.id, takesInput ? { body: args as never } : {}));
       },
     });
   }
