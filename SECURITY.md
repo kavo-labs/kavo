@@ -33,7 +33,7 @@ You should receive an initial response within **48 hours**. We will work with yo
 
 ## Security Hardening
 
-Kavo includes several built-in security measures. Each is exercised on every ORM adapter and protocol surface by the shared [security conformance suite](tools/security-testkit/README.md), under the case named in brackets:
+Kavo includes several built-in security measures. Each is exercised by the shared [security conformance suite](tools/security-testkit/README.md) on every ORM adapter and protocol surface that can express the attack, under the case named in brackets:
 
 - **Mass assignment protection** — only declared DTO fields are accepted; generated/primary-key columns are stripped automatically. [`create-strips-protected-fields`, `patch-keeps-primary-key`]
 - **Filter/sort/select allowlists** — clients can only query fields marked `filterable`, `sortable`, or `selectable`. [`filter-hidden-column`, `sort-hidden-column`, `select-hidden-column`, `response-hides-column`]

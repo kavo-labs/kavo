@@ -54,8 +54,10 @@ function expectRejected(result: SecurityResult, status: number, code?: RegExp | 
   }
   expect(result.ok, JSON.stringify(result)).toBe(false);
   expect(result.status).toBe(status);
-  if (code !== undefined && !result.ok && result.code !== undefined) {
-    expect(result.code).toMatch(code);
+  if (code !== undefined && !result.ok) {
+    // A rejection with no Kavo code is not the rejection the case asks for:
+    // a broken GraphQL document or a transport error must not pass as one.
+    expect(result.code, JSON.stringify(result)).toMatch(code);
   }
 }
 
@@ -89,7 +91,11 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
   const run = (id: SecurityCaseId, title: string, body: (skip: () => void) => Promise<void>): void => {
     const gap = gaps[id];
     if (gap !== undefined) {
-      it.skip(`${title} [known gap, ${gap}]`, async () => {});
+      // Expected to fail, not skipped: the day the tracking issue's fix
+      // lands, this goes red until the `knownGaps` entry is deleted.
+      it.fails(`${title} [known gap, ${gap}]`, async (context) => {
+        await body(() => context.skip());
+      });
       return;
     }
     it(title, async (context) => {
@@ -133,6 +139,7 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
         "filter-prototype-key",
         "rejects __proto__, constructor and prototype as filter fields with a 400",
         async (skip) => {
+          const before = Object.getOwnPropertyNames(Object.prototype).sort();
           for (const field of ["__proto__", "constructor", "prototype"]) {
             expectRejected(
               await call(skip, "findMany", { query: { [`filter[${field}][eq]`]: "x" } }),
@@ -140,7 +147,7 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
               QUERY_INVALID,
             );
           }
-          expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+          expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(before);
         },
       );
 
@@ -169,6 +176,10 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
             { name: "alpha", tenant: "a", apiKey: null },
             { name: "beta", tenant: "a", apiKey: null },
           ]);
+          // Positive control first: a surface that answered every `eq` with
+          // nothing would otherwise pass the literal checks below.
+          const control = expectAccepted(await call(skip, "findMany", { query: { "filter[name][eq]": "alpha" } }));
+          expect(itemsOf(control).map((row) => row["name"])).toEqual(["alpha"]);
           for (const value of ["' OR '1'='1", "alpha' --", '{"$ne":null}', "%", "alpha\\"]) {
             const body = expectAccepted(await call(skip, "findMany", { query: { "filter[name][eq]": value } }));
             expect(itemsOf(body)).toEqual([]);
@@ -188,6 +199,11 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
           await options.seed([{ name: "alpha", tenant: "a", apiKey: null }]);
           expectRejected(
             await call(skip, "findMany", { query: { "filter[name][eq]": "alpha\u0000" } }),
+            400,
+            QUERY_INVALID,
+          );
+          expectRejected(
+            await call(skip, "findMany", { query: { "filter[name][like]": "%a\u0000%" } }),
             400,
             QUERY_INVALID,
           );
@@ -268,9 +284,12 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
               body: { [idField]: 4242, name: "new", tenant: "a", apiKey: "k-injected" },
             }),
           ) as Record<string, number | string>;
-          const id = body[idField]!;
+          const id = body[idField];
+          expect(id).toBeDefined();
           expect(String(id)).not.toBe("4242");
-          expect((await options.read(id))?.apiKey ?? null).toBeNull();
+          const stored = await options.read(id!);
+          expect(stored).toMatchObject({ name: "new", tenant: "a" });
+          expect(stored?.apiKey ?? null).toBeNull();
         },
       );
 
@@ -310,6 +329,7 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
         ]);
         const body = expectAccepted(await call(skip, "findMany", {}));
         expect(itemsOf(body).map((row) => row["name"])).toEqual(["visible"]);
+        expect((body as { total?: number | null }).total).toBe(1);
         const filtered = expectAccepted(
           await call(skip, "findMany", { query: { "filter[tenant][eq]": HIDDEN_TENANT } }),
         );
@@ -318,30 +338,26 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
     });
 
     describe("6 · information disclosure", () => {
-      run(
-        "error-body-hides-internals",
-        "keeps stacks, driver messages and query text out of error bodies",
-        async (skip) => {
-          const results = [
-            await call(skip, "findMany", { query: { "filter[apiKey][eq]": "x" } }),
-            await call(skip, "findOne", { id: options.missingId }),
-            await call(skip, "deleteOne", { id: options.missingId }),
-          ];
-          for (const result of results) {
-            expect(isUnsupported(result) ? true : result.ok).toBe(false);
-            const text = JSON.stringify((result as { body: unknown }).body);
-            for (const leak of [
-              /\bstack\b/i,
-              /\bat .+:\d+:\d+/,
-              /\bSELECT\b/,
-              /\bFROM\s+"?vault/i,
-              /Prisma|Mongo|TypeORM|MikroORM/,
-            ]) {
-              expect(text).not.toMatch(leak);
-            }
+      run("error-body-hides-internals", "keeps stacks and query text out of rejection bodies", async (skip) => {
+        const results = [
+          await call(skip, "findMany", { query: { "filter[apiKey][eq]": "x" } }),
+          await call(skip, "findOne", { id: options.missingId }),
+          await call(skip, "deleteOne", { id: options.missingId }),
+        ];
+        for (const result of results) {
+          expect(isUnsupported(result) ? true : result.ok).toBe(false);
+          const text = JSON.stringify((result as { body: unknown }).body);
+          for (const leak of [
+            /\bstack\b/i,
+            /\bat .+:\d+:\d+/,
+            /\bSELECT\b/,
+            /\bFROM\s+"?vault/i,
+            /Prisma|Mongo|TypeORM|MikroORM/,
+          ]) {
+            expect(text).not.toMatch(leak);
           }
-        },
-      );
+        }
+      });
     });
   });
 }

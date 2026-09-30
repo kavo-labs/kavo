@@ -36,6 +36,6 @@ The suite's source may import `@kavo/core` and `vitest` only (`.dependency-cruis
 
 ## Adding a case
 
-Name it for the attack and the guarantee (`rejects a column hidden from sort.fields with a 400`) and give it a `SecurityCaseId`. A case that only the wire grammar can express skips itself for `grammar: "programmatic"` drivers. A consumer that fails a case for a tracked reason lists it in `knownGaps` with the public issue number. The case then shows as skipped with that reference, and the entry is deleted when the issue closes.
+Name it for the attack and the guarantee (`rejects a column hidden from sort.fields with a 400`) and give it a `SecurityCaseId`. A case that only the wire grammar can express skips itself for `grammar: "programmatic"` drivers. A consumer that fails a case for a tracked reason lists it in `knownGaps` with the public issue number. The case then runs as an expected failure (`it.fails`) under that reference, so the fix for the issue turns it red until the entry is deleted.
 
 A reproduction for an unreleased Critical/High finding never enters the corpus before its advisory is published (#490's confidentiality rules).
