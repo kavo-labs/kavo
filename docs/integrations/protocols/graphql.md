@@ -9,19 +9,19 @@ Inside a Nest app, the fastest path is `KavoModule`'s `graphql` option, which mo
 ```ts
 KavoModule.forRoot({
   infrastructure: createInfrastructure(dataSource),
-  graphql: true, // mounts POST /graphql
+  graphql: true, // mounts POST /graphql, unguarded: see "No auth guard by default"
 });
 
-// Or choose the path:
+// Or choose the path, and guard it:
 KavoModule.forRoot({
   infrastructure: createInfrastructure(dataSource),
-  graphql: { path: "api/graphql" },
+  graphql: { path: "api/graphql", guards: [GraphQLAuthGuard] },
 });
 ```
 
 Setting `graphql` implies `provideServices`, because the merged schema's resolvers need every entity's service as a DI provider to look them up.
 
-**The zero-config route has no auth guard.** Anyone who can reach `POST /graphql` can run every query and mutation an entity registered. See [No auth guard by default](#no-auth-guard-by-default) before you set `graphql: true`.
+**Without `guards`, the zero-config route has no auth guard.** Anyone who can reach `POST /graphql` can run every query and mutation an entity registered. See [No auth guard by default](#no-auth-guard-by-default) before you set `graphql: true`.
 
 Each entity registers its GraphQL types once, next to its other config. This is opt-in, not implied by `@Kavo` alone:
 
@@ -72,17 +72,25 @@ The field's placement — `Query` or `Mutation` — follows the operation's regi
 
 ## No auth guard by default
 
-The zero-config controller carries no guard, interceptor, or other route-level protection. A guard on an entity's `@Kavo`-decorated REST controller does not extend to `POST /graphql`, and neither does anything else that lives on that controller:
+Unless you pass `guards`, the zero-config controller carries no guard, interceptor, or other route-level protection. To gate the route, hand the option your guards:
+
+```ts
+KavoModule.forRoot({ infrastructure, graphql: { guards: [GraphQLAuthGuard] } });
+```
+
+They go on the generated controller with `@UseGuards`, so a denial stops the request before any resolver runs, with the guard's own error (`403` when it returns `false`). A guard class is built inside `KavoModule`, so its dependencies must come from a global module or from `forRootAsync`'s `imports`, and it must stay singleton-scoped ([Guarding the zero-config routes](/guides/configuration/module-setup#guarding-the-zero-config-routes)). An app-wide `APP_GUARD` also covers the route.
+
+A guard decides whether a request gets in. It does not tell the engine who is calling. A guard on an entity's `@Kavo`-decorated REST controller does not extend to `POST /graphql`, and neither does anything else that lives on that controller:
 
 - An `@Override`'d or hand-written method's own authorization. Resolvers call the entity's service directly, so they never reach controller code.
 - Nest's `ValidationPipe` on a class-shaped `schema.input`. It validates REST bodies only.
 - The module's `app` context extractor. `context.app` is `{}` for every GraphQL call ([Wiring your own auth](/guides/wiring-your-own-auth)).
 
-What the engine enforces does hold here: the field allowlists, write-body stripping, `policy`, `filter.apply` and `set`, but evaluated with an empty `context.app`. If the GraphQL surface needs auth, write your own controller instead (below), put the guard on it, and leave `graphql` unset.
+What the engine enforces does hold here: the field allowlists, write-body stripping, `policy`, `filter.apply` and `set`, but evaluated with an empty `context.app`, guards or not. So a per-caller rule (an `owner()` policy, a tenant `filter.apply`) sees no caller over GraphQL. That is true of a hand-written `BaseKavoGraphQLController` too, which has no way to pass one. Keep an entity whose rules depend on the caller off the GraphQL surface, or make those rules deny when `context.app` is empty.
 
 ## Mounting your own controller
 
-For more control (a custom path, guards, interceptors) extend `BaseKavoGraphQLController` instead of using the `graphql` option:
+For more control than a path and guards (interceptors, a different method or transport) extend `BaseKavoGraphQLController` instead of using the `graphql` option:
 
 ```ts
 @Controller("graphql")

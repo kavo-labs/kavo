@@ -133,16 +133,24 @@ Two ways to mount it, pick one per app — never both at the same path:
    JSON-RPC body. Only `POST` is wired; Streamable HTTP's `GET` and `DELETE`
    exist for stateful mode, which this controller never enters.
 
-### ⚠️ The default MCP route has no auth guard
+### ⚠️ The default MCP route has no auth guard unless you give it one
 
 `mcp: true` mounts a separate, **unguarded** `POST /mcp` exposing every
 entity's full standard toolset — **including every write operation** — to
 anyone who can reach it. A guard on an entity's `@Kavo`-decorated REST
 controller does **not** extend to this route.
 
-If the MCP surface needs auth, leave `mcp` unset and write a concrete
-controller extending `BaseKavoMcpController` instead, where your own guards
-and interceptors apply.
+Pass guards to protect it: `mcp: { guards: [McpAuthGuard] }` (a class or an
+instance). They go on the generated controller with `@UseGuards`, so a
+denial stops the request before any tool runs (`403` when the guard returns
+`false`). A guard class is built inside `KavoModule`, so its dependencies
+must come from a global module or from `forRootAsync({ imports })`, and it
+must stay singleton-scoped: a request-scoped guard leaves the rebuilt
+controller with no tools. An app-wide `APP_GUARD` covers the route too.
+
+A guard gates the route; it does not identify the caller to the engine.
+`context.app` is `{}` for every MCP call, guarded or not, so per-caller
+`policy` or `filter.apply` rules see no caller there.
 
 ## Where to go next
 
