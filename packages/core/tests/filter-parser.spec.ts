@@ -519,6 +519,14 @@ describe("DefaultFilterParser — security posture", () => {
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_OPERATOR");
   });
 
+  it.each(["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"])(
+    "rejects the Object.prototype member name '%s' as an operator token with a 400",
+    (token) => {
+      const issues = issuesOf(() => parse({ [`filter[name][${token}]`]: "x" }));
+      expect(issues[0]).toMatchObject({ field: "name", code: "KAVO_QUERY_INVALID_OPERATOR" });
+    },
+  );
+
   it("rejects coercion failures as field-level issues", () => {
     const issues = issuesOf(() => parse({ "filter[age][eq]": "abc" }));
     expect(issues[0]?.code).toBe("KAVO_QUERY_INVALID_VALUE");

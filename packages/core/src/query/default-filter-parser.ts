@@ -45,10 +45,13 @@ const OPERATOR_TOKENS = {
 /**
  * The parse-direction lookup, derived so the two directions cannot drift.
  * Keyed by `string` on purpose: it takes untrusted wire input, so a miss
- * must yield `undefined` rather than be assumed present.
+ * must yield `undefined` rather than be assumed present. A `Map`, not a
+ * plain object: an object literal inherits `Object.prototype`, so a token
+ * such as `constructor` or `__proto__` would "hit" and reach the AST as an
+ * operator no translator knows.
  */
-const WIRE_OPERATORS: Readonly<Record<string, FilterOperator>> = Object.freeze(
-  Object.fromEntries(Object.entries(OPERATOR_TOKENS).map(([operator, token]) => [token, operator as FilterOperator])),
+const WIRE_OPERATORS: ReadonlyMap<string, FilterOperator> = new Map(
+  Object.entries(OPERATOR_TOKENS).map(([operator, token]) => [token, operator as FilterOperator]),
 );
 
 const LOGICAL_TOKENS = new Set(["and", "or", "not"]);
@@ -322,7 +325,7 @@ export class DefaultFilterParser<Entity = unknown> implements FilterParser<Entit
     config: ResolvedEntityConfig<Entity>,
     issues: QueryIssueDto[],
   ): FilterCondition<Entity> | null {
-    const operator = WIRE_OPERATORS[token];
+    const operator = WIRE_OPERATORS.get(token);
     if (operator === undefined) {
       issues.push({
         field,

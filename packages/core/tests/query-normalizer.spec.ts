@@ -989,3 +989,40 @@ describe("QueryNormalizer — repeated-key and malformed wire spellings", () => 
     expect(issues[0]).toMatchObject({ field: "select[comments]", code: "KAVO_QUERY_INVALID_VALUE" });
   });
 });
+
+/**
+ * `filter-parser.spec.ts` pins prototype keys on the filter axis. Every other
+ * grammar axis takes an untrusted name too, and each must treat
+ * `__proto__`/`constructor`/`prototype` as the unknown name it is: a 400,
+ * never a lookup that resolves to an `Object.prototype` member.
+ */
+describe("QueryNormalizer — prototype keys on every non-filter axis", () => {
+  const searchable = resolveEntityConfig(userMetadata, { search: { fields: ["name"] } }, undefined);
+
+  it.each(["__proto__", "constructor", "prototype"])("rejects '%s' as a sort, select and search field", (key) => {
+    expect(issuesOf(() => normalizer.normalizeWire({ sort: key }, config))[0]?.field).toBe(key);
+    expect(issuesOf(() => normalizer.normalizeWire({ sort: `-${key}` }, config))[0]?.field).toBe(key);
+    expect(issuesOf(() => normalizer.normalizeWire({ select: key }, config))[0]?.field).toBe(key);
+    expect(
+      issuesOf(() => normalizer.normalizeWire({ "search[query]": "x", "search[fields]": key }, searchable))[0]?.field,
+    ).toBe(key);
+  });
+
+  it.each(["__proto__", "constructor", "prototype"])("rejects '%s' as an include path", (key) => {
+    expect(() => postNormalizer.normalizeWire({ include: key }, postConfig)).toThrowError(QueryValidationException);
+    expect(() => postNormalizer.normalizeWire({ include: `comments.${key}` }, postConfig)).toThrowError(
+      QueryValidationException,
+    );
+  });
+
+  // A `select[<relation>]` key is read only for a relation the request also
+  // includes (the resolver validates it there), so a prototype name is inert:
+  // it lands in a null-prototype record that nothing ever looks up.
+  it.each(["__proto__", "constructor", "prototype"])("keeps a select[%s] key inert and off Object.prototype", (key) => {
+    const query = postNormalizer.normalizeWire({ [`select[${key}]`]: "polluted", include: "comments" }, postConfig);
+    expect(Object.getPrototypeOf(query.select.relations)).toBeNull();
+    expect(Object.keys(query.include)).toEqual(["comments"]);
+    expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+  });
+});
