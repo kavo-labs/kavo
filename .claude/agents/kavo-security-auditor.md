@@ -59,7 +59,7 @@ package to this list the day it lands.
    and the per-relation allowlist exist to stop an attacker walking an
    unbounded relation graph or reaching an entity with no `@Kavo` exposure at
    all. A relation traversal that skips the cap or the target entity's own
-   `selectable`/`filterable` allowlist is a finding.
+   `select.fields`/`filter.fields` allowlist is a finding.
 6. **Adapter-level injection.** In any `packages/orms/*` adapter, a raw query
    (TypeORM `query()` or an interpolated query-builder fragment, Prisma
    `$queryRaw`/`$executeRaw`, a Mongo `$where`/`$function`/`$expr` operator,

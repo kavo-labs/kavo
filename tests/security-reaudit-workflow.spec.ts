@@ -14,13 +14,26 @@ const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const workflow = readFileSync(resolve(REPO_ROOT, ".github/workflows/security-reaudit.yml"), "utf8");
 const templatePath = resolve(REPO_ROOT, ".github/ISSUE_TEMPLATE/security-reaudit.md");
 
-/** Every `<scope>: <level>` line under a `permissions:` key, at any indent. */
+/**
+ * Every `<scope>: <level>` line under a `permissions:` key, at any indent.
+ * Comments are stripped first, as `workflow-permissions.spec.ts` does, so a
+ * trailing `# why` or a comment line can't end a block before a grant.
+ */
 function grantedScopes(yaml: string): string[] {
-  return [...yaml.matchAll(/^( *)permissions:\n((?:\1 {2}[\w-]+: \w+\n)+)/gm)].flatMap(([, , block]) =>
-    (block ?? "")
-      .trim()
-      .split("\n")
-      .map((line) => line.trim()),
+  const code = yaml
+    .split("\n")
+    .map((line) => line.replace(/\s+#.*$/, "").replace(/^\s*#.*$/, ""))
+    .filter((line) => line.trim() !== "")
+    .join("\n");
+  return [...`${code}\n`.matchAll(/^( *)permissions:( *\S.*)?\n((?:\1 {2}\S.*\n)*)/gm)].flatMap(
+    ([, , inline, block]) => [
+      ...(inline === undefined ? [] : [inline.trim()]),
+      ...(block ?? "")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.trim()),
+    ],
   );
 }
 
@@ -43,6 +56,35 @@ describe("security re-audit workflow", () => {
 
   it("stops rather than open a second issue for the same quarter", () => {
     expect(workflow).toMatch(/grep -qxF "\$title"; then\n.*\n\s+exit 0/);
+  });
+
+  it("finds the last re-audit by its exact title shape, not by search rank", () => {
+    // Title search is a loose phrase match: it also finds #499 itself.
+    expect(workflow).toContain(String.raw`test("^Quarterly security re-audit [0-9]{4}-Q[1-4]$")`);
+  });
+
+  it("reads the last audited SHA back through CRLF line endings", () => {
+    expect(workflow).toMatch(/--jq \.body \| tr -d '\\r' \\\n\s+\| sed -n/);
+  });
+
+  it("only opens an issue from the default branch", () => {
+    expect(workflow).toContain("if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)");
+  });
+});
+
+describe("grantedScopes", () => {
+  it("sees a grant behind a trailing or standalone comment", () => {
+    const yaml = [
+      "permissions:",
+      "  contents: read",
+      "  # why",
+      "  pull-requests: write # why",
+      "jobs:",
+      "  a:",
+      "    permissions: write-all",
+      "",
+    ].join("\n");
+    expect(grantedScopes(yaml)).toEqual(["contents: read", "pull-requests: write", "write-all"]);
   });
 });
 

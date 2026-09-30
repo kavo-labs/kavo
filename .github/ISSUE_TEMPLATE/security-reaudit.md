@@ -1,6 +1,6 @@
 ---
 name: Security re-audit
-about: The quarterly full-surface security re-audit (opened by security-reaudit.yml)
+about: The quarterly full-surface security re-audit. Opened by security-reaudit.yml; don't open one by hand.
 title: "Quarterly security re-audit YYYY-Qn"
 labels: security, type:chore
 ---
@@ -9,6 +9,8 @@ A full-surface re-audit of current `main`, run by a maintainer with Claude Code.
 
 - Last re-audit: {{LAST_REAUDIT}}, which audited `main` at `{{LAST_SHA}}`
 - This re-audit: `main` at `{{MAIN_SHA}}`
+
+If the last re-audit is `none`, there is no baseline: diff against the SHA #490 audited, or treat every package and ADR as new. Keep the "This re-audit" line as it is, since the next run reads the SHA back from it.
 
 ## Confidentiality
 

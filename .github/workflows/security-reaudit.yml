@@ -16,6 +16,9 @@ permissions:
 
 jobs:
   open-issue:
+    # The issue records the SHA it audits as `main`, so a manual dispatch from
+    # another branch must not open one.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -43,12 +46,20 @@ jobs:
             exit 0
           fi
 
-          last="$(gh issue list --state all --label security --search "$search" --limit 1 --json number --jq '.[0].number // empty')"
+          # Title search is a loose phrase match (it finds #499 itself), so the
+          # exact title shape is filtered here rather than trusted to the search.
+          last="$(gh issue list --state all --label security --search "$search" --json number,title \
+            --jq '[.[] | select(.title | test("^Quarterly security re-audit [0-9]{4}-Q[1-4]$"))][0].number // empty')"
           last_ref=none
           last_sha=none
           if [ -n "$last" ]; then
             last_ref="#${last}"
-            found="$(gh issue view "$last" --json body --jq .body | sed -n 's/^- This re-audit: `main` at `\([0-9a-f]\{40\}\)`$/\1/p')"
+            # A body edited in the web UI comes back with CRLF line endings.
+            found="$(gh issue view "$last" --json body --jq .body | tr -d '\r' \
+              | sed -n 's/^- This re-audit: `main` at `\([0-9a-f]\{40\}\)`$/\1/p')"
+            if [ -z "$found" ]; then
+              echo "::warning::#${last} records no audited SHA; this re-audit has no diff baseline"
+            fi
             last_sha="${found:-none}"
           fi
 
