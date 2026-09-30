@@ -22,6 +22,8 @@ operations: {
 
 Declaring `realtimeEvent` on a read, or on a `cardinality: "many"` operation, is a bootstrap error — a realtime event describes exactly one row.
 
+**Events are not authorized per subscriber.** A published event goes to every subscriber of its channel. `policy`, `filter.apply`, and the field allowlists shape what REST returns, but they are not evaluated again for each subscriber of a realtime event. A subscription's own `filter` narrows which events it receives, not whether the subscriber may see them. `@kavo/sse` performs no authentication or authorization of its own. Gate who may open a stream in the host (a guard or proxy on the mounted route), and only enable `realtime` on an entity whose every row may reach every subscriber that gate admits. Use `subscribableFields` to keep fields off the wire.
+
 See [Realtime](/internals/architecture/18-realtime) for the full event and channel model, and `@kavo/sse`'s own README for the first transport implementation: collection channels, subscribe-time filtering, and `subscribableFields` payload narrowing.
 
 See [Settings](/guides/configuration/settings) for the rest of `KavoSettings`.

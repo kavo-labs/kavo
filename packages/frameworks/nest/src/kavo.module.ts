@@ -115,6 +115,10 @@ export interface KavoModuleAsyncOptions extends Pick<ModuleMetadata, "imports"> 
    * entity's service as a DI provider to look up via `ModuleRef`, the same
    * requirement `BaseKavoGraphQLController` always has) even if
    * `provideServices` itself is left unset.
+   *
+   * **The mounted route carries no auth guard.** A guard on an entity's REST
+   * controller does not extend to it. Extend `BaseKavoGraphQLController`
+   * with your own guard instead if the GraphQL surface needs auth.
    */
   graphql?: KavoGraphQLOption;
   /**
@@ -128,6 +132,11 @@ export interface KavoModuleAsyncOptions extends Pick<ModuleMetadata, "imports"> 
    * `BaseKavoMcpController` always has) even if `provideServices` itself
    * is left unset. Runs stateless — see `createDefaultMcpController`'s doc
    * comment.
+   *
+   * **The mounted route carries no auth guard.** Anyone who can reach it can
+   * call every entity's tools, writes included; a guard on an entity's REST
+   * controller does not extend to it. Extend `BaseKavoMcpController` with
+   * your own guard instead if the MCP surface needs auth.
    */
   mcp?: KavoMcpOption;
 }
