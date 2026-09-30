@@ -64,8 +64,8 @@ export class QueryNormalizer<Entity = unknown> {
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
 
-    const withDeleted = parseSoftDeleteFlag("withDeleted", rawParams["withDeleted"], config, issues, "client");
-    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", rawParams["onlyDeleted"], config, issues, "client");
+    const withDeleted = parseSoftDeleteFlag("withDeleted", rawParams["withDeleted"], config, issues, "wire");
+    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", rawParams["onlyDeleted"], config, issues, "wire");
     if (withDeleted && onlyDeleted) {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
@@ -156,6 +156,12 @@ export class QueryNormalizer<Entity = unknown> {
    * already typed — no coercion — but allowlists and limits are enforced
    * identically: the security posture cannot be bypassed by calling the
    * service directly with strings that defeat `FieldPath` typing.
+   *
+   * One exception: `withDeleted`/`onlyDeleted` skip the
+   * `delete.allowDeletedReads` gate here (#517), because a programmatic
+   * query is trusted as server code. A protocol binding or resolver must
+   * therefore never forward those two flags from its own client into a
+   * `QueryContext`.
    */
   normalizeInput(
     query: QueryContext<Entity> | undefined,
@@ -164,8 +170,8 @@ export class QueryNormalizer<Entity = unknown> {
   ): NormalizedQueryContext<Entity> {
     const issues: QueryIssueDto[] = [];
     const input = query ?? {};
-    const withDeleted = parseSoftDeleteFlag("withDeleted", input.withDeleted, config, issues, "server");
-    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", input.onlyDeleted, config, issues, "server");
+    const withDeleted = parseSoftDeleteFlag("withDeleted", input.withDeleted, config, issues, "programmatic");
+    const onlyDeleted = parseSoftDeleteFlag("onlyDeleted", input.onlyDeleted, config, issues, "programmatic");
     if (withDeleted && onlyDeleted) {
       issues.push(conflictingSoftDeleteFlagsIssue());
     }
@@ -768,17 +774,17 @@ function parseIncludePaths(raw: unknown, issues: QueryIssueDto[]): readonly stri
  * (see {@link conflictingSoftDeleteFlagsIssue}), since each is individually
  * valid on a soft-deletable entity.
  *
- * From a client (the wire grammar), either flag also needs
- * `delete.allowDeletedReads` (issue #517): without it a soft-deleted row
- * stays gone from the client's side. A programmatic `QueryContext` is
- * server code, so `origin: "server"` skips that gate.
+ * From the wire grammar, either flag also needs `delete.allowDeletedReads`
+ * (issue #517): without it a soft-deleted row stays gone from the client's
+ * side. A programmatic `QueryContext` is trusted as server code, so
+ * `origin: "programmatic"` skips that gate — see `normalizeInput`.
  */
 function parseSoftDeleteFlag<Entity>(
   field: "withDeleted" | "onlyDeleted",
   raw: unknown,
   config: ResolvedEntityConfig<Entity>,
   issues: QueryIssueDto[],
-  origin: "client" | "server",
+  origin: "wire" | "programmatic",
 ): boolean {
   if (raw === undefined || raw === null || raw === "" || raw === false || raw === "false" || raw === "0") {
     return false;
@@ -802,7 +808,7 @@ function parseSoftDeleteFlag<Entity>(
     return false;
   }
   const settings = config.settings.delete;
-  if (origin === "client" && (settings === false || settings.allowDeletedReads !== true)) {
+  if (origin === "wire" && (settings === false || settings.allowDeletedReads !== true)) {
     issues.push({
       field,
       code: "KAVO_QUERY_UNSUPPORTED_PARAM",

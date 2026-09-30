@@ -76,7 +76,8 @@ Soft-deleted rows are invisible by default — to `findOne`, `findMany`,
 `count`, and to `updateOne`/`patchOne` (a write never touches a deleted
 row; reviving one is `restoreOne`'s job, not a side effect of a write).
 
-`withDeleted=true` opts back in on both wire and programmatic paths. On an
+`withDeleted=true` opts back in on both wire and programmatic paths (on
+the wire, only with `delete.allowDeletedReads`, below). On an
 entity that is **not** soft-deletable, the parameter is rejected
 (`KAVO_QUERY_UNSUPPORTED_PARAM`), never silently ignored — a client that
 believes it's seeing deleted rows should be told it isn't.
