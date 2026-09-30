@@ -810,12 +810,12 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
   }
 
   /**
-   * The parent row a relation primitive mutates, inside that primitive's
-   * transaction and scoped to live rows (`scopeToLive`) — or a 404. Shared by
+   * Asserts the parent row a relation primitive mutates exists, inside that
+   * primitive's transaction and scoped to live rows (`scopeToLive`) — or a 404. Shared by
    * `patchRelation` and `add`/`removeRelationMember`, so a soft-deleted parent
    * answers the same through each of them.
    */
-  private async findLiveParent(manager: EntityManager, id: EntityId, context: KavoContext<Entity>): Promise<Entity> {
+  private async requireLiveParent(manager: EntityManager, id: EntityId, context: KavoContext<Entity>): Promise<void> {
     const existingQb = manager.getRepository(this.entity).createQueryBuilder(this.alias);
     if (this.compositeIdFields === null) {
       existingQb.where(`${this.alias}.${this.idField} = :id`, { id });
@@ -823,11 +823,9 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
       existingQb.where(this.compositeCriteria(id) as ObjectLiteral);
     }
     this.scopeToLive(existingQb, context, false, false);
-    const existing = await existingQb.getOne();
-    if (existing === null) {
+    if ((await existingQb.getOne()) === null) {
       throw this.notFound(id, context);
     }
-    return existing;
   }
 
   /**
@@ -852,7 +850,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // marker column gets no automatic exclusion from TypeORM's
         // repository API, so a bare `findOne` would leave a soft-deleted
         // parent's membership writable through a JSON Patch.
-        await this.findLiveParent(manager, id, context);
+        await this.requireLiveParent(manager, id, context);
 
         const relationMetadata = manager.connection
           .getMetadata(this.entity)
@@ -1007,7 +1005,7 @@ export class TypeOrmRepositoryAdapter<Entity extends ObjectLiteral> implements R
         // Soft-delete-scoped, the same as `replaceRelation`'s own existence
         // check (`byId`) — a soft-deleted parent must 404 here too, not
         // stay reachable through `add`/`removeRelationMember`.
-        await this.findLiveParent(manager, id, context);
+        await this.requireLiveParent(manager, id, context);
 
         const relationMetadata = this.relationMetadataOf(manager, relation, context);
         const relatedIdField = relationMetadata.inverseEntityMetadata.primaryColumns[0]!.propertyName;

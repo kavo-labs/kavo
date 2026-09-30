@@ -1442,7 +1442,9 @@ export class KavoEngine<Entity extends object> {
       return id;
     }
     const value = Number(id);
-    if (Number.isNaN(value)) {
+    // The rule `coerceScalar` applies to a numeric filter value: a blank id
+    // is not `0`, and `Infinity` names no row.
+    if (id.trim() === "" || !Number.isFinite(value)) {
       throw QueryValidationException.single({
         field: lookupFieldName,
         code: "KAVO_QUERY_INVALID_VALUE",

@@ -52,6 +52,7 @@ jobs:
     if: ${{ needs.release-please.outputs.releases_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       actions: write # so this job can workflow_dispatch publish.yml
     steps:
       - name: Publish the new release to npm

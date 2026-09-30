@@ -36,7 +36,17 @@ entity's routes live for the same `createCrud` config. An unknown entity
 key, or a method/segment combination no enabled operation resolves to,
 answers `404` — never `500` and never a bare `405`, since a route that was
 never configured for this entity is indistinguishable, from the outside,
-from one that does not exist.
+from one that does not exist. The entity key is looked up as an own
+property only, so a segment naming an `Object.prototype` member
+(`constructor`, `__proto__`) is an unknown key like any other, and each
+`404` is a fresh `Response`, since a body can be read only once.
+
+Path segments are used exactly as Next.js hands them over. Next.js has
+already percent-decoded its catch-all params, so an id is never decoded a
+second time (issue #521): decoding `%31` again would serve the id `1` to a
+request whose URL, as host middleware saw it, named `%31`. An encoded `/`
+stays inside its one segment and can only ever become an id value, never a
+different route.
 
 ## 2. Wiring entities: no module, no binder
 
