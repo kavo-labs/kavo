@@ -1,0 +1,15 @@
+{
+  "name": "kavo-security-testkit",
+  "private": true,
+  "description": "Kavo's shared security conformance suite: one corpus of attacks every ORM adapter and protocol surface runs through its own SecurityDriver. Never published.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@kavo/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vitest": "*"
+  }
+}

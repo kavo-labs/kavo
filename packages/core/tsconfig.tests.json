@@ -12,7 +12,8 @@
     "types": ["node"],
     // Mirrors the vitest aliases: tests exercise sources, not `dist/`.
     "paths": {
-      "@kavo/core": ["./src/index.ts"]
+      "@kavo/core": ["./src/index.ts"],
+      "kavo-security-testkit": ["../../tools/security-testkit/src/index.ts"]
     }
   },
   "include": ["tests"]

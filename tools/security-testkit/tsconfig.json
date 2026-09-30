@@ -1,0 +1,16 @@
+{
+  // Typecheck-only: the testkit is consumed as TypeScript source through the
+  // vitest alias and each consumer's tsconfig.tests.json `paths`, so it is
+  // never built. Same shape as a package's tsconfig.tests.json.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "paths": {
+      "@kavo/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
