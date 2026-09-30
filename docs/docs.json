@@ -107,6 +107,7 @@
             ]
           },
           "guides/wiring-your-own-auth",
+          "guides/security",
           "guides/error-handling",
           "guides/custom-adapter",
           "guides/benchmarks",

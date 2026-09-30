@@ -50,3 +50,5 @@ The guards go on the generated controller class with `@UseGuards`, so they behav
 Keep these guards, and whatever they inject, singleton-scoped. A request-scoped guard, or one that injects `REQUEST`, makes Nest rebuild the controller per request, and the rebuilt controller never collects its toolset or schema. It fails closed rather than open: an allowed request finds no MCP tools, and GraphQL answers `500`. The same applies to a request-scoped `APP_GUARD`. Read the request from the `ExecutionContext` that `canActivate` receives instead.
 
 If the route needs more than a guard, such as a different method or transport, leave the option unset and write your own controller extending `BaseKavoGraphQLController` or `BaseKavoMcpController`.
+
+See [Security guide](/guides/security) for the other routes and settings to check before production: `@kavo/sse`'s route, body-size and rate limits, and the config keys that widen what a client reaches.
