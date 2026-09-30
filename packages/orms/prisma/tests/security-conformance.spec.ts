@@ -50,4 +50,9 @@ defineSecuritySuite({
   },
   read: async (id) => client.vault.findUnique({ where: { id: Number(id) } }),
   missingId: 999_999,
+  knownGaps: {
+    // Prisma's `contains` on SQLite passes `%` and `_` through to LIKE as
+    // wildcards, and its query API has no ESCAPE clause to stop it.
+    "search-escapes-wildcards": "#520",
+  },
 });
