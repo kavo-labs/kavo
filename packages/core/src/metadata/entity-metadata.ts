@@ -86,10 +86,16 @@ export interface EntityMetadata<Entity = unknown> {
  * The writable-field universe a `createOne`/`updateOne` body may set when
  * no DTO class narrows it (ADR-0014): every non-generated, non-derived
  * scalar column except the single primary key — a composite natural key is
- * kept, since the client supplies it on `createOne` — plus every relation,
- * writable by association. A `derivedExpression` field (issue #373) has no
- * backing storage column to write to, so it is excluded here the same way
- * `generated` is.
+ * kept, since the client supplies it on `createOne` — plus every **to-one**
+ * relation, writable by association. A `derivedExpression` field (issue #373)
+ * has no backing storage column to write to, so it is excluded here the same
+ * way `generated` is.
+ *
+ * A to-many relation is deliberately not part of it: associating one
+ * rewrites *other* rows' foreign keys, and the policy stage only judges the
+ * row being written (GHSA-p8cm-xwp6-gvrc). It joins the write shape only when
+ * the entity opts it in with `relations.<name>.write`, which
+ * `DefaultDeserializer` resolves per call from config.
  *
  * This is the exact set `DefaultDeserializer` strips an unknown write key
  * against. The soft-delete marker column is deliberately *not* excluded
@@ -105,7 +111,8 @@ export function derivedWritableFieldNames<Entity>(metadata: EntityMetadata<Entit
         (metadata.compositeIdFields !== undefined || field.name !== metadata.idField),
     )
     .map((field) => field.name);
-  return [...columns, ...metadata.relations.map((relation) => relation.name)];
+  const toOne = metadata.relations.filter((relation) => relation.cardinality === "one");
+  return [...columns, ...toOne.map((relation) => relation.name)];
 }
 
 /**

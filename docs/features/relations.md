@@ -21,7 +21,9 @@ A `relations` entry tunes an already-includable relation and/or opts a to-many r
 
 `write: { strategy }` opts a to-many relation into array-mutation writes and names the strategy in one statement — `"replace"`, `"resource"`, or `"jsonPatch"`, all implemented. There is no entity-level default and no boolean form: since [issue #404](/internals/adr/0029-array-relations-may-opt-into-replace-writes) each relation that wants writes names its own strategy, and omitting `write` is how a relation stays non-array-mutable. Two relations on the same entity may use two different strategies.
 
-`write` on a to-one relation is a bootstrap error (association by id already covers those). `write` is independent of `include.fields`: a relation can be write-opted without being read-includable, or the other way around. Write **permission** for a relation is `schema.input.create`/`schema.input.update`'s own field list or registered write schema, not this key.
+`write` on a to-one relation is a bootstrap error (association by id already covers those). `write` is independent of `include.fields`: a relation can be write-opted without being read-includable, or the other way around.
+
+**To-many association in a create/update/patch body is opt-in.** A to-one relation is writable by association by default (`{ "owner": { "id": 7 } }`, [ADR-0014](/internals/adr/0014-associate-by-id-not-deep-writes)). A to-many is not: associating one rewrites other rows' foreign keys, which the policy on those rows never sees. It joins an entity's write body only when that entity sets `write` on it (as above), or registers a write schema that names it (`schema.input` as a class or `{ fields: [...] }`), which works on every adapter. Without either, a to-many key in a body is dropped like any other unknown key. Once opted in, authorizing which rows may be linked is the app's job, for example a `when()` policy that inspects the body.
 
 ```ts
 @Kavo(Book, {

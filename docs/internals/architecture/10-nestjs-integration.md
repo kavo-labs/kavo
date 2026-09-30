@@ -480,7 +480,9 @@ A `creatable`/`updatable` name that is a **relation** rather than a scalar
 column has no `metadata.fields` entry, so it is picked up from
 `metadata.relations` and documented as the association-by-id shape the
 deserializer accepts (ADR-0014): a `{ id }` reference object for a to-one,
-a nullable array of them for a to-many. `id` is typed from the target
+a nullable array of them for a to-many the entity opted in with
+`relations.<name>.write` (the derived default leaves an un-opted-in to-many
+out, as the deserializer does). `id` is typed from the target
 entity's own metadata, which the binder resolves through
 `infrastructure.metadataFor(relation.target())`; it stays untyped only when
 that target can't be resolved (no infrastructure, or a root that can't

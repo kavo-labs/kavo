@@ -503,9 +503,20 @@ describe("association by id (ADR-0014)", () => {
     );
   });
 
-  it("maps a to-many association element-wise", async () => {
-    const fixture = blog();
-    const { authors, authorAdapter } = fixture;
+  it("leaves a to-many relation out of the derived write shape unless the entity opts it in", async () => {
+    // Associating a to-many rewrites the related rows' foreign keys, which
+    // the policy stage never judges (GHSA-p8cm-xwp6-gvrc).
+    const { authors, authorAdapter } = blog();
+    await authors.createOne({ name: "Ada", posts: [{ id: 1 }, { id: 2 }] } as never);
+    expect(lastRow(authorAdapter)).not.toHaveProperty("posts");
+  });
+
+  it("maps a to-many association element-wise once a write schema names it", async () => {
+    // An explicit write schema is the opt-in every adapter supports;
+    // `relations.<name>.write` is the other, for adapters with array mutation.
+    const { authors, authorAdapter } = blog({
+      author: { schema: { input: { fields: ["name", "posts"] } } } as never,
+    });
     await authors.createOne({ name: "Ada", posts: [{ id: 1 }, { id: 2 }] } as never);
     expect(lastRow(authorAdapter)["posts"]).toEqual([{ id: 1 }, { id: 2 }]);
   });
