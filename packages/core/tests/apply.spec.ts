@@ -395,6 +395,26 @@ describe("select.apply — forced fields are unioned into the projection, never 
     await crud.findMany(undefined);
     expect(adapter.lastQuery?.select.root).toBeNull();
   });
+
+  it("unions into select.default when the request sends no select= (#545)", async () => {
+    const { crud, adapter } = makeCrud({
+      select: { fields: ["id", "title", "authorId"], default: ["title"], apply: () => ["authorId"] },
+    } as never);
+    adapter.rows.push(Object.assign(new Post(), { id: 1, title: "hello", authorId: 7 }));
+
+    const list = await crud.findMany(undefined);
+
+    expect(adapter.lastQuery?.select.root).toEqual(["title", "authorId"]);
+    expect(list.items[0]).toEqual({ title: "hello", authorId: 7 });
+  });
+
+  it("leaves select.default alone when select.apply forces nothing", async () => {
+    const { crud, adapter } = makeCrud({
+      select: { fields: ["id", "title", "authorId"], default: ["title"], apply: () => undefined },
+    } as never);
+    await crud.findMany(undefined);
+    expect(adapter.lastQuery?.select.root).toBeNull();
+  });
 });
 
 describe("include.apply — forced relation paths are unioned before resolution", () => {

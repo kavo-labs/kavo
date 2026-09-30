@@ -88,6 +88,7 @@ export class QueryNormalizer<Entity = unknown> {
     const select: FieldSelection<Entity> = unionServerSelect(
       parseSelect(rawParams, config, issues),
       serverApply?.select,
+      config.select.default,
     );
     const include = this.resolveIncludes(
       [...parseIncludePaths(rawParams["include"], issues), ...(serverApply?.include ?? [])],
@@ -209,6 +210,7 @@ export class QueryNormalizer<Entity = unknown> {
     const select: FieldSelection<Entity> = unionServerSelect(
       { root: rootFields, relations: relationFields },
       serverApply?.select,
+      config.select.default,
     );
     const include = this.resolveIncludes(
       [...(input.include ?? []), ...(serverApply?.include ?? [])],
@@ -650,18 +652,27 @@ function prependServerSort<Entity>(
 
 /**
  * `select.apply` composition (ADR-0048): forced fields are unioned into the
- * root projection — additive only, never a mask. A `null` root already
- * means "everything the resolved DTO allows", a superset of any forced
- * field, so it is left untouched.
+ * root projection — additive only, never a mask. A `null` root with no
+ * `select.default` means "everything the resolved DTO allows", a superset of
+ * any forced field, so it is left untouched. With a `select.default`, a
+ * `null` root means "serve the default" (the serializer applies it), which
+ * need not contain the forced fields — so the default is made explicit here
+ * and the forced fields unioned into it (issue #545). The serializer still
+ * bounds that root by `select.fields` and any registered output schema.
  */
 function unionServerSelect<Entity>(
   select: FieldSelection<Entity>,
   serverSelect: readonly FieldPath<Entity, 1>[] | undefined,
+  selectDefault: readonly FieldPath<Entity, 1>[] | undefined,
 ): FieldSelection<Entity> {
-  if (serverSelect === undefined || serverSelect.length === 0 || select.root === null) {
+  if (serverSelect === undefined || serverSelect.length === 0) {
     return select;
   }
-  const merged = new Set([...(select.root as readonly string[]), ...(serverSelect as readonly string[])]);
+  const base = select.root ?? selectDefault ?? null;
+  if (base === null) {
+    return select;
+  }
+  const merged = new Set([...(base as readonly string[]), ...(serverSelect as readonly string[])]);
   return { root: [...merged] as unknown as readonly FieldPath<Entity, 1>[], relations: select.relations };
 }
 

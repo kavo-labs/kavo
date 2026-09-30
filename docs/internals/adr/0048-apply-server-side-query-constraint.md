@@ -106,6 +106,13 @@ goes through `QueryNormalizer`, so `filter.apply`/`sort.apply`/
 (`repository.findOneById(id, context.query, context)`) then inherits the
 composed filter automatically, no special-casing needed.
 
+> **Amended (issue #545).** A request with no `select=` leaves the root
+> selection `null`, which meant "everything" until `select.default`
+> (applied in the serializer since #386) made it mean "the default".
+> `select.apply` now unions its forced fields into `select.default` in
+> that case, so it stays additive whether or not an entity configures a
+> default projection.
+
 A single-row write (`updateOne`/`patchOne`/`deleteOne`/`restoreOne`/
 `purgeOne`) never runs `QueryNormalizer` at all — it mutates by id alone. The
 engine's policy stage (`KavoEngine.checkPolicy`) already pays for a
