@@ -130,8 +130,10 @@ and `docs/internals/architecture/12-relations-and-includes.md`.
 
 ## Soft delete — `withDeleted=true`
 
-Includes soft-deleted rows, which are otherwise excluded from every read.
-On an entity that is not soft-deletable this is rejected with
+Includes soft-deleted rows, which are otherwise excluded from every read;
+`onlyDeleted=true` narrows to them instead. Both need the entity (or the
+read) to opt in with `delete.allowDeletedReads`. Without it, or on an entity
+that is not soft-deletable, either is rejected with
 `KAVO_QUERY_UNSUPPORTED_PARAM` (not silently ignored); a non-boolean value is
 a field-level 400. Applies to the **root only** — it never widens what an
 included relation returns.

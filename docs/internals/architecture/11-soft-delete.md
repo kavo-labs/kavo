@@ -82,6 +82,17 @@ an entity that is not soft-deletable the parameter is **rejected**
 (`KAVO_QUERY_UNSUPPORTED_PARAM`) rather than ignored: a client that
 believes it is seeing deleted rows should be told it is not.
 
+On the wire, both flags also need `delete.allowDeletedReads` (default
+`false`, issue #517), resolved through the ordinary settings chain, so it
+can be opened per entity or per read (`operations.findMany`). Many apps
+treat a soft-deleted row as gone from the client's side, and before this
+key any client could read the trash by adding a query parameter. A
+programmatic `QueryContext` is not gated: it is server code, and the
+engine's own internal reads (the `restoreOne`/`purgeOne` pre-fetch) pass
+`withDeleted` that way. The gate lives in `QueryNormalizer`'s
+`parseSoftDeleteFlag`, which knows which path it is on; adapters are
+unchanged.
+
 `onlyDeleted=true` is the third state: instead of widening the default
 exclusion, it narrows a read to _only_ soft-deleted rows (a "trash" view).
 It is parsed and validated the same way as `withDeleted` — rejected with

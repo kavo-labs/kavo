@@ -8,7 +8,7 @@
 GET /books?withDeleted=true
 ```
 
-This opts back into seeing soft-deleted rows on a read that would otherwise exclude them. `?onlyDeleted=true` narrows the other way: only soft-deleted rows, for a "trash" view. Both are rejected on an entity that isn't soft-deletable. Setting both together is also rejected, as a conflicting combination, rather than one silently winning. See [Soft delete](/features/soft-delete).
+This opts back into seeing soft-deleted rows on a read that would otherwise exclude them. `?onlyDeleted=true` narrows the other way: only soft-deleted rows, for a "trash" view. Both work only on an entity that opted in with `delete.allowDeletedReads`, and are rejected with a `400` otherwise, including on an entity that isn't soft-deletable. Setting both together is also rejected, as a conflicting combination, rather than one silently winning. See [Soft delete](/features/soft-delete).
 
 ## The response envelope
 
