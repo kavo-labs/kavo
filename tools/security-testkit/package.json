@@ -9,7 +9,7 @@
   "dependencies": {
     "@kavo/core": "workspace:*"
   },
-  "peerDependencies": {
-    "vitest": "*"
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }
