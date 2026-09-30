@@ -4,3 +4,5 @@ dist/
 *.tsbuildinfo
 pnpm-lock.yaml
 CHANGELOG.md
+# Written by release-please on every release (ADR-0041), like CHANGELOG.md
+.release-please-manifest.json

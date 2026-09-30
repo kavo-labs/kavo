@@ -259,6 +259,35 @@ jobs:
       - name: Build docs
         run: pnpm docs:build
 
+  # The Kavo-specific Semgrep rules in `.semgrep/kavo.yml` (issue #495), each
+  # a way request input could reach a query or the runtime as code. First the
+  # rules are held to their fixtures, so a rule that silently stopped matching
+  # goes red, then `packages/` is scanned and any finding fails the PR.
+  # `semgrep --test` takes one target per run, hence the loop. The image is
+  # pinned by digest (semgrep 1.178.0) and the checkout by SHA, as
+  # `codeql.yml` does.
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    container:
+      image: semgrep/semgrep@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the rules against their fixtures
+        run: |
+          for fixture in .semgrep/tests/*.ts; do
+            semgrep --test --metrics=off --config .semgrep/kavo.yml "$fixture"
+          done
+
+      - name: Scan packages
+        run: semgrep scan --metrics=off --config .semgrep/kavo.yml --error packages
+
   doc-links:
     name: doc links
     runs-on: ubuntu-latest
