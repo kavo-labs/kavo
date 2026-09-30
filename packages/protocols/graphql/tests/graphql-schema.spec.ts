@@ -262,7 +262,7 @@ describe("createKavoGraphQLSchema", () => {
       Note,
       {
         delete: { strategy: "soft" },
-        operations: { createOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
+        operations: { findOne: true, createOne: true, deleteOne: true, restoreOne: true, purgeOne: true },
       },
       { adapter, metadata: noteMetadata },
     );
@@ -319,6 +319,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
       Todo,
       {
         operations: {
+          findOne: true,
           markDoneOne: {
             handler: {
               async execute(input: unknown, context: KavoContext<Todo>) {
@@ -388,6 +389,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
       Todo,
       {
         operations: {
+          findOne: true,
           markDoneOne: {
             handler: {
               async execute(input: unknown, context: KavoContext<Todo>) {
@@ -597,7 +599,7 @@ describe("custom operations reach GraphQL (issue #153)", () => {
     const service = createKavo().createCrud(
       Todo,
       {
-        operations: { markDoneOne: { handler: { async execute() {} }, schema: { output: Todo } } },
+        operations: { findOne: true, markDoneOne: { handler: { async execute() {} }, schema: { output: Todo } } },
       } as never,
       { adapter, metadata: todoMetadata },
     );
@@ -823,6 +825,40 @@ describe("createKavoGraphQLSchema — service-only operations (#531)", () => {
           }),
         } as never,
       ]),
-    ).toThrowError(/reads are service-only/);
+    ).toThrowError(/reads are disabled or service-only/);
+  });
+
+  it("leaves a disabled read off the schema (#548)", () => {
+    const schema = createKavoGraphQLSchema({
+      name: "Todo",
+      itemType: ItemType,
+      service: service({ findOne: false, findMany: true }),
+    });
+    expect(Object.keys(schema.getQueryType()!.getFields())).toEqual(["todos"]);
+  });
+
+  it("refuses at bootstrap a mutation opt-in that names a disabled operation (#548)", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        itemType: ItemType,
+        deleteOne: true,
+        service: service({ findOne: true, findMany: true, deleteOne: false }),
+      }),
+    ).toThrowError(/'deleteOne' is disabled/);
+  });
+
+  it("refuses restoreOne on an entity that never declared soft delete (#548)", () => {
+    expect(() =>
+      createKavoGraphQLSchema({
+        name: "Todo",
+        itemType: ItemType,
+        restoreOne: true,
+        service: createKavo().createCrud(Todo, undefined, {
+          adapter: new InMemoryTodoAdapter(),
+          metadata: todoMetadata,
+        }),
+      }),
+    ).toThrowError(/'restoreOne' is disabled/);
   });
 });

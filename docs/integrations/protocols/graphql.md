@@ -33,25 +33,25 @@ registerKavoGraphQLTypes(Owner, {
   updateInputType: UpdateOwnerInput,
   patchInputType: PatchOwnerInput,
   deleteOne: true,
-  restoreOne: true, // meaningful only if Owner declared soft delete
+  restoreOne: true, // a bootstrap error unless Owner declared soft delete
   purgeOne: true,
 });
 ```
 
 Each field is opt-in per entity. Omitting an option leaves the field out of the schema entirely:
 
-| Field                                       | Enabled by                                |
-| ------------------------------------------- | ----------------------------------------- |
-| `Query.owner(id)`                           | always, unless `findOne` is service-only  |
-| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is service-only |
-| `Mutation.createOwner`                      | `createInputType`                         |
-| `Mutation.updateOwner`                      | `updateInputType`                         |
-| `Mutation.patchOwner`                       | `patchInputType`                          |
-| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                         |
-| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                        |
-| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                          |
+| Field                                       | Enabled by                                            |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `Query.owner(id)`                           | always, unless `findOne` is disabled or service-only  |
+| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is disabled or service-only |
+| `Mutation.createOwner`                      | `createInputType`                                     |
+| `Mutation.updateOwner`                      | `updateInputType`                                     |
+| `Mutation.patchOwner`                       | `patchInputType`                                      |
+| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                                     |
+| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                                    |
+| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                                      |
 
-An operation marked service-only (`meta.routes.enabled: false`) never reaches the schema, as it gets no REST route or MCP tool: a service-only `findOne`/`findMany` is left off `Query`, and naming a service-only operation here (`deleteOne: true`, an input type, or an `operations` entry) fails at bootstrap with a `ConfigurationException`.
+An operation that is disabled, or marked service-only (`meta.routes.enabled: false`), never reaches the schema, just as it gets no REST route or MCP tool: a disabled or service-only `findOne`/`findMany` is left off `Query`, and naming one here (`deleteOne: true`, an input type, or an `operations` entry) fails at bootstrap with a `ConfigurationException`. That includes `restoreOne`/`purgeOne` on an entity that never declared soft delete.
 
 `filter` and `sort` on `Query.owners` use Kavo's own grammar, not a generated per-entity input type. `sort` takes REST's `-field` string convention. `filter` takes a raw filter-AST `JSON` scalar (`{ kind: "condition", field, operator, value }`, operators in `SCREAMING_SNAKE`) rather than a typed input object.
 

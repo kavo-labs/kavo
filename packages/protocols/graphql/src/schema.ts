@@ -247,6 +247,15 @@ export function crudFields<
       .filter((descriptor) => (descriptor.meta as { routes?: { enabled?: boolean } }).routes?.enabled === false)
       .map((descriptor) => descriptor.id),
   );
+  // A disabled standard operation (`findOne: false`, or `restoreOne` on an
+  // entity that never declared soft delete) is treated the same way (issue
+  // #548): left off when unconditional, refused when named. Before, its
+  // field was built anyway and threw `OperationDisabledException` on use.
+  // Custom operations have their own disabled check below.
+  const disabled = new Set<string>(
+    (registry?.all() ?? []).filter((descriptor) => !descriptor.enabled).map((descriptor) => descriptor.id),
+  );
+  const unexposed = (operation: string): boolean => serviceOnly.has(operation) || disabled.has(operation);
   const refuseServiceOnly = (operation: string, option: string): void => {
     if (serviceOnly.has(operation)) {
       throw new ConfigurationException(
@@ -254,6 +263,14 @@ export function crudFields<
         option,
         `'${operation}' is service-only on this entity (meta.routes.enabled: false), so it cannot be ` +
           `exposed on the GraphQL schema; drop '${option}' from registerKavoGraphQLTypes, or expose the operation`,
+      );
+    }
+    if (disabled.has(operation)) {
+      throw new ConfigurationException(
+        name,
+        option,
+        `'${operation}' is disabled on this entity, so it cannot be exposed on the GraphQL schema; ` +
+          `drop '${option}' from registerKavoGraphQLTypes, or enable the operation`,
       );
     }
   };
@@ -269,14 +286,14 @@ export function crudFields<
   });
 
   const query: Record<string, GraphQLFieldConfig<unknown, unknown>> = {};
-  if (!serviceOnly.has("findOne")) {
+  if (!unexposed("findOne")) {
     query[fieldName] = {
       type: itemType,
       args: idArgs,
       resolve: (_root: unknown, args: { id: number }) => service.findOne(args.id as Id),
     };
   }
-  if (!serviceOnly.has("findMany")) {
+  if (!unexposed("findMany")) {
     query[`${fieldName}s`] = {
       type: new GraphQLNonNull(listType),
       args: {
@@ -472,14 +489,14 @@ export function createKavoGraphQLSchema<
 >(options: KavoGraphQLOptions<Entity, Id, CreateDto, UpdateDto, PatchDto, ItemDto, ListDto>): GraphQLSchema {
   const { query, mutation } = crudFields(options);
   if (Object.keys(query).length === 0) {
-    // Only reachable when both reads are service-only and no custom read is
-    // exposed; an empty `Query` type is invalid GraphQL, so fail here with
-    // the fix rather than on the first request.
+    // Only reachable when both reads are disabled or service-only and no
+    // custom read is exposed; an empty `Query` type is invalid GraphQL, so
+    // fail here with the fix rather than on the first request.
     throw new ConfigurationException(
       options.name,
       "operations",
-      "every read is service-only, so the GraphQL schema would have an empty Query type — expose " +
-        "findOne or findMany, or add a custom read to registerKavoGraphQLTypes' 'operations'",
+      "every read is disabled or service-only, so the GraphQL schema would have an empty Query type — " +
+        "enable and expose findOne or findMany, or add a custom read to registerKavoGraphQLTypes' 'operations'",
     );
   }
   return new GraphQLSchema({
@@ -521,9 +538,9 @@ export function mergeKavoGraphQLSchemas(
       bindings.length === 0
         ? "no entity registered any GraphQL types — call registerKavoGraphQLTypes(Entity, {...}) " +
             "for at least one @Kavo entity before enabling a GraphQL endpoint"
-        : "every registered entity's reads are service-only (meta.routes.enabled: false), so the " +
-            "schema would have an empty Query type — expose findOne or findMany on at least one, or " +
-            "add a custom read to its registerKavoGraphQLTypes 'operations'",
+        : "every registered entity's reads are disabled or service-only (meta.routes.enabled: false), " +
+            "so the schema would have an empty Query type — enable and expose findOne or findMany on at " +
+            "least one, or add a custom read to its registerKavoGraphQLTypes 'operations'",
     );
   }
 

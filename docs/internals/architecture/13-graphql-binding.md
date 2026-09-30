@@ -31,36 +31,34 @@ const schema = createKavoGraphQLSchema({
   updateInputType: UpdateOwnerInput,
   patchInputType: PatchOwnerInput,
   deleteOne: true,
-  restoreOne: true, // meaningful only if Owner declared soft delete
+  restoreOne: true, // a bootstrap error unless Owner declared soft delete
   purgeOne: true,
 });
 ```
 
 Every field this produces:
 
-| Field                                       | Enabled by                                |
-| ------------------------------------------- | ----------------------------------------- |
-| `Query.owner(id)`                           | always, unless `findOne` is service-only  |
-| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is service-only |
-| `Mutation.createOwner`                      | `createInputType`                         |
-| `Mutation.updateOwner`                      | `updateInputType`                         |
-| `Mutation.patchOwner`                       | `patchInputType`                          |
-| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                         |
-| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                        |
-| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                          |
+| Field                                       | Enabled by                                            |
+| ------------------------------------------- | ----------------------------------------------------- |
+| `Query.owner(id)`                           | always, unless `findOne` is disabled or service-only  |
+| `Query.owners(limit, offset, sort, filter)` | always, unless `findMany` is disabled or service-only |
+| `Mutation.createOwner`                      | `createInputType`                                     |
+| `Mutation.updateOwner`                      | `updateInputType`                                     |
+| `Mutation.patchOwner`                       | `patchInputType`                                      |
+| `Mutation.deleteOwner: Boolean`             | `deleteOne: true`                                     |
+| `Mutation.restoreOwner: Owner`              | `restoreOne: true`                                    |
+| `Mutation.purgeOwner: Boolean`              | `purgeOne: true`                                      |
 
 Each mutation is opt-in per entity — omit the option and the field never
-reaches the schema. The binding reads the entity's `OperationRegistry` for
-one thing only, service-only operations (`meta.routes.enabled: false`, the
-same check REST and MCP make, issue #531): a service-only `findOne`/
-`findMany` is left off `Query`, and an option above (or an `operations`
-entry) naming a service-only operation is a `ConfigurationException` at
-bootstrap. It does **not** check whether an operation is disabled: setting `restoreOne: true` here
-for an entity whose `@Kavo` config disables `restoreOne` still puts the
-field in the schema, and it throws `OperationDisabledException` at resolve
-time, the same way calling the REST route would. Keeping the two in sync
-is the caller's job today — reading the registry directly is real,
-scoped follow-up work (tracked as a GraphQL issue), not implemented here.
+reaches the schema. The binding reads the entity's `OperationRegistry` to
+keep the schema in line with what the entity actually exposes: an
+operation that is disabled, or service-only (`meta.routes.enabled: false`,
+the same check REST and MCP make), never becomes a field. A disabled or
+service-only `findOne`/`findMany` is left off `Query`, and an option above
+(or an `operations` entry) naming one is a `ConfigurationException` at
+bootstrap — `restoreOne: true` on an entity that never declared soft
+delete, say (issues #531, #548). Before, such a field was built anyway
+and threw `OperationDisabledException` when resolved.
 
 **Filter and sort** (`Query.<entity>s` args, always present):
 

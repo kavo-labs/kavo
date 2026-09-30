@@ -30,7 +30,7 @@ const schema = createKavoGraphQLSchema({
   updateInputType: UpdateOwnerInput,
   patchInputType: PatchOwnerInput,
   deleteOne: true,
-  restoreOne: true, // meaningful only if Owner declared soft delete
+  restoreOne: true, // a bootstrap error unless Owner declared soft delete
   purgeOne: true,
 });
 ```
