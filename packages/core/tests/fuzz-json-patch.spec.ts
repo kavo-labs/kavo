@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { JsonPatchInvalidDocumentException, KavoException } from "@kavo/core";
 import type { JsonPatchParseOptions } from "../src/engine/json-patch.js";
 import { parseJsonPatchDocument } from "../src/engine/json-patch.js";
+import { expectPrototypesIntact, fuzzRuns } from "./support/fuzz.js";
 
 /**
  * Property-based fuzzing of the `jsonPatch` body parser (ADR-0029). A patch
@@ -11,8 +12,7 @@ import { parseJsonPatchDocument } from "../src/engine/json-patch.js";
  * relations it was told are writable. `FC_SEED` pins the run (CI sets it).
  */
 
-const seed = process.env["FC_SEED"] === undefined ? undefined : Number(process.env["FC_SEED"]);
-const runs = { numRuns: 2000, ...(seed === undefined ? {} : { seed }) };
+const runs = fuzzRuns();
 
 function options(writableFields: readonly string[], writeOptedRelations: readonly string[]): JsonPatchParseOptions {
   return {
@@ -31,7 +31,7 @@ function options(writableFields: readonly string[], writeOptedRelations: readonl
  */
 const optionSets: ReadonlyArray<readonly [string, JsonPatchParseOptions]> = [
   ["ordinary names", options(["name", "email"], ["posts"])],
-  ["prototype-shadowing names", options(["name", "constructor"], ["posts", "toString"])],
+  ["prototype-shadowing names", options(["name", "constructor", "__proto__"], ["posts", "toString", "__proto__"])],
 ];
 
 const hostileSegment = fc.oneof(
@@ -90,8 +90,6 @@ function nearValidDocument(parseOptions: JsonPatchParseOptions) {
   return fc.array(nearValidOp, { minLength: 1, maxLength: 4 });
 }
 
-const prototypeKeys = Object.getOwnPropertyNames(Object.prototype).sort();
-
 describe.each(optionSets)("parseJsonPatchDocument — fuzzed documents (%s)", (_, parseOptions) => {
   const document = fc.oneof(randomDocument, nearValidDocument(parseOptions));
 
@@ -118,15 +116,50 @@ describe.each(optionSets)("parseJsonPatchDocument — fuzzed documents (%s)", (_
         } catch {
           return;
         }
-        for (const field of Object.keys(parsed.fields)) {
+        // A re-parented result hides its keys from `Object.keys`, so pin the
+        // prototype first, then walk with `for…in` to see inherited keys too.
+        expect(Object.getPrototypeOf(parsed.fields)).toBe(Object.prototype);
+        expect(Object.getPrototypeOf(parsed.relations)).toBe(Object.prototype);
+        for (const field in parsed.fields) {
           expect(parseOptions.writableFields).toContain(field);
         }
-        for (const relation of Object.keys(parsed.relations)) {
+        for (const relation in parsed.relations) {
           expect(parseOptions.writeOptedRelations).toContain(relation);
+          expect(Object.hasOwn(parsed.relations, relation)).toBe(true);
           expect(Array.isArray(parsed.relations[relation]!.add)).toBe(true);
           expect(Array.isArray(parsed.relations[relation]!.remove)).toBe(true);
         }
-        expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(prototypeKeys);
+        expectPrototypesIntact();
+      }),
+      runs,
+    );
+  });
+
+  it("yields exactly the fields and member changes a valid document spells, dropping none", () => {
+    fc.assert(
+      fc.property(nearValidDocument(parseOptions), (doc) => {
+        let parsed;
+        try {
+          parsed = parseJsonPatchDocument(doc, parseOptions);
+        } catch {
+          return;
+        }
+        // The expected result, built with Maps for the same reason the parser
+        // uses them: a name like `__proto__` must stay an ordinary key.
+        const fields = new Map<string, unknown>();
+        const relations = new Map<string, { add: unknown[]; remove: unknown[] }>();
+        for (const { op, path, value } of doc) {
+          const [name, dash] = path.slice(1).split("/") as [string, string | undefined];
+          if (dash === undefined) {
+            fields.set(name, value);
+          } else {
+            const bucket = relations.get(name) ?? { add: [], remove: [] };
+            bucket[op as "add" | "remove"].push(value);
+            relations.set(name, bucket);
+          }
+        }
+        expect(new Map(Object.entries(parsed.fields))).toEqual(fields);
+        expect(new Map(Object.entries(parsed.relations))).toEqual(relations);
       }),
       runs,
     );

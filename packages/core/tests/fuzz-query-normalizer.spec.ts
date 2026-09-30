@@ -4,6 +4,7 @@ import type { NormalizedQueryContext, ResolvedEntityConfig } from "@kavo/core";
 import { QueryNormalizer, QueryValidationException, resolveEntityConfig } from "@kavo/core";
 import type { User } from "./support/user-fixture.js";
 import { userMetadata } from "./support/user-fixture.js";
+import { expectPrototypesIntact, fuzzRuns } from "./support/fuzz.js";
 
 /**
  * Property-based fuzzing of the wire grammar. Every other normalizer spec
@@ -12,8 +13,7 @@ import { userMetadata } from "./support/user-fixture.js";
  * (CI sets it); without it every local run explores fresh inputs.
  */
 
-const seed = process.env["FC_SEED"] === undefined ? undefined : Number(process.env["FC_SEED"]);
-const runs = { numRuns: 2000, ...(seed === undefined ? {} : { seed }) };
+const runs = fuzzRuns();
 
 const normalizer = new QueryNormalizer(userMetadata);
 
@@ -48,6 +48,7 @@ const hostileSegment = fc.oneof(
     "prototype",
     "toString",
     "hasOwnProperty",
+    "polluted",
     "eq",
     "in",
     "like",
@@ -205,17 +206,20 @@ const sortValue = fc
     },
   )
   .map((parts) => parts.join(","));
+const selectValue = fc.array(fieldName, { minLength: 1, maxLength: 4 }).map((fields) => fields.join(","));
 const grammarParams = fc
   .tuple(
     fc.array(filterEntry, { maxLength: 4 }),
     fc.option(sortValue, { nil: undefined }),
+    fc.option(selectValue, { nil: undefined }),
     fc.oneof({ weight: 3, arbitrary: fc.constant(undefined) }, fc.string({ maxLength: 12 })),
     fc.oneof({ weight: 3, arbitrary: fc.constant({}) }, randomParams),
   )
-  .map(([filters, sort, search, noise]) => ({
+  .map(([filters, sort, select, search, noise]) => ({
     ...noise,
     ...Object.fromEntries(filters),
     ...(sort === undefined ? {} : { sort }),
+    ...(select === undefined ? {} : { select }),
     ...(search === undefined ? {} : { "search[query]": search }),
   }));
 const wireParams = fc.oneof(randomParams, grammarParams);
@@ -235,6 +239,10 @@ function normalizeOrReject(
       return undefined;
     }
     throw error;
+  } finally {
+    // Checked after every call, in every property, so a pollution failure
+    // names the input that caused it rather than whichever ran next.
+    expectPrototypesIntact();
   }
 }
 
@@ -252,8 +260,6 @@ function conditionFields(node: unknown, out: string[] = []): string[] {
   return out;
 }
 
-const prototypeKeys = Object.getOwnPropertyNames(Object.prototype).sort();
-
 describe.each(configs)("QueryNormalizer — fuzzed wire params (%s)", (_, config) => {
   it("rejects hostile input only with QueryValidationException, never a crash", () => {
     fc.assert(
@@ -265,23 +271,21 @@ describe.each(configs)("QueryNormalizer — fuzzed wire params (%s)", (_, config
   it("never pollutes Object.prototype, whatever the bracket keys spell", () => {
     fc.assert(
       fc.property(wireParams, (params) => {
+        // `normalizeOrReject` asserts the prototypes after every call.
         normalizeOrReject(params, config);
-        expect(Object.getOwnPropertyNames(Object.prototype).sort()).toEqual(prototypeKeys);
-        expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
       }),
       runs,
     );
   });
 
-  it("never lets a filter or sort field outside the allowlist through", () => {
+  it("never lets a filter, sort or select field outside the allowlist through", () => {
     const filterable = new Set<string>(config.filter.fields as readonly string[]);
-    // The effective sort is the client's sort (checked against `sort.fields`)
-    // or the configured default; the id tiebreaker is appended to either.
-    const sortable = new Set<string>([
-      ...(config.sort.fields as readonly string[]),
-      ...config.sortDefault.map(({ field }) => field as string),
-      userMetadata.idField as string,
-    ]);
+    // Both configs page by offset, which appends no id tiebreaker, and
+    // `sort.default` is bootstrap-validated against `sort.fields`, so every
+    // sort key must be in `sort.fields` itself. A cursor or since config
+    // would need its own tiebreaker allowance, not a global one.
+    const sortable = new Set<string>(config.sort.fields as readonly string[]);
+    const selectable = new Set<string>(config.select.fields as readonly string[]);
     fc.assert(
       fc.property(wireParams, (params) => {
         const query = normalizeOrReject(params, config);
@@ -294,6 +298,11 @@ describe.each(configs)("QueryNormalizer — fuzzed wire params (%s)", (_, config
         for (const { field } of query.sort) {
           expect(sortable).toContain(field as string);
         }
+        for (const field of query.select.root ?? []) {
+          expect(selectable).toContain(field as string);
+        }
+        // `User` has no relations, so no relation fieldset can be legal.
+        expect(Object.keys(query.select.relations)).toEqual([]);
       }),
       runs,
     );
