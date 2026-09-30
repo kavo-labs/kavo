@@ -250,6 +250,45 @@ module.exports = {
       },
     },
     {
+      name: "security-testkit-imports-core-and-vitest-only",
+      severity: "error",
+      comment:
+        "The private security conformance suite (`tools/security-testkit`, " +
+        "#491) holds the corpus and nothing else: its source may import the " +
+        "`@kavo/core` barrel and `vitest`, never an adapter, protocol, " +
+        "framework, or example. Every driver lives in the consuming " +
+        "package's own `tests/`, which is what lets core's in-memory tests " +
+        "run the same suite the ORM adapters do.",
+      from: { path: "^tools/security-testkit/src" },
+      to: {
+        pathNot:
+          "^(tools/security-testkit/src/|@kavo/core$|packages/core/src/index\\.ts$|node_modules/.*/(vitest|@vitest/[^/]+)/)",
+      },
+    },
+    {
+      name: "security-testkit-is-test-only",
+      severity: "error",
+      comment:
+        "No published package's source, and no example app's source, may " +
+        "import the security testkit: it is never released (#491), so a " +
+        "runtime edge to it would ship a dangling import.",
+      from: { path: "^(packages/.+/src|examples/[^/]+/src)/" },
+      to: { path: "(^|/)(kavo-security-testkit|tools/security-testkit)(/|$)" },
+    },
+    {
+      name: "security-testkit-entry-point-only",
+      severity: "error",
+      comment:
+        "A consumer's tests import the testkit through its entry point " +
+        "(`kavo-security-testkit`) only, never a file behind it — the same " +
+        "no-deep-imports rule every @kavo barrel gets.",
+      from: { path: "^(packages/.+|examples/[^/]+)/tests/" },
+      to: {
+        path: "(^kavo-security-testkit/.+|^tools/security-testkit/)",
+        pathNot: "^tools/security-testkit/src/index\\.ts$",
+      },
+    },
+    {
       name: "no-circular",
       severity: "error",
       comment:

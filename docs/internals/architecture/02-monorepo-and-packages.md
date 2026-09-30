@@ -197,6 +197,15 @@ Two independent enforcement layers:
      `tests`; core's tests additionally may not reach an adapter, a protocol
      binding, or a framework package, because core's ignorance of all three is
      what its suite exists to prove.
+   - **The security testkit is test-only, in both directions.**
+     `tools/security-testkit` (`kavo-security-testkit`, #491) is cruised
+     alongside `packages/` and `examples/`. Its source may import the core
+     barrel and `vitest` only, so drivers stay in each consumer's `tests/`;
+     no package or example `src` may import it, since it is never published;
+     and a consumer's tests reach it through its entry point only. One limit
+     is inherited from `options.exclude`: an npm module that resolves under
+     a `/dist/` path drops out of the graph, so a stray npm import in the
+     testkit that resolves there is review's job, like any other npm edge.
 
 ## 4. Workspace tooling: pnpm + plain scripts (ADR-0003)
 

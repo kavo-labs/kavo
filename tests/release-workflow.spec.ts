@@ -963,3 +963,40 @@ describe("release-please workflow", () => {
     expect(wf).toContain("workflow_dispatch:");
   });
 });
+
+/**
+ * The security conformance suite (`tools/security-testkit`, #491) is a
+ * workspace member so tests can resolve it, and must never ship: it holds
+ * attack payloads, and it depends on `@kavo/core` as source. Nothing about
+ * its location alone keeps it out of a release, so each of the three ways a
+ * package reaches npm is checked here.
+ */
+describe("the security testkit is never released", () => {
+  const TESTKIT_DIR = "tools/security-testkit";
+  const manifest = JSON.parse(readFileSync(resolve(REPO_ROOT, TESTKIT_DIR, "package.json"), "utf8")) as {
+    name: string;
+    private?: boolean;
+  };
+
+  it("is a private package outside the @kavo scope", () => {
+    expect(manifest.private).toBe(true);
+    expect(manifest.name).not.toMatch(/^@kavo\//);
+  });
+
+  it("is not in publish.yml's package list", () => {
+    const list = /PACKAGE_DIRS: >-\n((?: {8}\S+\n)+)/.exec(workflow)?.[1] ?? "";
+    expect(list.split("\n").map((line) => line.trim())).not.toContain(TESTKIT_DIR);
+    expect(list).toContain("packages/core");
+    expect(workflow).not.toContain("security-testkit");
+  });
+
+  it("is not bumped by release-please", () => {
+    const config = readFileSync(resolve(REPO_ROOT, "release-please-config.json"), "utf8");
+    const extraFiles = (JSON.parse(config) as { packages: Record<string, { "extra-files"?: { path: string }[] }> })
+      .packages["."]?.["extra-files"];
+    for (const { path } of extraFiles ?? []) {
+      expect(matchesGlob(`${TESTKIT_DIR}/package.json`, path)).toBe(false);
+    }
+    expect(config).not.toContain("security-testkit");
+  });
+});

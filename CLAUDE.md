@@ -18,7 +18,7 @@ pnpm typecheck    # tsc --noEmit over the root tests/ plus every package's and e
 pnpm test         # vitest run (whole monorepo)
 pnpm test:coverage # the same suite under v8 coverage, failing on the thresholds in vitest.coverage.config.ts — its own CI job, deliberately not part of `check`
 pnpm depcruise    # enforce package-boundary rules (.dependency-cruiser.cjs)
-pnpm lint         # oxlint over packages/*, examples/*, tests/ and .github/scripts/
+pnpm lint         # oxlint over packages/*, examples/*, tests/, .github/scripts/ and tools/security-testkit/
 pnpm prettify     # prettier --write . (printWidth 120)
 pnpm format:check # prettier --check . — the separate formatting job CI runs alongside the gate
 pnpm docs:build   # vitepress build docs — a second CI gate that `check` does NOT run
@@ -33,7 +33,7 @@ pnpm vitest run packages/core/tests/filter-parser.spec.ts
 pnpm vitest run -t "coerces JavaScript number syntax"
 ```
 
-Tests live in each package's `tests/` directory (never in `src/`, so they are not shipped in `dist/`). The one exception is the repo-level `tests/` directory, for tests whose subject is the repo's own wiring rather than any package — `tests/release-workflow.spec.ts` gates `.github/workflows/publish.yml`, and `tests/check-doc-links.spec.ts` gates `scripts/check-doc-links.sh`. Put a test there only when it belongs to no package; it is type-checked by the root `tsconfig.tests.json`. Vitest aliases `@kavo/*` to package `src/` directly (see `vitest.config.ts`), so tests exercise sources with no stale-`dist` hazard. The SWC vitest plugin is required — TypeORM entities and Nest DI need decorator metadata that esbuild cannot emit.
+Tests live in each package's `tests/` directory (never in `src/`, so they are not shipped in `dist/`). The one exception is the repo-level `tests/` directory, for tests whose subject is the repo's own wiring rather than any package — `tests/release-workflow.spec.ts` gates `.github/workflows/publish.yml`, and `tests/check-doc-links.spec.ts` gates `scripts/check-doc-links.sh`. Put a test there only when it belongs to no package; it is type-checked by the root `tsconfig.tests.json`. The shared security conformance suite lives in `tools/security-testkit` (private, never published, imported as `kavo-security-testkit`): each adapter and surface runs it through a driver in its own `tests/` (see that directory's README). Vitest aliases `@kavo/*` to package `src/` directly (see `vitest.config.ts`), so tests exercise sources with no stale-`dist` hazard. The SWC vitest plugin is required — TypeORM entities and Nest DI need decorator metadata that esbuild cannot emit.
 
 Because the build compiles `src` only, each package also has a `tsconfig.tests.json` (`noEmit`, `include: ["tests"]`, `paths` mirroring the vitest aliases) that `pnpm typecheck` runs. That is what makes the type-level acceptance tests in `packages/**/tests/types/*.test-d.ts` real: `vitest.config.ts` collects only `*.spec.ts`, so nothing in them ever executes — `expectTypeOf` assertions and `@ts-expect-error` directives are checked by `tsc` alone. An unused `@ts-expect-error` is itself an error, so those tests fail in both directions.
 

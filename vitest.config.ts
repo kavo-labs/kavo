@@ -36,6 +36,10 @@ export default defineConfig({
       "@kavo/next": new URL("./packages/frameworks/next/src/index.ts", import.meta.url).pathname,
       "@kavo/graphql": new URL("./packages/protocols/graphql/src/index.ts", import.meta.url).pathname,
       "@kavo/mcp": new URL("./packages/protocols/mcp/src/index.ts", import.meta.url).pathname,
+      // The private security conformance suite (#491), resolved as source
+      // like the packages above. Outside the @kavo scope on purpose: core's
+      // tests may import it without widening `core-tests-know-no-adapter`.
+      "kavo-security-testkit": new URL("./tools/security-testkit/src/index.ts", import.meta.url).pathname,
     },
   },
   test: {

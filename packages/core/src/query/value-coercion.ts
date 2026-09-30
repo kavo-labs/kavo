@@ -25,6 +25,14 @@ export function coerceScalar(
   // values pass through as strings and the database compares them. Wiring
   // target-entity metadata through the relation registry would close the
   // gap — that was never done, so this is still open.
+  // No column stores a NUL character (Postgres refuses one in text, and
+  // SQLite ends a statement at it), so a value carrying one can only fail in
+  // the driver as a 500. It is the client's error, whatever the column —
+  // including a relation path, which the database compares uncoerced. The
+  // value is not echoed: the byte is what makes it unprintable.
+  if (typeof raw === "string" && raw.includes("\u0000")) {
+    return { field, code: "KAVO_QUERY_INVALID_VALUE", detail: `Value for field '${field}' contains a NUL character.` };
+  }
   if (metadata === undefined) {
     return String(raw);
   }

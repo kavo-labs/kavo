@@ -1008,6 +1008,14 @@ function parseSearch<Entity>(
     });
     return filter;
   }
+  if (query.includes("\u0000")) {
+    issues.push({
+      field: "search[query]",
+      code: "KAVO_QUERY_INVALID_VALUE",
+      detail: `'search[query]' contains a NUL character.`,
+    });
+    return filter;
+  }
   const searchable = search.fields as readonly string[];
   if (searchable.length === 0) {
     issues.push({

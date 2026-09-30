@@ -117,3 +117,13 @@ model Scratch {
   id    Int    @id @default(autoincrement())
   label String
 }
+
+// ── security-conformance.spec.ts (kavo-security-testkit, #491) ──────────
+
+model Vault {
+  id     Int     @id @default(autoincrement())
+  name   String
+  tenant String
+  rank   Int     @default(0)
+  apiKey String?
+}

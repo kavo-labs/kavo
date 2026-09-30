@@ -13,7 +13,8 @@
       "@kavo/core": ["../../core/src/index.ts"],
       "@kavo/graphql": ["../../protocols/graphql/src/index.ts"],
       "@kavo/mcp": ["../../protocols/mcp/src/index.ts"],
-      "@kavo/nest": ["./src/index.ts"]
+      "@kavo/nest": ["./src/index.ts"],
+      "kavo-security-testkit": ["../../../tools/security-testkit/src/index.ts"]
     }
   },
   "include": ["tests"]

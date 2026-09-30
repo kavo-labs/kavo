@@ -429,7 +429,10 @@ through `filter`, the same way it composes any other filter.
   Failures are field-level 400 issues, never a silent `NaN` or
   `Invalid Date`. A number must be finite: `Infinity` and an overflowing
   `1e999` are rejected like any other non-number, and the same rule coerces
-  a route id on a numeric id column (a blank id is a 400, not `0`). Coercion consults the **root** entity's column metadata
+  a route id on a numeric id column (a blank id is a 400, not `0`). A value
+  or `like` pattern containing a NUL character is a 400 for every column
+  kind, relation paths included, and so is a `search[query]` term (#527):
+  no column stores one, and the driver would fail as a 500. Coercion consults the **root** entity's column metadata
   only: a relation-path value (`filter[profile.city][eq]=…`) has no entry
   in that map and passes through as a string. Include resolution and
   fieldset validation wire in the target entity's config (doc 12), but
