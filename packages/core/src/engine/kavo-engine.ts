@@ -1169,13 +1169,12 @@ export class KavoEngine<Entity extends object> {
     if (forced === undefined) {
       return;
     }
-    if (descriptor.id !== "patchOne") {
-      Object.assign(body, forced);
-      return;
-    }
+    // Defined, not assigned: `Object.assign` and `body[field] = …` both run the
+    // `__proto__` setter, so a forced field of that name would re-parent the
+    // write body instead of setting a key (#533).
     for (const [field, value] of Object.entries(forced)) {
-      if (Object.hasOwn(body, field)) {
-        (body as Record<string, unknown>)[field] = value;
+      if (descriptor.id !== "patchOne" || Object.hasOwn(body, field)) {
+        Object.defineProperty(body, field, { value, writable: true, enumerable: true, configurable: true });
       }
     }
   }
@@ -1349,13 +1348,17 @@ export class KavoEngine<Entity extends object> {
       return { id, data };
     }
 
-    const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = {};
-    for (const [relation, ops] of relationEntries) {
-      relationPatch[relation] = {
-        add: this.resolveJsonPatchMemberIds(relation, ops.add, context),
-        remove: this.resolveJsonPatchMemberIds(relation, ops.remove, context),
-      };
-    }
+    // `Object.fromEntries`, not assignment: a relation named `__proto__` must
+    // stay an own key rather than re-parent the patch (#533).
+    const relationPatch: Record<string, { add: readonly EntityId[]; remove: readonly EntityId[] }> = Object.fromEntries(
+      relationEntries.map(([relation, ops]) => [
+        relation,
+        {
+          add: this.resolveJsonPatchMemberIds(relation, ops.add, context),
+          remove: this.resolveJsonPatchMemberIds(relation, ops.remove, context),
+        },
+      ]),
+    );
     return { id, data, relationPatch };
   }
 
