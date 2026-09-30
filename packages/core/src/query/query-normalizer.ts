@@ -1169,7 +1169,10 @@ function valueFitsOperator(operator: string, value: unknown): boolean {
   switch (operator) {
     case "IS_NULL":
     case "IS_NOT_NULL":
-      return true;
+      // The adapters ignore the operand, and the wire parser emits `true`;
+      // anything beyond a boolean or nothing is refused, so an object
+      // never rides along in the AST.
+      return value === null || value === undefined || typeof value === "boolean";
     case "IN":
     case "NOT_IN":
       return Array.isArray(value) && value.every(isFilterScalar);

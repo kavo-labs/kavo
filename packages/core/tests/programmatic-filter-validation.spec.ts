@@ -56,6 +56,7 @@ describe("QueryNormalizer — programmatic filter validation", () => {
     ["one bound for BETWEEN", "BETWEEN", ["a"]],
     ["a non-string LIKE pattern", "LIKE", 5],
     ["a non-finite number", "EQ", Number.POSITIVE_INFINITY],
+    ["an operand on IS_NULL", "IS_NULL", { $ne: null }],
   ])("rejects %s", (_label, operator, value) => {
     expect(issuesFor({ kind: "condition", field: "name", operator, value })[0]).toMatchObject({
       field: "name",
