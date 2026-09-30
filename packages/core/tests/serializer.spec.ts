@@ -9,13 +9,15 @@ import type {
 } from "@kavo/core";
 import {
   AssociationInvalidShapeException,
+  ConfigurationException,
   DefaultDeserializer,
   DefaultEntityCatalog,
   DefaultSerializer,
+  createKavo,
   createKavoContext,
   resolveEntityConfig,
 } from "@kavo/core";
-import { User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
+import { InMemoryUserAdapter, User, contextStub, unusedRepository, userMetadata } from "./support/user-fixture.js";
 import { Author, Post, authorMetadata, postMetadata } from "./support/blog-fixture.js";
 
 const userConfig = resolveEntityConfig(userMetadata, undefined, undefined);
@@ -84,6 +86,33 @@ describe("DefaultSerializer — select.default never widens a registered DTO (#5
   it("still serves the whole default when no DTO is registered", () => {
     const item = serializer.serializeItem(ada(), null, readContext(userConfig));
     expect(Object.keys(item as object)).toEqual(["id", "name", "email"]);
+  });
+
+  it("caps the default through a real createCrud service, on findOne and findMany", async () => {
+    const adapter = new InMemoryUserAdapter();
+    adapter.rows.push(ada());
+    const crud = createKavo().createCrud(
+      User,
+      {
+        schema: { output: { item: UserItemDto, list: UserItemDto } },
+        select: { default: ["id", "name", "email"] },
+      } as never,
+      { adapter, metadata: userMetadata },
+    );
+
+    expect(Object.keys((await crud.findOne(1)) as object)).toEqual(["id", "name"]);
+    const list = await crud.findMany();
+    expect(Object.keys(list.items[0]!)).toEqual(["id", "name"]);
+  });
+
+  it("refuses at bootstrap a select.default that shares no field with the output DTO", () => {
+    expect(() =>
+      createKavo().createCrud(
+        User,
+        { schema: { output: { item: UserItemDto } }, select: { default: ["email", "status"] } } as never,
+        { adapter: new InMemoryUserAdapter(), metadata: userMetadata },
+      ),
+    ).toThrowError(ConfigurationException);
   });
 
   it("leaves an explicit select= bounded by the DTO, as before", () => {

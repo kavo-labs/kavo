@@ -71,6 +71,15 @@ programmatic paths, the same place `defaultSortOf` already runs, so
 `@kavo/graphql`/`@kavo/mcp` inherit it with no binding-side change (both
 delegate entirely to `QueryNormalizer`, ADR-0016).
 
+> **Amended (issues #386, #514).** Since #386 moved the key to
+> `select.default`, it is applied in `DefaultSerializer`, not
+> `QueryNormalizer`: a request with no `select=` keeps `select.root: null`,
+> and the serializer serves the default. #514 made a registered
+> class-shaped output schema its ceiling — the default is intersected with
+> the schema's keys, and a default sharing no field with one fails at
+> bootstrap — so, like an explicit `select=`, it can only narrow what the
+> schema exposes (ADR-0055).
+
 **`defaults.include` replaces the per-relation `defaultInclude` boolean with
 one flat list of relation names, entity-wide.** The ADR-0028 cross-check —
 `defaultInclude` on a relation not in `allowed.includable` is a bootstrap
