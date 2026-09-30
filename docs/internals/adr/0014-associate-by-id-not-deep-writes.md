@@ -48,13 +48,32 @@ as is an id that is not a string or number (`{"owner": {"id": {"gt": 0}}}`).
 `null` remains the one way to clear a to-one association. Array elements
 keep the narrowing described above.
 
-Relations join the derived write shape by default, so association works
-with zero config. An entity with a registered `create`/`update` DTO opts
-in by declaring the property (`owner: number | null = null`), which also
-documents it in Swagger. Without a write DTO, the synthesized fallback body
-schema documents the relation too — as a `{ id }` reference object, an
-array of them for a to-many — from `metadata.relations` (see
+To-one relations join the derived write shape by default, so association
+works with zero config. An entity with a registered `create`/`update` DTO
+opts in by declaring the property (`owner: number | null = null`), which
+also documents it in Swagger. Without a write DTO, the synthesized fallback
+body schema documents the relation too — as a `{ id }` reference object, an
+array of them for an opted-in to-many — from `metadata.relations` (see
 `docs/internals/architecture/10-nestjs-integration.md`, issue #339).
+
+**Amendment (GHSA-p8cm-xwp6-gvrc): to-many association is opt-in.** A
+to-many relation is no longer part of the derived write shape. Associating
+one rewrites the foreign keys of _other_ rows, and the policy stage
+(ADR-0037) only ever judges the row being written, so a default that
+accepted it let a write to one row move related rows whose own policy
+never ran. A to-many joins the write shape only when the entity chooses
+it, in either of two ways:
+
+- a write schema that names it (`schema.input` as a class, a validator's
+  registered class, or the `{ fields }` shorthand), which every adapter
+  supports; or
+- `relations.<name>.write`, the array-mutation opt-in (ADR-0029), on an
+  adapter that implements it.
+
+Either way the app has accepted that surface and owns its authorization,
+for example with a `when()` policy that reads the body. To-one association
+is unchanged: its foreign key sits on the row being written, which that
+row's own policy already covers.
 
 Deep nested writes are **out of scope**, not merely unimplemented.
 

@@ -524,16 +524,31 @@ describe("PrismaRepositoryAdapter — query translation", () => {
       expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
     });
 
-    it("refuses association through a to-many relation key with a 400, on create and update", async () => {
+    it("leaves a to-many relation key out of the default write shape, touching no related row", async () => {
+      const book = await client.book.create({ data: { title: "Elsewhere" } });
+      const created = (await authors.createOne({
+        email: "many@x.io",
+        name: "Many",
+        age: 1,
+        books: [{ id: book.id }],
+      } as never)) as Author;
+      expect(created).toMatchObject({ name: "Many" });
+      expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
+    });
+
+    it("refuses a to-many relation key a write schema opts in with a 400, on create and update", async () => {
+      const shelving = kavo.createCrud(Author, {
+        schema: { input: { fields: ["email", "name", "age", "books"] } },
+      } as never) as DefaultKavoService<Author>;
       const book = await client.book.create({ data: { title: "Elsewhere" } });
       await expect(
-        authors.createOne({ email: "many@x.io", name: "Many", age: 1, books: [{ id: book.id }] } as never),
+        shelving.createOne({ email: "many@x.io", name: "Many", age: 1, books: [{ id: book.id }] } as never),
       ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
       expect(await client.author.count()).toBe(0);
 
       const author = await client.author.create({ data: { email: "own@x.io", name: "Own", age: 1 } });
       await expect(
-        authors.updateOne(author.id, { email: "own@x.io", name: "Own", age: 1, books: [{ id: book.id }] } as never),
+        shelving.updateOne(author.id, { email: "own@x.io", name: "Own", age: 1, books: [{ id: book.id }] } as never),
       ).rejects.toMatchObject({ code: "KAVO_ASSOCIATION_INVALID_SHAPE", status: 400 });
       expect((await client.book.findUnique({ where: { id: book.id } }))?.authorId).toBeNull();
     });

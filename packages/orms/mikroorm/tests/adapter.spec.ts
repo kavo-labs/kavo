@@ -312,10 +312,32 @@ describe("MikroOrmRepositoryAdapter — relation writes", () => {
       .sort();
   }
 
-  it("associates a to-many by an array of { id } references", async () => {
+  /**
+   * To-many association is opt-in (GHSA-p8cm-xwp6-gvrc): it rewrites the
+   * related rows' foreign keys, which no policy judges. A write schema naming
+   * the relation is the opt-in this adapter supports.
+   */
+  const shelvingAuthors = () =>
+    kavo.createCrud(Author, {
+      schema: { input: { fields: ["email", "name", "age", "shelves"] } },
+    } as never) as DefaultKavoService<Author>;
+
+  it("leaves a to-many relation out of the default write shape", async () => {
+    const a = await newShelf("A");
+    const created = (await authors.createOne({
+      email: "ada@x.io",
+      name: "Ada",
+      age: 36,
+      shelves: [{ id: a }],
+    } as never)) as Author;
+
+    expect(await shelvesOf(created.id)).toEqual([]);
+  });
+
+  it("associates a to-many by an array of { id } references once a write schema names it", async () => {
     const a = await newShelf("A");
     const b = await newShelf("B");
-    const created = (await authors.createOne({
+    const created = (await shelvingAuthors().createOne({
       email: "ada@x.io",
       name: "Ada",
       age: 36,
@@ -332,7 +354,7 @@ describe("MikroOrmRepositoryAdapter — relation writes", () => {
     // shapes that really can reach this code — and passing `[null]` to
     // `em.create` fails at the driver as a 500 rather than being ignored.
     const a = await newShelf("A");
-    const created = (await authors.createOne({
+    const created = (await shelvingAuthors().createOne({
       email: "ada@x.io",
       name: "Ada",
       age: 36,

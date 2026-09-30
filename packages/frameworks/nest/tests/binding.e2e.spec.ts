@@ -2708,6 +2708,8 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
         throw new Error("not exercised");
       },
       purge: async () => {},
+      // Only reached when a test opts a to-many into `relations.<name>.write`.
+      replaceRelation: async () => {},
     } as unknown as RepositoryAdapter<object>;
     const infrastructure: KavoInfrastructure = {
       metadataFor: () => metadata as never,
@@ -2811,15 +2813,31 @@ describe("@Kavo Swagger fallback request-body schema when no DTO is configured (
     }
   });
 
-  it("documents a relation-only writable projection instead of an empty, bodyless-looking schema (issue #339)", async () => {
+  it("documents a to-many relation only once the entity opts it into writes (GHSA-p8cm-xwp6-gvrc)", async () => {
     await withMetadata(
-      // The whole entity is a generated id plus two relations — nothing the
-      // scalar-column loop can match.
       [{ name: "id", kind: "string", nullable: false, generated: true }],
       [
         { name: "word", target: () => class {}, cardinality: "one", includable: false, strategy: "auto" },
         { name: "tags", target: () => class {}, cardinality: "many", includable: false, strategy: "auto" },
       ],
+    );
+
+    // The deserializer drops an un-opted-in to-many key, so documenting it
+    // would advertise a write the route silently ignores.
+    expect(Object.keys(bodySchema("/notes", "post")?.properties ?? {})).toEqual(["word"]);
+  });
+
+  it("documents a relation-only writable projection instead of an empty, bodyless-looking schema (issue #339)", async () => {
+    await withMetadata(
+      // The whole entity is a generated id plus two relations — nothing the
+      // scalar-column loop can match. `tags` is opted into writes, since a
+      // to-many joins the write shape only then (GHSA-p8cm-xwp6-gvrc).
+      [{ name: "id", kind: "string", nullable: false, generated: true }],
+      [
+        { name: "word", target: () => class {}, cardinality: "one", includable: false, strategy: "auto" },
+        { name: "tags", target: () => class {}, cardinality: "many", includable: false, strategy: "auto" },
+      ],
+      { relations: { tags: { write: { strategy: "replace" } } } },
     );
 
     const schema = bodySchema("/notes", "post");

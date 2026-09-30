@@ -444,10 +444,16 @@ describe("the CodeQL workflow", () => {
     expect(topLevel).toMatch(/^ {2}schedule:\n {4}- cron: "[^"]+"$/m);
   });
 
-  it("analyzes the published packages' JavaScript/TypeScript with the security-extended queries", () => {
-    expect(jobs).toMatch(/^ {10}languages: javascript-typescript$/m);
+  it("analyzes the packages' JavaScript/TypeScript and the workflows with the security-extended queries", () => {
+    // One matrix leg per language, each scoped to its own sources (#507 added
+    // the `actions` leg, which scans the workflow files).
+    const legs = [...jobs.matchAll(/^ {10}- language: ([\w-]+)\n {12}paths: (\S+)$/gm)].map(
+      ([, language, paths]) => `${language} → ${paths}`,
+    );
+    expect(legs.sort()).toEqual(["actions → .github", "javascript-typescript → packages"]);
+    expect(jobs).toMatch(/^ {10}languages: \$\{\{ matrix\.language \}\}$/m);
     expect(jobs).toMatch(/^ {10}queries: security-extended$/m);
-    expect(jobs).toMatch(/^ {12}paths:\n {14}- packages$/m);
+    expect(jobs).toMatch(/^ {12}paths:\n {14}- \$\{\{ matrix\.paths \}\}$/m);
     expect(jobs).toContain("github/codeql-action/analyze@");
     expect(jobs, "`upload` would stop results reaching the Security tab").not.toMatch(/^\s+upload:/m);
   });

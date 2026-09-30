@@ -317,8 +317,8 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     this.relationIdFields = relations;
     // The shared derivation (ADR-0014): every non-generated column except a
     // single primary key (a composite natural key is kept — the client
-    // supplies it on `createOne`), plus every relation, writable by
-    // association.
+    // supplies it on `createOne`), plus every to-one relation, writable by
+    // association. Opted-in to-many relations are added per call below.
     this.writableProjection = derivedWritableFieldNames(metadata);
   }
 
@@ -342,7 +342,19 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // explicit allowlist here (the derived writable projection is still
     // used, and the engine's `safeParse` step separately validates/reshapes
     // afterward).
-    const allowed = explicit ?? this.writableProjection;
+    // A to-many relation joins the derived default only when the entity opted
+    // it in with `relations.<name>.write`: associating one rewrites other
+    // rows' foreign keys, and the policy stage only judges the row being
+    // written (GHSA-p8cm-xwp6-gvrc). Resolved per call because `relations` is
+    // config, not metadata; a context with no config (a test stub) opts
+    // nothing in, the safe fallback.
+    const allowed = explicit ?? [
+      ...this.writableProjection,
+      ...(context.config?.relations
+        ?.all()
+        .filter((relation) => relation.cardinality === "many" && relation.write !== undefined)
+        .map((relation) => relation.name) ?? []),
+    ];
     // Only the derived default excludes the marker — an explicit DTO's own
     // key set is deliberately left alone, same as the id (see class doc).
     // Optional chaining: this class is exported and constructible directly
