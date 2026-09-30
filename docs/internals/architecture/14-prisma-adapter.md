@@ -171,12 +171,16 @@ request, with no error on either side. Escape a literal `%`/`_` with a
 backslash to sidestep the limit, or reach for a raw query. Doc 05 §3
 cross-references this from the grammar side.
 
-The grammar's backslash escape itself _is_ honored: `\%` and `\_` are
-resolved to literal text before the wildcard positions are read, so
-`filter[name][like]=100\%` is `{ equals: "100%" }` — matching what
-`@kavo/typeorm` gets from its bound `ESCAPE` clause and `@kavo/mongoose`
-from `likeToRegExpSource`. `@kavo/mikroorm` is the adapter with the weaker
-escape story here (doc 17 §7).
+The grammar's backslash escape is resolved before the wildcard positions
+are read: `\%` and `\_` become literal text, so `filter[name][like]=100\%`
+is `{ equals: "100%" }`, which matches exactly. That literal text does
+**not** survive `contains`/`startsWith`/`endsWith` on SQLite: Prisma passes
+a `%` or `_` inside the value through to `LIKE` as a wildcard, and its query
+API has no `ESCAPE` clause to stop it. So `filter[name][like]=%0\%%` (and a
+`search[query]` of `0%`, which core escapes the same way) also matches
+`1000`. `@kavo/mikroorm` has the same gap for a different reason (doc 17
+§7); both are tracked by #520 and pinned by the security conformance suite's
+`search-escapes-wildcards` case (`tools/security-testkit`).
 
 ## 7. Attachment points for later work
 

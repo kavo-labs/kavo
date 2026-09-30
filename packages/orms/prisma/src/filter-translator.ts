@@ -259,9 +259,10 @@ function tokenizeLike(pattern: string): readonly LikeToken[] {
  * `docs/internals/architecture/14-prisma-adapter.md`.
  *
  * The backslash escape is applied first, so `100\%` is the literal text
- * `100%` (an `equals`), not a `startsWith` on `100\` — matching the
- * `ESCAPE` clause `@kavo/typeorm` binds and the regex `@kavo/mongoose`
- * builds.
+ * `100%` (an `equals`), not a `startsWith` on `100\`. The literal is exact
+ * only under `equals`: inside `contains`/`startsWith`/`endsWith`, Prisma
+ * on SQLite hands a `%` or `_` to `LIKE` as a wildcard, with no `ESCAPE`
+ * clause available (#520; doc 14 §6).
  */
 function likeToPrismaStringFilter(pattern: string, field: string): Record<string, unknown> {
   const tokens = tokenizeLike(pattern);
@@ -296,6 +297,6 @@ function likeToPrismaStringFilter(pattern: string, field: string): Record<string
       `'${pattern}'. Prisma's 'where' has no raw pattern operator, so only a leading and/or ` +
       `trailing '%' is supported ('john', 'A%', '%son', '%j%'); an interior '%' and the ` +
       `single-character wildcard '_' have no equivalent. Escape a literal '%' or '_' with a ` +
-      `backslash, or move the pattern to a raw query.`,
+      `backslash for an exact match, or move the pattern to a raw query.`,
   });
 }
