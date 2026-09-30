@@ -716,7 +716,20 @@ function resolveFieldGroups<Entity extends object>(
   const includeConfig = entityConfig?.include;
   const includeFields = resolveIncludableSelector(entityName, relationNames, includeConfig?.fields);
 
-  const search = resolveSearchConfig(entityName, stringColumns, entityConfig?.search);
+  // An unconfigured (or `{ exclude }`-form) `search.fields` derives from the
+  // string columns a client could already filter with `ilike` and read back:
+  // a search term is an ILIKE substring match, so a column hidden from
+  // `filter.fields` or `select.fields` (an API key, a password hash) would
+  // otherwise be matchable one guessed character at a time. An explicit
+  // `search.fields` list is the entity's own decision and is taken as given.
+  const filterable = new Set(filterFields as readonly string[]);
+  const selectable = new Set(selectFields as readonly string[]);
+  const searchBase = stringColumns.filter((field) => {
+    const name = field as string;
+    const allowed = operators?.get(name);
+    return filterable.has(name) && selectable.has(name) && (allowed === undefined || allowed.has("ILIKE"));
+  });
+  const search = resolveSearchConfig(entityName, searchBase, entityConfig?.search);
   if (search !== false) {
     for (const field of search.fields as readonly string[]) {
       if (derivedNames.has(field)) {
