@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.25.0](https://github.com/kavo-labs/kavo/compare/v0.24.0...v0.25.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** a client request with withDeleted=true or onlyDeleted=true is a 400 unless the entity, or the operation, sets delete: { allowDeletedReads: true }.
+
+### Features
+
+* **nest:** accept guards on the zero-config MCP and GraphQL routes ([#535](https://github.com/kavo-labs/kavo/issues/535)) ([48073a8](https://github.com/kavo-labs/kavo/commit/48073a824990f5e814d8076654c96e95675b4f17)), closes [#498](https://github.com/kavo-labs/kavo/issues/498)
+
+
+### Bug Fixes
+
+* **core:** cap select.default at a registered output DTO ([#544](https://github.com/kavo-labs/kavo/issues/544)) ([a6211a2](https://github.com/kavo-labs/kavo/commit/a6211a220e3abf0622441d809955f234f8bbd307)), closes [#514](https://github.com/kavo-labs/kavo/issues/514)
+* **core:** gate a client's withDeleted and onlyDeleted behind an opt-in ([#541](https://github.com/kavo-labs/kavo/issues/541)) ([7bee298](https://github.com/kavo-labs/kavo/commit/7bee29832efcb19aa2b99021854f329cca44d878)), closes [#517](https://github.com/kavo-labs/kavo/issues/517)
+* **core:** keep a __proto__-named field or relation an own key on writes ([#539](https://github.com/kavo-labs/kavo/issues/539)) ([f867bef](https://github.com/kavo-labs/kavo/commit/f867bef97ff3b7cea8cf48c93d84d0b9236c9741)), closes [#533](https://github.com/kavo-labs/kavo/issues/533)
+* **core:** narrow findOne by filter.apply only, and other follow-ups to [#529](https://github.com/kavo-labs/kavo/issues/529) ([#530](https://github.com/kavo-labs/kavo/issues/530)) ([fd1084a](https://github.com/kavo-labs/kavo/commit/fd1084aebd4da55a8405679eea6c96eb1377465a)), closes [#490](https://github.com/kavo-labs/kavo/issues/490)
+* **core:** union select.apply into select.default ([#546](https://github.com/kavo-labs/kavo/issues/546)) ([d450ad0](https://github.com/kavo-labs/kavo/commit/d450ad09ebafc32cb370a1a47a5dec207fb8abe1)), closes [#545](https://github.com/kavo-labs/kavo/issues/545)
+* **graphql:** keep service-only operations off the schema ([#547](https://github.com/kavo-labs/kavo/issues/547)) ([82178ea](https://github.com/kavo-labs/kavo/commit/82178ea2d580d4cdfb89734d92d4d172a47befa8)), closes [#531](https://github.com/kavo-labs/kavo/issues/531)
+* harden id handling, row scoping, relation operations and query validation ([#529](https://github.com/kavo-labs/kavo/issues/529)) ([8ab4ab8](https://github.com/kavo-labs/kavo/commit/8ab4ab859e0fbeb1264e0b563b71c85f27e45862)), closes [#490](https://github.com/kavo-labs/kavo/issues/490)
+* harden input handling and CI supply chain from the Phase 1 security audit ([#526](https://github.com/kavo-labs/kavo/issues/526)) ([2520667](https://github.com/kavo-labs/kavo/commit/2520667fa9d1295593eb005ee619f97d23b9e58d)), closes [#510](https://github.com/kavo-labs/kavo/issues/510) [#511](https://github.com/kavo-labs/kavo/issues/511) [#512](https://github.com/kavo-labs/kavo/issues/512) [#521](https://github.com/kavo-labs/kavo/issues/521) [#525](https://github.com/kavo-labs/kavo/issues/525) [#490](https://github.com/kavo-labs/kavo/issues/490)
+* **mcp:** answer a non-Kavo error with a generic tool result ([#542](https://github.com/kavo-labs/kavo/issues/542)) ([cc46daa](https://github.com/kavo-labs/kavo/commit/cc46daa19267a6dd0c21052f7579d1d870785ee0)), closes [#523](https://github.com/kavo-labs/kavo/issues/523)
+
+
+### Documentation
+
+* add an adopter security guide ([#536](https://github.com/kavo-labs/kavo/issues/536)) ([62cc5ac](https://github.com/kavo-labs/kavo/commit/62cc5ac6b0c0447d335f3ae876b93d7e6083cf94)), closes [#497](https://github.com/kavo-labs/kavo/issues/497)
+
+
+### Tests
+
+* add the shared security conformance testkit and run it on every adapter and surface ([#528](https://github.com/kavo-labs/kavo/issues/528)) ([bb68bd9](https://github.com/kavo-labs/kavo/commit/bb68bd9aabf2a4ec5edea761f5452842894fd1b9)), closes [#527](https://github.com/kavo-labs/kavo/issues/527) [#491](https://github.com/kavo-labs/kavo/issues/491)
+* **core:** fuzz the wire query normalizer and the JSON Patch parser ([#532](https://github.com/kavo-labs/kavo/issues/532)) ([58b8564](https://github.com/kavo-labs/kavo/commit/58b8564842fc35a116b27754b062882b33b39d58)), closes [#494](https://github.com/kavo-labs/kavo/issues/494)
+
+
+### CI
+
+* add CodeQL and Kavo-specific Semgrep rules ([#506](https://github.com/kavo-labs/kavo/issues/506)) ([2b01450](https://github.com/kavo-labs/kavo/commit/2b014504735898cd4350aa2861b497fb2e6c21c1)), closes [#495](https://github.com/kavo-labs/kavo/issues/495)
+* schedule a quarterly security re-audit and pin the auditor to every package ([#537](https://github.com/kavo-labs/kavo/issues/537)) ([3d0c2c1](https://github.com/kavo-labs/kavo/commit/3d0c2c1f81c90cd9abdec9d3f35a8f460579d497)), closes [#499](https://github.com/kavo-labs/kavo/issues/499)
+
 ## [0.24.0](https://github.com/kavo-labs/kavo/compare/v0.23.4...v0.24.0) (2026-09-30)
 
 
