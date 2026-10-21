@@ -18,7 +18,7 @@
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-sqlite3": "^13.0.3",
-    "next": "^15.5.4",
+    "next": "^15.5.27",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.1.5"
