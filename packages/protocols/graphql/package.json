@@ -1,6 +1,6 @@
 {
   "name": "@kavo/graphql",
-  "version": "0.24.0",
+  "version": "0.25.0",
   "description": "Kavo GraphQL binding — builds a GraphQL schema over a createCrud service, delegating every resolver to the same engine REST uses.",
   "license": "MIT",
   "engines": {
