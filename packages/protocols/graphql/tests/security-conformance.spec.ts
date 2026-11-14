@@ -83,6 +83,12 @@ const graphqlDriver: SecurityDriver = {
     const error = result.errors?.[0];
     if (error !== undefined) {
       const cause = error.originalError;
+      // A body the declared input type refuses never reaches a resolver:
+      // GraphQL's own variable coercion answers, so this surface has no way
+      // to send it and the case is not this driver's to pass.
+      if (!(cause instanceof KavoException) && /^Variable "\$input" (got|has) invalid value/.test(error.message)) {
+        return { unsupported: "the GraphQL input type refuses the body before any resolver runs" };
+      }
       // What a client sees is the serialized `errors` array; the status and
       // code come from the Kavo exception behind it, when there is one.
       const body = JSON.parse(JSON.stringify(result.errors));

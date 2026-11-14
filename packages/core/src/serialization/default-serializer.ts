@@ -6,8 +6,9 @@ import { schemaShapeKeys } from "../schema/schema-shape.js";
 import { isSchemaClass, type SchemaLike } from "../schema/schema-class.js";
 import { shorthandFieldsOf } from "../schema/schema-fields-shorthand.js";
 import { decodeCompositeId } from "../metadata/composite-id.js";
-import { derivedWritableFieldNames, type EntityMetadata } from "../metadata/entity-metadata.js";
-import { AssociationInvalidShapeException } from "../errors/exceptions.js";
+import { derivedWritableFieldNames, type EntityMetadata, type FieldKind } from "../metadata/entity-metadata.js";
+import type { QueryIssueDto } from "../errors/problem-details.js";
+import { AssociationInvalidShapeException, SchemaValidationException } from "../errors/exceptions.js";
 
 const NO_RELATIONS: ReadonlySet<string> = new Set<string>();
 
@@ -299,6 +300,17 @@ function narrowToSchema(projection: Projection, schema: SchemaLike<object> | nul
  * marker field still reaches it, because both are real columns with
  * legitimate opt-in uses (assigning a natural key on `create`) that a
  * derived field never has.
+ *
+ * A scalar column takes a scalar value (issue #519). A plain object sent for
+ * a `string`/`number`/`boolean`/`date`/`enum` column is a 400
+ * (`SchemaValidationException`), whichever key set admitted the column. An
+ * ORM is free to read such an object as an instruction instead of a value —
+ * Prisma runs `{ increment: 5 }` or `{ set: … }` on a scalar field as an
+ * update operation — so the write that reaches the database would not be the
+ * one a policy or a schema inspecting the body saw. Only a `json` column
+ * holds an object. Arrays pass: metadata reports a list column under its
+ * element kind, and class instances pass (`Date`, `Buffer`, a decimal type),
+ * since only a programmatic caller can send one.
  */
 /**
  * What `associate()` needs to know about a relation's target, resolved
@@ -310,6 +322,8 @@ type RelationIdSpec = { readonly idField: string } | { readonly compositeIdField
 export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entity> {
   private readonly writableProjection: readonly string[];
   private readonly relationIdFields: ReadonlyMap<string, () => RelationIdSpec | undefined>;
+  /** Every column that cannot hold an object, by name: all kinds but `json`. */
+  private readonly scalarKinds: ReadonlyMap<string, FieldKind>;
 
   constructor(metadata: EntityMetadata<Entity>, catalog?: EntityCatalog) {
     const relations = new Map<string, () => RelationIdSpec | undefined>();
@@ -326,6 +340,9 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
       });
     }
     this.relationIdFields = relations;
+    this.scalarKinds = new Map(
+      metadata.fields.filter((field) => field.kind !== "json").map((field) => [field.name, field.kind]),
+    );
     // The shared derivation (ADR-0014): every non-generated column except a
     // single primary key (a composite natural key is kept — the client
     // supplies it on `createOne`), plus every to-one relation, writable by
@@ -378,6 +395,7 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
     // run the prototype setter and re-parent the result instead of becoming a
     // key. `Object.fromEntries` defines every name as an own property (#533).
     const result: [string, unknown][] = [];
+    const issues: QueryIssueDto[] = [];
     for (const key of allowed) {
       if (key === softDeleteField) {
         continue;
@@ -392,10 +410,40 @@ export class DefaultDeserializer<Entity = unknown> implements Deserializer<Entit
         continue;
       }
       const spec = this.relationIdFields.get(key)?.();
-      result.push([key, spec === undefined ? source[key] : associate(source[key], spec, key, context)]);
+      if (spec !== undefined) {
+        result.push([key, associate(source[key], spec, key, context)]);
+        continue;
+      }
+      // A relation key is `associate`'s to judge even when its target is not
+      // in the catalog: under Mongoose a `ref` path is a field as well.
+      if (!this.relationIdFields.has(key)) {
+        const kind = this.scalarKinds.get(key);
+        if (kind !== undefined && isPlainObject(source[key])) {
+          issues.push({ field: key, detail: `expected a ${kind} value, not an object` });
+          continue;
+        }
+      }
+      result.push([key, source[key]]);
+    }
+    if (issues.length > 0) {
+      throw new SchemaValidationException(issues, {
+        context: { entityName: context.entityName, operation: context.operation, correlationId: context.correlationId },
+      });
     }
     return Object.fromEntries(result) as Shape;
   }
+}
+
+/**
+ * A JSON object, or anything built like one: `Object.prototype` or no
+ * prototype at all (GraphQL hands its arguments over prototype-less).
+ */
+function isPlainObject(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /**

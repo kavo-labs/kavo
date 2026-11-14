@@ -10,6 +10,7 @@ import type {
 import {
   AssociationInvalidShapeException,
   ConfigurationException,
+  SchemaValidationException,
   DefaultDeserializer,
   DefaultEntityCatalog,
   DefaultSerializer,
@@ -350,6 +351,79 @@ describe("DefaultDeserializer — write projection", () => {
   it("treats a bodyless request as an empty payload", () => {
     // `KavoRequest.body` is nullable, and every write deserializes it.
     expect(deserializer.deserialize(null, null, contextStub())).toEqual({});
+  });
+});
+
+describe("DefaultDeserializer — a scalar column takes a scalar value (issue #519)", () => {
+  // An ORM may read an object under a scalar column as an instruction rather
+  // than a value: Prisma runs `{ increment: 5 }` as an update operation. The
+  // write would then differ from the body a policy or schema inspected.
+  const metadata: EntityMetadata<User> = {
+    ...userMetadata,
+    fields: [
+      ...userMetadata.fields,
+      { name: "active", kind: "boolean", nullable: false, generated: false },
+      { name: "bornAt", kind: "date", nullable: true, generated: false },
+      { name: "settings", kind: "json", nullable: true, generated: false },
+    ],
+  };
+  const deserializer = new DefaultDeserializer<User>(metadata);
+
+  function rejection(body: unknown, schema: (new () => object) | null = null): SchemaValidationException {
+    try {
+      deserializer.deserialize(body, schema, contextStub());
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaValidationException);
+      return error as SchemaValidationException;
+    }
+    throw new Error("expected the body to be rejected");
+  }
+
+  it.each([
+    ["number", { age: { increment: 5 } }, "age"],
+    ["string", { name: { set: "Ada" } }, "name"],
+    ["boolean", { active: { set: true } }, "active"],
+    ["date", { bornAt: { set: "2020-01-01" } }, "bornAt"],
+    ["enum", { status: { set: "active" } }, "status"],
+  ])("rejects an object sent for a %s column", (kind, body, field) => {
+    const error = rejection(body);
+    expect(error.code).toBe("KAVO_SCHEMA_INVALID");
+    expect(error.issues).toEqual([{ field, detail: `expected a ${kind} value, not an object` }]);
+  });
+
+  it("rejects a prototype-less object the same way", () => {
+    // GraphQL hands argument objects over with no prototype.
+    const increment = Object.assign(Object.create(null) as object, { increment: 5 });
+    expect(rejection({ age: increment }).issues.map((issue) => issue.field)).toEqual(["age"]);
+  });
+
+  it("reports every offending column in one rejection", () => {
+    const error = rejection({ name: { set: "Ada" }, email: "a@x.io", age: { multiply: 2 } });
+    expect(error.issues.map((issue) => issue.field)).toEqual(["name", "age"]);
+  });
+
+  it("applies under an explicit write DTO too", () => {
+    class PatchUserDto {
+      age = 0;
+    }
+    expect(rejection({ age: { increment: 5 } }, PatchUserDto).issues.map((issue) => issue.field)).toEqual(["age"]);
+  });
+
+  it("lets a json column hold an object", () => {
+    const body = { settings: { set: { theme: "dark" } } };
+    expect(deserializer.deserialize(body, null, contextStub())).toEqual(body);
+  });
+
+  it("passes scalars, null, arrays and class instances through untouched", () => {
+    // Metadata reports a list column under its element kind, so an array is
+    // a legitimate value; a `Date` is what a programmatic caller sends.
+    const bornAt = new Date(0);
+    const body = { name: ["a", "b"], email: null, age: 41, active: false, bornAt };
+    expect(deserializer.deserialize(body, null, contextStub())).toEqual(body);
+  });
+
+  it("ignores an object under a key the write shape does not admit", () => {
+    expect(deserializer.deserialize({ id: { set: 1 }, name: "Ada" }, null, contextStub())).toEqual({ name: "Ada" });
   });
 });
 
