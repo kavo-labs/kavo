@@ -28,6 +28,9 @@ allowBuilds:
 # fixed only in the next major; both uses are API-compatible across it.
 overrides:
   "@mikro-orm/better-sqlite>better-sqlite3": "^13.0.2"
+  # Not a security floor: 12.x does not compile against Node 27's V8, which
+  # the `node current` CI jobs install. 13 is what the workspace uses anyway.
+  "@prisma/adapter-better-sqlite3>better-sqlite3": "^13.0.3"
   "js-yaml@<5.2.2": "^5.2.3"
   "vitepress>vite": "^6.4.3"
   "fast-uri@>=3.0.0 <3.1.8": "^3.1.8"
