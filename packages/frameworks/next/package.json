@@ -38,6 +38,6 @@
     }
   },
   "devDependencies": {
-    "next": "^15.5.28"
+    "next": "^16.4.6"
   }
 }
