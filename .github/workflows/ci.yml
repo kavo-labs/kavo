@@ -36,7 +36,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ["lts/-1", "lts/*", "current"]
+        # No `current` leg here, unlike `test`: while `current` resolves to a
+        # Node prerelease (27.0.0-alpha), dependency-cruiser's CLI refuses to
+        # start on it, so `depcruise` cannot pass whatever the code does. The
+        # `test` job still runs on `current`, which is the early warning that
+        # leg exists for. Add it back once Node 27 is released.
+        node: ["lts/-1", "lts/*"]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

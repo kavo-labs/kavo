@@ -17,6 +17,7 @@ export type SecurityCaseId =
   | "response-hides-column"
   | "create-strips-protected-fields"
   | "patch-keeps-primary-key"
+  | "write-rejects-operation-object"
   | "policy-denial"
   | "missing-row-before-denial"
   | "apply-scopes-find-many"
@@ -302,6 +303,30 @@ export function defineSecuritySuite(options: SecuritySuiteOptions): void {
             await call(skip, "patchOne", { id: id!, body: { [idField]: 4242, name: "patched", apiKey: "k-injected" } }),
           );
           expect(await options.read(id!)).toMatchObject({ name: "patched", apiKey: "k-original" });
+        },
+      );
+
+      run(
+        "write-rejects-operation-object",
+        "rejects an object sent as a scalar column's value with a 400",
+        async (skip) => {
+          const [id] = await options.seed([{ name: "alpha", tenant: "a", rank: 5, apiKey: "k-1" }]);
+          // The spellings an ORM could run as an operation instead of storing
+          // as a value (#519): Prisma's `increment`/`set` on a scalar field.
+          for (const body of [{ rank: { increment: 100 } }, { rank: { set: 100 } }, { name: { set: "renamed" } }]) {
+            expectRejected(await call(skip, "patchOne", { id: id!, body }), 400, "KAVO_SCHEMA_INVALID");
+            expectRejected(
+              await call(skip, "updateOne", { id: id!, body: { name: "alpha", tenant: "a", rank: 5, ...body } }),
+              400,
+              "KAVO_SCHEMA_INVALID",
+            );
+          }
+          expectRejected(
+            await call(skip, "createOne", { body: { name: { set: "created" }, tenant: "a" } }),
+            400,
+            "KAVO_SCHEMA_INVALID",
+          );
+          expect(await options.read(id!)).toMatchObject({ name: "alpha", rank: 5 });
         },
       );
     });

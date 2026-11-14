@@ -182,6 +182,17 @@ API has no `ESCAPE` clause to stop it. So `filter[name][like]=%0\%%` (and a
 §7); both are tracked by #520 and pinned by the security conformance suite's
 `search-escapes-wildcards` case (`tools/security-testkit`).
 
+**No update-operation objects in a write body.** Prisma reads an object
+under a scalar field (`{ increment: 5 }`, `{ set: … }`, `{ push: … }` on a
+list) as an update operation, and `toWriteData` spreads body values into
+`data` unchanged. The adapter does not filter them: core's
+`DefaultDeserializer` refuses a plain object under any non-`json` column
+with a 400 `KAVO_SCHEMA_INVALID` before a body reaches an adapter (issue
+#519), pinned here by the security conformance suite's
+`write-rejects-operation-object` case. A `Json` field keeps taking objects,
+which Prisma stores literally. A custom `Deserializer` takes over that
+guarantee along with the seam.
+
 ## 7. Attachment points for later work
 
 - **Transactions:** same unbuilt seam as `@kavo/typeorm` (doc 09 §6) —

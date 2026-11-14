@@ -168,3 +168,23 @@ this ADR deferred are resolved as follows:
 - A per-operation override naming a field the operation lacks
   (`deleteOne: { schema: { output } }`) is now rejected at bootstrap only;
   the old type-level `Pick` narrowing is gone.
+
+## Update (2026-11-15)
+
+Entity metadata is the write schema of last resort, and it now rejects one
+thing (issue #519). `DefaultDeserializer` refuses a plain object sent as the
+value of a `string`/`number`/`boolean`/`date`/`enum` column with the same
+`SchemaValidationException` (`KAVO_SCHEMA_INVALID`, 400) a failed `safeParse`
+raises, one `errors[]` entry per column. It applies under every slot value —
+none, a class, the `{ fields }` shorthand, a validator — and runs before the
+validator's `safeParse`.
+
+The reason is that an ORM may execute such an object instead of storing it:
+`@kavo/prisma` passes body values into `data`, where `{ increment: 5 }` on a
+scalar field is an update operation. The body a validator or policy judged
+would then not be the write that ran. Rejecting in core rather than in the
+Prisma adapter keeps the four adapters' behaviour identical.
+
+`json` columns, arrays (a list column carries its element kind) and class
+instances are untouched. Full per-kind value validation stays the configured
+validator's job; this is only the floor under it.
