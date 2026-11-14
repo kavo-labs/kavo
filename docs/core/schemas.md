@@ -25,7 +25,7 @@ There's no separate `patch` schema to write. It derives from `update`. Configuri
 
 Each slot accepts either of these:
 
-- **A class**, narrowed by its **runtime key set**: the own enumerable properties of `new Schema()`, not its TypeScript type. Fields need real initializers to exist at runtime. A class never rejects a body; it only shapes it.
+- **A class**, narrowed by its **runtime key set**: the own enumerable properties of `new Schema()`, not its TypeScript type. Fields need real initializers to exist at runtime. A class only shapes a body; the one thing it rejects is [an object under a scalar column](#scalar-columns-take-scalar-values).
 - **A validator**: any object with `safeParse(input): SchemaParseResult<Output>`, the shape a Zod schema already has. `@kavo/core` has no `zod` dependency (ADR-0005).
 
 ```ts
@@ -47,6 +47,29 @@ A validator differs in these ways:
 - **`schema.output` shapes but is never re-validated.** A `safeParse` failure falls back to the already-projected value rather than rejecting a response Kavo itself produced, so a validator is not a confidentiality boundary. Use a class, `{ fields }`, or `select.fields` to keep a column off the wire.
 - **A per-operation validator override still narrows against the entity-scope allowlist.** A class-shaped `schema.input.create`/`update` at entity scope sets the writable-field allowlist; an `operations.<id>.schema` validator override replaces only the judging step, so a lenient validator can't widen what that allowlist excluded.
 - **Nested rows ignore it.** An included relation is shaped only by its target's class-shaped `schema.output`; a validator there does not narrow nested rows.
+
+### Scalar columns take scalar values
+
+Whatever the slot holds, and with no slot at all, a write body may not carry an object as the value of a `string`, `number`, `boolean`, `date` or `enum` column. That is a `400 KAVO_SCHEMA_INVALID` with one `errors[]` entry per offending column, raised before a validator or the adapter sees the body:
+
+```http
+PATCH /accounts/7
+{ "balance": { "increment": 1000 } }
+```
+
+```json
+{
+  "code": "KAVO_SCHEMA_INVALID",
+  "status": 400,
+  "errors": [{ "field": "balance", "detail": "expected a number value, not an object" }]
+}
+```
+
+An ORM can read such an object as an instruction instead of a value. Prisma runs `increment`, `multiply` or `set` on a scalar field as an update operation, so the write would not be the one your validator or policy inspected. The rule is in core, so every adapter answers the same way.
+
+Three things still pass. A `json` column holds any object. An array passes, because a list column is described by its element kind. A class instance (`Date`, `Buffer`, a decimal type) passes, since only a programmatic caller can send one.
+
+A column whose ORM-level transformer or custom type takes an object on the wire is described by its storage kind, so it is refused too. Declare it as a JSON column, or accept its scalar spelling and convert in a validator's transform.
 
 **Schema mapping happens before field selection.** A `select=id,title` query string can only narrow what the resolved schema already projects. Selection never widens a projection past what the schema or the `select.fields` allowlist allows.
 
